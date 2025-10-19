@@ -1,17 +1,12 @@
 set(NAMGUITAR_CORE_SRC
   NAMGuitarPlugin.h
-  presets/PresetManager.cpp
-  presets/PresetManager.h
-  presets/PresetStorage.cpp
-  presets/PresetStorage.h
+  presets/PresetTypes.h
   dsp/NAMDSPManager.cpp
   dsp/NAMDSPManager.h
   dsp/IRManager.cpp
   dsp/IRManager.h
   models/ModelHasher.cpp
   models/ModelHasher.h
-  network/PresetServiceClient.cpp
-  network/PresetServiceClient.h
   ui/WebUIBridge.cpp
   ui/WebUIBridge.h
   util/FileSystem.cpp
@@ -53,7 +48,6 @@ target_include_directories(NAMGuitarFXCore
     ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty
     ${CMAKE_CURRENT_SOURCE_DIR}/dsp
     ${CMAKE_CURRENT_SOURCE_DIR}/models
-    ${CMAKE_CURRENT_SOURCE_DIR}/network
     ${CMAKE_CURRENT_SOURCE_DIR}/presets
     ${CMAKE_CURRENT_SOURCE_DIR}/ui
     ${CMAKE_CURRENT_SOURCE_DIR}/util
@@ -143,10 +137,6 @@ endif()
 
 if(TARGET NeuralAmpModelerCore)
   target_link_libraries(NAMGuitarFXCore PUBLIC NeuralAmpModelerCore)
-endif()
-
-if(TARGET httplib::httplib)
-  target_link_libraries(NAMGuitarFXCore PUBLIC httplib::httplib)
 endif()
 
 add_subdirectory(platform)

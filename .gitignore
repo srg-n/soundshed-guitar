@@ -29,3 +29,17 @@ src/build/src/NAMGuitarFXCore.dir/
 src/build/src/Release/
 
 src/_deps/
+
+src/src/Debug/
+
+src/src/NAMGuitarFX.dir/
+
+src/src/NAMGuitarFXCore.dir/
+
+src/src/platform/vst3/Debug/
+
+src/src/platform/vst3/NAMGuitarFX_VST3.dir/
+
+src/src/platform/app/Debug/
+
+src/src/platform/app/NAMGuitarFX_App.dir/

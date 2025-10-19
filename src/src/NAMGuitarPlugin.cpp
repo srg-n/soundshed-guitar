@@ -1,8 +1,16 @@
 #include "NAMGuitarPlugin.h"
 
-#include <filesystem>
 #include <algorithm>
+#include <array>
+#include <cctype>
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <optional>
+#include <vector>
+#include <exception>
+#include <string_view>
+
 #include <nlohmann/json.hpp>
 
 #include "config.h"
@@ -12,8 +20,6 @@
 #include "wdlstring.h"
 
 #include "dsp/NAMDSPManager.h"
-#include "presets/PresetManager.h"
-#include "presets/PresetStorage.h"
 #include "ui/WebUIBridge.h"
 
 namespace namguitar
@@ -113,11 +119,11 @@ nlohmann::json SerializePresetToJson(const Preset& preset)
   nlohmann::json attachments = nlohmann::json::array();
   for (const auto& attachment : preset.attachments)
   {
-    attachments.push_back({
-      {"type", attachment.type},
-      {"filePath", attachment.filePath.generic_string()},
-      {"hash", attachment.hash},
-    });
+    nlohmann::json attachmentJson;
+    attachmentJson["type"] = attachment.type;
+    attachmentJson["filePath"] = attachment.filePath.generic_string();
+    attachmentJson["hash"] = attachment.hash;
+    attachments.push_back(std::move(attachmentJson));
   }
   jsonPreset["attachments"] = std::move(attachments);
 
@@ -134,30 +140,13 @@ nlohmann::json SerializePresetToJson(const Preset& preset)
   return jsonPreset;
 }
 
-std::filesystem::path ResolveAttachmentPath(const PresetAttachment& attachment)
-{
-  if (attachment.filePath.is_absolute())
-  {
-    return attachment.filePath;
-  }
-
-  const std::filesystem::path presetDirectory{"presets"};
-  return presetDirectory / attachment.filePath;
-}
-
 } // namespace
 
 NAMGuitarPlugin::NAMGuitarPlugin(const iplug::InstanceInfo& info)
   : iplug::Plugin(info, iplug::MakeConfig(kParamCount, kNumPrograms))
   , mDSP(std::make_unique<NAMDSPManager>())
-  , mPresets(std::make_unique<PresetManager>())
   , mWebUI(std::make_unique<WebUIBridge>())
 {
-  if (mPresets)
-  {
-    mPresets->SetRemoteBaseUrl(mRemoteApiBaseUrl);
-  }
-
   InitializeParameters();
   HandleWebViewMessages();
 
@@ -217,12 +206,7 @@ void NAMGuitarPlugin::OnIdle()
 
 bool NAMGuitarPlugin::SerializeState(iplug::IByteChunk& chunk) const
 {
-  if (!mPresets)
-  {
-    return false;
-  }
-
-  bool success = mPresets->Serialize(chunk);
+  bool success = chunk.PutStr(mActivePresetJson.c_str());
   success &= chunk.PutStr(mActivePresetId.c_str());
   success &= chunk.PutStr(mActiveModelPath.c_str());
   success &= chunk.PutStr(mActiveIRPath.c_str());
@@ -231,24 +215,54 @@ bool NAMGuitarPlugin::SerializeState(iplug::IByteChunk& chunk) const
 
 int NAMGuitarPlugin::UnserializeState(const iplug::IByteChunk& chunk, int startPos)
 {
-  if (!mPresets)
+  int position = startPos;
+
+  WDL_String presetJson;
+  position = chunk.GetStr(presetJson, position);
+  if (position < 0)
   {
     return startPos;
   }
+  mActivePresetJson = presetJson.Get();
 
-  int position = mPresets->Unserialize(chunk, startPos);
-
-  WDL_String activePreset;
-  position = chunk.GetStr(activePreset, position);
-  mActivePresetId = activePreset.Get();
+  WDL_String activePresetId;
+  position = chunk.GetStr(activePresetId, position);
+  if (position < 0)
+  {
+    return startPos;
+  }
+  mActivePresetId = activePresetId.Get();
 
   WDL_String modelPath;
   position = chunk.GetStr(modelPath, position);
+  if (position < 0)
+  {
+    return startPos;
+  }
   mActiveModelPath = modelPath.Get();
 
   WDL_String irPath;
   position = chunk.GetStr(irPath, position);
+  if (position < 0)
+  {
+    return startPos;
+  }
   mActiveIRPath = irPath.Get();
+
+  if (!mActivePresetJson.empty())
+  {
+    const auto jsonPreset = nlohmann::json::parse(mActivePresetJson, nullptr, false);
+    if (!jsonPreset.is_discarded() && jsonPreset.is_object())
+    {
+      Preset preset = ParsePresetFromJson(jsonPreset);
+      ApplyPreset(preset);
+      mActivePreset = preset;
+      if (mActivePresetId.empty())
+      {
+        mActivePresetId = preset.id;
+      }
+    }
+  }
 
   mPendingStateBroadcast = true;
   return position;
@@ -348,105 +362,19 @@ void NAMGuitarPlugin::HandleUIMessage(const std::string& message)
   }
 
   const std::string type = payload.value("type", "");
-  if (type == "search")
+  if (type == "loadPreset")
   {
-    HandlePresetSearch(payload);
+    HandlePresetLoadRequest(payload);
   }
-  else if (type == "downloadPreset")
+  else if (type == "requestState")
   {
-    HandlePresetDownload(payload);
-  }
-  else if (type == "loadPreset")
-  {
-    HandlePresetLoad(payload);
-  }
-}
-
-void NAMGuitarPlugin::HandlePresetSearch(const nlohmann::json& payload)
-{
-  if (!mPresets)
-  {
-    return;
-  }
-
-  PresetSearchRequest request;
-  request.query = payload.value("query", "");
-  request.category = payload.value("category", "");
-
-  mPresets->SearchRemotePresets(request, [this](std::vector<Preset> presets) {
-    nlohmann::json message;
-    message["type"] = "presetSearchResults";
-    nlohmann::json results = nlohmann::json::array();
-    for (const auto& preset : presets)
-    {
-      results.push_back(SerializePresetToJson(preset));
-    }
-    message["presets"] = std::move(results);
-
-    if (mWebUI)
-    {
-      mWebUI->EnqueueMessage(message.dump());
-    }
-  });
-}
-
-void NAMGuitarPlugin::HandlePresetDownload(const nlohmann::json& payload)
-{
-  if (!mPresets)
-  {
-    return;
-  }
-
-  const std::string presetId = payload.value("presetId", "");
-  if (presetId.empty())
-  {
-    return;
-  }
-
-  mPresets->DownloadRemotePreset(presetId, [this](std::vector<Preset> presets) {
-    for (auto& preset : presets)
-    {
-      mPresets->SavePreset(preset);
-      if (mWebUI)
-      {
-        nlohmann::json message;
-        message["type"] = "presetLoaded";
-        message["preset"] = SerializePresetToJson(preset);
-        mWebUI->EnqueueMessage(message.dump());
-      }
-    }
-  });
-}
-
-void NAMGuitarPlugin::HandlePresetLoad(const nlohmann::json& payload)
-{
-  if (!mPresets)
-  {
-    return;
-  }
-
-  const std::string presetId = payload.value("presetId", "");
-  if (presetId.empty())
-  {
-    return;
-  }
-
-  const auto presets = mPresets->ListPresets();
-  const auto it = std::find_if(presets.begin(), presets.end(), [&](const Preset& candidate) {
-    return candidate.id == presetId;
-  });
-
-  if (it != presets.end())
-  {
-    ApplyPreset(*it);
-    mActivePresetId = it->id;
-    mPendingStateBroadcast = true;
+    HandleStateRequest();
   }
 }
 
 void NAMGuitarPlugin::BroadcastState()
 {
-  if (!mPresets || !mWebUI)
+  if (!mWebUI)
   {
     return;
   }
@@ -454,23 +382,22 @@ void NAMGuitarPlugin::BroadcastState()
   nlohmann::json message;
   message["type"] = "state";
   message["activePresetId"] = mActivePresetId;
+
   auto parameters = SerializeParametersToJson(*this);
   parameters["modelPath"] = mActiveModelPath;
   parameters["irPath"] = mActiveIRPath;
   message["parameters"] = std::move(parameters);
 
-  nlohmann::json presetsJson = nlohmann::json::array();
-  for (const auto& preset : mPresets->ListPresets())
+  if (mActivePreset)
   {
-    presetsJson.push_back(SerializePresetToJson(preset));
+    message["preset"] = SerializePresetToJson(*mActivePreset);
   }
-  message["presets"] = std::move(presetsJson);
 
   mWebUI->EnqueueMessage(message.dump());
   mPendingStateBroadcast = false;
 }
 
-void NAMGuitarPlugin::ApplyPreset(const Preset& preset)
+void NAMGuitarPlugin::ApplyPreset(Preset& preset)
 {
   if (!mDSP)
   {
@@ -484,41 +411,295 @@ void NAMGuitarPlugin::ApplyPreset(const Preset& preset)
     {
       const auto index = static_cast<int>(*paramId);
       auto* param = GetParam(index);
-      param->Set(parameter.value);
-      OnParamChange(index);
+      if (param)
+      {
+        param->Set(parameter.value);
+        OnParamChange(index);
+      }
     }
   }
 
-  for (const auto& attachment : preset.attachments)
+  for (auto& attachment : preset.attachments)
   {
-    const auto path = ResolveAttachmentPath(attachment);
+    const auto resolvedPath = MaterializeAttachment(attachment);
+    if (!resolvedPath)
+    {
+      continue;
+    }
+
+    attachment.filePath = *resolvedPath;
+    attachment.data.clear();
+
     if (attachment.type == "nam")
     {
-      if (mDSP->LoadModel(path))
+      if (mDSP->LoadModel(*resolvedPath))
       {
-        mActiveModelPath = path.generic_string();
+        mActiveModelPath = resolvedPath->generic_string();
       }
     }
     else if (attachment.type == "ir")
     {
-      if (mDSP->LoadImpulseResponse(path))
+      if (mDSP->LoadImpulseResponse(*resolvedPath))
       {
-        mActiveIRPath = path.generic_string();
+        mActiveIRPath = resolvedPath->generic_string();
       }
     }
   }
 }
 
-void NAMGuitarPlugin::SaveCurrentStateToPreset(Preset& preset) const
+void NAMGuitarPlugin::HandlePresetLoadRequest(const nlohmann::json& payload)
 {
-  preset.parameters.clear();
-  for (int paramIdx = 0; paramIdx < kParamCount; ++paramIdx)
+  const auto presetJsonIter = payload.find("preset");
+  if (presetJsonIter == payload.end() || !presetJsonIter->is_object())
   {
-    PresetParameter entry;
-    entry.id = ParamKey(static_cast<ParameterId>(paramIdx));
-    entry.value = GetParam(paramIdx)->Value();
-    preset.parameters.push_back(std::move(entry));
+    return;
   }
+
+  try
+  {
+    Preset preset = ParsePresetFromJson(*presetJsonIter);
+    ApplyPreset(preset);
+
+    mActivePreset = preset;
+    mActivePresetId = preset.id;
+    mActivePresetJson = presetJsonIter->dump();
+    mPendingStateBroadcast = true;
+
+    if (mWebUI)
+    {
+      nlohmann::json message;
+      message["type"] = "presetLoaded";
+      message["preset"] = SerializePresetToJson(preset);
+      mWebUI->EnqueueMessage(message.dump());
+    }
+  }
+  catch (const std::exception& exception)
+  {
+    mPendingStateBroadcast = true;
+    ReportErrorToUI("Failed to load preset", exception.what());
+  }
+  catch (...)
+  {
+    mPendingStateBroadcast = true;
+    ReportErrorToUI("Failed to load preset", "An unknown error occurred");
+  }
+}
+
+void NAMGuitarPlugin::HandleStateRequest()
+{
+  mPendingStateBroadcast = true;
+}
+
+void NAMGuitarPlugin::ReportErrorToUI(std::string_view message, std::string_view detail) const
+{
+  if (!mWebUI)
+  {
+    return;
+  }
+
+  nlohmann::json payload;
+  payload["type"] = "error";
+  payload["message"] = std::string{message};
+  if (!detail.empty())
+  {
+    payload["detail"] = std::string{detail};
+  }
+
+  mWebUI->EnqueueMessage(payload.dump());
+}
+
+std::optional<std::filesystem::path> NAMGuitarPlugin::MaterializeAttachment(const PresetAttachment& attachment) const
+{
+  std::filesystem::path target = ResolveAttachmentTarget(attachment);
+  if (target.empty())
+  {
+    return std::nullopt;
+  }
+
+  if (!attachment.data.empty())
+  {
+    const auto data = DecodeBase64(attachment.data);
+    if (data.empty())
+    {
+      return std::nullopt;
+    }
+
+    if (!WriteFile(target, data))
+    {
+      return std::nullopt;
+    }
+  }
+
+  if (!std::filesystem::exists(target))
+  {
+    return std::nullopt;
+  }
+
+  if (!attachment.hash.empty())
+  {
+    const auto hash = mHasher.HashFile(target);
+    if (!hash.empty() && hash != attachment.hash)
+    {
+      return std::nullopt;
+    }
+  }
+
+  return target;
+}
+
+std::filesystem::path NAMGuitarPlugin::ResolveAttachmentTarget(const PresetAttachment& attachment) const
+{
+  if (!attachment.filePath.empty())
+  {
+    if (attachment.filePath.is_absolute())
+    {
+      return attachment.filePath;
+    }
+
+    if (const auto presetDir = mFileSystem.EnsureDirectory(mFileSystem.ResolvePresetDirectory()))
+    {
+      return *presetDir / attachment.filePath;
+    }
+
+    return attachment.filePath;
+  }
+
+  if (!attachment.hash.empty())
+  {
+    if (const auto presetDir = mFileSystem.EnsureDirectory(mFileSystem.ResolvePresetDirectory()))
+    {
+      return *presetDir / (attachment.hash + (attachment.type.empty() ? std::string{} : std::string{"."} + attachment.type));
+    }
+  }
+
+  return {};
+}
+
+std::vector<std::uint8_t> NAMGuitarPlugin::DecodeBase64(const std::string& encoded)
+{
+  static const std::array<int, 256> decodeTable = []() {
+    std::array<int, 256> table{};
+    table.fill(-1);
+    const std::string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    for (std::size_t idx = 0; idx < alphabet.size(); ++idx)
+    {
+      table[static_cast<unsigned char>(alphabet[idx])] = static_cast<int>(idx);
+    }
+    table[static_cast<unsigned char>('-')] = 62;
+    table[static_cast<unsigned char>('_')] = 63;
+    return table;
+  }();
+
+  std::vector<std::uint8_t> output;
+  int accumulator = 0;
+  int bits = -8;
+
+  for (unsigned char c : encoded)
+  {
+    if (std::isspace(c))
+    {
+      continue;
+    }
+
+    if (c == '=')
+    {
+      break;
+    }
+
+    const int value = decodeTable[c];
+    if (value < 0)
+    {
+      return {};
+    }
+
+    accumulator = (accumulator << 6) + value;
+    bits += 6;
+    if (bits >= 0)
+    {
+      output.push_back(static_cast<std::uint8_t>((accumulator >> bits) & 0xFF));
+      bits -= 8;
+    }
+  }
+
+  return output;
+}
+
+bool NAMGuitarPlugin::WriteFile(const std::filesystem::path& target, const std::vector<std::uint8_t>& data) const
+{
+  if (target.empty())
+  {
+    return false;
+  }
+
+  const auto parent = target.parent_path();
+  if (!parent.empty())
+  {
+    if (!mFileSystem.EnsureDirectory(parent))
+    {
+      return false;
+    }
+  }
+
+  std::ofstream output(target, std::ios::binary | std::ios::trunc);
+  if (!output)
+  {
+    return false;
+  }
+
+  output.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
+  return output.good();
+}
+
+Preset NAMGuitarPlugin::ParsePresetFromJson(const nlohmann::json& jsonPreset)
+{
+  Preset preset;
+  preset.id = jsonPreset.value("id", "");
+  preset.name = jsonPreset.value("name", "");
+  preset.category = jsonPreset.value("category", "");
+  preset.description = jsonPreset.value("description", "");
+  preset.namModelId = jsonPreset.value("namModelId", "");
+  preset.irId = jsonPreset.value("irId", "");
+
+  if (jsonPreset.contains("fxChain") && jsonPreset["fxChain"].is_array())
+  {
+    for (const auto& fx : jsonPreset["fxChain"])
+    {
+      preset.fxChain.push_back(fx.get<std::string>());
+    }
+  }
+
+  if (jsonPreset.contains("attachments") && jsonPreset["attachments"].is_array())
+  {
+    for (const auto& jsonAttachment : jsonPreset["attachments"])
+    {
+      PresetAttachment attachment;
+      attachment.type = jsonAttachment.value("type", "");
+      attachment.hash = jsonAttachment.value("hash", "");
+      if (jsonAttachment.contains("filePath"))
+      {
+        attachment.filePath = jsonAttachment.value("filePath", "");
+      }
+      else if (jsonAttachment.contains("path"))
+      {
+        attachment.filePath = jsonAttachment.value("path", "");
+      }
+      attachment.data = jsonAttachment.value("data", "");
+      preset.attachments.push_back(std::move(attachment));
+    }
+  }
+
+  if (jsonPreset.contains("parameters") && jsonPreset["parameters"].is_array())
+  {
+    for (const auto& jsonParameter : jsonPreset["parameters"])
+    {
+      PresetParameter entry;
+      entry.id = jsonParameter.value("id", "");
+      entry.value = jsonParameter.value("value", 0.0);
+      preset.parameters.push_back(entry);
+    }
+  }
+
+  return preset;
 }
 
 } // namespace namguitar

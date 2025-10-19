@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <fstream>
+#include <iterator>
 #include <nlohmann/json.hpp>
+#include <utility>
 
 #include "IPlugStructs.h"
 
@@ -10,6 +12,60 @@ namespace namguitar
 {
 namespace
 {
+std::vector<Preset> BuildDefaultPresets()
+{
+  auto presetParameters = [](double inputTrim, double outputTrim, double drive, double tone, double gateEnabled,
+                              double gateThreshold) {
+    std::vector<PresetParameter> parameters;
+    parameters.push_back({"input_trim", inputTrim});
+    parameters.push_back({"output_trim", outputTrim});
+    parameters.push_back({"drive", drive});
+    parameters.push_back({"tone", tone});
+    parameters.push_back({"gate_enabled", gateEnabled});
+    parameters.push_back({"gate_threshold", gateThreshold});
+    return parameters;
+  };
+
+  std::vector<Preset> defaults;
+  defaults.push_back(Preset{
+    "factory-clean",
+    "Factory Clean",
+    "Factory",
+    "Balanced clean tone with plenty of headroom.",
+    "",
+    "",
+    {},
+    {},
+    presetParameters(0.0, 0.0, 0.15, 0.55, 0.0, -60.0),
+  });
+
+  defaults.push_back(Preset{
+    "factory-breakup",
+    "Edge of Breakup",
+    "Factory",
+    "Touch-sensitive crunch that works great with single coils.",
+    "",
+    "",
+    {},
+    {},
+    presetParameters(-3.0, 0.0, 0.45, 0.5, 0.0, -55.0),
+  });
+
+  defaults.push_back(Preset{
+    "factory-highgain",
+    "Saturated Lead",
+    "Factory",
+    "Tight high-gain lead preset with a gentle noise gate.",
+    "",
+    "",
+    {"noise_gate"},
+    {},
+    presetParameters(-6.0, -3.0, 0.85, 0.65, 1.0, -50.0),
+  });
+
+  return defaults;
+}
+
 nlohmann::json SerializePreset(const Preset& preset)
 {
   nlohmann::json jsonPreset;
@@ -45,43 +101,6 @@ nlohmann::json SerializePreset(const Preset& preset)
   return jsonPreset;
 }
 
-Preset DeserializePreset(const nlohmann::json& jsonPreset)
-{
-  Preset preset;
-  preset.id = jsonPreset.value("id", "");
-  preset.name = jsonPreset.value("name", "");
-  preset.category = jsonPreset.value("category", "");
-  preset.description = jsonPreset.value("description", "");
-  preset.namModelId = jsonPreset.value("namModelId", "");
-  preset.irId = jsonPreset.value("irId", "");
-  preset.fxChain = jsonPreset.value("fxChain", std::vector<std::string>{});
-
-  if (jsonPreset.contains("attachments"))
-  {
-    for (const auto& attachmentJson : jsonPreset["attachments"])
-    {
-      PresetAttachment attachment;
-      attachment.type = attachmentJson.value("type", "");
-      attachment.filePath = attachmentJson.value("filePath", "");
-      attachment.hash = attachmentJson.value("hash", "");
-      preset.attachments.push_back(std::move(attachment));
-    }
-  }
-
-  if (jsonPreset.contains("parameters"))
-  {
-    for (const auto& parameterJson : jsonPreset["parameters"])
-    {
-      PresetParameter parameter;
-      parameter.id = parameterJson.value("id", "");
-      parameter.value = parameterJson.value("value", 0.0);
-      preset.parameters.push_back(std::move(parameter));
-    }
-  }
-
-  return preset;
-}
-
 nlohmann::json SerializeAllPresets(const std::vector<Preset>& presets)
 {
   nlohmann::json jsonRoot;
@@ -92,6 +111,50 @@ nlohmann::json SerializeAllPresets(const std::vector<Preset>& presets)
   }
 
   return jsonRoot;
+}
+
+Preset DeserializePreset(const nlohmann::json& jsonPreset)
+{
+  Preset preset;
+  preset.id = jsonPreset.value("id", "");
+  preset.name = jsonPreset.value("name", "");
+  preset.category = jsonPreset.value("category", "");
+  preset.description = jsonPreset.value("description", "");
+  preset.namModelId = jsonPreset.value("namModelId", "");
+  preset.irId = jsonPreset.value("irId", "");
+
+  if (jsonPreset.contains("fxChain") && jsonPreset["fxChain"].is_array())
+  {
+    for (const auto& fx : jsonPreset["fxChain"])
+    {
+      preset.fxChain.push_back(fx.get<std::string>());
+    }
+  }
+
+  if (jsonPreset.contains("attachments") && jsonPreset["attachments"].is_array())
+  {
+    for (const auto& jsonAttachment : jsonPreset["attachments"])
+    {
+      PresetAttachment attachment;
+      attachment.type = jsonAttachment.value("type", "");
+      attachment.hash = jsonAttachment.value("hash", "");
+      attachment.filePath = jsonAttachment.value("filePath", "");
+      preset.attachments.push_back(std::move(attachment));
+    }
+  }
+
+  if (jsonPreset.contains("parameters") && jsonPreset["parameters"].is_array())
+  {
+    for (const auto& jsonParameter : jsonPreset["parameters"])
+    {
+      PresetParameter parameter;
+      parameter.id = jsonParameter.value("id", "");
+      parameter.value = jsonParameter.value("value", 0.0);
+      preset.parameters.push_back(parameter);
+    }
+  }
+
+  return preset;
 }
 
 std::vector<Preset> DeserializeAllPresets(const std::string& serialized)
@@ -108,7 +171,7 @@ std::vector<Preset> DeserializeAllPresets(const std::string& serialized)
     return presets;
   }
 
-  if (!jsonRoot.contains("presets"))
+  if (!jsonRoot.contains("presets") || !jsonRoot["presets"].is_array())
   {
     return presets;
   }
@@ -132,6 +195,7 @@ PresetStorage::PresetStorage()
   }
 
   LoadFromDisk();
+  EnsureDefaultPresets();
 }
 
 PresetStorage::~PresetStorage() = default;
@@ -245,6 +309,30 @@ void PresetStorage::LoadFromDisk()
 
   std::string serialized((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
   mPresets = DeserializeAllPresets(serialized);
+}
+
+void PresetStorage::EnsureDefaultPresets()
+{
+  const auto defaults = BuildDefaultPresets();
+  bool changed = false;
+
+  for (const auto& preset : defaults)
+  {
+    const auto existing = std::find_if(mPresets.begin(), mPresets.end(), [&](const Preset& candidate) {
+      return candidate.id == preset.id;
+    });
+
+    if (existing == mPresets.end())
+    {
+      mPresets.push_back(preset);
+      changed = true;
+    }
+  }
+
+  if (changed)
+  {
+    PersistToDisk();
+  }
 }
 
 } // namespace namguitar

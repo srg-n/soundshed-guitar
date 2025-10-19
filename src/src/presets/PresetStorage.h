@@ -1,11 +1,11 @@
 #pragma once
 
-#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "models/ModelHasher.h"
+#include "presets/PresetTypes.h"
 #include "util/FileSystem.h"
 
 namespace iplug
@@ -15,32 +15,6 @@ class IByteChunk;
 
 namespace namguitar
 {
-struct PresetAttachment
-{
-  std::string type;
-  std::filesystem::path filePath;
-  std::string hash;
-};
-
-struct PresetParameter
-{
-  std::string id;
-  double value = 0.0;
-};
-
-struct Preset
-{
-  std::string id;
-  std::string name;
-  std::string category;
-  std::string description;
-  std::string namModelId;
-  std::string irId;
-  std::vector<std::string> fxChain;
-  std::vector<PresetAttachment> attachments;
-  std::vector<PresetParameter> parameters;
-};
-
 class PresetStorage
 {
 public:
@@ -57,6 +31,7 @@ public:
 private:
   void PersistToDisk() const;
   void LoadFromDisk();
+  void EnsureDefaultPresets();
 
   std::vector<Preset> mPresets;
   FileSystem mFileSystem;

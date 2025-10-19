@@ -1,6 +1,8 @@
 #pragma once
 
+#include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -9,6 +11,9 @@
 
 #include "config.h"
 #include "IPlug_include_in_plug_hdr.h"
+#include "models/ModelHasher.h"
+#include "presets/PresetTypes.h"
+#include "util/FileSystem.h"
 
 namespace iplug
 {
@@ -21,9 +26,7 @@ class IGraphics;
 namespace namguitar
 {
 class NAMDSPManager;
-class PresetManager;
 class WebUIBridge;
-struct Preset;
 class NAMGuitarPlugin final : public iplug::Plugin
 {
 public:
@@ -52,20 +55,26 @@ private:
   void HandleWebViewMessages();
   void InitializeGraphics(iplug::igraphics::IGraphics& graphics);
   void HandleUIMessage(const std::string& message);
-  void HandlePresetSearch(const nlohmann::json& payload);
-  void HandlePresetDownload(const nlohmann::json& payload);
-  void HandlePresetLoad(const nlohmann::json& payload);
+  void HandlePresetLoadRequest(const nlohmann::json& payload);
+  void HandleStateRequest();
   void BroadcastState();
-  void ApplyPreset(const namguitar::Preset& preset);
-  void SaveCurrentStateToPreset(namguitar::Preset& preset) const;
+  void ApplyPreset(namguitar::Preset& preset);
+  void ReportErrorToUI(std::string_view message, std::string_view detail = {}) const;
+  [[nodiscard]] std::optional<std::filesystem::path> MaterializeAttachment(const PresetAttachment& attachment) const;
+  [[nodiscard]] std::filesystem::path ResolveAttachmentTarget(const PresetAttachment& attachment) const;
+  [[nodiscard]] static namguitar::Preset ParsePresetFromJson(const nlohmann::json& jsonPreset);
+  [[nodiscard]] static std::vector<std::uint8_t> DecodeBase64(const std::string& encoded);
+  bool WriteFile(const std::filesystem::path& target, const std::vector<std::uint8_t>& data) const;
 
   std::unique_ptr<NAMDSPManager> mDSP;
-  std::unique_ptr<PresetManager> mPresets;
   std::unique_ptr<WebUIBridge> mWebUI;
+  FileSystem mFileSystem;
+  ModelHasher mHasher;
+  std::optional<Preset> mActivePreset;
+  std::string mActivePresetJson;
   std::string mActivePresetId;
   std::string mActiveModelPath;
   std::string mActiveIRPath;
-  std::string mRemoteApiBaseUrl = "http://localhost:8000";
   bool mPendingStateBroadcast = true;
 };
 } // namespace namguitar
