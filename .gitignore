@@ -1,0 +1,23 @@
+# Build artifacts
+/build/
+/bin/
+/dist/
+/.vs/
+/CMakeFiles/
+CMakeCache.txt
+*.vcxproj*
+*.sln
+*.user
+*.pyc
+__pycache__/
+*.log
+*.zip
+*.aaxplugin/
+*.vst3/
+*.component/
+
+src/.vs/
+
+src/out/
+
+src/x64/

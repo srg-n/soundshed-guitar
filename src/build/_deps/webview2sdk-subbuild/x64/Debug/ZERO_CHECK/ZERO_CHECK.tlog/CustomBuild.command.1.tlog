@@ -1,0 +1,10 @@
+^C:\WORK\GIT\MISC\NEURON-GUITAR\SRC\BUILD\_DEPS\WEBVIEW2SDK-SUBBUILD\CMAKEFILES\B8CCC371D8BACB99F2D2F30B0E187B21\GENERATE.STAMP.RULE
+setlocal
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SC:/Work/GIT/misc/neuron-guitar/src/build/_deps/webview2sdk-subbuild -BC:/Work/GIT/misc/neuron-guitar/src/build/_deps/webview2sdk-subbuild --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Work/GIT/misc/neuron-guitar/src/build/_deps/webview2sdk-subbuild/webview2sdk-populate.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/neuralampmodelercore-subbuild/CMakeFiles/neuralampmodelercore-populate"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/neuralampmodelercore-subbuild/CMakeFiles/1d502630900a8a85c67a52b70b987bf2/neuralampmodelercore-populate.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/neuralampmodelercore-subbuild/CMakeFiles/6dbc9c9ccfc1931f8580a31de2b20cd5/neuralampmodelercore-populate-complete.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/neuralampmodelercore-subbuild/CMakeFiles/dcba636f9d2a0c24a1b8d5ff41883e60/neuralampmodelercore-populate-build.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/neuralampmodelercore-subbuild/CMakeFiles/dcba636f9d2a0c24a1b8d5ff41883e60/neuralampmodelercore-populate-configure.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/neuralampmodelercore-subbuild/CMakeFiles/dcba636f9d2a0c24a1b8d5ff41883e60/neuralampmodelercore-populate-download.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/neuralampmodelercore-subbuild/CMakeFiles/dcba636f9d2a0c24a1b8d5ff41883e60/neuralampmodelercore-populate-install.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/neuralampmodelercore-subbuild/CMakeFiles/dcba636f9d2a0c24a1b8d5ff41883e60/neuralampmodelercore-populate-mkdir.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/neuralampmodelercore-subbuild/CMakeFiles/dcba636f9d2a0c24a1b8d5ff41883e60/neuralampmodelercore-populate-patch.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/neuralampmodelercore-subbuild/CMakeFiles/dcba636f9d2a0c24a1b8d5ff41883e60/neuralampmodelercore-populate-test.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/neuralampmodelercore-subbuild/CMakeFiles/dcba636f9d2a0c24a1b8d5ff41883e60/neuralampmodelercore-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"neuralampmodelercore-populate"
+		],
+		"name" : "neuralampmodelercore-populate"
+	}
+}

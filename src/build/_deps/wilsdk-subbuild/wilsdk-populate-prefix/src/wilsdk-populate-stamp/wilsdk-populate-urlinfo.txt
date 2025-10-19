@@ -1,0 +1,12 @@
+# This is a generated file and its contents are an internal implementation detail.
+# The download step will be re-executed if anything in this file changes.
+# No other meaning or use of this file is supported.
+
+method=url
+command=D:/Program Files/Microsoft Visual Studio/18/Insiders/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild/wilsdk-populate-prefix/src/wilsdk-populate-stamp/download-wilsdk-populate.cmake;COMMAND;D:/Program Files/Microsoft Visual Studio/18/Insiders/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild/wilsdk-populate-prefix/src/wilsdk-populate-stamp/verify-wilsdk-populate.cmake;COMMAND;D:/Program Files/Microsoft Visual Studio/18/Insiders/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild/wilsdk-populate-prefix/src/wilsdk-populate-stamp/extract-wilsdk-populate.cmake
+source_dir=C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-src
+work_dir=C:/Work/GIT/misc/neuron-guitar/src/build/_deps
+url(s)=https://globalcdn.nuget.org/packages/microsoft.windows.implementationlibrary.1.0.240803.1.nupkg
+hash=
+      no_extract=
+

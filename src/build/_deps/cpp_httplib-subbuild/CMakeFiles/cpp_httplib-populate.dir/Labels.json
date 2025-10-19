@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/cpp_httplib-subbuild/CMakeFiles/cpp_httplib-populate"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/cpp_httplib-subbuild/CMakeFiles/d1961c6ebcc349d7a1c51a6242229337/cpp_httplib-populate.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/cpp_httplib-subbuild/CMakeFiles/a6c8ad0610fe35ad9e13671d7ca13ee7/cpp_httplib-populate-complete.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/cpp_httplib-subbuild/CMakeFiles/cff3f1932d3b1d95b6aa8d4446b0e69f/cpp_httplib-populate-build.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/cpp_httplib-subbuild/CMakeFiles/cff3f1932d3b1d95b6aa8d4446b0e69f/cpp_httplib-populate-configure.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/cpp_httplib-subbuild/CMakeFiles/cff3f1932d3b1d95b6aa8d4446b0e69f/cpp_httplib-populate-download.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/cpp_httplib-subbuild/CMakeFiles/cff3f1932d3b1d95b6aa8d4446b0e69f/cpp_httplib-populate-install.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/cpp_httplib-subbuild/CMakeFiles/cff3f1932d3b1d95b6aa8d4446b0e69f/cpp_httplib-populate-mkdir.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/cpp_httplib-subbuild/CMakeFiles/cff3f1932d3b1d95b6aa8d4446b0e69f/cpp_httplib-populate-patch.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/cpp_httplib-subbuild/CMakeFiles/cff3f1932d3b1d95b6aa8d4446b0e69f/cpp_httplib-populate-test.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/cpp_httplib-subbuild/CMakeFiles/cff3f1932d3b1d95b6aa8d4446b0e69f/cpp_httplib-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"cpp_httplib-populate"
+		],
+		"name" : "cpp_httplib-populate"
+	}
+}

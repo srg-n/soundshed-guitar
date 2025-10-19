@@ -1,0 +1,9 @@
+C:\Work\GIT\misc\neuron-guitar\src\src\NAMGuitarPlugin.cpp;C:\Work\GIT\misc\neuron-guitar\src\build\src\NAMGuitarFX.dir\Release\NAMGuitarPlugin.obj
+C:\Work\GIT\misc\neuron-guitar\src\src\presets\PresetManager.cpp;C:\Work\GIT\misc\neuron-guitar\src\build\src\NAMGuitarFX.dir\Release\PresetManager.obj
+C:\Work\GIT\misc\neuron-guitar\src\src\presets\PresetStorage.cpp;C:\Work\GIT\misc\neuron-guitar\src\build\src\NAMGuitarFX.dir\Release\PresetStorage.obj
+C:\Work\GIT\misc\neuron-guitar\src\src\dsp\NAMDSPManager.cpp;C:\Work\GIT\misc\neuron-guitar\src\build\src\NAMGuitarFX.dir\Release\NAMDSPManager.obj
+C:\Work\GIT\misc\neuron-guitar\src\src\dsp\IRManager.cpp;C:\Work\GIT\misc\neuron-guitar\src\build\src\NAMGuitarFX.dir\Release\IRManager.obj
+C:\Work\GIT\misc\neuron-guitar\src\src\models\ModelHasher.cpp;C:\Work\GIT\misc\neuron-guitar\src\build\src\NAMGuitarFX.dir\Release\ModelHasher.obj
+C:\Work\GIT\misc\neuron-guitar\src\src\network\PresetServiceClient.cpp;C:\Work\GIT\misc\neuron-guitar\src\build\src\NAMGuitarFX.dir\Release\PresetServiceClient.obj
+C:\Work\GIT\misc\neuron-guitar\src\src\ui\WebUIBridge.cpp;C:\Work\GIT\misc\neuron-guitar\src\build\src\NAMGuitarFX.dir\Release\WebUIBridge.obj
+C:\Work\GIT\misc\neuron-guitar\src\src\util\FileSystem.cpp;C:\Work\GIT\misc\neuron-guitar\src\build\src\NAMGuitarFX.dir\Release\FileSystem.obj

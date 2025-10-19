@@ -1,0 +1,10 @@
+^C:\WORK\GIT\MISC\NEURON-GUITAR\SRC\BUILD\CMAKEFILES\5E63319C1F30CDE0C81D1AFA925DE682\GENERATE.STAMP.RULE
+setlocal
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SC:/Work/GIT/misc/neuron-guitar/src -BC:/Work/GIT/misc/neuron-guitar/src/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Work/GIT/misc/neuron-guitar/src/build/NAMGuitarFX.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/iplug2-subbuild/CMakeFiles/iplug2-populate"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/iplug2-subbuild/CMakeFiles/a3defaf3518e8679199635c17ab65c68/iplug2-populate.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/iplug2-subbuild/CMakeFiles/a2d196f0352d008d155b3d6e67136ae4/iplug2-populate-complete.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/iplug2-subbuild/CMakeFiles/6ba39d16263e4542e0f52d7a37667668/iplug2-populate-build.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/iplug2-subbuild/CMakeFiles/6ba39d16263e4542e0f52d7a37667668/iplug2-populate-configure.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/iplug2-subbuild/CMakeFiles/6ba39d16263e4542e0f52d7a37667668/iplug2-populate-download.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/iplug2-subbuild/CMakeFiles/6ba39d16263e4542e0f52d7a37667668/iplug2-populate-install.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/iplug2-subbuild/CMakeFiles/6ba39d16263e4542e0f52d7a37667668/iplug2-populate-mkdir.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/iplug2-subbuild/CMakeFiles/6ba39d16263e4542e0f52d7a37667668/iplug2-populate-patch.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/iplug2-subbuild/CMakeFiles/6ba39d16263e4542e0f52d7a37667668/iplug2-populate-test.rule"
+		},
+		{
+			"file" : "C:/Work/GIT/misc/neuron-guitar/src/build/_deps/iplug2-subbuild/CMakeFiles/6ba39d16263e4542e0f52d7a37667668/iplug2-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"iplug2-populate"
+		],
+		"name" : "iplug2-populate"
+	}
+}

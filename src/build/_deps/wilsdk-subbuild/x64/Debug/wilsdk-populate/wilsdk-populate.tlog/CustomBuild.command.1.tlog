@@ -1,0 +1,152 @@
+^C:\WORK\GIT\MISC\NEURON-GUITAR\SRC\BUILD\_DEPS\WILSDK-SUBBUILD\CMAKEFILES\78D935C92170D7E3982D604DE9D30487\WILSDK-POPULATE-MKDIR.RULE
+setlocal
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -Dcfgdir=/Debug -P C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild/wilsdk-populate-prefix/tmp/wilsdk-populate-mkdirs.cmake
+if %errorlevel% neq 0 goto :cmEnd
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E touch C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild/wilsdk-populate-prefix/src/wilsdk-populate-stamp/Debug/wilsdk-populate-mkdir
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\WORK\GIT\MISC\NEURON-GUITAR\SRC\BUILD\_DEPS\WILSDK-SUBBUILD\CMAKEFILES\78D935C92170D7E3982D604DE9D30487\WILSDK-POPULATE-DOWNLOAD.RULE
+setlocal
+cd C:\Work\GIT\misc\neuron-guitar\src\build\_deps
+if %errorlevel% neq 0 goto :cmEnd
+C:
+if %errorlevel% neq 0 goto :cmEnd
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE -P C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild/wilsdk-populate-prefix/src/wilsdk-populate-stamp/download-wilsdk-populate.cmake
+if %errorlevel% neq 0 goto :cmEnd
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE -P C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild/wilsdk-populate-prefix/src/wilsdk-populate-stamp/verify-wilsdk-populate.cmake
+if %errorlevel% neq 0 goto :cmEnd
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE -P C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild/wilsdk-populate-prefix/src/wilsdk-populate-stamp/extract-wilsdk-populate.cmake
+if %errorlevel% neq 0 goto :cmEnd
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E touch C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild/wilsdk-populate-prefix/src/wilsdk-populate-stamp/Debug/wilsdk-populate-download
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\WORK\GIT\MISC\NEURON-GUITAR\SRC\BUILD\_DEPS\WILSDK-SUBBUILD\CMAKEFILES\78D935C92170D7E3982D604DE9D30487\WILSDK-POPULATE-UPDATE.RULE
+setlocal
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E echo_append
+if %errorlevel% neq 0 goto :cmEnd
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E touch C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild/wilsdk-populate-prefix/src/wilsdk-populate-stamp/Debug/wilsdk-populate-update
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\WORK\GIT\MISC\NEURON-GUITAR\SRC\BUILD\_DEPS\WILSDK-SUBBUILD\CMAKEFILES\78D935C92170D7E3982D604DE9D30487\WILSDK-POPULATE-PATCH.RULE
+setlocal
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E echo_append
+if %errorlevel% neq 0 goto :cmEnd
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E touch C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild/wilsdk-populate-prefix/src/wilsdk-populate-stamp/Debug/wilsdk-populate-patch
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\WORK\GIT\MISC\NEURON-GUITAR\SRC\BUILD\_DEPS\WILSDK-SUBBUILD\CMAKEFILES\78D935C92170D7E3982D604DE9D30487\WILSDK-POPULATE-CONFIGURE.RULE
+setlocal
+cd C:\Work\GIT\misc\neuron-guitar\src\build\_deps\wilsdk-build
+if %errorlevel% neq 0 goto :cmEnd
+C:
+if %errorlevel% neq 0 goto :cmEnd
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E echo_append
+if %errorlevel% neq 0 goto :cmEnd
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E touch C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild/wilsdk-populate-prefix/src/wilsdk-populate-stamp/Debug/wilsdk-populate-configure
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\WORK\GIT\MISC\NEURON-GUITAR\SRC\BUILD\_DEPS\WILSDK-SUBBUILD\CMAKEFILES\78D935C92170D7E3982D604DE9D30487\WILSDK-POPULATE-BUILD.RULE
+setlocal
+cd C:\Work\GIT\misc\neuron-guitar\src\build\_deps\wilsdk-build
+if %errorlevel% neq 0 goto :cmEnd
+C:
+if %errorlevel% neq 0 goto :cmEnd
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E echo_append
+if %errorlevel% neq 0 goto :cmEnd
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E touch C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild/wilsdk-populate-prefix/src/wilsdk-populate-stamp/Debug/wilsdk-populate-build
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\WORK\GIT\MISC\NEURON-GUITAR\SRC\BUILD\_DEPS\WILSDK-SUBBUILD\CMAKEFILES\78D935C92170D7E3982D604DE9D30487\WILSDK-POPULATE-INSTALL.RULE
+setlocal
+cd C:\Work\GIT\misc\neuron-guitar\src\build\_deps\wilsdk-build
+if %errorlevel% neq 0 goto :cmEnd
+C:
+if %errorlevel% neq 0 goto :cmEnd
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E echo_append
+if %errorlevel% neq 0 goto :cmEnd
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E touch C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild/wilsdk-populate-prefix/src/wilsdk-populate-stamp/Debug/wilsdk-populate-install
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\WORK\GIT\MISC\NEURON-GUITAR\SRC\BUILD\_DEPS\WILSDK-SUBBUILD\CMAKEFILES\78D935C92170D7E3982D604DE9D30487\WILSDK-POPULATE-TEST.RULE
+setlocal
+cd C:\Work\GIT\misc\neuron-guitar\src\build\_deps\wilsdk-build
+if %errorlevel% neq 0 goto :cmEnd
+C:
+if %errorlevel% neq 0 goto :cmEnd
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E echo_append
+if %errorlevel% neq 0 goto :cmEnd
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E touch C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild/wilsdk-populate-prefix/src/wilsdk-populate-stamp/Debug/wilsdk-populate-test
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\WORK\GIT\MISC\NEURON-GUITAR\SRC\BUILD\_DEPS\WILSDK-SUBBUILD\CMAKEFILES\B7667E49F946BCC0E38E242FD215C5AC\WILSDK-POPULATE-COMPLETE.RULE
+setlocal
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E make_directory C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild/CMakeFiles/Debug
+if %errorlevel% neq 0 goto :cmEnd
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E touch C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild/CMakeFiles/Debug/wilsdk-populate-complete
+if %errorlevel% neq 0 goto :cmEnd
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E touch C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild/wilsdk-populate-prefix/src/wilsdk-populate-stamp/Debug/wilsdk-populate-done
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\WORK\GIT\MISC\NEURON-GUITAR\SRC\BUILD\_DEPS\WILSDK-SUBBUILD\CMAKEFILES\CAD04D9DFDF5E8CAA1C48EFCF359868B\WILSDK-POPULATE.RULE
+setlocal
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\WORK\GIT\MISC\NEURON-GUITAR\SRC\BUILD\_DEPS\WILSDK-SUBBUILD\CMAKELISTS.TXT
+setlocal
+"D:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SC:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild -BC:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild --check-stamp-file C:/Work/GIT/misc/neuron-guitar/src/build/_deps/wilsdk-subbuild/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
