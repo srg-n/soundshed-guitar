@@ -76,6 +76,13 @@ const uiState = {
   filteredPresets: [],
   activePresetId: null,
   presetCache: new Map(),
+  parameters: {
+    values: [],
+    gateEnabled: false,
+    gateThreshold: null,
+    modelPath: "",
+    irPath: "",
+  },
 };
 
 window.NAMBridge = {
@@ -132,9 +139,75 @@ function renderPresetList(presets) {
   });
 }
 
+function formatParameterValue(parameter) {
+  if (typeof parameter.value === "number") {
+    return parameter.value.toFixed(2);
+  }
+  if (typeof parameter.value === "boolean") {
+    return parameter.value ? "On" : "Off";
+  }
+  return `${parameter.value ?? ""}`;
+}
+
+function renderParameterSection() {
+  const parameterItems = (uiState.parameters.values ?? [])
+    .map((parameter) => {
+      const label = parameter.label ?? parameter.id ?? "";
+      return `
+        <li>
+          <span class="parameter-label">${label}</span>
+          <span class="parameter-value">${formatParameterValue(parameter)}</span>
+        </li>
+      `;
+    })
+    .join("");
+
+  const hasParameters = Boolean(parameterItems);
+  const gateInfo = typeof uiState.parameters.gateEnabled === "boolean"
+    ? `
+        <li>
+          <span class="parameter-label">Noise Gate</span>
+          <span class="parameter-value">${uiState.parameters.gateEnabled ? "On" : "Off"}${
+            typeof uiState.parameters.gateThreshold === "number"
+              ? ` (${uiState.parameters.gateThreshold.toFixed(1)} dB)`
+              : ""
+          }</span>
+        </li>
+      `
+    : "";
+
+  const signalPath = `
+    <ul class="signal-path">
+      <li><span class="parameter-label">Model</span><span class="parameter-value">${uiState.parameters.modelPath || "None"}</span></li>
+      <li><span class="parameter-label">Impulse Response</span><span class="parameter-value">${uiState.parameters.irPath || "None"}</span></li>
+    </ul>
+  `;
+
+  if (!hasParameters && !gateInfo && !uiState.parameters.modelPath && !uiState.parameters.irPath) {
+    return "";
+  }
+
+  return `
+    <section>
+      <h3>Current Parameters</h3>
+      <ul class="parameter-list">
+        ${parameterItems}
+        ${gateInfo}
+      </ul>
+      <h4>Signal Path</h4>
+      ${signalPath}
+    </section>
+  `;
+}
+
 function renderPresetDetails(preset) {
   if (!preset) {
-    presetDetailsElement.innerHTML = "<p>Select a preset to see details.</p>";
+    const parameterSection = renderParameterSection();
+    presetDetailsElement.innerHTML = `
+      <h2>No Preset Loaded</h2>
+      <p>Select a preset to see details.</p>
+      ${parameterSection}
+    `;
     return;
   }
 
@@ -165,6 +238,7 @@ function renderPresetDetails(preset) {
       <ul>${attachments}</ul>
     </section>
     <button id="apply-preset">Apply Preset</button>
+    ${renderParameterSection()}
   `;
 
   const applyButton = document.getElementById("apply-preset");
@@ -180,6 +254,15 @@ function handleIncomingMessage(message) {
   switch (payload.type) {
     case "state": {
       uiState.activePresetId = payload.activePresetId ?? null;
+      if (payload.parameters) {
+        uiState.parameters = {
+          values: Array.isArray(payload.parameters.parameters) ? payload.parameters.parameters : [],
+          gateEnabled: payload.parameters.gateEnabled ?? false,
+          gateThreshold: typeof payload.parameters.gateThreshold === "number" ? payload.parameters.gateThreshold : null,
+          modelPath: payload.parameters.modelPath ?? "",
+          irPath: payload.parameters.irPath ?? "",
+        };
+      }
       if (payload.preset) {
         uiState.presetCache.set(payload.preset.id, payload.preset);
         if (!uiState.presets.some((preset) => preset.id === payload.preset.id)) {
@@ -199,6 +282,18 @@ function handleIncomingMessage(message) {
         uiState.activePresetId = preset.id;
         uiState.presetCache.set(preset.id, preset);
         renderPresetDetails(clonePreset(preset));
+      }
+      if (payload.parameters) {
+        uiState.parameters = {
+          values: Array.isArray(payload.parameters.parameters) ? payload.parameters.parameters : uiState.parameters.values,
+          gateEnabled: payload.parameters.gateEnabled ?? uiState.parameters.gateEnabled,
+          gateThreshold:
+            typeof payload.parameters.gateThreshold === "number"
+              ? payload.parameters.gateThreshold
+              : uiState.parameters.gateThreshold,
+          modelPath: payload.parameters.modelPath ?? uiState.parameters.modelPath,
+          irPath: payload.parameters.irPath ?? uiState.parameters.irPath,
+        };
       }
       renderPresetList(uiState.filteredPresets);
       clearNotification();
@@ -378,7 +473,6 @@ async function loadPresetIndex() {
 }
 
 async function initialize() {
-  alert(REMOTE_BASE_URL);
   if (REMOTE_BASE_URL) {
     await loadPresetIndex();
   } else {

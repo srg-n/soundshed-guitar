@@ -72,3 +72,47 @@ input[type="search"] {
 .notification.visible {
   display: block;
 }
+
+.parameter-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px 12px;
+}
+
+.parameter-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  background-color: #282832;
+  border-radius: 4px;
+}
+
+.parameter-label {
+  font-weight: 600;
+  color: #d0d0f5;
+}
+
+.parameter-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.signal-path {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.signal-path li {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 1px solid #30303a;
+}
+
+.signal-path li:last-child {
+  border-bottom: none;
+}
