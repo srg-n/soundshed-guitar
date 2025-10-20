@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <numbers>
 #include <optional>
 #include <vector>
 #include <exception>
@@ -388,6 +390,10 @@ void NAMGuitarPlugin::HandleUIMessage(const std::string& message)
   {
     HandleStateRequest();
   }
+  else if (type == "runSignalPathTest")
+  {
+    HandleSignalTestRequest(payload);
+  }
 }
 
 void NAMGuitarPlugin::BroadcastState()
@@ -506,6 +512,35 @@ void NAMGuitarPlugin::HandlePresetLoadRequest(const nlohmann::json& payload)
 void NAMGuitarPlugin::HandleStateRequest()
 {
   mPendingStateBroadcast = true;
+}
+
+void NAMGuitarPlugin::HandleSignalTestRequest(const nlohmann::json& payload)
+{
+  const double frequency = payload.value("frequency", 440.0);
+  const double duration = payload.value("duration", 1.0);
+
+  const auto result = RunSignalPathTest(frequency, duration);
+
+  if (!mWebUI)
+  {
+    return;
+  }
+
+  nlohmann::json message;
+  message["type"] = "signalPathTestResult";
+  message["frequency"] = result.frequencyHz;
+  message["duration"] = result.durationSeconds;
+  message["sampleRate"] = result.sampleRate;
+  message["inputRMS"] = result.inputRMS;
+  message["outputRMS"] = {result.outputRMS[0], result.outputRMS[1]};
+  message["passed"] = result.passed;
+
+  if (!result.passed)
+  {
+    message["message"] = "Signal path test did not produce any output";
+  }
+
+  mWebUI->EnqueueMessage(message.dump());
 }
 
 void NAMGuitarPlugin::ReportErrorToUI(std::string_view message, std::string_view detail) const
@@ -718,6 +753,101 @@ Preset NAMGuitarPlugin::ParsePresetFromJson(const nlohmann::json& jsonPreset)
   }
 
   return preset;
+}
+
+NAMGuitarPlugin::SignalPathTestResult NAMGuitarPlugin::RunSignalPathTest(double frequencyHz, double durationSeconds)
+{
+  SignalPathTestResult result;
+  result.frequencyHz = frequencyHz;
+  result.durationSeconds = durationSeconds;
+
+  if (!mDSP)
+  {
+    return result;
+  }
+
+  if (frequencyHz <= 0.0 || durationSeconds <= 0.0)
+  {
+    return result;
+  }
+
+  const double sampleRate = GetSampleRate() > 0.0 ? GetSampleRate() : 44100.0;
+  result.sampleRate = sampleRate;
+
+  const int hostBlockSize = GetBlockSize();
+  constexpr int kTestBlockSize = 256;
+  const int analysisBlockSize = std::max(hostBlockSize, kTestBlockSize);
+  const int restoreBlockSize = hostBlockSize > 0 ? hostBlockSize : analysisBlockSize;
+
+  mDSP->Prepare(sampleRate, analysisBlockSize);
+  mDSP->Reset();
+
+  const int totalFrames = static_cast<int>(std::ceil(durationSeconds * sampleRate));
+  if (totalFrames <= 0)
+  {
+    mDSP->Reset();
+    mDSP->Prepare(sampleRate, restoreBlockSize);
+    return result;
+  }
+
+  std::vector<iplug::sample> inputLeft(static_cast<std::size_t>(analysisBlockSize));
+  std::vector<iplug::sample> inputRight(static_cast<std::size_t>(analysisBlockSize));
+  std::vector<iplug::sample> outputLeft(static_cast<std::size_t>(analysisBlockSize));
+  std::vector<iplug::sample> outputRight(static_cast<std::size_t>(analysisBlockSize));
+
+  const double twoPi = std::numbers::pi * 2.0;
+  const double phaseIncrement = twoPi * frequencyHz / sampleRate;
+  double phase = 0.0;
+
+  double inputSumSquares = 0.0;
+  double outputSumSquaresLeft = 0.0;
+  double outputSumSquaresRight = 0.0;
+
+  for (int processed = 0; processed < totalFrames; processed += analysisBlockSize)
+  {
+    const int framesThisPass = std::min(analysisBlockSize, totalFrames - processed);
+
+    for (int frame = 0; frame < framesThisPass; ++frame)
+    {
+      // Feed a calibrated sine tone into both channels to probe the entire guitar chain.
+      const double sample = std::sin(phase) * 0.5;
+      phase += phaseIncrement;
+      if (phase >= twoPi)
+      {
+        phase -= twoPi;
+      }
+
+      inputLeft[static_cast<std::size_t>(frame)] = static_cast<iplug::sample>(sample);
+      inputRight[static_cast<std::size_t>(frame)] = static_cast<iplug::sample>(sample);
+      outputLeft[static_cast<std::size_t>(frame)] = 0.0f;
+      outputRight[static_cast<std::size_t>(frame)] = 0.0f;
+
+      inputSumSquares += sample * sample;
+    }
+
+    iplug::sample* in[] = {inputLeft.data(), inputRight.data()};
+    iplug::sample* out[] = {outputLeft.data(), outputRight.data()};
+    mDSP->Process(in, out, framesThisPass);
+
+    for (int frame = 0; frame < framesThisPass; ++frame)
+    {
+      const double left = static_cast<double>(outputLeft[static_cast<std::size_t>(frame)]);
+      const double right = static_cast<double>(outputRight[static_cast<std::size_t>(frame)]);
+      outputSumSquaresLeft += left * left;
+      outputSumSquaresRight += right * right;
+    }
+  }
+
+  const double divisor = std::max(1.0, static_cast<double>(totalFrames));
+  result.inputRMS = std::sqrt(inputSumSquares / divisor);
+  result.outputRMS[0] = std::sqrt(outputSumSquaresLeft / divisor);
+  result.outputRMS[1] = std::sqrt(outputSumSquaresRight / divisor);
+  result.passed = (result.outputRMS[0] > 1e-4) || (result.outputRMS[1] > 1e-4);
+
+  mDSP->Reset();
+  mDSP->Prepare(sampleRate, restoreBlockSize);
+
+  return result;
 }
 
 } // namespace namguitar

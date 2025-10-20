@@ -116,3 +116,56 @@ input[type="search"] {
 .signal-path li:last-child {
   border-bottom: none;
 }
+
+.signal-test-controls {
+  margin-top: 16px;
+}
+
+.signal-test-controls button {
+  padding: 10px 14px;
+  border: none;
+  border-radius: 4px;
+  background-color: #3a4bf0;
+  color: #ffffff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.signal-test-controls button:hover {
+  background-color: #2f3ec4;
+}
+
+.signal-test-results {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: 6px;
+  background-color: #20202a;
+  border: 1px solid #2f2f3a;
+}
+
+.signal-test-results ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.signal-test-results li {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+}
+
+.status-pass {
+  color: #6bd48b;
+}
+
+.status-fail {
+  color: #f26d7a;
+}
+
+.signal-test-message {
+  margin-top: 10px;
+  font-size: 0.9rem;
+  color: #f0e0b0;
+}

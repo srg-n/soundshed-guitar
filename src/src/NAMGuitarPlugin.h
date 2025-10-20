@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -39,6 +40,18 @@ public:
   int UnserializeState(const iplug::IByteChunk& chunk, int startPos) override;
   void OnParamChange(int paramIdx) override;
 
+  struct SignalPathTestResult
+  {
+    double sampleRate = 0.0;
+    double frequencyHz = 0.0;
+    double durationSeconds = 0.0;
+    double inputRMS = 0.0;
+    std::array<double, 2> outputRMS {0.0, 0.0};
+    bool passed = false;
+  };
+
+  [[nodiscard]] SignalPathTestResult RunSignalPathTest(double frequencyHz = 440.0, double durationSeconds = 1.0);
+
   enum ParameterId
   {
     kParamInputTrim = 0,
@@ -57,6 +70,7 @@ private:
   void HandleUIMessage(const std::string& message);
   void HandlePresetLoadRequest(const nlohmann::json& payload);
   void HandleStateRequest();
+  void HandleSignalTestRequest(const nlohmann::json& payload);
   void BroadcastState();
   void ApplyPreset(namguitar::Preset& preset);
   void ReportErrorToUI(std::string_view message, std::string_view detail = {}) const;

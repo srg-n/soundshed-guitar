@@ -83,6 +83,7 @@ const uiState = {
     modelPath: "",
     irPath: "",
   },
+  signalTest: null,
 };
 
 window.NAMBridge = {
@@ -106,6 +107,17 @@ function showNotification(message, detail = "") {
   const resolvedMessage = detail ? `${message}: ${detail}` : message;
   notificationElement.textContent = resolvedMessage;
   notificationElement.classList.add("visible");
+}
+
+function requestSignalPathTest() {
+  clearNotification();
+  window.NAMBridge.postMessage(
+    JSON.stringify({
+      type: "runSignalPathTest",
+      frequency: 440,
+      duration: 1.0,
+    }),
+  );
 }
 
 function renderPresetList(presets) {
@@ -183,8 +195,29 @@ function renderParameterSection() {
     </ul>
   `;
 
+  const signalTestSection = uiState.signalTest
+    ? `
+        <section class="signal-test-results">
+          <h4>Last Signal Path Test</h4>
+          <ul>
+            <li><span class="parameter-label">Frequency</span><span class="parameter-value">${uiState.signalTest.frequency.toFixed(1)} Hz</span></li>
+            <li><span class="parameter-label">Duration</span><span class="parameter-value">${uiState.signalTest.duration.toFixed(2)} s</span></li>
+            <li><span class="parameter-label">Input RMS</span><span class="parameter-value">${uiState.signalTest.inputRMS.toFixed(4)}</span></li>
+            <li><span class="parameter-label">Output RMS (L/R)</span><span class="parameter-value">${uiState.signalTest.outputLeft.toFixed(4)} / ${uiState.signalTest.outputRight.toFixed(4)}</span></li>
+            <li><span class="parameter-label">Status</span><span class="parameter-value ${uiState.signalTest.passed ? "status-pass" : "status-fail"}">${uiState.signalTest.passed ? "Pass" : "Fail"}</span></li>
+          </ul>
+          ${uiState.signalTest.message ? `<p class="signal-test-message">${uiState.signalTest.message}</p>` : ""}
+        </section>
+      `
+    : "";
+
   if (!hasParameters && !gateInfo && !uiState.parameters.modelPath && !uiState.parameters.irPath) {
-    return "";
+    return `
+      <section class="signal-test-controls">
+        <button id="run-signal-test">Run Signal Path Test</button>
+      </section>
+      ${signalTestSection}
+    `;
   }
 
   return `
@@ -197,6 +230,10 @@ function renderParameterSection() {
       <h4>Signal Path</h4>
       ${signalPath}
     </section>
+    <section class="signal-test-controls">
+      <button id="run-signal-test">Run Signal Path Test</button>
+    </section>
+    ${signalTestSection}
   `;
 }
 
@@ -208,6 +245,10 @@ function renderPresetDetails(preset) {
       <p>Select a preset to see details.</p>
       ${parameterSection}
     `;
+    const signalTestButton = document.getElementById("run-signal-test");
+    if (signalTestButton) {
+      signalTestButton.addEventListener("click", requestSignalPathTest);
+    }
     return;
   }
 
@@ -247,6 +288,11 @@ function renderPresetDetails(preset) {
       await applyPresetFromLibrary(preset.id);
     });
   }
+
+  const signalTestButton = document.getElementById("run-signal-test");
+  if (signalTestButton) {
+    signalTestButton.addEventListener("click", requestSignalPathTest);
+  }
 }
 
 function handleIncomingMessage(message) {
@@ -263,6 +309,7 @@ function handleIncomingMessage(message) {
           irPath: payload.parameters.irPath ?? "",
         };
       }
+      uiState.signalTest = null;
       if (payload.preset) {
         uiState.presetCache.set(payload.preset.id, payload.preset);
         if (!uiState.presets.some((preset) => preset.id === payload.preset.id)) {
@@ -297,6 +344,22 @@ function handleIncomingMessage(message) {
       }
       renderPresetList(uiState.filteredPresets);
       clearNotification();
+      break;
+    }
+    case "signalPathTestResult": {
+      uiState.signalTest = {
+        frequency: payload.frequency ?? 0,
+        duration: payload.duration ?? 0,
+        sampleRate: payload.sampleRate ?? 0,
+        inputRMS: payload.inputRMS ?? 0,
+        outputLeft: Array.isArray(payload.outputRMS) ? payload.outputRMS[0] ?? 0 : 0,
+        outputRight: Array.isArray(payload.outputRMS) ? payload.outputRMS[1] ?? 0 : 0,
+        passed: Boolean(payload.passed),
+        message: payload.message ?? "",
+      };
+      renderPresetDetails(uiState.presetCache.get(uiState.activePresetId) ?? null);
+      const statusMessage = uiState.signalTest.passed ? "Signal path test passed" : "Signal path test failed";
+      showNotification(statusMessage, uiState.signalTest.message ?? "");
       break;
     }
     case "error": {
