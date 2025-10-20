@@ -251,15 +251,26 @@ int NAMGuitarPlugin::UnserializeState(const iplug::IByteChunk& chunk, int startP
 
   if (!mActivePresetJson.empty())
   {
-    const auto jsonPreset = nlohmann::json::parse(mActivePresetJson, nullptr, false);
-    if (!jsonPreset.is_discarded() && jsonPreset.is_object())
+    if (!nlohmann::json::accept(mActivePresetJson))
     {
-      Preset preset = ParsePresetFromJson(jsonPreset);
-      ApplyPreset(preset);
-      mActivePreset = preset;
-      if (mActivePresetId.empty())
+      ReportErrorToUI("Failed to restore preset state", "Saved preset JSON is invalid");
+    }
+    else
+    {
+      const auto jsonPreset = nlohmann::json::parse(mActivePresetJson);
+      if (!jsonPreset.is_object())
       {
-        mActivePresetId = preset.id;
+        ReportErrorToUI("Failed to restore preset state", "Preset JSON is not an object");
+      }
+      else
+      {
+        Preset preset = ParsePresetFromJson(jsonPreset);
+        ApplyPreset(preset);
+        mActivePreset = preset;
+        if (mActivePresetId.empty())
+        {
+          mActivePresetId = preset.id;
+        }
       }
     }
   }
@@ -355,9 +366,16 @@ void NAMGuitarPlugin::InitializeGraphics(iplug::igraphics::IGraphics& graphics)
 
 void NAMGuitarPlugin::HandleUIMessage(const std::string& message)
 {
-  const nlohmann::json payload = nlohmann::json::parse(message, nullptr, false);
-  if (payload.is_discarded())
+  if (!nlohmann::json::accept(message))
   {
+    ReportErrorToUI("Received invalid message", "UI sent malformed JSON payload");
+    return;
+  }
+
+  const auto payload = nlohmann::json::parse(message);
+  if (!payload.is_object())
+  {
+    ReportErrorToUI("Received invalid message", "UI sent malformed JSON payload");
     return;
   }
 

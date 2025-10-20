@@ -378,6 +378,7 @@ async function loadPresetIndex() {
 }
 
 async function initialize() {
+  alert(REMOTE_BASE_URL);
   if (REMOTE_BASE_URL) {
     await loadPresetIndex();
   } else {
