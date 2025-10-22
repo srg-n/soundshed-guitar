@@ -1,6 +1,9 @@
 const presetListElement = document.getElementById("preset-list");
 const presetDetailsElement = document.getElementById("preset-details");
 const presetSearchElement = document.getElementById("preset-search");
+const logPanelElement = document.getElementById("log-panel");
+const tabButtons = Array.from(document.querySelectorAll(".tab-button"));
+const tabPanels = Array.from(document.querySelectorAll(".tab-panel"));
 const appRootElement = document.getElementById("app");
 
 const notificationElement = document.createElement("div");
@@ -62,13 +65,13 @@ const DEFAULT_PRESETS = window.NAM_DEFAULT_PRESETS ?? [
     attachments: [
       {
         type: "nam",
-        filePath: "SLO-100 LOWGAIN VALETON.nam",
-        path: "../models/SLO-100 LOWGAIN VALETON.nam",
+        filePath: "C:/Work/GIT/misc/neuron-guitar/src/build/src/platform/app/Debug/resources/models/test.nam",
+        path: "C:/Work/GIT/misc/neuron-guitar/src/build/src/platform/app/Debug/resources/models/test.nam",
       },
       {
         type: "ir",
-        filePath: "421 1960.wav",
-        path: "../ir/421 1960.wav",
+        filePath: "C:/Work/GIT/misc/neuron-guitar/src/build/src/platform/app/Debug/resources/ir/test.wav",
+        path: "C:/Work/GIT/misc/neuron-guitar/src/build/src/platform/app/Debug/resources/ir/test.wav",
       },
     ],
     parameters: [
@@ -100,6 +103,8 @@ const DEFAULT_PRESETS = window.NAM_DEFAULT_PRESETS ?? [
   },
 ];
 
+const LOG_ENTRY_LIMIT = 200;
+
 const uiState = {
   presets: [],
   filteredPresets: [],
@@ -113,6 +118,7 @@ const uiState = {
     irPath: "",
   },
   signalTest: null,
+  logs: [],
 };
 
 window.NAMBridge = {
@@ -136,6 +142,93 @@ function showNotification(message, detail = "") {
   const resolvedMessage = detail ? `${message}: ${detail}` : message;
   notificationElement.textContent = resolvedMessage;
   notificationElement.classList.add("visible");
+}
+
+function activateTab(tabId) {
+  if (!tabButtons.length || !tabPanels.length) {
+    return;
+  }
+
+  tabButtons.forEach((button) => {
+    const isActive = button.dataset.tab === tabId;
+    button.classList.toggle("active", isActive);
+  });
+
+  tabPanels.forEach((panel) => {
+    const isDetailsPanel = panel.id === "preset-details" && tabId === "details";
+    const isLogPanel = panel.id === "log-panel" && tabId === "logs";
+    panel.classList.toggle("active", isDetailsPanel || isLogPanel);
+  });
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function renderLogEntries() {
+  if (!logPanelElement) {
+    return;
+  }
+
+  if (!uiState.logs.length) {
+    logPanelElement.innerHTML = '<p class="empty">No log entries yet.</p>';
+    return;
+  }
+
+  const items = uiState.logs
+    .map((entry) => {
+      const timestamp = entry.timestamp instanceof Date
+        ? entry.timestamp.toLocaleTimeString()
+        : entry.timestamp;
+      return `
+        <li class="log-entry">
+          <time>${escapeHtml(timestamp)}</time>
+          <span>${escapeHtml(entry.message)}</span>
+        </li>
+      `;
+    })
+    .join("");
+
+  logPanelElement.innerHTML = `<ul class="log-list">${items}</ul>`;
+  logPanelElement.scrollTop = logPanelElement.scrollHeight;
+}
+
+function appendLog(message) {
+  const entry = {
+    timestamp: new Date(),
+    message,
+  };
+
+  uiState.logs.push(entry);
+  if (uiState.logs.length > LOG_ENTRY_LIMIT) {
+    uiState.logs.splice(0, uiState.logs.length - LOG_ENTRY_LIMIT);
+  }
+
+  renderLogEntries();
+}
+
+const nativeFetch = typeof window.fetch === "function" ? window.fetch.bind(window) : null;
+
+if (nativeFetch) {
+  // Wrap fetch so we can display request activity inside the log tab.
+  window.fetch = async (...args) => {
+    const [input] = args;
+    const url = typeof input === "string" ? input : input?.url ?? "(unknown)";
+    appendLog(`fetch → ${url}`);
+    try {
+      const response = await nativeFetch(...args);
+      appendLog(`response ${response.status} ← ${url}`);
+      return response;
+    } catch (error) {
+      appendLog(`error ← ${url} (${error instanceof Error ? error.message : String(error)})`);
+      throw error;
+    }
+  };
 }
 
 function requestSignalPathTest() {
@@ -583,6 +676,18 @@ async function initialize() {
   }
   window.NAMBridge.postMessage({ type: "requestState" });
 }
+
+tabButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const tabId = button.dataset.tab ?? "";
+    if (tabId) {
+      activateTab(tabId);
+    }
+  });
+});
+
+activateTab("details");
+renderLogEntries();
 
 presetSearchElement?.addEventListener("input", (event) => {
   filterPresets(event.target.value ?? "");

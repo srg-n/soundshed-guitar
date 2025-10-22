@@ -14,7 +14,16 @@
       </header>
       <main>
         <section id="preset-list"></section>
-        <section id="preset-details"></section>
+        <section id="inspector">
+          <nav class="tabs">
+            <button class="tab-button active" data-tab="details">Details</button>
+            <button class="tab-button" data-tab="logs">Log</button>
+          </nav>
+          <div id="tab-contents">
+            <div id="preset-details" class="tab-panel active"></div>
+            <div id="log-panel" class="tab-panel"></div>
+          </div>
+        </section>
       </main>
     </div>
     <script src="main.js"></script>
