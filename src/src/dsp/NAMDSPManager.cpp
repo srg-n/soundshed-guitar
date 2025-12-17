@@ -126,6 +126,11 @@ void NAMDSPManager::SetGateThreshold(double decibels)
   mGateThreshold = decibels;
 }
 
+void NAMDSPManager::SetMix(double mix)
+{
+  mMix = std::clamp(mix, 0.0, 1.0);
+}
+
 void NAMDSPManager::Process(iplug::sample** inputs, iplug::sample** outputs, int nFrames)
 {
   const auto frames = std::min(nFrames, mMaxBlockSize);
@@ -178,9 +183,12 @@ void NAMDSPManager::Process(iplug::sample** inputs, iplug::sample** outputs, int
       ApplyImpulseResponse(channelBuffer, channel);
     }
 
+    // Blend wet (processed) and dry (original) signals based on mix parameter
     for (int frame = 0; frame < frames; ++frame)
     {
-      outputChannel[frame] = static_cast<iplug::sample>(channelBuffer[frame] * mOutputTrimLinear);
+      const double wetSample = channelBuffer[frame] * mOutputTrimLinear;
+      const double drySample = static_cast<double>(inputChannel[frame]);
+      outputChannel[frame] = static_cast<iplug::sample>(wetSample * mMix + drySample * (1.0 - mMix));
     }
   }
 }

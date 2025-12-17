@@ -772,6 +772,9 @@ void NAMGuitarPlugin::OnParamChange(int paramIdx)
     case kParamGateThreshold:
       mDSP->SetGateThreshold(param->Value());
       break;
+    case kParamMix:
+      mDSP->SetMix(param->Value());
+      break;
     default:
       break;
   }
@@ -787,6 +790,7 @@ void NAMGuitarPlugin::InitializeParameters()
   GetParam(kParamTone)->InitDouble("Tone Tilt", 0.5, 0.0, 1.0, 0.01);
   GetParam(kParamGateEnabled)->InitBool("Noise Gate", false);
   GetParam(kParamGateThreshold)->InitDouble("Gate Threshold", -60.0, -80.0, -20.0, 0.1, "dB");
+  GetParam(kParamMix)->InitDouble("Mix", 1.0, 0.0, 1.0, 0.01);
 }
 
 void NAMGuitarPlugin::HandleWebViewMessages()
@@ -1349,6 +1353,9 @@ bool NAMGuitarPlugin::StartSignalPathTest(double frequencyHz, double durationSec
   mSignalTestResult.frequencyHz = frequencyHz;
   mSignalTestResult.sampleRate = sampleRate;
   mSignalTestResult.durationSeconds = static_cast<double>(totalSamples) / sampleRate;
+
+  // Reset DSP state for clean test signal processing (same as demo audio preview)
+  mDSP->Reset();
 
   mSignalTestResultPending.store(false, std::memory_order_release);
   mSignalTestActive.store(true, std::memory_order_release);

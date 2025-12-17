@@ -39,6 +39,7 @@ public:
   void SetTone(double tilt); // -1..1 tilt high/low emphasis
   void SetGateEnabled(bool enabled);
   void SetGateThreshold(double decibels);
+  void SetMix(double mix);
 
   void Process(iplug::sample** inputs, iplug::sample** outputs, int nFrames);
 
@@ -69,6 +70,7 @@ private:
   double mToneTilt = 0.0;
   bool mGateEnabled = false;
   double mGateThreshold = -60.0;
+  double mMix = 1.0; // 0.0 = fully dry, 1.0 = fully wet
 
   struct IRHistory
   {

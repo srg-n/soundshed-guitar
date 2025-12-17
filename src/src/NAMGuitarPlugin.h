@@ -61,6 +61,7 @@ public:
     kParamTone,
     kParamGateEnabled,
     kParamGateThreshold,
+    kParamMix,
     kParamCount
   };
 
