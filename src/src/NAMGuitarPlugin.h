@@ -98,6 +98,7 @@ private:
   std::unique_ptr<WebUIBridge> mWebUI;
   FileSystem mFileSystem;
   ModelHasher mHasher;
+  std::filesystem::path mResourceRoot;
   std::optional<Preset> mActivePreset;
   std::string mActivePresetJson;
   std::string mActivePresetId;

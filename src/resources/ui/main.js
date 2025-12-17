@@ -107,7 +107,12 @@ const DEMO_AUDIO_SAMPLES = [
   {
     id: "guitar-riff-01",
     title: "Guitar Riff 01",
-    path: "C:/Work/GIT/misc/neuron-guitar/src/build/src/platform/app/Debug/resources/ui/demo/guitar-riff-02.wav",
+    path: "demo/guitar-riff-01.wav",
+  },
+  {
+    id: "guitar-riff-02",
+    title: "Guitar Riff 02",
+    path: "demo/guitar-riff-02.wav",
   },
 ];
 
@@ -423,23 +428,29 @@ function resolveDemoSamplePath(rawPath) {
     return null;
   }
 
-  if (/^https?:\/\//i.test(rawPath) || /^file:\/\//i.test(rawPath)) {
+  // Already a URL - use as-is
+  if (/^https?:\/\//i.test(rawPath)) {
     return rawPath;
   }
 
+  // Normalize path separators and return relative path
+  // The UI is served from the resources/ui folder, so relative paths work directly
   const normalized = rawPath.replace(/\\/g, "/");
-
-  if (!normalized.includes(":")) {
+  
+  // If it's already a simple relative path, use it
+  if (!normalized.includes(":") && !normalized.startsWith("/")) {
     return normalized;
   }
 
-  const resourcesIndex = normalized.toLowerCase().indexOf("/resources/");
-  if (resourcesIndex >= 0) {
-    const relative = normalized.slice(resourcesIndex + "/resources/".length);
-    return `../${relative}`;
+  // Try to extract relative path from absolute paths containing /resources/ui/
+  const uiIndex = normalized.toLowerCase().indexOf("/resources/ui/");
+  if (uiIndex >= 0) {
+    return normalized.slice(uiIndex + "/resources/ui/".length);
   }
 
-  return `file:///${normalized}`;
+  // Fallback: just use the filename
+  const lastSlash = normalized.lastIndexOf("/");
+  return lastSlash >= 0 ? normalized.slice(lastSlash + 1) : normalized;
 }
 
 function parseWavMetadata(arrayBuffer) {

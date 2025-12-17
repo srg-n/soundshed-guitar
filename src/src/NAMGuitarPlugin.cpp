@@ -378,6 +378,16 @@ NAMGuitarPlugin::NAMGuitarPlugin(const iplug::InstanceInfo& info)
   , mDSP(std::make_unique<NAMDSPManager>())
   , mWebUI(std::make_unique<WebUIBridge>())
 {
+  // Initialize the resource root early so preset loading can find bundled assets
+  WDL_String bundlePath;
+  iplug::BundleResourcePath(bundlePath, ::gHINSTANCE);
+  if (bundlePath.GetLength() == 0)
+  {
+    iplug::HostPath(bundlePath, nullptr);
+    bundlePath.Append("resources\\");
+  }
+  mResourceRoot = std::filesystem::path{bundlePath.Get()};
+
   InitializeParameters();
   HandleWebViewMessages();
 
@@ -388,7 +398,7 @@ NAMGuitarPlugin::NAMGuitarPlugin(const iplug::InstanceInfo& info)
 
 #if PLUG_HAS_UI
   mMakeGraphicsFunc = [this]() {
-    return MakeGraphics(*this, PLUG_WIDTH, PLUG_HEIGHT, GetScaleForScreen(PLUG_WIDTH, PLUG_HEIGHT));
+    return MakeGraphics(*this, PLUG_WIDTH, PLUG_HEIGHT, PLUG_FPS, GetScaleForScreen(PLUG_WIDTH, PLUG_HEIGHT));
   };
 
   mLayoutFunc = [this](iplug::igraphics::IGraphics* graphics) {
@@ -810,6 +820,7 @@ void NAMGuitarPlugin::InitializeGraphics(iplug::igraphics::IGraphics& graphics)
     bundlePath.Append("resources\\");
   }
   const std::filesystem::path resourceRoot = std::filesystem::path{bundlePath.Get()};
+  mResourceRoot = resourceRoot;
   mWebUI->Initialize(graphics, resourceRoot);
   mPendingStateBroadcast = true;
 }
@@ -1128,9 +1139,26 @@ std::filesystem::path NAMGuitarPlugin::ResolveAttachmentTarget(const PresetAttac
       return attachment.filePath;
     }
 
+    // First check if the file exists in the bundled resources folder
+    if (!mResourceRoot.empty())
+    {
+      const auto resourcePath = mResourceRoot / attachment.filePath;
+      if (std::filesystem::exists(resourcePath))
+      {
+        return resourcePath;
+      }
+    }
+
+    // Then check the user preset directory
     if (const auto presetDir = mFileSystem.EnsureDirectory(mFileSystem.ResolvePresetDirectory()))
     {
-      return *presetDir / attachment.filePath;
+      const auto presetPath = *presetDir / attachment.filePath;
+      if (std::filesystem::exists(presetPath))
+      {
+        return presetPath;
+      }
+      // Return preset directory path even if file doesn't exist (for writing)
+      return presetPath;
     }
 
     return attachment.filePath;

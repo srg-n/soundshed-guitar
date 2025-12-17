@@ -27,41 +27,60 @@ std::vector<Preset> BuildDefaultPresets()
   };
 
   std::vector<Preset> defaults;
-  defaults.push_back(Preset{
-    "factory-clean",
-    "Factory Clean",
-    "Factory",
-    "Balanced clean tone with plenty of headroom.",
-    "",
-    "",
-    {},
-    {},
-    presetParameters(0.0, 0.0, 0.15, 0.55, 0.0, -60.0),
-  });
 
-  defaults.push_back(Preset{
-    "factory-breakup",
-    "Edge of Breakup",
-    "Factory",
-    "Touch-sensitive crunch that works great with single coils.",
-    "",
-    "",
-    {},
-    {},
-    presetParameters(-3.0, 0.0, 0.45, 0.5, 0.0, -55.0),
-  });
+  // Factory Clean - uses bundled NAM model and IR
+  {
+    Preset preset;
+    preset.id = "factory-clean";
+    preset.name = "Factory Clean";
+    preset.category = "Factory";
+    preset.description = "Balanced clean tone with plenty of headroom.";
+    preset.namModelId = "test.nam";
+    preset.irId = "test.wav";
+    preset.fxChain = {};
+    preset.attachments = {
+      {"nam", std::filesystem::path("models/test.nam"), ""},
+      {"ir", std::filesystem::path("ir/test.wav"), ""},
+    };
+    preset.parameters = presetParameters(0.0, 0.0, 0.15, 0.55, 0.0, -60.0);
+    defaults.push_back(std::move(preset));
+  }
 
-  defaults.push_back(Preset{
-    "factory-highgain",
-    "Saturated Lead",
-    "Factory",
-    "Tight high-gain lead preset with a gentle noise gate.",
-    "",
-    "",
-    {"noise_gate"},
-    {},
-    presetParameters(-6.0, -3.0, 0.85, 0.65, 1.0, -50.0),
-  });
+  // Edge of Breakup - uses bundled NAM model and a different IR
+  {
+    Preset preset;
+    preset.id = "factory-breakup";
+    preset.name = "Edge of Breakup";
+    preset.category = "Factory";
+    preset.description = "Touch-sensitive crunch that works great with single coils.";
+    preset.namModelId = "test.nam";
+    preset.irId = "421 1960.wav";
+    preset.fxChain = {};
+    preset.attachments = {
+      {"nam", std::filesystem::path("models/test.nam"), ""},
+      {"ir", std::filesystem::path("ir/421 1960.wav"), ""},
+    };
+    preset.parameters = presetParameters(-3.0, 0.0, 0.45, 0.5, 0.0, -55.0);
+    defaults.push_back(std::move(preset));
+  }
+
+  // Saturated Lead - high gain with noise gate
+  {
+    Preset preset;
+    preset.id = "factory-highgain";
+    preset.name = "Saturated Lead";
+    preset.category = "Factory";
+    preset.description = "Tight high-gain lead preset with a gentle noise gate.";
+    preset.namModelId = "test.nam";
+    preset.irId = "906 1960.wav";
+    preset.fxChain = {"noise_gate"};
+    preset.attachments = {
+      {"nam", std::filesystem::path("models/test.nam"), ""},
+      {"ir", std::filesystem::path("ir/906 1960.wav"), ""},
+    };
+    preset.parameters = presetParameters(-6.0, -3.0, 0.85, 0.65, 1.0, -50.0);
+    defaults.push_back(std::move(preset));
+  }
 
   return defaults;
 }
