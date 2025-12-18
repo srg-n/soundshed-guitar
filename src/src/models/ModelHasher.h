@@ -5,9 +5,9 @@
 
 namespace namguitar
 {
-class ModelHasher
-{
-public:
-  [[nodiscard]] std::string HashFile(const std::filesystem::path& filePath) const;
-};
+  class ModelHasher
+  {
+  public:
+    [[nodiscard]] std::string HashFile(const std::filesystem::path &filePath) const;
+  };
 } // namespace namguitar

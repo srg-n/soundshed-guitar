@@ -10,32 +10,32 @@
 
 namespace iplug
 {
-class IByteChunk;
+  class IByteChunk;
 }
 
 namespace namguitar
 {
-class PresetStorage
-{
-public:
-  PresetStorage();
-  ~PresetStorage();
+  class PresetStorage
+  {
+  public:
+    PresetStorage();
+    ~PresetStorage();
 
-  bool Serialize(iplug::IByteChunk& chunk) const;
-  int Unserialize(const iplug::IByteChunk& chunk, int startPos);
+    bool Serialize(iplug::IByteChunk &chunk) const;
+    int Unserialize(const iplug::IByteChunk &chunk, int startPos);
 
-  void SavePreset(const Preset& preset);
-  [[nodiscard]] std::vector<Preset> ListPresets() const;
-  [[nodiscard]] std::optional<Preset> FindPreset(const std::string& id) const;
+    void SavePreset(const Preset &preset);
+    [[nodiscard]] std::vector<Preset> ListPresets() const;
+    [[nodiscard]] std::optional<Preset> FindPreset(const std::string &id) const;
 
-private:
-  void PersistToDisk() const;
-  void LoadFromDisk();
-  void EnsureDefaultPresets();
+  private:
+    void PersistToDisk() const;
+    void LoadFromDisk();
+    void EnsureDefaultPresets();
 
-  std::vector<Preset> mPresets;
-  FileSystem mFileSystem;
-  ModelHasher mHasher;
-  std::filesystem::path mPresetFile;
-};
+    std::vector<Preset> mPresets;
+    FileSystem mFileSystem;
+    ModelHasher mHasher;
+    std::filesystem::path mPresetFile;
+  };
 } // namespace namguitar

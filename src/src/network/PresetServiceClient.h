@@ -6,24 +6,24 @@
 
 namespace namguitar
 {
-struct Preset;
+  struct Preset;
 
-struct PresetSearchRequest
-{
-  std::string query;
-  std::string category;
-};
+  struct PresetSearchRequest
+  {
+    std::string query;
+    std::string category;
+  };
 
-class PresetServiceClient
-{
-public:
-  using ResultCallback = std::function<void(std::vector<Preset>)>;
+  class PresetServiceClient
+  {
+  public:
+    using ResultCallback = std::function<void(std::vector<Preset>)>;
 
-  void SetBaseUrl(std::string baseUrl);
-  void SearchPresets(const PresetSearchRequest& request, ResultCallback callback);
-  void DownloadPreset(const std::string& presetId, ResultCallback callback);
+    void SetBaseUrl(std::string baseUrl);
+    void SearchPresets(const PresetSearchRequest &request, ResultCallback callback);
+    void DownloadPreset(const std::string &presetId, ResultCallback callback);
 
-private:
-  std::string mBaseUrl;
-};
+  private:
+    std::string mBaseUrl;
+  };
 } // namespace namguitar
