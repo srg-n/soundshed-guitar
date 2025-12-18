@@ -124,6 +124,7 @@ const uiState = {
   },
   signalTest: null,
   demoAudioSelectedId: DEMO_AUDIO_SAMPLES.length ? DEMO_AUDIO_SAMPLES[0].id : null,
+  demoAudioRepeat: false,
   logs: [],
 };
 
@@ -134,6 +135,106 @@ window.NAMBridge = {
     }
   },
 };
+
+/**
+ * Sends a parameter change message to the C++ backend.
+ * @param {string} id - Parameter ID (e.g., "mix", "drive", "tone", "output_trim")
+ * @param {number} value - Parameter value
+ */
+function setParameter(id, value) {
+  window.NAMBridge.postMessage({
+    type: "setParameter",
+    id,
+    value,
+  });
+}
+
+/**
+ * Updates the display value for a control slider.
+ * @param {string} controlId - The control element ID (without "control-" prefix)
+ * @param {number} value - The current value
+ * @param {string} format - Format type: "percent", "db", or "value"
+ */
+function updateControlDisplay(controlId, value, format = "percent") {
+  const displayElement = document.getElementById(`control-${controlId}-value`);
+  if (!displayElement) return;
+
+  let displayText;
+  switch (format) {
+    case "db":
+      displayText = `${value >= 0 ? "+" : ""}${value.toFixed(1)} dB`;
+      break;
+    case "percent":
+      displayText = `${Math.round(value * 100)}%`;
+      break;
+    default:
+      displayText = value.toFixed(2);
+  }
+  displayElement.textContent = displayText;
+}
+
+/**
+ * Initializes the control panel sliders and their event handlers.
+ */
+function initializeControls() {
+  const controls = [
+    { id: "mix", paramId: "mix", format: "percent" },
+    { id: "drive", paramId: "drive", format: "percent" },
+    { id: "output-trim", paramId: "output_trim", format: "db" },
+    { id: "tone", paramId: "tone", format: "percent" },
+    { id: "input-trim", paramId: "input_trim", format: "db" },
+  ];
+
+  controls.forEach(({ id, paramId, format }) => {
+    const slider = document.getElementById(`control-${id}`);
+    if (!slider) return;
+
+    // Update display on input (while dragging)
+    slider.addEventListener("input", () => {
+      const value = parseFloat(slider.value);
+      updateControlDisplay(id, value, format);
+    });
+
+    // Send to backend on change (when released)
+    slider.addEventListener("change", () => {
+      const value = parseFloat(slider.value);
+      setParameter(paramId, value);
+      appendLog(`${paramId} → ${value}`);
+    });
+  });
+}
+
+/**
+ * Updates the control sliders from the current UI state parameters.
+ */
+function syncControlsFromState() {
+  const paramToControl = {
+    mix: { id: "mix", format: "percent" },
+    drive: { id: "drive", format: "percent" },
+    output_trim: { id: "output-trim", format: "db" },
+    tone: { id: "tone", format: "percent" },
+    input_trim: { id: "input-trim", format: "db" },
+  };
+
+  // Extract values from the parameters array
+  const paramValues = {};
+  if (Array.isArray(uiState.parameters.values)) {
+    uiState.parameters.values.forEach((param) => {
+      paramValues[param.id] = param.value;
+    });
+  }
+
+  Object.entries(paramToControl).forEach(([paramId, { id, format }]) => {
+    const slider = document.getElementById(`control-${id}`);
+    if (!slider) return;
+
+    const value = paramValues[paramId];
+    if (typeof value === "number") {
+      slider.value = value;
+      updateControlDisplay(id, value, format);
+    }
+  });
+}
 
 function clonePreset(preset) {
   return JSON.parse(JSON.stringify(preset));
@@ -392,6 +493,10 @@ function renderDemoAudioControls() {
           ${options}
         </select>
         <button id="play-demo-audio" class="demo-audio-button">Play</button>
+        <label class="demo-audio-repeat">
+          <input type="checkbox" id="demo-audio-repeat-checkbox" />
+          <span>Repeat</span>
+        </label>
       </div>
     </section>
   `;
@@ -411,6 +516,14 @@ function bindDemoAudioControls() {
   if (playButton) {
     playButton.addEventListener("click", async () => {
       await previewSelectedDemoAudio();
+    });
+  }
+
+  const repeatCheckbox = document.getElementById("demo-audio-repeat-checkbox");
+  if (repeatCheckbox) {
+    repeatCheckbox.checked = uiState.demoAudioRepeat;
+    repeatCheckbox.addEventListener("change", (event) => {
+      uiState.demoAudioRepeat = event.target.checked;
     });
   }
 }
@@ -642,6 +755,7 @@ function handleIncomingMessage(message) {
       renderPresetList(uiState.filteredPresets);
       const preset = payload.preset ?? uiState.presetCache.get(uiState.activePresetId) ?? null;
       renderPresetDetails(preset ? clonePreset(preset) : null);
+      syncControlsFromState();
       clearNotification();
       break;
     }
@@ -665,6 +779,7 @@ function handleIncomingMessage(message) {
         };
       }
       renderPresetList(uiState.filteredPresets);
+      syncControlsFromState();
       clearNotification();
       break;
     }
@@ -696,7 +811,12 @@ function handleIncomingMessage(message) {
     }
     case "previewComplete": {
       appendLog(`preview complete ← ${payload.title ?? payload.id ?? "demo"}`);
-      showNotification("Demo playback finished", payload.title ?? "Demo");
+      if (uiState.demoAudioRepeat) {
+        // Restart playback if repeat is enabled
+        previewSelectedDemoAudio();
+      } else {
+        showNotification("Demo playback finished", payload.title ?? "Demo");
+      }
       break;
     }
     case "error": {
@@ -924,6 +1044,7 @@ tabButtons.forEach((button) => {
 
 activateTab("details");
 renderLogEntries();
+initializeControls();
 
 presetSearchElement?.addEventListener("input", (event) => {
   filterPresets(event.target.value ?? "");

@@ -74,6 +74,7 @@ private:
   void HandleStateRequest();
   void HandleSignalTestRequest(const nlohmann::json& payload);
   void HandlePreviewDemoRequest(const nlohmann::json& payload);
+  void HandleSetParameterRequest(const nlohmann::json& payload);
   void BroadcastState();
   void ApplyPreset(namguitar::Preset& preset);
   void ReportErrorToUI(std::string_view message, std::string_view detail = {}) const;

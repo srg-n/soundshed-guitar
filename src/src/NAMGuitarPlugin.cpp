@@ -872,6 +872,10 @@ void NAMGuitarPlugin::HandleUIMessage(const std::string& message)
   {
     HandlePreviewDemoRequest(payload);
   }
+  else if (type == "setParameter")
+  {
+    HandleSetParameterRequest(payload);
+  }
 }
 
 void NAMGuitarPlugin::BroadcastState()
@@ -990,6 +994,49 @@ void NAMGuitarPlugin::HandlePresetLoadRequest(const nlohmann::json& payload)
 void NAMGuitarPlugin::HandleStateRequest()
 {
   mPendingStateBroadcast = true;
+}
+
+void NAMGuitarPlugin::HandleSetParameterRequest(const nlohmann::json& payload)
+{
+  const std::string paramId = payload.value("id", "");
+  const double value = payload.value("value", 0.0);
+
+  // Map string parameter IDs to enum values
+  int paramIdx = -1;
+  if (paramId == "input_trim")
+  {
+    paramIdx = kParamInputTrim;
+  }
+  else if (paramId == "output_trim")
+  {
+    paramIdx = kParamOutputTrim;
+  }
+  else if (paramId == "drive")
+  {
+    paramIdx = kParamDrive;
+  }
+  else if (paramId == "tone")
+  {
+    paramIdx = kParamTone;
+  }
+  else if (paramId == "gate_enabled")
+  {
+    paramIdx = kParamGateEnabled;
+  }
+  else if (paramId == "gate_threshold")
+  {
+    paramIdx = kParamGateThreshold;
+  }
+  else if (paramId == "mix")
+  {
+    paramIdx = kParamMix;
+  }
+
+  if (paramIdx >= 0 && paramIdx < kParamCount)
+  {
+    GetParam(paramIdx)->Set(value);
+    OnParamChange(paramIdx);
+  }
 }
 
 void NAMGuitarPlugin::HandleSignalTestRequest(const nlohmann::json& payload)
