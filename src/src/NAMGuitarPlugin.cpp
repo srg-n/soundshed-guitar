@@ -75,6 +75,12 @@ namespace namguitar
         return "gate_enabled";
       case NAMGuitarPlugin::kParamGateThreshold:
         return "gate_threshold";
+      case NAMGuitarPlugin::kParamMix:
+        return "mix";
+      case NAMGuitarPlugin::kParamDoublerEnabled:
+        return "doubler_enabled";
+      case NAMGuitarPlugin::kParamDoublerDelay:
+        return "doubler_delay";
       default:
         return "";
       }
@@ -105,6 +111,18 @@ namespace namguitar
       if (key == "gate_threshold")
       {
         return NAMGuitarPlugin::kParamGateThreshold;
+      }
+      if (key == "mix")
+      {
+        return NAMGuitarPlugin::kParamMix;
+      }
+      if (key == "doubler_enabled")
+      {
+        return NAMGuitarPlugin::kParamDoublerEnabled;
+      }
+      if (key == "doubler_delay")
+      {
+        return NAMGuitarPlugin::kParamDoublerDelay;
       }
       return std::nullopt;
     }
@@ -791,6 +809,12 @@ namespace namguitar
     case kParamMix:
       mDSP->SetMix(param->Value());
       break;
+    case kParamDoublerEnabled:
+      mDSP->SetDoublerEnabled(param->Bool());
+      break;
+    case kParamDoublerDelay:
+      mDSP->SetDoublerDelay(param->Value());
+      break;
     default:
       break;
     }
@@ -807,6 +831,8 @@ namespace namguitar
     GetParam(kParamGateEnabled)->InitBool("Noise Gate", false);
     GetParam(kParamGateThreshold)->InitDouble("Gate Threshold", -60.0, -80.0, -20.0, 0.1, "dB");
     GetParam(kParamMix)->InitDouble("Mix", 1.0, 0.0, 1.0, 0.01);
+    GetParam(kParamDoublerEnabled)->InitBool("Doubler", false);
+    GetParam(kParamDoublerDelay)->InitDouble("Doubler Delay", 6.0, 0.5, 50.0, 0.1, "ms");
   }
 
   void NAMGuitarPlugin::HandleWebViewMessages()
@@ -1047,6 +1073,14 @@ namespace namguitar
     else if (paramId == "mix")
     {
       paramIdx = kParamMix;
+    }
+    else if (paramId == "doubler_enabled")
+    {
+      paramIdx = kParamDoublerEnabled;
+    }
+    else if (paramId == "doubler_delay")
+    {
+      paramIdx = kParamDoublerDelay;
     }
 
     if (paramIdx >= 0 && paramIdx < kParamCount)

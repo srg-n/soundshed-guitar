@@ -131,6 +131,25 @@ namespace namguitar
     mMix = std::clamp(mix, 0.0, 1.0);
   }
 
+  void NAMDSPManager::SetDoublerEnabled(bool enabled)
+  {
+    mDoublerEnabled = enabled;
+  }
+
+  void NAMDSPManager::SetDoublerDelay(double milliseconds)
+  {
+    mDoublerDelayMs = std::clamp(milliseconds, 0.5, 50.0);
+    mDoublerDelaySamples = static_cast<int>(mDoublerDelayMs * mSampleRate / 1000.0);
+    
+    // Resize delay buffers if needed
+    const std::size_t requiredSize = static_cast<std::size_t>(mDoublerDelaySamples + mMaxBlockSize);
+    if (mDoublerDelayBufferL.size() < requiredSize)
+    {
+      mDoublerDelayBufferL.resize(requiredSize, 0.0);
+      mDoublerDelayBufferR.resize(requiredSize, 0.0);
+    }
+  }
+
   void NAMDSPManager::Process(iplug::sample **inputs, iplug::sample **outputs, int nFrames)
   {
     const auto frames = std::min(nFrames, mMaxBlockSize);
@@ -142,16 +161,20 @@ namespace namguitar
 
     const auto impulseSize = static_cast<int>(mIRManager.Impulse().size());
 
+    // Process both channels through the amp model
+    std::vector<double> processedL(frames, 0.0);
+    std::vector<double> processedR(frames, 0.0);
+    std::vector<double>* channelBuffers[kNumChannels] = {&processedL, &processedR};
+
     for (int channel = 0; channel < kNumChannels; ++channel)
     {
       iplug::sample *inputChannel = inputs[channel];
-      iplug::sample *outputChannel = outputs[channel];
-      if (!inputChannel || !outputChannel)
+      if (!inputChannel)
       {
         continue;
       }
 
-      std::vector<double> channelBuffer(frames, 0.0);
+      std::vector<double>& channelBuffer = *channelBuffers[channel];
       for (int frame = 0; frame < frames; ++frame)
       {
         double sample = static_cast<double>(inputChannel[frame]) * mInputTrimLinear;
@@ -182,7 +205,64 @@ namespace namguitar
       {
         ApplyImpulseResponse(channelBuffer, channel);
       }
+    }
 
+    // Apply doubler effect if enabled
+    // The doubler creates a stereo widening effect by:
+    // - Left channel: original signal (or slightly delayed)
+    // - Right channel: delayed copy of the signal
+    // This creates a "doubled" guitar sound common in recordings
+    if (mDoublerEnabled && mDoublerDelaySamples > 0)
+    {
+      // Ensure delay buffers are properly sized
+      const std::size_t bufferSize = static_cast<std::size_t>(mDoublerDelaySamples + mMaxBlockSize + 1);
+      if (mDoublerDelayBufferL.size() < bufferSize)
+      {
+        mDoublerDelayBufferL.resize(bufferSize, 0.0);
+        mDoublerDelayBufferR.resize(bufferSize, 0.0);
+        mDoublerWriteIndex = 0;
+      }
+
+      // Create mono sum for doubler processing
+      std::vector<double> monoSignal(frames);
+      for (int frame = 0; frame < frames; ++frame)
+      {
+        monoSignal[frame] = (processedL[frame] + processedR[frame]) * 0.5;
+      }
+
+      // Process doubler: left gets direct signal, right gets delayed signal
+      for (int frame = 0; frame < frames; ++frame)
+      {
+        // Write current sample to delay buffer
+        mDoublerDelayBufferL[mDoublerWriteIndex] = monoSignal[frame];
+        
+        // Read delayed sample for right channel
+        std::size_t readIndex = mDoublerWriteIndex >= static_cast<std::size_t>(mDoublerDelaySamples)
+          ? mDoublerWriteIndex - static_cast<std::size_t>(mDoublerDelaySamples)
+          : mDoublerDelayBufferL.size() - (static_cast<std::size_t>(mDoublerDelaySamples) - mDoublerWriteIndex);
+        
+        // Left channel: direct mono signal
+        processedL[frame] = monoSignal[frame];
+        // Right channel: delayed mono signal
+        processedR[frame] = mDoublerDelayBufferL[readIndex];
+        
+        // Advance write index
+        mDoublerWriteIndex = (mDoublerWriteIndex + 1) % mDoublerDelayBufferL.size();
+      }
+    }
+
+    // Output final signal with mix and output trim
+    for (int channel = 0; channel < kNumChannels; ++channel)
+    {
+      iplug::sample *inputChannel = inputs[channel];
+      iplug::sample *outputChannel = outputs[channel];
+      if (!inputChannel || !outputChannel)
+      {
+        continue;
+      }
+
+      std::vector<double>& channelBuffer = *channelBuffers[channel];
+      
       // Blend wet (processed) and dry (original) signals based on mix parameter
       for (int frame = 0; frame < frames; ++frame)
       {

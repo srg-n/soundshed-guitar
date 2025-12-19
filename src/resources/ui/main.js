@@ -298,6 +298,105 @@ function initializeControls() {
       appendLog(`${paramId} → ${value}`);
     });
   });
+  
+  // Initialize doubler controls
+  initializeDoublerControls();
+}
+
+/**
+ * Initializes the doubler toggle and delay knob controls.
+ */
+function initializeDoublerControls() {
+  const doublerToggle = document.getElementById("doubler-toggle");
+  const delayValueDisplay = document.getElementById("delay-value");
+  
+  // Doubler toggle
+  if (doublerToggle) {
+    doublerToggle.addEventListener("change", () => {
+      const enabled = doublerToggle.checked ? 1.0 : 0.0;
+      setParameter("doubler_enabled", enabled);
+      appendLog(`doubler_enabled → ${enabled}`);
+    });
+  }
+  
+  // Initialize delay knob interaction
+  const delayKnob = document.querySelector('.knob[data-param="delay"]');
+  if (delayKnob) {
+    let isDragging = false;
+    let startY = 0;
+    let startValue = 6.0;
+    const minValue = 0.5;
+    const maxValue = 50.0;
+    
+    const updateDelayDisplay = (value) => {
+      if (delayValueDisplay) {
+        delayValueDisplay.textContent = `${value.toFixed(2)} ms`;
+      }
+      // Update knob rotation
+      const rotation = ((value - minValue) / (maxValue - minValue)) * 270 - 135;
+      const indicator = delayKnob.querySelector('.knob-indicator');
+      if (indicator) {
+        indicator.style.transform = `translateX(-50%) rotate(${rotation}deg)`;
+      }
+    };
+    
+    delayKnob.addEventListener("mousedown", (e) => {
+      isDragging = true;
+      startY = e.clientY;
+      startValue = parseFloat(delayKnob.dataset.value) || 6.0;
+      e.preventDefault();
+    });
+    
+    document.addEventListener("mousemove", (e) => {
+      if (!isDragging) return;
+      const deltaY = startY - e.clientY;
+      const sensitivity = 0.5;
+      let newValue = startValue + deltaY * sensitivity;
+      newValue = Math.max(minValue, Math.min(maxValue, newValue));
+      delayKnob.dataset.value = newValue;
+      updateDelayDisplay(newValue);
+    });
+    
+    document.addEventListener("mouseup", () => {
+      if (isDragging) {
+        isDragging = false;
+        const value = parseFloat(delayKnob.dataset.value) || 6.0;
+        setParameter("doubler_delay", value);
+        appendLog(`doubler_delay → ${value}`);
+      }
+    });
+    
+    // Initialize display
+    updateDelayDisplay(parseFloat(delayKnob.dataset.value) || 6.0);
+  }
+}
+
+/**
+ * Syncs doubler controls from state.
+ */
+function syncDoublerControlsFromState() {
+  const paramValues = {};
+  if (Array.isArray(uiState.parameters.values)) {
+    uiState.parameters.values.forEach((param) => {
+      paramValues[param.id] = param.value;
+    });
+  }
+  
+  // Sync doubler toggle
+  const doublerToggle = document.getElementById("doubler-toggle");
+  if (doublerToggle && typeof paramValues.doubler_enabled === "number") {
+    doublerToggle.checked = paramValues.doubler_enabled > 0.5;
+  }
+  
+  // Sync delay value
+  const delayKnob = document.querySelector('.knob[data-param="delay"]');
+  const delayValueDisplay = document.getElementById("delay-value");
+  if (delayKnob && typeof paramValues.doubler_delay === "number") {
+    delayKnob.dataset.value = paramValues.doubler_delay;
+    if (delayValueDisplay) {
+      delayValueDisplay.textContent = `${paramValues.doubler_delay.toFixed(2)} ms`;
+    }
+  }
 }
 
 /**
@@ -330,6 +429,9 @@ function syncControlsFromState() {
       updateControlDisplay(id, value, format);
     }
   });
+  
+  // Also sync doubler controls
+  syncDoublerControlsFromState();
 }
 
 function clonePreset(preset) {

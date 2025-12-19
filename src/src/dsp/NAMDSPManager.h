@@ -40,6 +40,8 @@ namespace namguitar
     void SetGateEnabled(bool enabled);
     void SetGateThreshold(double decibels);
     void SetMix(double mix);
+    void SetDoublerEnabled(bool enabled);
+    void SetDoublerDelay(double milliseconds);
 
     void Process(iplug::sample **inputs, iplug::sample **outputs, int nFrames);
 
@@ -71,6 +73,14 @@ namespace namguitar
     bool mGateEnabled = false;
     double mGateThreshold = -60.0;
     double mMix = 1.0; // 0.0 = fully dry, 1.0 = fully wet
+
+    // Doubler effect state
+    bool mDoublerEnabled = false;
+    double mDoublerDelayMs = 6.0; // Default 6ms separation
+    int mDoublerDelaySamples = 0;
+    std::vector<double> mDoublerDelayBufferL;
+    std::vector<double> mDoublerDelayBufferR;
+    std::size_t mDoublerWriteIndex = 0;
 
     struct IRHistory
     {

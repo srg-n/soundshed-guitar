@@ -66,6 +66,8 @@ namespace namguitar
       kParamGateEnabled,
       kParamGateThreshold,
       kParamMix,
+      kParamDoublerEnabled,
+      kParamDoublerDelay,
       kParamCount
     };
 
