@@ -10,22 +10,22 @@
     <div id="app">
       <!-- Top Icon Bar -->
       <header class="icon-bar">
-        <button class="icon-btn" title="Signal Chain">
+        <button class="icon-btn" data-panel="signal-chain" title="Signal Chain">
           <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" fill="none"/></svg>
         </button>
-        <button class="icon-btn" title="Input">
+        <button class="icon-btn" data-panel="input" title="Input">
           <svg viewBox="0 0 24 24"><path d="M12 3v18M5 10l7-7 7 7" stroke="currentColor" stroke-width="2" fill="none"/></svg>
         </button>
-        <button class="icon-btn" title="Amp">
+        <button class="icon-btn active" data-panel="amp" title="Amp">
           <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2" stroke="currentColor" stroke-width="2" fill="none"/></svg>
         </button>
-        <button class="icon-btn active" title="Effects">
+        <button class="icon-btn" data-panel="effects" title="Effects">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
         </button>
-        <button class="icon-btn" title="EQ">
+        <button class="icon-btn" data-panel="eq" title="EQ">
           <svg viewBox="0 0 24 24"><path d="M4 21v-7M12 21V3M20 21v-11" stroke="currentColor" stroke-width="2" fill="none"/></svg>
         </button>
-        <button class="icon-btn" title="Reverb">
+        <button class="icon-btn" data-panel="reverb" title="Reverb">
           <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M4 12h16" stroke="currentColor" stroke-width="2"/></svg>
         </button>
       </header>
@@ -111,90 +111,135 @@
         </div>
       </section>
 
-      <!-- Main Amp Display -->
-      <main class="amp-display">
-        <div class="amp-panel">
-          <div class="amp-visualization">
-            <!-- Placeholder for amp graphics -->
-            <div class="amp-glow"></div>
+      <!-- Main Content Area -->
+      <main class="main-content">
+        <!-- Signal Chain Panel -->
+        <div class="tab-panel" id="panel-signal-chain">
+          <div class="panel-content">
+            <h2>Signal Chain</h2>
+            <div id="preset-details"></div>
           </div>
+        </div>
 
-          <!-- Amp Knobs Row -->
-          <div class="amp-knobs">
-            <div class="amp-knob-control">
-              <span class="amp-knob-label">INPUT</span>
-              <div class="amp-knob" data-param="amp-input">
-                <div class="knob-indicator"></div>
+        <!-- Input Panel -->
+        <div class="tab-panel" id="panel-input">
+          <div class="panel-content">
+            <h2>Input Settings</h2>
+            <p>Configure input gain, noise gate, and input routing options.</p>
+          </div>
+        </div>
+
+        <!-- Amp Panel (Default) -->
+        <div class="tab-panel active" id="panel-amp">
+          <div class="amp-display">
+            <div class="amp-panel">
+              <div class="amp-visualization">
+                <!-- Placeholder for amp graphics -->
+                <div class="amp-glow"></div>
+              </div>
+
+              <!-- Amp Knobs Row -->
+              <div class="amp-knobs">
+                <div class="amp-knob-control">
+                  <span class="amp-knob-label">INPUT</span>
+                  <div class="amp-knob" data-param="amp-input">
+                    <div class="knob-indicator"></div>
+                  </div>
+                </div>
+                <div class="amp-knob-control voice-switch">
+                  <span class="amp-knob-label">VOICE</span>
+                  <div class="voice-toggle">
+                    <div class="voice-lever"></div>
+                  </div>
+                </div>
+                <div class="amp-knob-control">
+                  <span class="amp-knob-label">GAIN</span>
+                  <div class="amp-knob" data-param="gain">
+                    <div class="knob-indicator"></div>
+                  </div>
+                </div>
+                <div class="amp-knob-control">
+                  <span class="amp-knob-label">BASS</span>
+                  <div class="amp-knob" data-param="bass">
+                    <div class="knob-indicator"></div>
+                  </div>
+                </div>
+                <div class="amp-knob-control">
+                  <span class="amp-knob-label">MIDDLE</span>
+                  <div class="amp-knob" data-param="middle">
+                    <div class="knob-indicator"></div>
+                  </div>
+                </div>
+                <div class="amp-knob-control">
+                  <span class="amp-knob-label">TREBLE</span>
+                  <div class="amp-knob" data-param="treble">
+                    <div class="knob-indicator"></div>
+                  </div>
+                </div>
+                <div class="amp-knob-control">
+                  <span class="amp-knob-label">PRESENCE</span>
+                  <div class="amp-knob" data-param="presence">
+                    <div class="knob-indicator"></div>
+                  </div>
+                </div>
+                <div class="amp-knob-control">
+                  <span class="amp-knob-label">MASTER</span>
+                  <div class="amp-knob" data-param="master">
+                    <div class="knob-indicator"></div>
+                  </div>
+                </div>
+                <div class="amp-knob-control">
+                  <span class="amp-knob-label">OUTPUT</span>
+                  <div class="amp-knob" data-param="amp-output">
+                    <div class="knob-indicator"></div>
+                  </div>
+                </div>
+                <div class="amp-knob-control power-control">
+                  <span class="amp-knob-label">POWER</span>
+                  <div class="power-switch" id="power-switch">
+                    <div class="power-indicator"></div>
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="amp-knob-control voice-switch">
-              <span class="amp-knob-label">VOICE</span>
-              <div class="voice-toggle">
-                <div class="voice-lever"></div>
-              </div>
-            </div>
-            <div class="amp-knob-control">
-              <span class="amp-knob-label">GAIN</span>
-              <div class="amp-knob" data-param="gain">
-                <div class="knob-indicator"></div>
-              </div>
-            </div>
-            <div class="amp-knob-control">
-              <span class="amp-knob-label">BASS</span>
-              <div class="amp-knob" data-param="bass">
-                <div class="knob-indicator"></div>
-              </div>
-            </div>
-            <div class="amp-knob-control">
-              <span class="amp-knob-label">MIDDLE</span>
-              <div class="amp-knob" data-param="middle">
-                <div class="knob-indicator"></div>
-              </div>
-            </div>
-            <div class="amp-knob-control">
-              <span class="amp-knob-label">TREBLE</span>
-              <div class="amp-knob" data-param="treble">
-                <div class="knob-indicator"></div>
-              </div>
-            </div>
-            <div class="amp-knob-control">
-              <span class="amp-knob-label">PRESENCE</span>
-              <div class="amp-knob" data-param="presence">
-                <div class="knob-indicator"></div>
-              </div>
-            </div>
-            <div class="amp-knob-control">
-              <span class="amp-knob-label">MASTER</span>
-              <div class="amp-knob" data-param="master">
-                <div class="knob-indicator"></div>
-              </div>
-            </div>
-            <div class="amp-knob-control">
-              <span class="amp-knob-label">OUTPUT</span>
-              <div class="amp-knob" data-param="amp-output">
-                <div class="knob-indicator"></div>
-              </div>
-            </div>
-            <div class="amp-knob-control power-control">
-              <span class="amp-knob-label">POWER</span>
-              <div class="power-switch" id="power-switch">
-                <div class="power-indicator"></div>
-              </div>
+
+            <!-- Cab Section Icons -->
+            <div class="cab-section">
+              <button class="cab-btn" title="Cabinet 1">
+                <div class="cab-icon cab-1x12"></div>
+              </button>
+              <button class="cab-btn active" title="Cabinet 2">
+                <div class="cab-icon cab-2x12"></div>
+              </button>
+              <button class="cab-btn" title="Cabinet 3">
+                <div class="cab-icon cab-4x12"></div>
+              </button>
             </div>
           </div>
         </div>
 
-        <!-- Cab Section Icons -->
-        <div class="cab-section">
-          <button class="cab-btn" title="Cabinet 1">
-            <div class="cab-icon cab-1x12"></div>
-          </button>
-          <button class="cab-btn active" title="Cabinet 2">
-            <div class="cab-icon cab-2x12"></div>
-          </button>
-          <button class="cab-btn" title="Cabinet 3">
-            <div class="cab-icon cab-4x12"></div>
-          </button>
+        <!-- Effects Panel -->
+        <div class="tab-panel" id="panel-effects">
+          <div class="panel-content">
+            <h2>Effects</h2>
+            <p>Add and configure effects pedals in your signal chain.</p>
+          </div>
+        </div>
+
+        <!-- EQ Panel -->
+        <div class="tab-panel" id="panel-eq">
+          <div class="panel-content">
+            <h2>Equalizer</h2>
+            <p>Fine-tune your tone with parametric or graphic EQ.</p>
+          </div>
+        </div>
+
+        <!-- Reverb Panel -->
+        <div class="tab-panel" id="panel-reverb">
+          <div class="panel-content">
+            <h2>Reverb</h2>
+            <p>Configure reverb type, size, decay, and mix.</p>
+          </div>
         </div>
       </main>
 

@@ -6,6 +6,15 @@ const tabButtons = Array.from(document.querySelectorAll(".tab-button"));
 const tabPanels = Array.from(document.querySelectorAll(".tab-panel"));
 const appRootElement = document.getElementById("app");
 
+// New UI elements for amp-style interface
+const presetDropdown = document.getElementById("preset-dropdown");
+const prevPresetBtn = document.getElementById("prev-preset");
+const nextPresetBtn = document.getElementById("next-preset");
+
+// Icon bar tab navigation
+const iconBarButtons = Array.from(document.querySelectorAll(".icon-bar .icon-btn"));
+const mainTabPanels = Array.from(document.querySelectorAll(".main-content .tab-panel"));
+
 const notificationElement = document.createElement("div");
 notificationElement.id = "notification";
 notificationElement.className = "notification";
@@ -435,6 +444,11 @@ function requestSignalPathTest() {
 }
 
 function renderPresetList(presets) {
+  // Skip if preset list element doesn't exist (new amp-style UI)
+  if (!presetListElement) {
+    return;
+  }
+  
   if (!presets.length) {
     presetListElement.innerHTML = '<p class="empty">No presets available.</p>';
     return;
@@ -480,74 +494,117 @@ function renderParameterSection() {
     .map((parameter) => {
       const label = parameter.label ?? parameter.id ?? "";
       return `
-        <li>
-          <span class="parameter-label">${label}</span>
-          <span class="parameter-value">${formatParameterValue(parameter)}</span>
-        </li>
+        <div class="param-card">
+          <span class="param-label">${label}</span>
+          <span class="param-value">${formatParameterValue(parameter)}</span>
+        </div>
       `;
     })
     .join("");
 
   const hasParameters = Boolean(parameterItems);
-  const gateInfo = typeof uiState.parameters.gateEnabled === "boolean"
+  const gateStatus = typeof uiState.parameters.gateEnabled === "boolean"
     ? `
-        <li>
-          <span class="parameter-label">Noise Gate</span>
-          <span class="parameter-value">${uiState.parameters.gateEnabled ? "On" : "Off"}${
+        <div class="param-card ${uiState.parameters.gateEnabled ? 'active' : ''}">
+          <span class="param-label">Noise Gate</span>
+          <span class="param-value">${uiState.parameters.gateEnabled ? "On" : "Off"}${
             typeof uiState.parameters.gateThreshold === "number"
               ? ` (${uiState.parameters.gateThreshold.toFixed(1)} dB)`
               : ""
           }</span>
-        </li>
+        </div>
       `
     : "";
 
-  const signalPath = `
-    <ul class="signal-path">
-      <li><span class="parameter-label">Model</span><span class="parameter-value">${uiState.parameters.modelPath || "None"}</span></li>
-      <li><span class="parameter-label">Impulse Response</span><span class="parameter-value">${uiState.parameters.irPath || "None"}</span></li>
-    </ul>
+  const signalPathCards = `
+    <div class="signal-path-cards">
+      <div class="path-card">
+        <div class="path-icon">🎸</div>
+        <div class="path-info">
+          <span class="path-label">Amp Model</span>
+          <span class="path-value">${uiState.parameters.modelPath || "None"}</span>
+        </div>
+      </div>
+      <div class="path-card">
+        <div class="path-icon">🔊</div>
+        <div class="path-info">
+          <span class="path-label">Cabinet IR</span>
+          <span class="path-value">${uiState.parameters.irPath || "None"}</span>
+        </div>
+      </div>
+    </div>
   `;
 
   const signalTestSection = uiState.signalTest
     ? `
-        <section class="signal-test-results">
-          <h4>Last Signal Path Test</h4>
-          <ul>
-            <li><span class="parameter-label">Frequency</span><span class="parameter-value">${uiState.signalTest.frequency.toFixed(1)} Hz</span></li>
-            <li><span class="parameter-label">Duration</span><span class="parameter-value">${uiState.signalTest.duration.toFixed(2)} s</span></li>
-            <li><span class="parameter-label">Input RMS</span><span class="parameter-value">${uiState.signalTest.inputRMS.toFixed(4)}</span></li>
-            <li><span class="parameter-label">Output RMS (L/R)</span><span class="parameter-value">${uiState.signalTest.outputLeft.toFixed(4)} / ${uiState.signalTest.outputRight.toFixed(4)}</span></li>
-            <li><span class="parameter-label">Status</span><span class="parameter-value ${uiState.signalTest.passed ? "status-pass" : "status-fail"}">${uiState.signalTest.passed ? "Pass" : "Fail"}</span></li>
-          </ul>
-          ${uiState.signalTest.message ? `<p class="signal-test-message">${uiState.signalTest.message}</p>` : ""}
-        </section>
+        <div class="test-results ${uiState.signalTest.passed ? 'passed' : 'failed'}">
+          <div class="test-header">
+            <span class="test-icon">${uiState.signalTest.passed ? '✓' : '✗'}</span>
+            <span class="test-title">Signal Path Test</span>
+            <span class="test-status">${uiState.signalTest.passed ? 'Passed' : 'Failed'}</span>
+          </div>
+          <div class="test-details">
+            <div class="test-stat">
+              <span class="stat-label">Frequency</span>
+              <span class="stat-value">${uiState.signalTest.frequency.toFixed(1)} Hz</span>
+            </div>
+            <div class="test-stat">
+              <span class="stat-label">Duration</span>
+              <span class="stat-value">${uiState.signalTest.duration.toFixed(2)} s</span>
+            </div>
+            <div class="test-stat">
+              <span class="stat-label">Input RMS</span>
+              <span class="stat-value">${uiState.signalTest.inputRMS.toFixed(4)}</span>
+            </div>
+            <div class="test-stat">
+              <span class="stat-label">Output L/R</span>
+              <span class="stat-value">${uiState.signalTest.outputLeft.toFixed(4)} / ${uiState.signalTest.outputRight.toFixed(4)}</span>
+            </div>
+          </div>
+          ${uiState.signalTest.message ? `<p class="test-message">${uiState.signalTest.message}</p>` : ""}
+        </div>
       `
     : "";
 
-  if (!hasParameters && !gateInfo && !uiState.parameters.modelPath && !uiState.parameters.irPath) {
+  if (!hasParameters && !gateStatus && !uiState.parameters.modelPath && !uiState.parameters.irPath) {
     return `
-      <section class="signal-test-controls">
-        <button id="run-signal-test">Run Signal Path Test</button>
-      </section>
-      ${signalTestSection}
+      <div class="signal-chain-section">
+        <h3 class="section-title">
+          <span class="section-icon">🔬</span>
+          Diagnostics
+        </h3>
+        <button id="run-signal-test" class="test-btn">Run Signal Path Test</button>
+        ${signalTestSection}
+      </div>
     `;
   }
 
   return `
-    <section>
-      <h3>Current Parameters</h3>
-      <ul class="parameter-list">
+    <div class="signal-chain-section">
+      <h3 class="section-title">
+        <span class="section-icon">⚙️</span>
+        Current Parameters
+      </h3>
+      <div class="params-grid">
         ${parameterItems}
-        ${gateInfo}
-      </ul>
-      <h4>Signal Path</h4>
-      ${signalPath}
-    </section>
-    <section class="signal-test-controls">
-      <button id="run-signal-test">Run Signal Path Test</button>
-    </section>
-    ${signalTestSection}
+        ${gateStatus}
+      </div>
+    </div>
+    <div class="signal-chain-section">
+      <h3 class="section-title">
+        <span class="section-icon">🛤️</span>
+        Active Signal Path
+      </h3>
+      ${signalPathCards}
+    </div>
+    <div class="signal-chain-section">
+      <h3 class="section-title">
+        <span class="section-icon">🔬</span>
+        Diagnostics
+      </h3>
+      <button id="run-signal-test" class="test-btn">Run Signal Path Test</button>
+      ${signalTestSection}
+    </div>
   `;
 }
 
@@ -572,20 +629,25 @@ function renderDemoAudioControls() {
     .join("");
 
   return `
-    <section class="demo-audio">
-      <h3>Demo Audio</h3>
-      <div class="demo-audio-controls">
-        <label for="demo-audio-select">Preview</label>
-        <select id="demo-audio-select" class="demo-audio-select">
+    <div class="signal-chain-section">
+      <h3 class="section-title">
+        <span class="section-icon">🎵</span>
+        Demo Audio
+      </h3>
+      <div class="demo-controls">
+        <select id="demo-audio-select" class="demo-select">
           ${options}
         </select>
-        <button id="play-demo-audio" class="demo-audio-button">Play</button>
-        <label class="demo-audio-repeat">
+        <button id="play-demo-audio" class="play-btn">
+          <span class="play-icon">▶</span>
+          Play
+        </button>
+        <label class="repeat-toggle">
           <input type="checkbox" id="demo-audio-repeat-checkbox" />
-          <span>Repeat</span>
+          <span class="repeat-label">🔁 Repeat</span>
         </label>
       </div>
-    </section>
+    </div>
   `;
 }
 
@@ -755,14 +817,22 @@ async function previewSelectedDemoAudio() {
 }
 
 function renderPresetDetails(preset) {
+  if (!presetDetailsElement) return;
+  
   if (!preset) {
     const parameterSection = renderParameterSection();
     const demoSection = renderDemoAudioControls();
     presetDetailsElement.innerHTML = `
-      <h2>No Preset Loaded</h2>
-      <p>Select a preset to see details.</p>
-      ${demoSection}
-      ${parameterSection}
+      <div class="signal-chain-container">
+        <div class="signal-chain-header">
+          <div class="preset-info">
+            <h2 class="preset-title">No Preset Loaded</h2>
+            <p class="preset-description">Select a preset to see details.</p>
+          </div>
+        </div>
+        ${demoSection}
+        ${parameterSection}
+      </div>
     `;
     const signalTestButton = document.getElementById("run-signal-test");
     if (signalTestButton) {
@@ -772,35 +842,81 @@ function renderPresetDetails(preset) {
     return;
   }
 
-  const attachments = (preset.attachments ?? [])
-    .map(
-      (attachment) => `
-        <li>
-          <strong>${attachment.type}</strong>
-          <span>${attachment.hash ?? ""}</span>
-        </li>
-      `,
-    )
+  const attachmentCards = (preset.attachments ?? [])
+    .map((attachment) => {
+      const icon = attachment.type === 'audiofx' ? '🎸' : attachment.type === 'ir' ? '🔊' : '📦';
+      const label = attachment.type === 'audiofx' ? 'Amp Model' : attachment.type === 'ir' ? 'Cabinet IR' : attachment.type;
+      const hashShort = attachment.hash ? attachment.hash.substring(0, 12) + '...' : 'N/A';
+      return `
+        <div class="attachment-card">
+          <div class="attachment-icon">${icon}</div>
+          <div class="attachment-info">
+            <span class="attachment-type">${label}</span>
+            <span class="attachment-hash" title="${attachment.hash ?? ''}">${hashShort}</span>
+          </div>
+          <div class="attachment-status active"></div>
+        </div>
+      `;
+    })
     .join("");
 
-  const fxChain = (preset.fxChain ?? [])
-    .map((stage) => `<li>${stage}</li>`)
+  const fxChainNodes = (preset.fxChain ?? [])
+    .map((stage) => {
+      const icon = stage === 'noise_gate' ? '🔇' : stage === 'compressor' ? '📊' : stage === 'eq' ? '🎚️' : '⚡';
+      return `
+        <div class="fx-node">
+          <div class="fx-node-icon">${icon}</div>
+          <span class="fx-node-label">${stage.replace(/_/g, ' ')}</span>
+        </div>
+        <div class="fx-connector"></div>
+      `;
+    })
     .join("");
+
+  const fxChainContent = fxChainNodes || '<span class="fx-empty">No effects in chain</span>';
 
   presetDetailsElement.innerHTML = `
-    <h2>${preset.name}</h2>
-    <p>${preset.description ?? ""}</p>
-    <section>
-      <h3>FX Chain</h3>
-      <ul>${fxChain}</ul>
-    </section>
-    <section>
-      <h3>Attachments</h3>
-      <ul>${attachments}</ul>
-    </section>
-    <button id="apply-preset">Apply Preset</button>
-    ${renderDemoAudioControls()}
-    ${renderParameterSection()}
+    <div class="signal-chain-container">
+      <div class="signal-chain-header">
+        <div class="preset-info">
+          <h2 class="preset-title">${preset.name}</h2>
+          <p class="preset-description">${preset.description ?? ''}</p>
+        </div>
+        <button id="apply-preset" class="apply-btn">Apply Preset</button>
+      </div>
+
+      <div class="signal-chain-section">
+        <h3 class="section-title">
+          <span class="section-icon">🔗</span>
+          Signal Chain
+        </h3>
+        <div class="fx-chain-flow">
+          <div class="fx-node input-node">
+            <div class="fx-node-icon">🎸</div>
+            <span class="fx-node-label">Input</span>
+          </div>
+          <div class="fx-connector"></div>
+          ${fxChainContent}
+          <div class="fx-node output-node">
+            <div class="fx-node-icon">🔊</div>
+            <span class="fx-node-label">Output</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="signal-chain-section">
+        <h3 class="section-title">
+          <span class="section-icon">📦</span>
+          Loaded Components
+        </h3>
+        <div class="attachments-grid">
+          ${attachmentCards || '<span class="no-attachments">No components loaded</span>'}
+        </div>
+      </div>
+
+      ${renderDemoAudioControls()}
+      ${renderParameterSection()}
+    </div>
   `;
 
   const applyButton = document.getElementById("apply-preset");
@@ -837,12 +953,14 @@ function handleIncomingMessage(message) {
         if (!uiState.presets.some((preset) => preset.id === payload.preset.id)) {
           uiState.presets = [payload.preset, ...uiState.presets];
           filterPresets(presetSearchElement?.value ?? "");
+          populatePresetDropdown();
         }
       }
       renderPresetList(uiState.filteredPresets);
       const preset = payload.preset ?? uiState.presetCache.get(uiState.activePresetId) ?? null;
       renderPresetDetails(preset ? clonePreset(preset) : null);
       syncControlsFromState();
+      updatePresetDropdownSelection();
       clearNotification();
       break;
     }
@@ -852,6 +970,7 @@ function handleIncomingMessage(message) {
         uiState.activePresetId = preset.id;
         uiState.presetCache.set(preset.id, preset);
         renderPresetDetails(clonePreset(preset));
+        updatePresetDropdownSelection();
       }
       if (payload.parameters) {
         uiState.parameters = {
@@ -1120,7 +1239,148 @@ async function initialize() {
     });
     renderPresetList(uiState.filteredPresets);
   }
+  
+  // Populate the preset dropdown
+  populatePresetDropdown();
+  
   window.NAMBridge.postMessage({ type: "requestState" });
+}
+
+/**
+ * Populates the preset dropdown with available presets.
+ */
+function populatePresetDropdown() {
+  if (!presetDropdown) return;
+  
+  presetDropdown.innerHTML = "";
+  
+  uiState.presets.forEach((preset) => {
+    const option = document.createElement("option");
+    option.value = preset.id;
+    option.textContent = preset.name;
+    if (preset.id === uiState.activePresetId) {
+      option.selected = true;
+    }
+    presetDropdown.appendChild(option);
+  });
+}
+
+/**
+ * Updates the preset dropdown selection to match the active preset.
+ */
+function updatePresetDropdownSelection() {
+  if (!presetDropdown || !uiState.activePresetId) return;
+  presetDropdown.value = uiState.activePresetId;
+}
+
+/**
+ * Gets the index of the currently active preset.
+ * @returns {number} Index of active preset, or -1 if not found
+ */
+function getActivePresetIndex() {
+  if (!uiState.activePresetId) return -1;
+  return uiState.presets.findIndex((p) => p.id === uiState.activePresetId);
+}
+
+/**
+ * Selects the previous preset in the list.
+ */
+async function selectPreviousPreset() {
+  if (!uiState.presets.length) return;
+  
+  let index = getActivePresetIndex();
+  if (index <= 0) {
+    index = uiState.presets.length - 1; // Wrap to end
+  } else {
+    index--;
+  }
+  
+  const preset = uiState.presets[index];
+  if (preset) {
+    await applyPresetFromLibrary(preset.id);
+    updatePresetDropdownSelection();
+  }
+}
+
+/**
+ * Selects the next preset in the list.
+ */
+async function selectNextPreset() {
+  if (!uiState.presets.length) return;
+  
+  let index = getActivePresetIndex();
+  if (index < 0 || index >= uiState.presets.length - 1) {
+    index = 0; // Wrap to beginning
+  } else {
+    index++;
+  }
+  
+  const preset = uiState.presets[index];
+  if (preset) {
+    await applyPresetFromLibrary(preset.id);
+    updatePresetDropdownSelection();
+  }
+}
+
+/**
+ * Initializes the preset navigation controls (dropdown, prev/next buttons).
+ */
+function initializePresetControls() {
+  // Dropdown change handler
+  if (presetDropdown) {
+    presetDropdown.addEventListener("change", async (event) => {
+      const presetId = event.target.value;
+      if (presetId) {
+        await applyPresetFromLibrary(presetId);
+      }
+    });
+  }
+  
+  // Previous preset button
+  if (prevPresetBtn) {
+    prevPresetBtn.addEventListener("click", async () => {
+      await selectPreviousPreset();
+    });
+  }
+  
+  // Next preset button
+  if (nextPresetBtn) {
+    nextPresetBtn.addEventListener("click", async () => {
+      await selectNextPreset();
+    });
+  }
+}
+
+/**
+ * Switches to a specific tab panel in the main content area.
+ * @param {string} panelId - The panel ID (e.g., "signal-chain", "amp", "effects")
+ */
+function switchMainPanel(panelId) {
+  // Update icon bar button states
+  iconBarButtons.forEach((btn) => {
+    const btnPanel = btn.dataset.panel;
+    btn.classList.toggle("active", btnPanel === panelId);
+  });
+  
+  // Update panel visibility
+  mainTabPanels.forEach((panel) => {
+    const isPanelMatch = panel.id === `panel-${panelId}`;
+    panel.classList.toggle("active", isPanelMatch);
+  });
+}
+
+/**
+ * Initializes the icon bar tab navigation.
+ */
+function initializeIconBarTabs() {
+  iconBarButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const panelId = btn.dataset.panel;
+      if (panelId) {
+        switchMainPanel(panelId);
+      }
+    });
+  });
 }
 
 tabButtons.forEach((button) => {
@@ -1135,6 +1395,8 @@ tabButtons.forEach((button) => {
 activateTab("details");
 renderLogEntries();
 initializeControls();
+initializePresetControls();
+initializeIconBarTabs();
 
 presetSearchElement?.addEventListener("input", (event) => {
   filterPresets(event.target.value ?? "");
