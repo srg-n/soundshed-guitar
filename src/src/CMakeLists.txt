@@ -13,9 +13,12 @@ set(_nam_dsp_sources
   ${NeuralAmpModelerCore_SOURCE_DIR}/NAM/wavenet.cpp
 )
 
+# NAMGuitarFXCore contains API-agnostic shared code. NAMGuitarPlugin.cpp 
+# and NAMGuitarPlugin.h are NOT included here because they require format-
+# specific API definitions (APP_API, VST3_API, etc.). Each format target
+# compiles NAMGuitarPlugin.cpp directly with its own API definition.
+
 set(_namguitar_core_sources
-  NAMGuitarPlugin.cpp
-  NAMGuitarPlugin.h
   dsp/IRManager.cpp
   dsp/IRManager.h
   dsp/NAMDSPManager.cpp
@@ -56,6 +59,7 @@ target_include_directories(NAMGuitarFXCore
     ${iPlug2_SOURCE_DIR}/IPlug/APP
     ${iPlug2_SOURCE_DIR}/IPlug/Extras
     ${iPlug2_SOURCE_DIR}/IPlug/Extras/WebView
+    ${iPlug2_SOURCE_DIR}/IPlug/VST3_SDK
     ${iPlug2_SOURCE_DIR}/IGraphics
     ${iPlug2_SOURCE_DIR}/IGraphics/Controls
     ${iPlug2_SOURCE_DIR}/IGraphics/Drawing
@@ -91,9 +95,9 @@ target_compile_definitions(NAMGuitarFXCore
     IGRAPHICS_GL2
     # Prevent Windows min/max macros from conflicting with std::numeric_limits
     NOMINMAX
-    # Default to standalone APP_API for building the core library;
-    # format-specific targets override this when linking.
-    APP_API
+    # Note: APP_API is NOT defined here. Format-specific targets (standalone,
+    # VST3, etc.) must define their own API macro. The core library compiles
+    # NAMGuitarPlugin.cpp as a static library without API-specific code.
 )
 
 if(WIN32)

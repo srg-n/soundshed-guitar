@@ -3,7 +3,12 @@ include(FetchContent)
 if(NAMGUITAR_FETCH_DEPENDENCIES)
   message(STATUS "Fetching iPlug2 and NeuralAmpModelerCore dependencies")
 
-  if(NOT TARGET iplug2)
+  # Check for local iPlug2 copy first (with VST3_SDK included)
+  set(_local_iplug2 "${CMAKE_CURRENT_SOURCE_DIR}/_deps/iplug2-src")
+  if(EXISTS "${_local_iplug2}/IPlug/VST3_SDK" AND NOT DEFINED iPlug2_SOURCE_DIR)
+    message(STATUS "Using local iPlug2 from ${_local_iplug2}")
+    set(iPlug2_SOURCE_DIR "${_local_iplug2}" CACHE PATH "iPlug2 source directory")
+  elseif(NOT TARGET iplug2)
     FetchContent_Declare(
       iPlug2
       GIT_REPOSITORY https://github.com/iPlug2/iPlug2.git

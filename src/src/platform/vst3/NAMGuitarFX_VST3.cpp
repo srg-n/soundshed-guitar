@@ -1,3 +1,7 @@
+// Include VST3 SDK headers before plugin header to ensure all VST3 types are available
+#include "pluginterfaces/vst/ivstaudioprocessor.h"
+#include "pluginterfaces/vst/ivstcomponent.h"
+
 #include "NAMGuitarPlugin.h"
 
 // This translation unit intentionally remains lightweight. By including the

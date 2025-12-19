@@ -37,14 +37,14 @@ src/                            # Shared plug-in code
 > - Platform SDKs for the desired plug-in formats (VST3 SDK, macOS Audio Unit tools, Avid AAX SDK)
 > - Git (required by `FetchContent` to materialise dependencies)
 >
-> The Steinberg VST3 SDK must be downloaded separately (see https://developer.steinberg.help/display/VST/Downloads) and extracted. Point `VST3_SDK_ROOT` at the extracted folder or drop it into `[_deps/iplug2-src/Dependencies/IPlug/VST3_SDK](./_deps/iplug2-src/Dependencies/IPlug)` before configuring.
+> The Steinberg VST3 SDK must be downloaded separately (see https://www.steinberg.net/vst3sdk) and extracted. Point `VST3_SDK_ROOT` at the extracted folder or drop it into `[_deps/iplug2-src/Dependencies/IPlug/VST3_SDK](./_deps/iplug2-src/Dependencies/IPlug)` before configuring.
 >
 > iPlug2 and NeuralAmpModelerCore are fetched automatically the first time you configure the project. The build will also fetch `nlohmann::json` and `cpp-httplib` for preset management and HTTP support.
 
 ```powershell
 mkdir build
 cd build
-cmake -G "Visual Studio 17 2022" -A x64 ..
+cmake -G "Visual Studio 18 2026" -A x64 ..
 cmake --build . --config Release
 ```
 
