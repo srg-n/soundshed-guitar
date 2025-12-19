@@ -81,6 +81,11 @@ namespace namguitar
     void HandleSignalTestRequest(const nlohmann::json &payload);
     void HandlePreviewDemoRequest(const nlohmann::json &payload);
     void HandleSetParameterRequest(const nlohmann::json &payload);
+    void HandleLoadModelRequest(const nlohmann::json &payload);
+    void HandleLoadIRRequest(const nlohmann::json &payload);
+    void HandleSavePresetRequest(const nlohmann::json &payload);
+    void HandleBrowseModelRequest();
+    void HandleBrowseIRRequest();
     void BroadcastState();
     void ApplyPreset(namguitar::Preset &preset);
     void ReportErrorToUI(std::string_view message, std::string_view detail = {}) const;

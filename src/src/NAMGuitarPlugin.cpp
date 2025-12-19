@@ -13,6 +13,12 @@
 #include <iostream> // For std::cout
 #include <ctime> // For time()
 
+#ifdef _WIN32
+#include <windows.h>
+#include <commdlg.h>
+#include <shobjidl.h>
+#endif
+
 #include <nlohmann/json.hpp>
 
 #include "config.h"
@@ -919,6 +925,26 @@ namespace namguitar
     {
       HandleSetParameterRequest(payload);
     }
+    else if (type == "loadModel")
+    {
+      HandleLoadModelRequest(payload);
+    }
+    else if (type == "loadIR")
+    {
+      HandleLoadIRRequest(payload);
+    }
+    else if (type == "savePreset")
+    {
+      HandleSavePresetRequest(payload);
+    }
+    else if (type == "browseModel")
+    {
+      HandleBrowseModelRequest();
+    }
+    else if (type == "browseIR")
+    {
+      HandleBrowseIRRequest();
+    }
   }
 
   void NAMGuitarPlugin::BroadcastState()
@@ -1101,6 +1127,289 @@ namespace namguitar
     }
 
     ReportErrorToUI("Unable to start signal path test", "Another test is already running or DSP is not ready");
+  }
+
+  void NAMGuitarPlugin::HandleLoadModelRequest(const nlohmann::json &payload)
+  {
+    if (!mDSP)
+    {
+      ReportErrorToUI("Cannot load model", "DSP not initialized");
+      return;
+    }
+
+    const std::string filePath = payload.value("filePath", "");
+    if (filePath.empty())
+    {
+      ReportErrorToUI("Cannot load model", "No file path provided");
+      return;
+    }
+
+    const std::filesystem::path modelPath{filePath};
+    if (!std::filesystem::exists(modelPath))
+    {
+      ReportErrorToUI("Cannot load model", "File does not exist: " + filePath);
+      return;
+    }
+
+    if (mDSP->LoadModel(modelPath))
+    {
+      mActiveModelPath = modelPath.generic_string();
+      // Clear active preset since state no longer matches
+      mActivePreset.reset();
+      mActivePresetId.clear();
+      mActivePresetJson.clear();
+      mPendingStateBroadcast = true;
+
+      if (mWebUI)
+      {
+        nlohmann::json message;
+        message["type"] = "modelLoaded";
+        message["path"] = mActiveModelPath;
+        mWebUI->EnqueueMessage(message.dump());
+      }
+    }
+    else
+    {
+      ReportErrorToUI("Failed to load model", "Could not parse model file: " + filePath);
+    }
+  }
+
+  void NAMGuitarPlugin::HandleLoadIRRequest(const nlohmann::json &payload)
+  {
+    if (!mDSP)
+    {
+      ReportErrorToUI("Cannot load IR", "DSP not initialized");
+      return;
+    }
+
+    const std::string filePath = payload.value("filePath", "");
+    if (filePath.empty())
+    {
+      ReportErrorToUI("Cannot load IR", "No file path provided");
+      return;
+    }
+
+    const std::filesystem::path irPath{filePath};
+    if (!std::filesystem::exists(irPath))
+    {
+      ReportErrorToUI("Cannot load IR", "File does not exist: " + filePath);
+      return;
+    }
+
+    if (mDSP->LoadImpulseResponse(irPath))
+    {
+      mActiveIRPath = irPath.generic_string();
+      // Clear active preset since state no longer matches
+      mActivePreset.reset();
+      mActivePresetId.clear();
+      mActivePresetJson.clear();
+      mPendingStateBroadcast = true;
+
+      if (mWebUI)
+      {
+        nlohmann::json message;
+        message["type"] = "irLoaded";
+        message["path"] = mActiveIRPath;
+        mWebUI->EnqueueMessage(message.dump());
+      }
+    }
+    else
+    {
+      ReportErrorToUI("Failed to load IR", "Could not parse IR file: " + filePath);
+    }
+  }
+
+  void NAMGuitarPlugin::HandleSavePresetRequest(const nlohmann::json &payload)
+  {
+    const std::string presetName = payload.value("name", "");
+    const std::string presetCategory = payload.value("category", "User");
+    const std::string presetDescription = payload.value("description", "");
+
+    if (presetName.empty())
+    {
+      ReportErrorToUI("Cannot save preset", "Preset name is required");
+      return;
+    }
+
+    // Build the preset from current state
+    Preset newPreset;
+    newPreset.id = "user-" + std::to_string(std::time(nullptr));
+    newPreset.name = presetName;
+    newPreset.category = presetCategory;
+    newPreset.description = presetDescription;
+
+    // Capture current parameters
+    for (int paramIdx = 0; paramIdx < kParamCount; ++paramIdx)
+    {
+      const auto *param = GetParam(paramIdx);
+      if (param)
+      {
+        std::string key;
+        switch (static_cast<ParameterId>(paramIdx))
+        {
+        case kParamInputTrim:
+          key = "input_trim";
+          break;
+        case kParamOutputTrim:
+          key = "output_trim";
+          break;
+        case kParamDrive:
+          key = "drive";
+          break;
+        case kParamTone:
+          key = "tone";
+          break;
+        case kParamGateEnabled:
+          key = "gate_enabled";
+          break;
+        case kParamGateThreshold:
+          key = "gate_threshold";
+          break;
+        case kParamMix:
+          key = "mix";
+          break;
+        case kParamDoublerEnabled:
+          key = "doubler_enabled";
+          break;
+        case kParamDoublerDelay:
+          key = "doubler_delay";
+          break;
+        default:
+          continue;
+        }
+        newPreset.parameters.push_back({key, param->Value()});
+      }
+    }
+
+    // Add current model as attachment if loaded
+    if (!mActiveModelPath.empty())
+    {
+      PresetAttachment modelAttachment;
+      modelAttachment.type = "nam";
+      modelAttachment.filePath = std::filesystem::path{mActiveModelPath};
+      newPreset.attachments.push_back(modelAttachment);
+    }
+
+    // Add current IR as attachment if loaded
+    if (!mActiveIRPath.empty())
+    {
+      PresetAttachment irAttachment;
+      irAttachment.type = "ir";
+      irAttachment.filePath = std::filesystem::path{mActiveIRPath};
+      newPreset.attachments.push_back(irAttachment);
+    }
+
+    // Save to user presets directory
+    const auto presetDir = mFileSystem.EnsureDirectory(mFileSystem.ResolvePresetDirectory());
+    if (!presetDir)
+    {
+      ReportErrorToUI("Cannot save preset", "Could not create preset directory");
+      return;
+    }
+
+    const std::filesystem::path presetFilePath = *presetDir / (newPreset.id + ".json");
+
+    // Serialize preset to JSON
+    nlohmann::json presetJson;
+    presetJson["id"] = newPreset.id;
+    presetJson["name"] = newPreset.name;
+    presetJson["category"] = newPreset.category;
+    presetJson["description"] = newPreset.description;
+
+    nlohmann::json parametersArray = nlohmann::json::array();
+    for (const auto &param : newPreset.parameters)
+    {
+      parametersArray.push_back({{"id", param.id}, {"value", param.value}});
+    }
+    presetJson["parameters"] = parametersArray;
+
+    nlohmann::json attachmentsArray = nlohmann::json::array();
+    for (const auto &attachment : newPreset.attachments)
+    {
+      nlohmann::json attachmentJson;
+      attachmentJson["type"] = attachment.type;
+      attachmentJson["filePath"] = attachment.filePath.generic_string();
+      attachmentsArray.push_back(attachmentJson);
+    }
+    presetJson["attachments"] = attachmentsArray;
+
+    // Write to file
+    std::ofstream outputFile(presetFilePath);
+    if (!outputFile)
+    {
+      ReportErrorToUI("Cannot save preset", "Could not create preset file");
+      return;
+    }
+
+    outputFile << presetJson.dump(2);
+    outputFile.close();
+
+    // Update active preset
+    mActivePreset = newPreset;
+    mActivePresetId = newPreset.id;
+    mActivePresetJson = presetJson.dump();
+    mPendingStateBroadcast = true;
+
+    if (mWebUI)
+    {
+      nlohmann::json message;
+      message["type"] = "presetSaved";
+      message["preset"] = presetJson;
+      message["path"] = presetFilePath.generic_string();
+      mWebUI->EnqueueMessage(message.dump());
+    }
+  }
+
+  void NAMGuitarPlugin::HandleBrowseModelRequest()
+  {
+#ifdef _WIN32
+    wchar_t filePath[MAX_PATH] = {0};
+    
+    OPENFILENAMEW ofn = {0};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = nullptr;
+    ofn.lpstrFilter = L"NAM Model Files (*.nam)\0*.nam\0JSON Files (*.json)\0*.json\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFile = filePath;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrTitle = L"Select NAM Model";
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+    
+    if (GetOpenFileNameW(&ofn))
+    {
+      std::filesystem::path modelPath{filePath};
+      nlohmann::json payload;
+      payload["filePath"] = modelPath.generic_string();
+      HandleLoadModelRequest(payload);
+    }
+#else
+    ReportErrorToUI("Browse not supported", "File browser is only available on Windows");
+#endif
+  }
+
+  void NAMGuitarPlugin::HandleBrowseIRRequest()
+  {
+#ifdef _WIN32
+    wchar_t filePath[MAX_PATH] = {0};
+    
+    OPENFILENAMEW ofn = {0};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = nullptr;
+    ofn.lpstrFilter = L"WAV Files (*.wav)\0*.wav\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFile = filePath;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrTitle = L"Select Impulse Response";
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+    
+    if (GetOpenFileNameW(&ofn))
+    {
+      std::filesystem::path irPath{filePath};
+      nlohmann::json payload;
+      payload["filePath"] = irPath.generic_string();
+      HandleLoadIRRequest(payload);
+    }
+#else
+    ReportErrorToUI("Browse not supported", "File browser is only available on Windows");
+#endif
   }
 
   void NAMGuitarPlugin::HandlePreviewDemoRequest(const nlohmann::json &payload)

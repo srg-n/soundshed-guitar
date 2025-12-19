@@ -619,12 +619,18 @@ function renderParameterSection() {
           <span class="path-label">Amp Model</span>
           <span class="path-value">${uiState.parameters.modelPath || "None"}</span>
         </div>
+        <div class="path-actions">
+          <button class="load-btn" id="load-model-btn">Load Model</button>
+        </div>
       </div>
       <div class="path-card">
         <div class="path-icon">🔊</div>
         <div class="path-info">
           <span class="path-label">Cabinet IR</span>
           <span class="path-value">${uiState.parameters.irPath || "None"}</span>
+        </div>
+        <div class="path-actions">
+          <button class="load-btn" id="load-ir-btn">Load IR</button>
         </div>
       </div>
     </div>
@@ -770,6 +776,175 @@ function bindDemoAudioControls() {
       uiState.demoAudioRepeat = event.target.checked;
     });
   }
+}
+
+/**
+ * Binds the load model/IR buttons to trigger file selection.
+ */
+function bindLoadButtons() {
+  const loadModelBtn = document.getElementById("load-model-btn");
+  const loadIRBtn = document.getElementById("load-ir-btn");
+  
+  if (loadModelBtn) {
+    loadModelBtn.addEventListener("click", () => {
+      // Request native file dialog from backend
+      window.NAMBridge.postMessage({ type: "browseModel" });
+      appendLog("browseModel → requested");
+    });
+  }
+  
+  if (loadIRBtn) {
+    loadIRBtn.addEventListener("click", () => {
+      // Request native file dialog from backend
+      window.NAMBridge.postMessage({ type: "browseIR" });
+      appendLog("browseIR → requested");
+    });
+  }
+}
+
+/**
+ * Sends a request to load a NAM model from a file path.
+ * @param {string} filePath - The absolute path to the model file
+ */
+function loadModelFromPath(filePath) {
+  window.NAMBridge.postMessage({
+    type: "loadModel",
+    filePath: filePath,
+  });
+  appendLog(`loadModel → ${filePath}`);
+}
+
+/**
+ * Sends a request to load an IR from a file path.
+ * @param {string} filePath - The absolute path to the IR file
+ */
+function loadIRFromPath(filePath) {
+  window.NAMBridge.postMessage({
+    type: "loadIR",
+    filePath: filePath,
+  });
+  appendLog(`loadIR → ${filePath}`);
+}
+
+/**
+ * Opens the save preset modal dialog.
+ */
+function openSavePresetModal() {
+  const modal = document.getElementById("save-preset-modal");
+  if (!modal) return;
+  
+  // Update the modal with current paths
+  const modelPathSpan = document.getElementById("save-modal-model-path");
+  const irPathSpan = document.getElementById("save-modal-ir-path");
+  
+  if (modelPathSpan) {
+    modelPathSpan.textContent = uiState.parameters.modelPath || "None";
+  }
+  if (irPathSpan) {
+    irPathSpan.textContent = uiState.parameters.irPath || "None";
+  }
+  
+  // Clear previous values
+  const nameInput = document.getElementById("preset-name-input");
+  const categoryInput = document.getElementById("preset-category-input");
+  const descriptionInput = document.getElementById("preset-description-input");
+  
+  if (nameInput) nameInput.value = "";
+  if (categoryInput) categoryInput.value = "User";
+  if (descriptionInput) descriptionInput.value = "";
+  
+  modal.style.display = "flex";
+}
+
+/**
+ * Closes the save preset modal dialog.
+ */
+function closeSavePresetModal() {
+  const modal = document.getElementById("save-preset-modal");
+  if (modal) {
+    modal.style.display = "none";
+  }
+}
+
+/**
+ * Saves the current preset with the values from the modal.
+ */
+function saveCurrentPreset() {
+  const nameInput = document.getElementById("preset-name-input");
+  const categoryInput = document.getElementById("preset-category-input");
+  const descriptionInput = document.getElementById("preset-description-input");
+  
+  const name = nameInput?.value?.trim() || "";
+  const category = categoryInput?.value?.trim() || "User";
+  const description = descriptionInput?.value?.trim() || "";
+  
+  if (!name) {
+    showNotification("Error", "Preset name is required");
+    return;
+  }
+  
+  window.NAMBridge.postMessage({
+    type: "savePreset",
+    name: name,
+    category: category,
+    description: description,
+  });
+  
+  appendLog(`savePreset → ${name}`);
+  closeSavePresetModal();
+}
+
+/**
+ * Initializes the file input handlers for model and IR loading.
+ * Note: Currently using native file dialogs via backend, so this is a no-op.
+ */
+function initializeFileInputs() {
+  // Native file dialogs are handled by the C++ backend via browseModel/browseIR messages
+  // The hidden file inputs in HTML are kept as fallback but not actively used
+}
+
+/**
+ * Initializes the save preset modal event handlers.
+ */
+function initializeSavePresetModal() {
+  const closeBtn = document.getElementById("save-preset-modal-close");
+  const cancelBtn = document.getElementById("save-preset-cancel");
+  const confirmBtn = document.getElementById("save-preset-confirm");
+  const modal = document.getElementById("save-preset-modal");
+  
+  if (closeBtn) {
+    closeBtn.addEventListener("click", closeSavePresetModal);
+  }
+  
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", closeSavePresetModal);
+  }
+  
+  if (confirmBtn) {
+    confirmBtn.addEventListener("click", saveCurrentPreset);
+  }
+  
+  // Close modal when clicking outside
+  if (modal) {
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) {
+        closeSavePresetModal();
+      }
+    });
+  }
+}
+
+/**
+ * Initializes the "SAVE AS..." button in the control bar.
+ */
+function initializeSaveAsButton() {
+  // Find the "SAVE AS..." button in the control bar
+  const saveAsButtons = document.querySelectorAll(".text-btn");
+  saveAsButtons.forEach((btn) => {
+    if (btn.textContent.trim() === "SAVE AS...") {
+      btn.addEventListener("click", openSavePresetModal);
+    }
+  });
 }
 
 function resolveDemoSamplePath(rawPath) {
@@ -934,6 +1109,7 @@ function renderPresetDetails(preset) {
       signalTestButton.addEventListener("click", requestSignalPathTest);
     }
     bindDemoAudioControls();
+    bindLoadButtons();
     return;
   }
 
@@ -1026,6 +1202,7 @@ function renderPresetDetails(preset) {
     signalTestButton.addEventListener("click", requestSignalPathTest);
   }
   bindDemoAudioControls();
+  bindLoadButtons();
 }
 
 function handleIncomingMessage(message) {
@@ -1123,6 +1300,38 @@ function handleIncomingMessage(message) {
     case "error": {
       console.error("Plugin error", payload);
       showNotification(payload.message ?? "An error occurred", payload.detail ?? "");
+      break;
+    }
+    case "modelLoaded": {
+      appendLog(`model loaded ← ${payload.path ?? "unknown"}`);
+      uiState.parameters.modelPath = payload.path ?? "";
+      renderPresetDetails(uiState.presetCache.get(uiState.activePresetId) ?? null);
+      showNotification("Model loaded", payload.path ?? "");
+      break;
+    }
+    case "irLoaded": {
+      appendLog(`IR loaded ← ${payload.path ?? "unknown"}`);
+      uiState.parameters.irPath = payload.path ?? "";
+      renderPresetDetails(uiState.presetCache.get(uiState.activePresetId) ?? null);
+      showNotification("IR loaded", payload.path ?? "");
+      break;
+    }
+    case "presetSaved": {
+      appendLog(`preset saved ← ${payload.preset?.name ?? "unknown"}`);
+      const savedPreset = payload.preset;
+      if (savedPreset) {
+        uiState.activePresetId = savedPreset.id;
+        uiState.presetCache.set(savedPreset.id, savedPreset);
+        // Add to presets list if not already there
+        if (!uiState.presets.some((p) => p.id === savedPreset.id)) {
+          uiState.presets.unshift(savedPreset);
+          filterPresets(presetSearchElement?.value ?? "");
+          populatePresetDropdown();
+        }
+        renderPresetDetails(clonePreset(savedPreset));
+        updatePresetDropdownSelection();
+      }
+      showNotification("Preset saved", payload.path ?? savedPreset?.name ?? "");
       break;
     }
     default:
@@ -1492,6 +1701,9 @@ renderLogEntries();
 initializeControls();
 initializePresetControls();
 initializeIconBarTabs();
+initializeFileInputs();
+initializeSavePresetModal();
+initializeSaveAsButton();
 
 presetSearchElement?.addEventListener("input", (event) => {
   filterPresets(event.target.value ?? "");
