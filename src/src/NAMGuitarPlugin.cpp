@@ -10,15 +10,15 @@
 #include <fstream>
 #include <optional>
 #include <vector>
-#include <exception>
-#include <string>
-#include <string_view>
+#include <iostream> // For std::cout
+#include <ctime> // For time()
 
 #include <nlohmann/json.hpp>
 
 #include "config.h"
 #include "IControls.h"
 #include "IPlug_include_in_plug_src.h"
+#include "IGraphics_include_in_plug_src.h"
 #include "IPlugPaths.h"
 #include "wdlstring.h"
 
@@ -371,6 +371,15 @@ namespace namguitar
   NAMGuitarPlugin::NAMGuitarPlugin(const iplug::InstanceInfo &info)
       : iplug::Plugin(info, iplug::MakeConfig(kParamCount, kNumPrograms)), mDSP(std::make_unique<NAMDSPManager>()), mWebUI(std::make_unique<WebUIBridge>())
   {
+    // Write to a log file to verify execution
+    FILE* logFile = fopen("c:\\temp\\plugin_log.txt", "a");
+    if (logFile) {
+      fprintf(logFile, "[Plugin] Constructor called at %llu\n", (unsigned long long)time(NULL));
+      fclose(logFile);
+    }
+
+    std::cout << "[Plugin] Constructor called" << std::endl;
+
     // Initialize the resource root early so preset loading can find bundled assets
     WDL_String bundlePath;
     iplug::BundleResourcePath(bundlePath, ::gHINSTANCE);
@@ -380,6 +389,7 @@ namespace namguitar
       bundlePath.Append("resources\\");
     }
     mResourceRoot = std::filesystem::path{bundlePath.Get()};
+    std::cout << "[Plugin] Resource root set to: " << mResourceRoot.generic_string() << std::endl;
 
     InitializeParameters();
     HandleWebViewMessages();
@@ -407,6 +417,14 @@ namespace namguitar
     };
 #endif
   }
+
+#ifdef VST3_API
+  Steinberg::tresult PLUGIN_API NAMGuitarPlugin::initialize(FUnknown* context)
+  {
+    std::cout << "[Plugin] initialize called" << std::endl;
+    return iplug::Plugin::initialize(context);
+  }
+#endif
 
   void NAMGuitarPlugin::ProcessBlock(iplug::sample **inputs, iplug::sample **outputs, int nFrames)
   {
@@ -588,6 +606,8 @@ namespace namguitar
 
   void NAMGuitarPlugin::OnIdle()
   {
+    std::cout << "[Plugin] OnIdle called" << std::endl;
+
     if (mWebUI)
     {
       mWebUI->PumpMessages();
@@ -800,7 +820,10 @@ namespace namguitar
                                    { HandleUIMessage(message); });
 
     mWebUI->RegisterLogHandler([this](const std::string &logMessage)
-                               { (void)logMessage; });
+                               { 
+                                 // Log to console for debugging
+                                 printf("[WebUI] %s\n", logMessage.c_str());
+                               });
   }
 
   void NAMGuitarPlugin::InitializeGraphics(iplug::igraphics::IGraphics &graphics)

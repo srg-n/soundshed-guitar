@@ -1,7 +1,6 @@
 #include "WebUIBridge.h"
 
-#include <filesystem>
-#include <sstream>
+#include <iostream> // For std::cout
 
 #include "IControls.h"
 #include "IWebViewControl.h"
@@ -47,13 +46,23 @@ void WebUIBridge::Initialize(iplug::igraphics::IGraphics& graphics, const std::f
 {
   using namespace iplug::igraphics;
 
+  std::cout << "[WebUI] Initialize called" << std::endl;
+
   const std::filesystem::path htmlPath = resourceRoot / "ui" / "index.html";
   IRECT bounds = graphics.GetBounds();
+
+  if (mLogger) {
+    mLogger("Initializing WebView with bounds: " + std::to_string(bounds.W()) + "x" + std::to_string(bounds.H()));
+    mLogger("HTML path: " + htmlPath.generic_string());
+  }
 
   mWebView = new IWebViewControl(
     bounds,
     true,
     [this, htmlPath](IWebViewControl*) {
+      if (mLogger) {
+        mLogger("WebView ready callback triggered");
+      }
       LoadWebContent(htmlPath);
     },
     [this](IWebViewControl*, const char* jsonMsg) {
@@ -64,6 +73,10 @@ void WebUIBridge::Initialize(iplug::igraphics::IGraphics& graphics, const std::f
     },
     true, // enable dev tools
     false);
+
+  if (mLogger) {
+    mLogger("WebView control created, attaching to graphics");
+  }
 
   graphics.AttachControl(mWebView);
 }
@@ -112,8 +125,12 @@ void WebUIBridge::PumpMessages()
 
 void WebUIBridge::LoadWebContent(const std::filesystem::path& htmlPath)
 {
+  std::cout << "[WebUI] LoadWebContent called" << std::endl;
   if (!mWebView)
   {
+    if (mLogger) {
+      mLogger("WebView is null, cannot load content");
+    }
     return;
   }
 
@@ -121,12 +138,53 @@ void WebUIBridge::LoadWebContent(const std::filesystem::path& htmlPath)
   {
     if (mLogger)
     {
-      mLogger("Failed to open UI html at " + htmlPath.generic_string());
+      mLogger("Failed to open UI html at " + htmlPath.generic_string() + " - file does not exist");
     }
     return;
   }
+
+  if (mLogger) {
+    mLogger("HTML file found, loading: " + htmlPath.generic_string());
+  }
+
+  mHtmlPath = htmlPath;
   const std::string pathString = htmlPath.generic_string();
   mWebView->LoadFile(pathString.c_str());
+
+  if (mLogger) {
+    mLogger("LoadFile called successfully");
+  }
+
+  // Set up JavaScript bridge after a short delay to ensure content is loaded
+  // Use a timer or just call it after LoadFile
+  SetupJavaScriptBridge();
+}
+
+void WebUIBridge::SetupJavaScriptBridge()
+{
+  if (!mWebView)
+  {
+    return;
+  }
+
+  if (mLogger) {
+    mLogger("Setting up JavaScript bridge");
+  }
+
+  // Set up the JavaScript bridge
+  const std::string bridgeScript = R"(
+    window.NAMBridge = {
+      postMessage: function(message) {
+        IPlugSendMsg(JSON.stringify(message));
+      }
+    };
+  )";
+
+  mWebView->EvaluateJavaScript(bridgeScript.c_str(), [this](const char* result) {
+    if (mLogger) {
+      mLogger("JavaScript bridge setup completed");
+    }
+  });
 }
 
 } // namespace namguitar

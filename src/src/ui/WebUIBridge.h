@@ -32,11 +32,13 @@ public:
 
 private:
   void LoadWebContent(const std::filesystem::path& htmlPath);
+  void SetupJavaScriptBridge();
 
   iplug::igraphics::IWebViewControl* mWebView = nullptr;
   std::mutex mQueueMutex;
   std::queue<std::string> mPendingMessages;
   MessageHandler mHandler;
   LogHandler mLogger;
+  std::filesystem::path mHtmlPath;
 };
 } // namespace namguitar

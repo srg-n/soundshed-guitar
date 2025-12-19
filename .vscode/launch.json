@@ -1,6 +1,7 @@
 {
   "version": "0.2.0",
   "configurations": [
+
     {
       "name": "Debug NAMGuitarFX App",
       "type": "cppvsdbg",
@@ -9,6 +10,18 @@
       "args": [],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}/src/build/src/platform/app/Debug",
+      "environment": [],
+      "console": "integratedTerminal",
+      "preLaunchTask": "Build NAMGuitarFX Debug"
+    },
+     {
+      "name": "Debug NAMGuitarFX VST Host",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/build/tools/VST3DebugHost.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/src/build/tools",
       "environment": [],
       "console": "integratedTerminal",
       "preLaunchTask": "Build NAMGuitarFX Debug"

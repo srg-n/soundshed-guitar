@@ -55,6 +55,9 @@ NeuronGuitar is an experimental iPlug2-based guitar processing plugin that fuses
 
    iPlug2 provides format-specific targets once the SDK locations are configured (see below).
 
+## Using the app/plugin
+To use the plugin copy \src\build\src\platform\vst3\Release\*.dll to C:\Program Files\CommonFiles\VST3 as *.vst
+
 ## SDK Requirements
 
 To produce binary plugins you must provide the following SDKs:

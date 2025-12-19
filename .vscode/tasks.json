@@ -20,7 +20,7 @@
       "problemMatcher": "$msCompile"
     },
     {
-      "label": "Build NAMGuitarFX Release",
+      "label": "Build NAMGuitarFX App Release",
       "type": "shell",
       "command": "cmake",
       "args": [
@@ -30,6 +30,19 @@
         "Release",
         "--target",
         "NAMGuitarFX_App"
+      ],
+      "group": "build",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "Build NAMGuitarFX App and VST Release",
+      "type": "shell",
+      "command": "cmake",
+      "args": [
+        "--build",
+        "${workspaceFolder}/src/build",
+        "--config",
+        "Release"
       ],
       "group": "build",
       "problemMatcher": "$msCompile"

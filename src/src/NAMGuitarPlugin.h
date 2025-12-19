@@ -41,6 +41,10 @@ namespace namguitar
     int UnserializeState(const iplug::IByteChunk &chunk, int startPos) override;
     void OnParamChange(int paramIdx) override;
 
+#ifdef VST3_API
+    Steinberg::tresult PLUGIN_API initialize(FUnknown* context) override;
+#endif
+
     struct SignalPathTestResult
     {
       double sampleRate = 0.0;
