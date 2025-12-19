@@ -15,14 +15,7 @@ const nextPresetBtn = document.getElementById("next-preset");
 const iconBarButtons = Array.from(document.querySelectorAll(".icon-bar .icon-btn"));
 const mainTabPanels = Array.from(document.querySelectorAll(".main-content .tab-panel"));
 
-const notificationElement = document.createElement("div");
-notificationElement.id = "notification";
-notificationElement.className = "notification";
-if (appRootElement && typeof appRootElement.prepend === "function") {
-  appRootElement.prepend(notificationElement);
-} else {
-  document.body.prepend(notificationElement);
-}
+const notificationElement =  document.getElementById("notification-area");
 
 const REMOTE_BASE_URL = window.AUDIOFX_REMOTE_BASE_URL ?? "";
 
