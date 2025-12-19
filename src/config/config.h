@@ -2,7 +2,7 @@
 
 #include "NAMGuitarConfig.h"
 
-#define PLUG_CLASS_NAME NAMGuitarPlugin
+#define PLUG_CLASS_NAME namguitar::NAMGuitarPlugin
 #define PLUG_HOST_RESIZE 1
 
 #define AUV2_ENTRY NAMGuitarFX_Entry
