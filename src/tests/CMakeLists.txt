@@ -46,3 +46,29 @@ target_compile_definitions(NAMGuitarFX_DSPLoadingTests
 )
 
 add_test(NAME PresetDSPLoadingTests COMMAND NAMGuitarFX_DSPLoadingTests)
+
+# DSP Processing Test - verifies that each preset can process audio without errors
+add_executable(NAMGuitarFX_DSPProcessingTests
+  PresetDSPProcessingTests.cpp
+)
+
+target_include_directories(NAMGuitarFX_DSPProcessingTests
+  PRIVATE
+    ${NAMGUITAR_PROJECT_ROOT}/src
+    ${NeuralAmpModelerCore_SOURCE_DIR}
+)
+
+target_link_libraries(NAMGuitarFX_DSPProcessingTests
+  PRIVATE
+    NAMGuitarFXCore
+    nlohmann_json::nlohmann_json
+)
+
+target_compile_features(NAMGuitarFX_DSPProcessingTests PRIVATE cxx_std_20)
+
+target_compile_definitions(NAMGuitarFX_DSPProcessingTests
+  PRIVATE
+    NAMGUITAR_TEST_RESOURCES_DIR="${NAMGUITAR_RESOURCES_DIR_NORMALIZED}"
+)
+
+add_test(NAME PresetDSPProcessingTests COMMAND NAMGuitarFX_DSPProcessingTests)
