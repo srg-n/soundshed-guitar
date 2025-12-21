@@ -359,8 +359,14 @@ int main()
     int presetsProcessed = 0;
     int presetsTested = 0;
 
-    std::cout << "DSP Processing Test - Testing audio processing for each preset\n";
-    std::cout << "================================================================\n\n";
+    std::cout << "DSP Processing Test - Testing audio processing with preset switching\n";
+    std::cout << "====================================================================\n";
+    std::cout << "(Using single DSP instance to verify Reset() works between presets)\n\n";
+
+    // Create a single DSP manager to reuse across all presets
+    // This tests that switching presets correctly resets DSP state
+    namguitar::NAMDSPManager dsp;
+    dsp.Prepare(kTestSampleRate, kTestBlockSize);
 
     for (const auto& preset : presetsJson)
     {
@@ -389,9 +395,8 @@ int main()
       const fs::path modelPath = modelLibrary.at(modelId).filePath;
       const fs::path irPath = irLibrary.at(irId).filePath;
 
-      // Create a fresh DSP manager for each preset
-      namguitar::NAMDSPManager dsp;
-      dsp.Prepare(kTestSampleRate, kTestBlockSize);
+      // Reset DSP state before loading new preset (mimics ApplyPreset behavior)
+      dsp.Reset();
 
       // Load model
       if (!dsp.LoadModel(modelPath))

@@ -4,6 +4,7 @@
 #include <atomic>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -144,6 +145,10 @@ namespace namguitar
     std::vector<iplug::sample> mPreviewInputRight;
     std::vector<iplug::sample> mPreviewOutputLeft;
     std::vector<iplug::sample> mPreviewOutputRight;
+
+    // Mutex to protect DSP state during model/IR loading
+    // ProcessBlock (audio thread) and ApplyPreset/LoadModel/LoadIR (UI thread) share mDSP
+    mutable std::mutex mDSPMutex;
   };
 } // namespace namguitar
 

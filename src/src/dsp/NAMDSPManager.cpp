@@ -52,6 +52,23 @@ namespace namguitar
         model->ResetAndPrewarm(mSampleRate, mMaxBlockSize);
       }
     }
+
+    // Reset all DSP state to avoid artifacts when switching presets
+    std::fill(mGateEnvelope.begin(), mGateEnvelope.end(), 0.0);
+    std::fill(mToneLowState.begin(), mToneLowState.end(), 0.0);
+    std::fill(mToneHighState.begin(), mToneHighState.end(), 0.0);
+
+    // Reset doubler delay buffers
+    std::fill(mDoublerDelayBufferL.begin(), mDoublerDelayBufferL.end(), 0.0);
+    std::fill(mDoublerDelayBufferR.begin(), mDoublerDelayBufferR.end(), 0.0);
+    mDoublerWriteIndex = 0;
+
+    // Reset IR convolution history
+    for (auto &history : mIRState)
+    {
+      std::fill(history.buffer.begin(), history.buffer.end(), 0.0);
+      history.writeIndex = 0;
+    }
   }
 
   bool NAMDSPManager::LoadModel(const std::filesystem::path &modelPath)
@@ -201,7 +218,7 @@ namespace namguitar
         }
       }
 
-      if (impulseSize > 0)
+      if (impulseSize > 0 && static_cast<std::size_t>(channel) < mIRState.size())
       {
         ApplyImpulseResponse(channelBuffer, channel);
       }
@@ -320,45 +337,71 @@ namespace namguitar
     return sample;
   }
 
+  // Applies convolution with a cabinet impulse response (IR) to simulate speaker characteristics.
+  //
+  // Convolution "imprints" the acoustic characteristics of a recorded speaker cabinet onto the
+  // input signal. The IR captures how a speaker responds to an impulse, encoding its frequency
+  // response and resonances.
+  //
+  // This implements direct-form FIR (Finite Impulse Response) convolution:
+  //   output[n] = sum(input[n-k] * impulse[k]) for k = 0 to N-1
+  //
+  // We use a circular buffer to store the last N input samples efficiently, avoiding the need
+  // to shift samples on each iteration.
   void NAMDSPManager::ApplyImpulseResponse(std::vector<double> &channelSamples, int channel) const
   {
-    const auto &impulse = mIRManager.Impulse();
-    if (impulse.empty())
+    // Take a snapshot copy of the impulse response for thread safety.
+    // This ensures we work with consistent data even if LoadImpulseResponse is called
+    // on another thread during processing.
+    const std::vector<float> impulse = mIRManager.Impulse();
+    const std::size_t irLength = impulse.size();
+    
+    if (irLength == 0)
     {
       return;
     }
 
+    // Get the history buffer for this channel
     auto &history = mIRState[static_cast<std::size_t>(channel)];
-    if (history.buffer.empty())
+    
+    // Ensure history buffer is correctly sized for this IR
+    if (history.buffer.size() != irLength)
     {
-      history.buffer.assign(impulse.size(), 0.0);
+      history.buffer.resize(irLength, 0.0);
+      history.writeIndex = 0;
+    }
+    
+    // Validate write index is in bounds
+    if (history.writeIndex >= irLength)
+    {
       history.writeIndex = 0;
     }
 
-    const std::size_t impulseSize = impulse.size();
+    // Process each input sample
     for (std::size_t i = 0; i < channelSamples.size(); ++i)
     {
-      // Feed the newest sample into the circular buffer and accumulate FIR taps for cabinet coloration.
+      // Store the new input sample in the circular buffer
       history.buffer[history.writeIndex] = channelSamples[i];
 
-      double acc = 0.0;
-      std::size_t bufferIndex = history.writeIndex;
-      for (std::size_t tap = 0; tap < impulseSize; ++tap)
+      // Compute convolution sum: multiply each past sample by corresponding IR coefficient
+      double output = 0.0;
+      
+      for (std::size_t k = 0; k < irLength; ++k)
       {
-        acc += history.buffer[bufferIndex] * impulse[tap];
-        if (bufferIndex == 0)
-        {
-          bufferIndex = impulseSize - 1;
-        }
-        else
-        {
-          --bufferIndex;
-        }
+        // Calculate index into circular buffer for sample[n-k]
+        // We want: current sample (k=0) at writeIndex, older samples going backwards
+        std::size_t sampleIndex = (history.writeIndex >= k) 
+            ? history.writeIndex - k 
+            : irLength - (k - history.writeIndex);
+            
+        output += history.buffer[sampleIndex] * static_cast<double>(impulse[k]);
       }
 
-      channelSamples[i] = acc;
+      // Write convolved output
+      channelSamples[i] = output;
 
-      history.writeIndex = (history.writeIndex + 1) % impulseSize;
+      // Advance write position (circular)
+      history.writeIndex = (history.writeIndex + 1) % irLength;
     }
   }
 

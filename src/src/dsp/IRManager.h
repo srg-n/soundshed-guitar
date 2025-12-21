@@ -23,7 +23,7 @@ namespace namguitar
     bool ParseFmtChunk(std::ifstream &stream, std::uint16_t &audioFormat, std::uint16_t &channels,
                        std::uint32_t &sampleRate, std::uint16_t &bitsPerSample, std::uint16_t &blockAlign,
                        std::uint32_t chunkSize);
-    bool ParseDataChunk(std::ifstream &stream, std::uint16_t bitsPerSample, std::uint16_t channels,
+    bool ParseDataChunk(std::ifstream &stream, std::uint16_t audioFormat, std::uint16_t bitsPerSample, std::uint16_t channels,
                         std::uint32_t dataSize, double targetSampleRate, std::uint32_t sourceSampleRate);
 
     std::optional<std::filesystem::path> mCurrentIR;

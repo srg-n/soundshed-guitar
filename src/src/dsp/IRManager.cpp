@@ -123,6 +123,11 @@ namespace namguitar
 
   bool IRManager::LoadImpulseResponse(const std::filesystem::path &filePath, double targetSampleRate)
   {
+    // Clear existing state first to ensure DSP doesn't use stale data
+    mImpulse.clear();
+    mCurrentIR.reset();
+    mImpulseSampleRate = 0.0;
+
     std::ifstream stream(filePath, std::ios::binary);
     if (!stream)
     {
@@ -131,6 +136,9 @@ namespace namguitar
 
     if (!ParseWavFile(stream, targetSampleRate))
     {
+      // Ensure state is clean on failure
+      mImpulse.clear();
+      mImpulseSampleRate = 0.0;
       return false;
     }
 
@@ -186,7 +194,7 @@ namespace namguitar
         }
         break;
       case MakeFourCC('d', 'a', 't', 'a'):
-        dataLoaded = ParseDataChunk(stream, bitsPerSample, channels, chunkSize, targetSampleRate, sampleRate);
+        dataLoaded = ParseDataChunk(stream, audioFormat, bitsPerSample, channels, chunkSize, targetSampleRate, sampleRate);
         break;
       default:
         stream.seekg(chunkSize, std::ios::cur);
@@ -229,15 +237,26 @@ namespace namguitar
     return audioFormat == 1 || audioFormat == 3; // PCM or IEEE float
   }
 
-  bool IRManager::ParseDataChunk(std::ifstream &stream, std::uint16_t bitsPerSample, std::uint16_t channels,
+  bool IRManager::ParseDataChunk(std::ifstream &stream, std::uint16_t audioFormat, std::uint16_t bitsPerSample, std::uint16_t channels,
                                  std::uint32_t dataSize, double targetSampleRate, std::uint32_t sourceSampleRate)
   {
-    if (channels == 0)
+    if (channels == 0 || bitsPerSample == 0)
     {
       return false;
     }
 
-    const std::size_t totalSamples = dataSize / (bitsPerSample / 8);
+    const std::size_t bytesPerSample = bitsPerSample / 8;
+    if (bytesPerSample == 0)
+    {
+      return false;
+    }
+
+    const std::size_t totalSamples = dataSize / bytesPerSample;
+    if (totalSamples == 0)
+    {
+      return false;
+    }
+
     std::vector<float> samples(totalSamples);
 
     if (bitsPerSample == 16)
@@ -261,18 +280,34 @@ namespace namguitar
     }
     else if (bitsPerSample == 32)
     {
-      for (std::size_t i = 0; i < totalSamples; ++i)
+      if (audioFormat == 3) // IEEE float
       {
-        const std::uint32_t raw = ReadLittleEndian<std::uint32_t>(stream);
-        float asFloat;
-        std::memcpy(&asFloat, &raw, sizeof(float));
-        samples[i] = asFloat;
+        for (std::size_t i = 0; i < totalSamples; ++i)
+        {
+          const std::uint32_t raw = ReadLittleEndian<std::uint32_t>(stream);
+          float asFloat;
+          std::memcpy(&asFloat, &raw, sizeof(float));
+          samples[i] = asFloat;
+        }
+      }
+      else // 32-bit PCM integer
+      {
+        for (std::size_t i = 0; i < totalSamples; ++i)
+        {
+          const std::int32_t value = ReadLittleEndian<std::int32_t>(stream);
+          samples[i] = static_cast<float>(value) / static_cast<float>(std::numeric_limits<std::int32_t>::max());
+        }
       }
     }
     else
     {
       stream.seekg(dataSize, std::ios::cur);
       return false;
+    }
+
+    if (!stream)
+    {
+      return false; // Read error occurred
     }
 
     DownmixToMono(samples, channels);

@@ -457,6 +457,20 @@ namespace namguitar
       return;
     }
 
+    // Try to acquire the DSP mutex. If we can't (e.g., model/IR is being loaded),
+    // output silence to avoid crashes. This prevents blocking the audio thread.
+    std::unique_lock<std::mutex> lock(mDSPMutex, std::try_to_lock);
+    if (!lock.owns_lock())
+    {
+      // DSP is being modified, output silence
+      if (outputs && outputs[0] && outputs[1])
+      {
+        std::fill(outputs[0], outputs[0] + nFrames, static_cast<iplug::sample>(0));
+        std::fill(outputs[1], outputs[1] + nFrames, static_cast<iplug::sample>(0));
+      }
+      return;
+    }
+
     if (auto previewBuffer = mPreviewBuffer.load(std::memory_order_acquire))
     {
       if (!outputs || !outputs[0] || !outputs[1])
@@ -619,6 +633,9 @@ namespace namguitar
     {
       return;
     }
+
+    // Lock DSP mutex during prepare/reset
+    std::lock_guard<std::mutex> lock(mDSPMutex);
 
     mDSP->Prepare(GetSampleRate(), GetBlockSize());
 
@@ -979,6 +996,12 @@ namespace namguitar
       return;
     }
 
+    // Lock DSP mutex to prevent ProcessBlock from accessing DSP during modification
+    std::lock_guard<std::mutex> lock(mDSPMutex);
+
+    // Reset DSP state before applying new preset to avoid artifacts
+    mDSP->Reset();
+
     for (const auto &parameter : preset.parameters)
     {
       const auto paramId = ParamIdFromKey(parameter.id);
@@ -1151,6 +1174,9 @@ namespace namguitar
       return;
     }
 
+    // Lock DSP mutex during model loading
+    std::lock_guard<std::mutex> lock(mDSPMutex);
+
     if (mDSP->LoadModel(modelPath))
     {
       mActiveModelPath = modelPath.generic_string();
@@ -1195,6 +1221,9 @@ namespace namguitar
       ReportErrorToUI("Cannot load IR", "File does not exist: " + filePath);
       return;
     }
+
+    // Lock DSP mutex during IR loading
+    std::lock_guard<std::mutex> lock(mDSPMutex);
 
     if (mDSP->LoadImpulseResponse(irPath))
     {
