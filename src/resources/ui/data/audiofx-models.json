@@ -1,16 +1,9 @@
 [
   {
-    "id": "nam-model-test-default",
+    "id": "audiofx-model-test-default",
     "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "filePath": "models/test.nam",
-    "title": "Test Model",
+    "filePath": "amps/Guitar/Scharrface/Randall Protube 2000/Randall Protube 2000 Overdrive channel V4 G6 B6 M5 T6 Gain Voicing2 boosted by Airis Parallel OD.nam",
+    "title": "Randall Protube 2000 Overdrive",
     "description": "Default bundled NAM model for testing"
-  },
-  {
-    "id": "randal-protube-overdrive",
-    "hash": "f3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "filePath": "models/test.nam",
-    "title": "Randal ProTube 2000 Overdrive",
-    "description": "Randal ProTube 2000 Overdrive amp model"
   }
 ]
