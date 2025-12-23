@@ -49,6 +49,10 @@ namespace namguitar
     [[nodiscard]] bool HasModel() const noexcept;
     [[nodiscard]] bool HasImpulseResponse() const noexcept;
 
+    // Test-only methods for IR convolution testing
+    void SetImpulseResponseForTest(const std::vector<float>& impulse);
+    void ApplyImpulseResponseForTest(std::vector<double>& channelSamples, int channel);
+
   private:
     double ApplyDrive(double sample) const;
     double ApplyTone(double sample, int channel);

@@ -426,4 +426,20 @@ namespace namguitar
     return mIRManager.HasImpulse();
   }
 
+  void NAMDSPManager::SetImpulseResponseForTest(const std::vector<float>& impulse)
+  {
+    mIRManager.SetImpulse(impulse);
+    // Reset IR state when changing impulse
+    for (auto& history : mIRState)
+    {
+      history.buffer.clear();
+      history.writeIndex = 0;
+    }
+  }
+
+  void NAMDSPManager::ApplyImpulseResponseForTest(std::vector<double>& channelSamples, int channel)
+  {
+    ApplyImpulseResponse(channelSamples, channel);
+  }
+
 } // namespace namguitar

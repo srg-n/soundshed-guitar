@@ -17,6 +17,9 @@ namespace namguitar
     [[nodiscard]] const std::vector<float> &Impulse() const noexcept;
     [[nodiscard]] bool HasImpulse() const noexcept;
 
+    // Test-only method to set impulse data directly without loading from file
+    void SetImpulse(const std::vector<float>& impulse);
+
   private:
     bool ParseWavFile(std::ifstream &stream, double targetSampleRate);
     bool ParseRiffHeader(std::ifstream &stream);

@@ -72,3 +72,23 @@ target_compile_definitions(NAMGuitarFX_DSPProcessingTests
 )
 
 add_test(NAME PresetDSPProcessingTests COMMAND NAMGuitarFX_DSPProcessingTests)
+
+# IR Convolution Unit Tests - verifies the convolution algorithm correctness
+add_executable(NAMGuitarFX_IRConvolutionTests
+  IRConvolutionTests.cpp
+)
+
+target_include_directories(NAMGuitarFX_IRConvolutionTests
+  PRIVATE
+    ${NAMGUITAR_PROJECT_ROOT}/src
+    ${NeuralAmpModelerCore_SOURCE_DIR}
+)
+
+target_link_libraries(NAMGuitarFX_IRConvolutionTests
+  PRIVATE
+    NAMGuitarFXCore
+)
+
+target_compile_features(NAMGuitarFX_IRConvolutionTests PRIVATE cxx_std_20)
+
+add_test(NAME IRConvolutionTests COMMAND NAMGuitarFX_IRConvolutionTests)

@@ -161,6 +161,12 @@ namespace namguitar
     return !mImpulse.empty();
   }
 
+  void IRManager::SetImpulse(const std::vector<float>& impulse)
+  {
+    mImpulse = impulse;
+    mCurrentIR = std::nullopt; // Clear the file path since this is synthetic data
+  }
+
   bool IRManager::ParseWavFile(std::ifstream &stream, double targetSampleRate)
   {
     if (!ParseRiffHeader(stream))
