@@ -862,6 +862,7 @@ function openSavePresetModal() {
 function closeSavePresetModal() {
   const modal = document.getElementById("save-preset-modal");
   if (modal) {
+    console.log("Closing save preset modal");
     modal.style.display = "none";
   }
 }
@@ -870,28 +871,48 @@ function closeSavePresetModal() {
  * Saves the current preset with the values from the modal.
  */
 function saveCurrentPreset() {
+  console.log("=== saveCurrentPreset CALLED ===");
+  
   const nameInput = document.getElementById("preset-name-input");
   const categoryInput = document.getElementById("preset-category-input");
   const descriptionInput = document.getElementById("preset-description-input");
+  
+  console.log("Elements retrieved:", { nameInput, categoryInput, descriptionInput });
   
   const name = nameInput?.value?.trim() || "";
   const category = categoryInput?.value?.trim() || "User";
   const description = descriptionInput?.value?.trim() || "";
   
+  console.log("Preset details", { name, category, description });
+  
   if (!name) {
+    console.log("ERROR: Preset name is empty, not saving");
     showNotification("Error", "Preset name is required");
     return;
   }
   
-  window.NAMBridge.postMessage({
-    type: "savePreset",
-    name: name,
-    category: category,
-    description: description,
-  });
+
+  // save
   
-  appendLog(`savePreset → ${name}`);
-  closeSavePresetModal();
+  
+  /*
+
+  
+  console.log("Sending message to bridge:", message);
+  console.log("Bridge availability:", { bridgeExists: !!window.NAMBridge, hasPostMessage: !!(window.NAMBridge && window.NAMBridge.postMessage) });
+  
+  if (window.NAMBridge && window.NAMBridge.postMessage) {
+    console.log("Posting message...");
+    window.NAMBridge.postMessage(message);
+    console.log("Message posted successfully");
+    appendLog(`savePreset → ${name}`);
+    console.log("Closing modal...");
+    closeSavePresetModal();
+    console.log("Preset save message sent");
+  } else {
+    console.error("NAMBridge not available for saving preset");
+    showNotification("Error", "Failed to save preset - bridge not available");
+  }*/
 }
 
 /**
@@ -912,6 +933,8 @@ function initializeSavePresetModal() {
   const confirmBtn = document.getElementById("save-preset-confirm");
   const modal = document.getElementById("save-preset-modal");
   
+  console.log("Initializing save preset modal", { closeBtn, cancelBtn, confirmBtn, modal });
+  
   if (closeBtn) {
     closeBtn.addEventListener("click", closeSavePresetModal);
   }
@@ -921,7 +944,12 @@ function initializeSavePresetModal() {
   }
   
   if (confirmBtn) {
-    confirmBtn.addEventListener("click", saveCurrentPreset);
+    confirmBtn.addEventListener("click", (e) => {
+      console.log("Save preset confirm button clicked");
+      saveCurrentPreset();
+    });
+  } else {
+    console.warn("Save preset confirm button not found!");
   }
   
   // Close modal when clicking outside
@@ -1241,7 +1269,6 @@ function handleIncomingMessage(message) {
       if (preset) {
         uiState.activePresetId = preset.id;
         uiState.presetCache.set(preset.id, preset);
-        renderPresetDetails(clonePreset(preset));
         updatePresetDropdownSelection();
       }
       if (payload.parameters) {
@@ -1255,6 +1282,10 @@ function handleIncomingMessage(message) {
           modelPath: payload.parameters.modelPath ?? uiState.parameters.modelPath,
           irPath: payload.parameters.irPath ?? uiState.parameters.irPath,
         };
+      }
+      // Render preset details AFTER updating parameters so signal path shows correct model/IR
+      if (preset) {
+        renderPresetDetails(clonePreset(preset));
       }
       renderPresetList(uiState.filteredPresets);
       syncControlsFromState();
@@ -1320,6 +1351,9 @@ function handleIncomingMessage(message) {
       appendLog(`preset saved ← ${payload.preset?.name ?? "unknown"}`);
       const savedPreset = payload.preset;
       if (savedPreset) {
+        // Save preset to localStorage
+        savePresetToLocalStorage(savedPreset);
+        
         uiState.activePresetId = savedPreset.id;
         uiState.presetCache.set(savedPreset.id, savedPreset);
         // Add to presets list if not already there
@@ -1499,6 +1533,42 @@ async function applyPresetFromLibrary(presetId) {
   }
 }
 
+/**
+ * Saves a preset to browser localStorage.
+ * @param {object} preset - The preset object to save
+ */
+function savePresetToLocalStorage(preset) {
+  try {
+    const savedPresets = JSON.parse(localStorage.getItem("namguitar_user_presets") || "[]");
+    // Check if preset with this ID already exists and replace it
+    const existingIndex = savedPresets.findIndex(p => p.id === preset.id);
+    if (existingIndex >= 0) {
+      savedPresets[existingIndex] = preset;
+    } else {
+      savedPresets.push(preset);
+    }
+    localStorage.setItem("namguitar_user_presets", JSON.stringify(savedPresets));
+    console.log(`Preset '${preset.name}' saved to localStorage`);
+  } catch (error) {
+    console.error("Failed to save preset to localStorage", error);
+  }
+}
+
+/**
+ * Loads user presets from browser localStorage.
+ * @returns {array} Array of user presets or empty array if none found
+ */
+function loadPresetsFromLocalStorage() {
+  try {
+    const savedPresets = JSON.parse(localStorage.getItem("namguitar_user_presets") || "[]");
+    console.log(`Loaded ${savedPresets.length} user presets from localStorage`);
+    return savedPresets;
+  } catch (error) {
+    console.error("Failed to load presets from localStorage", error);
+    return [];
+  }
+}
+
 async function loadPresetIndex() {
   try {
     if (!REMOTE_BASE_URL) {
@@ -1512,7 +1582,10 @@ async function loadPresetIndex() {
 
     const data = await response.json();
     const presets = Array.isArray(data) ? data : data.presets ?? [];
-    uiState.presets = presets.length ? presets : DEFAULT_PRESETS.slice();
+    // Start with default presets and append user-saved presets
+    const basePresets = presets.length ? presets : DEFAULT_PRESETS.slice();
+    const userPresets = loadPresetsFromLocalStorage();
+    uiState.presets = [...basePresets, ...userPresets];
     uiState.filteredPresets = uiState.presets.slice();
     uiState.presets.forEach((preset) => {
       uiState.presetCache.set(preset.id, preset);
@@ -1520,7 +1593,10 @@ async function loadPresetIndex() {
     renderPresetList(uiState.filteredPresets);
   } catch (error) {
     console.error("Failed to load preset index", error);
-    uiState.presets = DEFAULT_PRESETS.slice();
+    // Start with default presets and append user-saved presets
+    const basePresets = DEFAULT_PRESETS.slice();
+    const userPresets = loadPresetsFromLocalStorage();
+    uiState.presets = [...basePresets, ...userPresets];
     uiState.filteredPresets = uiState.presets.slice();
     uiState.presets.forEach((preset) => {
       uiState.presetCache.set(preset.id, preset);
@@ -1536,7 +1612,10 @@ async function initialize() {
   if (REMOTE_BASE_URL) {
     await loadPresetIndex();
   } else {
-    uiState.presets = DEFAULT_PRESETS.slice();
+    // Load default presets and append user-saved presets from localStorage
+    const basePresets = DEFAULT_PRESETS.slice();
+    const userPresets = loadPresetsFromLocalStorage();
+    uiState.presets = [...basePresets, ...userPresets];
     uiState.filteredPresets = uiState.presets.slice();
     uiState.presets.forEach((preset) => {
       uiState.presetCache.set(preset.id, preset);

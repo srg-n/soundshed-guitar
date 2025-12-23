@@ -922,6 +922,8 @@ namespace namguitar
     }
 
     const std::string type = payload.value("type", "");
+    std::cerr << "[NAMGuitarPlugin] Received UI message of type: " << type << std::endl;
+    
     if (type == "loadPreset")
     {
       HandlePresetLoadRequest(payload);
@@ -1068,6 +1070,13 @@ namespace namguitar
         nlohmann::json message;
         message["type"] = "presetLoaded";
         message["preset"] = SerializePresetToJson(preset);
+        
+        // Include current model/IR paths so UI can update signal path display
+        nlohmann::json parameters;
+        parameters["modelPath"] = mActiveModelPath;
+        parameters["irPath"] = mActiveIRPath;
+        message["parameters"] = std::move(parameters);
+        
         mWebUI->EnqueueMessage(message.dump());
       }
     }
@@ -1250,12 +1259,18 @@ namespace namguitar
 
   void NAMGuitarPlugin::HandleSavePresetRequest(const nlohmann::json &payload)
   {
+    std::cerr << "[NAMGuitarPlugin] HandleSavePresetRequest called" << std::endl;
+    
     const std::string presetName = payload.value("name", "");
     const std::string presetCategory = payload.value("category", "User");
     const std::string presetDescription = payload.value("description", "");
 
+    std::cerr << "[NAMGuitarPlugin] Saving preset: name=" << presetName 
+              << ", category=" << presetCategory << std::endl;
+
     if (presetName.empty())
     {
+      std::cerr << "[NAMGuitarPlugin] Error: Preset name is empty" << std::endl;
       ReportErrorToUI("Cannot save preset", "Preset name is required");
       return;
     }
