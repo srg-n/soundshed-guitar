@@ -196,6 +196,32 @@ function initializeInputOutputKnobs(): void {
     });
     knobInstances.set("output_level", outputKnobInstance);
   }
+
+  // Initialize Transpose knob
+  const transposeKnob = document.querySelector('.knob[data-param="transpose"]') as HTMLElement | null;
+  if (transposeKnob) {
+    const transposeKnobInstance = new GenericKnob({
+      knobElement: transposeKnob,
+      paramId: "transpose",
+      minValue: -12,
+      maxValue: 12,
+      defaultValue: 0,
+      displayFormat: (value) => {
+        const rounded = Math.round(value);
+        return rounded >= 0 ? `+${rounded} st` : `${rounded} st`;
+      },
+      valueDisplayId: "transpose-value",
+      sensitivity: 0.1,
+      onValueChange: (value) => {
+        // Snap to integer values for semitones
+        const rounded = Math.round(value);
+        if (Math.abs(value - rounded) > 0.01) {
+          transposeKnobInstance.setValue(rounded);
+        }
+      },
+    });
+    knobInstances.set("transpose", transposeKnobInstance);
+  }
 }
 
 export function initializeControls(): void {
@@ -258,6 +284,12 @@ export function syncDoublerControlsFromState(): void {
   const outputKnobInstance = knobInstances.get("output_level");
   if (outputKnobInstance && typeof paramValues.output_level === "number") {
     outputKnobInstance.setValue(paramValues.output_level);
+  }
+
+  // Sync transpose knob
+  const transposeKnobInstance = knobInstances.get("transpose");
+  if (transposeKnobInstance && typeof paramValues.transpose === "number") {
+    transposeKnobInstance.setValue(paramValues.transpose);
   }
 }
 

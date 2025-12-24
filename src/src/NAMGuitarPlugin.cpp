@@ -87,6 +87,8 @@ namespace namguitar
         return "doubler_enabled";
       case NAMGuitarPlugin::kParamDoublerDelay:
         return "doubler_delay";
+      case NAMGuitarPlugin::kParamTranspose:
+        return "transpose";
       default:
         return "";
       }
@@ -129,6 +131,10 @@ namespace namguitar
       if (key == "doubler_delay")
       {
         return NAMGuitarPlugin::kParamDoublerDelay;
+      }
+      if (key == "transpose")
+      {
+        return NAMGuitarPlugin::kParamTranspose;
       }
       return std::nullopt;
     }
@@ -838,6 +844,9 @@ namespace namguitar
     case kParamDoublerDelay:
       mDSP->SetDoublerDelay(param->Value());
       break;
+    case kParamTranspose:
+      mDSP->SetTranspose(static_cast<int>(std::round(param->Value())));
+      break;
     default:
       break;
     }
@@ -856,6 +865,7 @@ namespace namguitar
     GetParam(kParamMix)->InitDouble("Mix", 1.0, 0.0, 1.0, 0.01);
     GetParam(kParamDoublerEnabled)->InitBool("Doubler", false);
     GetParam(kParamDoublerDelay)->InitDouble("Doubler Delay", 6.0, 0.5, 50.0, 0.1, "ms");
+    GetParam(kParamTranspose)->InitInt("Transpose", 0, -12, 12, "st");
   }
 
   void NAMGuitarPlugin::HandleWebViewMessages()
@@ -1102,49 +1112,12 @@ namespace namguitar
     const std::string paramId = payload.value("id", "");
     const double value = payload.value("value", 0.0);
 
-    // Map string parameter IDs to enum values
-    int paramIdx = -1;
-    if (paramId == "input_trim")
+    // Use the existing ParamIdFromKey helper function
+    const auto paramIdx = ParamIdFromKey(paramId);
+    if (paramIdx && *paramIdx >= 0 && *paramIdx < kParamCount)
     {
-      paramIdx = kParamInputTrim;
-    }
-    else if (paramId == "output_trim")
-    {
-      paramIdx = kParamOutputTrim;
-    }
-    else if (paramId == "drive")
-    {
-      paramIdx = kParamDrive;
-    }
-    else if (paramId == "tone")
-    {
-      paramIdx = kParamTone;
-    }
-    else if (paramId == "gate_enabled")
-    {
-      paramIdx = kParamGateEnabled;
-    }
-    else if (paramId == "gate_threshold")
-    {
-      paramIdx = kParamGateThreshold;
-    }
-    else if (paramId == "mix")
-    {
-      paramIdx = kParamMix;
-    }
-    else if (paramId == "doubler_enabled")
-    {
-      paramIdx = kParamDoublerEnabled;
-    }
-    else if (paramId == "doubler_delay")
-    {
-      paramIdx = kParamDoublerDelay;
-    }
-
-    if (paramIdx >= 0 && paramIdx < kParamCount)
-    {
-      GetParam(paramIdx)->Set(value);
-      OnParamChange(paramIdx);
+      GetParam(*paramIdx)->Set(value);
+      OnParamChange(*paramIdx);
     }
   }
 

@@ -178,6 +178,25 @@ namespace namguitar
     }
   }
 
+  void NAMDSPManager::SetTranspose(int semitones)
+  {
+    mTransposeSemitones = std::clamp(semitones, -12, 12);
+    
+    // Calculate pitch ratio: 2^(semitones/12)
+    mPitchRatio = std::pow(2.0, static_cast<double>(mTransposeSemitones) / 12.0);
+    
+    // Resize pitch buffers for time-stretching
+    const std::size_t bufferSize = static_cast<std::size_t>(mMaxBlockSize * 4);
+    if (mPitchBufferL.size() < bufferSize)
+    {
+      mPitchBufferL.resize(bufferSize, 0.0);
+      mPitchBufferR.resize(bufferSize, 0.0);
+      mPitchReadIndex = 0;
+      mPitchWriteIndex = 0;
+      mPitchPhase = 0.0;
+    }
+  }
+
   void NAMDSPManager::Process(iplug::sample **inputs, iplug::sample **outputs, int nFrames)
   {
     const auto frames = std::min(nFrames, mMaxBlockSize);
@@ -277,6 +296,44 @@ namespace namguitar
         // Advance write index
         mDoublerWriteIndex = (mDoublerWriteIndex + 1) % mDoublerDelayBufferL.size();
       }
+    }
+
+    // Apply pitch shifting (transpose) if enabled
+    if (mTransposeSemitones != 0 && mPitchRatio != 1.0)
+    {
+      // Simple pitch shifting using time-domain resampling with linear interpolation
+      // This is a basic implementation; production code would use PSOLA or phase vocoder
+      std::vector<double> pitchShiftedL(frames);
+      std::vector<double> pitchShiftedR(frames);
+
+      for (int frame = 0; frame < frames; ++frame)
+      {
+        // Write input samples to pitch buffer
+        mPitchBufferL[mPitchWriteIndex] = processedL[frame];
+        mPitchBufferR[mPitchWriteIndex] = processedR[frame];
+        mPitchWriteIndex = (mPitchWriteIndex + 1) % mPitchBufferL.size();
+
+        // Read from buffer at adjusted rate for pitch shifting
+        const double readPos = mPitchPhase;
+        const std::size_t readIndex0 = static_cast<std::size_t>(readPos) % mPitchBufferL.size();
+        const std::size_t readIndex1 = (readIndex0 + 1) % mPitchBufferL.size();
+        const double frac = readPos - std::floor(readPos);
+
+        // Linear interpolation for smoother pitch shifting
+        pitchShiftedL[frame] = mPitchBufferL[readIndex0] * (1.0 - frac) + mPitchBufferL[readIndex1] * frac;
+        pitchShiftedR[frame] = mPitchBufferR[readIndex0] * (1.0 - frac) + mPitchBufferR[readIndex1] * frac;
+
+        // Advance phase by pitch ratio
+        mPitchPhase += mPitchRatio;
+        if (mPitchPhase >= static_cast<double>(mPitchBufferL.size()))
+        {
+          mPitchPhase -= static_cast<double>(mPitchBufferL.size());
+        }
+      }
+
+      // Replace processed audio with pitch-shifted version
+      processedL = std::move(pitchShiftedL);
+      processedR = std::move(pitchShiftedR);
     }
 
     // Output final signal with mix and output trim

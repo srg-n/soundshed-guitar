@@ -42,6 +42,7 @@ namespace namguitar
     void SetMix(double mix);
     void SetDoublerEnabled(bool enabled);
     void SetDoublerDelay(double milliseconds);
+    void SetTranspose(int semitones);
 
     void Process(iplug::sample **inputs, iplug::sample **outputs, int nFrames);
 
@@ -89,6 +90,15 @@ namespace namguitar
     std::vector<double> mDoublerDelayBufferL;
     std::vector<double> mDoublerDelayBufferR;
     std::size_t mDoublerWriteIndex = 0;
+
+    // Transpose (pitch shift) state
+    int mTransposeSemitones = 0;
+    double mPitchRatio = 1.0;
+    std::vector<double> mPitchBufferL;
+    std::vector<double> mPitchBufferR;
+    std::size_t mPitchReadIndex = 0;
+    std::size_t mPitchWriteIndex = 0;
+    double mPitchPhase = 0.0;
 
     struct IRHistory
     {

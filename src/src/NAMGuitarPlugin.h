@@ -69,6 +69,7 @@ namespace namguitar
       kParamMix,
       kParamDoublerEnabled,
       kParamDoublerDelay,
+      kParamTranspose,
       kParamCount
     };
 
