@@ -1,6 +1,6 @@
 import { uiState, clonePreset } from "./state.js";
 import { renderActivePreset, applyPresetFromLibrary, populatePresetDropdown, updatePresetDropdownSelection, savePresetToLocalStorage } from "./presets.js";
-import { syncControlsFromState, handleInputModeChanged } from "./controls.js";
+import { syncControlsFromState, handleInputModeChanged, handleAmpCabStateChanged } from "./controls.js";
 import { showNotification } from "./notifications.js";
 import { appendLog } from "./logging.js";
 import { previewSelectedDemoAudio } from "./demoAudio.js";
@@ -202,6 +202,15 @@ export function handleIncomingMessage(message: string): void {
         modePayload.inputChannel ?? 1
       );
       appendLog(`Input mode changed: ${modePayload.monoMode ? "Mono" : "Stereo"}, Channel: ${(modePayload.inputChannel ?? 1) + 1}`);
+      break;
+    }
+    case "ampCabStateChanged": {
+      const statePayload = payload as { ampEnabled?: boolean; cabEnabled?: boolean };
+      handleAmpCabStateChanged(
+        statePayload.ampEnabled ?? true,
+        statePayload.cabEnabled ?? true
+      );
+      appendLog(`Amp: ${statePayload.ampEnabled ? "ON" : "OFF"}, Cab: ${statePayload.cabEnabled ? "ON" : "OFF"}`);
       break;
     }
     default:

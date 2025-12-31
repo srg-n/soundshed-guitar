@@ -1,4 +1,4 @@
-import { initializeControls, initializeInputModeControls } from "./controls.js";
+import { initializeControls, initializeInputModeControls, initializeAmpCabPowerControls } from "./controls.js";
 import {
   initializePresetControls,
   initializePresets,
@@ -72,6 +72,7 @@ async function bootstrap(): Promise<void> {
   activateTab("details");
   initializeControls();
   initializeInputModeControls();
+  initializeAmpCabPowerControls();
   initializePresetControls();
   initializeIconBarTabs();
   initializeSavePresetModal();

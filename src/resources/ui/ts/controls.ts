@@ -410,3 +410,61 @@ export function handleInputModeChanged(monoMode: boolean, inputChannel: number):
     }
   }
 }
+
+// Amp and Cab power state
+let ampEnabled = true;
+let cabEnabled = true;
+
+function sendAmpCabStateToPlugin(): void {
+  const message = JSON.stringify({
+    type: "setAmpCabState",
+    ampEnabled: ampEnabled,
+    cabEnabled: cabEnabled,
+  });
+  
+  if (typeof (window as any).IPlugSendMsg === "function") {
+    (window as any).IPlugSendMsg(message);
+  }
+  
+  appendLog(`Amp: ${ampEnabled ? "ON" : "OFF"}, Cab: ${cabEnabled ? "ON" : "OFF"}`);
+}
+
+export function initializeAmpCabPowerControls(): void {
+  const ampPowerSwitch = document.getElementById("power-switch");
+  const cabPowerSwitch = document.getElementById("cab-power-switch");
+
+  if (ampPowerSwitch) {
+    ampPowerSwitch.addEventListener("click", () => {
+      ampEnabled = !ampEnabled;
+      ampPowerSwitch.classList.toggle("off", !ampEnabled);
+      sendAmpCabStateToPlugin();
+    });
+  }
+
+  if (cabPowerSwitch) {
+    cabPowerSwitch.addEventListener("click", () => {
+      cabEnabled = !cabEnabled;
+      cabPowerSwitch.classList.toggle("off", !cabEnabled);
+      sendAmpCabStateToPlugin();
+    });
+  }
+
+  // Send initial state
+  sendAmpCabStateToPlugin();
+}
+
+export function handleAmpCabStateChanged(newAmpEnabled: boolean, newCabEnabled: boolean): void {
+  ampEnabled = newAmpEnabled;
+  cabEnabled = newCabEnabled;
+
+  const ampPowerSwitch = document.getElementById("power-switch");
+  const cabPowerSwitch = document.getElementById("cab-power-switch");
+
+  if (ampPowerSwitch) {
+    ampPowerSwitch.classList.toggle("off", !ampEnabled);
+  }
+
+  if (cabPowerSwitch) {
+    cabPowerSwitch.classList.toggle("off", !cabEnabled);
+  }
+}

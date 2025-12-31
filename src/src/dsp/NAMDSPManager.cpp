@@ -336,14 +336,14 @@ namespace namguitar
       // In mono mode, use model index 0 only
       const int modelIdx = mMonoMode ? 0 : outputIdx;
       auto &model = mModels[static_cast<std::size_t>(modelIdx)];
-      if (model)
+      if (mAmpEnabled && model)
       {
 
         // copy namInput to namOutput as  a simple test
-        std::copy(mNamInput.begin(), mNamInput.begin() + frames, mNamOutput.begin());
+       // std::copy(mNamInput.begin(), mNamInput.begin() + frames, mNamOutput.begin());
 
 
-       // model->process(mNamInput.data(), mNamOutput.data(), frames);
+        model->process(mNamInput.data(), mNamOutput.data(), frames);
         std::transform(mNamOutput.begin(), mNamOutput.begin() + frames,
                        channelBuffer.begin(),
                        [](NAM_SAMPLE sample) { return static_cast<double>(sample); });
@@ -355,7 +355,7 @@ namespace namguitar
                        [](NAM_SAMPLE sample) { return static_cast<double>(sample); });
       }
 
-      if (impulseSize > 0 && static_cast<std::size_t>(modelIdx) < mIRState.size())
+      if (mCabEnabled && impulseSize > 0 && static_cast<std::size_t>(modelIdx) < mIRState.size())
       {
         // temp disable IR convolution for now
         ApplyImpulseResponse(channelBuffer, modelIdx);

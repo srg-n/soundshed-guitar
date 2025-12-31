@@ -49,6 +49,12 @@ namespace namguitar
     void SetDoublerDelay(double milliseconds);
     void SetTranspose(int semitones);
     
+    // Amp and Cab enable/disable
+    void SetAmpEnabled(bool enabled) { mAmpEnabled = enabled; }
+    [[nodiscard]] bool IsAmpEnabled() const noexcept { return mAmpEnabled; }
+    void SetCabEnabled(bool enabled) { mCabEnabled = enabled; }
+    [[nodiscard]] bool IsCabEnabled() const noexcept { return mCabEnabled; }
+    
     // Input mode settings
     void SetMonoMode(bool enabled) { mMonoMode = enabled; }
     [[nodiscard]] bool IsMonoMode() const noexcept { return mMonoMode; }
@@ -121,6 +127,10 @@ namespace namguitar
     bool mGateEnabled = false;
     double mGateThreshold = -60.0;
     double mMix = 1.0; // 0.0 = fully dry, 1.0 = fully wet
+    
+    // Amp and Cab enable state
+    bool mAmpEnabled = true;   // NAM model processing enabled by default
+    bool mCabEnabled = true;   // IR convolution enabled by default
     
     // Input mode settings
     bool mMonoMode = true;  // Default to mono mode

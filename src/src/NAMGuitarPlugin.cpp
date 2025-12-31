@@ -1010,6 +1010,10 @@ namespace namguitar
     {
       HandleSetInputModeRequest(payload);
     }
+    else if (type == "setAmpCabState")
+    {
+      HandleSetAmpCabStateRequest(payload);
+    }
   }
 
   void NAMGuitarPlugin::BroadcastState()
@@ -1583,6 +1587,38 @@ namespace namguitar
       message["type"] = "inputModeChanged";
       message["monoMode"] = mDSP->IsMonoMode();
       message["inputChannel"] = mDSP->GetInputChannel();
+      mWebUI->EnqueueMessage(message.dump());
+    }
+  }
+
+  void NAMGuitarPlugin::HandleSetAmpCabStateRequest(const nlohmann::json &payload)
+  {
+    if (!mDSP)
+    {
+      return;
+    }
+
+    // Set amp (NAM model) enabled state
+    if (payload.contains("ampEnabled"))
+    {
+      const bool enabled = payload.value("ampEnabled", true);
+      mDSP->SetAmpEnabled(enabled);
+    }
+
+    // Set cab (IR) enabled state
+    if (payload.contains("cabEnabled"))
+    {
+      const bool enabled = payload.value("cabEnabled", true);
+      mDSP->SetCabEnabled(enabled);
+    }
+
+    // Acknowledge the change
+    if (mWebUI)
+    {
+      nlohmann::json message;
+      message["type"] = "ampCabStateChanged";
+      message["ampEnabled"] = mDSP->IsAmpEnabled();
+      message["cabEnabled"] = mDSP->IsCabEnabled();
       mWebUI->EnqueueMessage(message.dump());
     }
   }

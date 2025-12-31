@@ -995,14 +995,55 @@ body {
   background: linear-gradient(180deg, #e07848, #c85828);
   border-radius: 3px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  transition: all 0.2s ease;
+}
+
+/* Power switch OFF state */
+.power-switch.off .power-indicator {
+  bottom: auto;
+  top: 6px;
+  background: linear-gradient(180deg, #808088, #606068);
 }
 
 /* Cab Section */
 .cab-section {
   display: flex;
   justify-content: center;
+  align-items: center;
   gap: 8px;
   margin-top: 20px;
+}
+
+.cab-power-control {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-right: 8px;
+}
+
+.cab-power-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: #5a5a68;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cab-power-switch {
+  width: 20px;
+  height: 40px;
+  background: linear-gradient(180deg, #e8e0d8, #d0c8c0);
+  border-radius: 4px;
+  border: 1px solid #b8b0a8;
+  position: relative;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
+}
+
+.cab-power-switch .power-indicator {
+  width: 12px;
+  height: 22px;
 }
 
 .cab-btn {
