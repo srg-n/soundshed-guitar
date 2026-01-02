@@ -18,6 +18,7 @@ namespace nam { namespace factory { void ForceFactoryRegistration(); } }
 #include "dsp/IRManager.h"
 #include "dsp/OptimizedConvolver.h"
 #include "dsp/SimpleCabSim.h"
+#include "dsp/ParametricEQ.h"
 
 namespace nam
 {
@@ -65,6 +66,13 @@ namespace namguitar
     void SetSimpleCabBass(double bass);      // 0.0-1.0
     void SetSimpleCabPresence(double presence); // 0.0-1.0
     void SetSimpleCabBrightness(double brightness); // 0.0-1.0
+    
+    // Parametric EQ
+    void SetEQEnabled(bool enabled) { mEQEnabled = enabled; }
+    [[nodiscard]] bool IsEQEnabled() const noexcept { return mEQEnabled; }
+    void SetEQBandGain(int band, double gainDb);
+    void SetEQBandFrequency(int band, double freqHz);
+    void SetEQBandQ(int band, double q);
     
     // Input mode settings
     void SetMonoMode(bool enabled) { mMonoMode = enabled; }
@@ -146,6 +154,10 @@ namespace namguitar
     
     // Simple cabinet simulation (filter-based, no IR)
     std::array<SimpleCabSim, 2> mSimpleCabSim; // One per channel
+    
+    // Parametric EQ
+    bool mEQEnabled = false;
+    std::array<ParametricEQ, 2> mParametricEQ; // One per channel
     
     // Input mode settings
     bool mMonoMode = true;  // Default to mono mode

@@ -19,6 +19,7 @@ class GenericKnob {
   private paramId: string;
   private minValue: number;
   private maxValue: number;
+  private defaultValue: number;
   private currentValue: number;
   private displayFormat: (value: number) => string;
   private valueDisplay: HTMLElement | null;
@@ -33,6 +34,7 @@ class GenericKnob {
     this.paramId = config.paramId;
     this.minValue = config.minValue;
     this.maxValue = config.maxValue;
+    this.defaultValue = config.defaultValue;
     this.currentValue = config.defaultValue;
     this.displayFormat = config.displayFormat;
     this.sensitivity = config.sensitivity ?? 0.5;
@@ -58,8 +60,21 @@ class GenericKnob {
 
   private setupEventListeners(): void {
     this.knobElement.addEventListener("mousedown", (e) => this.onMouseDown(e));
+    this.knobElement.addEventListener("dblclick", (e) => this.onDoubleClick(e));
     document.addEventListener("mousemove", (e) => this.onMouseMove(e));
     document.addEventListener("mouseup", () => this.onMouseUp());
+  }
+
+  private onDoubleClick(e: MouseEvent): void {
+    e.preventDefault();
+    e.stopPropagation();
+    this.setValue(this.defaultValue);
+    setParameter(this.paramId, this.defaultValue);
+    appendLog(`${this.paramId} → ${this.defaultValue.toFixed(2)} (reset to default)`);
+    
+    if (this.onValueChange) {
+      this.onValueChange(this.defaultValue);
+    }
   }
 
   private onMouseDown(e: MouseEvent): void {
@@ -303,6 +318,7 @@ export function initializeControls(): void {
   initializeInputOutputKnobs();
   initializeGateControls();
   initializeSimpleCabControls();
+  initializeEQControls();
 }
 
 export function syncDoublerControlsFromState(): void {
@@ -377,6 +393,7 @@ export function syncControlsFromState(): void {
   syncDoublerControlsFromState();
   syncGateControlsFromState();
   syncSimpleCabControlsFromState();
+  syncEQControlsFromState();
 }
 
 // Input mode state
@@ -636,4 +653,217 @@ export function syncSimpleCabControlsFromState(): void {
   }
 }
 
-export { initializeSimpleCabControls };
+// ===== Parametric EQ Controls =====
+let eqEnabled = false;
+
+function updateEQSectionState(): void {
+  const section = document.querySelector(".eq-section");
+  if (section) {
+    section.classList.toggle("enabled", eqEnabled);
+  }
+}
+
+function initializeEQControls(): void {
+  const eqToggle = document.getElementById("eq-toggle") as HTMLInputElement | null;
+
+  if (eqToggle) {
+    eqToggle.addEventListener("change", () => {
+      eqEnabled = eqToggle.checked;
+      setParameter("eq_enabled", eqEnabled ? 1.0 : 0.0);
+      appendLog(`eq_enabled → ${eqEnabled ? 1.0 : 0.0}`);
+      updateEQSectionState();
+    });
+  }
+
+  // Low Shelf Band
+  const lowGainKnob = document.querySelector('.eq-knob[data-param="eq_low_gain"]') as HTMLElement | null;
+  if (lowGainKnob) {
+    const knobInstance = new GenericKnob({
+      knobElement: lowGainKnob,
+      paramId: "eq_low_gain",
+      minValue: -12.0,
+      maxValue: 12.0,
+      defaultValue: 0.0,
+      displayFormat: (value) => `${value >= 0 ? "+" : ""}${value.toFixed(1)} dB`,
+      valueDisplayId: "eq-low-gain-value",
+      sensitivity: 0.1,
+    });
+    knobInstances.set("eq_low_gain", knobInstance);
+  }
+
+  const lowFreqKnob = document.querySelector('.eq-knob[data-param="eq_low_freq"]') as HTMLElement | null;
+  if (lowFreqKnob) {
+    const knobInstance = new GenericKnob({
+      knobElement: lowFreqKnob,
+      paramId: "eq_low_freq",
+      minValue: 20.0,
+      maxValue: 500.0,
+      defaultValue: 100.0,
+      displayFormat: (value) => `${Math.round(value)} Hz`,
+      valueDisplayId: "eq-low-freq-value",
+      sensitivity: 2.0,
+    });
+    knobInstances.set("eq_low_freq", knobInstance);
+  }
+
+  // Low-Mid Band
+  const lowMidGainKnob = document.querySelector('.eq-knob[data-param="eq_lowmid_gain"]') as HTMLElement | null;
+  if (lowMidGainKnob) {
+    const knobInstance = new GenericKnob({
+      knobElement: lowMidGainKnob,
+      paramId: "eq_lowmid_gain",
+      minValue: -12.0,
+      maxValue: 12.0,
+      defaultValue: 0.0,
+      displayFormat: (value) => `${value >= 0 ? "+" : ""}${value.toFixed(1)} dB`,
+      valueDisplayId: "eq-lowmid-gain-value",
+      sensitivity: 0.1,
+    });
+    knobInstances.set("eq_lowmid_gain", knobInstance);
+  }
+
+  const lowMidFreqKnob = document.querySelector('.eq-knob[data-param="eq_lowmid_freq"]') as HTMLElement | null;
+  if (lowMidFreqKnob) {
+    const knobInstance = new GenericKnob({
+      knobElement: lowMidFreqKnob,
+      paramId: "eq_lowmid_freq",
+      minValue: 100.0,
+      maxValue: 2000.0,
+      defaultValue: 500.0,
+      displayFormat: (value) => `${Math.round(value)} Hz`,
+      valueDisplayId: "eq-lowmid-freq-value",
+      sensitivity: 5.0,
+    });
+    knobInstances.set("eq_lowmid_freq", knobInstance);
+  }
+
+  const lowMidQKnob = document.querySelector('.eq-knob[data-param="eq_lowmid_q"]') as HTMLElement | null;
+  if (lowMidQKnob) {
+    const knobInstance = new GenericKnob({
+      knobElement: lowMidQKnob,
+      paramId: "eq_lowmid_q",
+      minValue: 0.1,
+      maxValue: 10.0,
+      defaultValue: 1.0,
+      displayFormat: (value) => value.toFixed(1),
+      valueDisplayId: "eq-lowmid-q-value",
+      sensitivity: 0.05,
+    });
+    knobInstances.set("eq_lowmid_q", knobInstance);
+  }
+
+  // High-Mid Band
+  const highMidGainKnob = document.querySelector('.eq-knob[data-param="eq_highmid_gain"]') as HTMLElement | null;
+  if (highMidGainKnob) {
+    const knobInstance = new GenericKnob({
+      knobElement: highMidGainKnob,
+      paramId: "eq_highmid_gain",
+      minValue: -12.0,
+      maxValue: 12.0,
+      defaultValue: 0.0,
+      displayFormat: (value) => `${value >= 0 ? "+" : ""}${value.toFixed(1)} dB`,
+      valueDisplayId: "eq-highmid-gain-value",
+      sensitivity: 0.1,
+    });
+    knobInstances.set("eq_highmid_gain", knobInstance);
+  }
+
+  const highMidFreqKnob = document.querySelector('.eq-knob[data-param="eq_highmid_freq"]') as HTMLElement | null;
+  if (highMidFreqKnob) {
+    const knobInstance = new GenericKnob({
+      knobElement: highMidFreqKnob,
+      paramId: "eq_highmid_freq",
+      minValue: 500.0,
+      maxValue: 8000.0,
+      defaultValue: 2000.0,
+      displayFormat: (value) => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : `${Math.round(value)} Hz`,
+      valueDisplayId: "eq-highmid-freq-value",
+      sensitivity: 20.0,
+    });
+    knobInstances.set("eq_highmid_freq", knobInstance);
+  }
+
+  const highMidQKnob = document.querySelector('.eq-knob[data-param="eq_highmid_q"]') as HTMLElement | null;
+  if (highMidQKnob) {
+    const knobInstance = new GenericKnob({
+      knobElement: highMidQKnob,
+      paramId: "eq_highmid_q",
+      minValue: 0.1,
+      maxValue: 10.0,
+      defaultValue: 1.0,
+      displayFormat: (value) => value.toFixed(1),
+      valueDisplayId: "eq-highmid-q-value",
+      sensitivity: 0.05,
+    });
+    knobInstances.set("eq_highmid_q", knobInstance);
+  }
+
+  // High Shelf Band
+  const highGainKnob = document.querySelector('.eq-knob[data-param="eq_high_gain"]') as HTMLElement | null;
+  if (highGainKnob) {
+    const knobInstance = new GenericKnob({
+      knobElement: highGainKnob,
+      paramId: "eq_high_gain",
+      minValue: -12.0,
+      maxValue: 12.0,
+      defaultValue: 0.0,
+      displayFormat: (value) => `${value >= 0 ? "+" : ""}${value.toFixed(1)} dB`,
+      valueDisplayId: "eq-high-gain-value",
+      sensitivity: 0.1,
+    });
+    knobInstances.set("eq_high_gain", knobInstance);
+  }
+
+  const highFreqKnob = document.querySelector('.eq-knob[data-param="eq_high_freq"]') as HTMLElement | null;
+  if (highFreqKnob) {
+    const knobInstance = new GenericKnob({
+      knobElement: highFreqKnob,
+      paramId: "eq_high_freq",
+      minValue: 2000.0,
+      maxValue: 16000.0,
+      defaultValue: 8000.0,
+      displayFormat: (value) => `${(value / 1000).toFixed(1)}k`,
+      valueDisplayId: "eq-high-freq-value",
+      sensitivity: 50.0,
+    });
+    knobInstances.set("eq_high_freq", knobInstance);
+  }
+
+  updateEQSectionState();
+}
+
+export function syncEQControlsFromState(): void {
+  const paramValues: Record<string, number> = {};
+  if (Array.isArray(uiState.parameters.values)) {
+    uiState.parameters.values.forEach((param) => {
+      if (typeof param.value === "number") {
+        paramValues[param.id] = param.value;
+      }
+    });
+  }
+
+  // Sync toggle
+  const eqToggle = document.getElementById("eq-toggle") as HTMLInputElement | null;
+  if (eqToggle && typeof paramValues.eq_enabled === "number") {
+    eqEnabled = paramValues.eq_enabled > 0.5;
+    eqToggle.checked = eqEnabled;
+    updateEQSectionState();
+  }
+
+  // Sync all knobs
+  const eqKnobs = [
+    "eq_low_gain", "eq_low_freq",
+    "eq_lowmid_gain", "eq_lowmid_freq", "eq_lowmid_q",
+    "eq_highmid_gain", "eq_highmid_freq", "eq_highmid_q",
+    "eq_high_gain", "eq_high_freq"
+  ];
+
+  eqKnobs.forEach((knobId) => {
+    const knobInstance = knobInstances.get(knobId);
+    if (knobInstance && typeof paramValues[knobId] === "number") {
+      knobInstance.setValue(paramValues[knobId]);
+    }
+  });
+}
+
+export { initializeSimpleCabControls, initializeEQControls };

@@ -74,6 +74,18 @@ namespace namguitar
       kParamSimpleCabBass,
       kParamSimpleCabPresence,
       kParamSimpleCabBrightness,
+      // Parametric EQ parameters
+      kParamEQEnabled,
+      kParamEQLowGain,
+      kParamEQLowFreq,
+      kParamEQLowMidGain,
+      kParamEQLowMidFreq,
+      kParamEQLowMidQ,
+      kParamEQHighMidGain,
+      kParamEQHighMidFreq,
+      kParamEQHighMidQ,
+      kParamEQHighGain,
+      kParamEQHighFreq,
       kParamCount
     };
 

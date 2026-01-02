@@ -97,6 +97,28 @@ namespace namguitar
         return "simplecab_presence";
       case NAMGuitarPlugin::kParamSimpleCabBrightness:
         return "simplecab_brightness";
+      case NAMGuitarPlugin::kParamEQEnabled:
+        return "eq_enabled";
+      case NAMGuitarPlugin::kParamEQLowGain:
+        return "eq_low_gain";
+      case NAMGuitarPlugin::kParamEQLowFreq:
+        return "eq_low_freq";
+      case NAMGuitarPlugin::kParamEQLowMidGain:
+        return "eq_lowmid_gain";
+      case NAMGuitarPlugin::kParamEQLowMidFreq:
+        return "eq_lowmid_freq";
+      case NAMGuitarPlugin::kParamEQLowMidQ:
+        return "eq_lowmid_q";
+      case NAMGuitarPlugin::kParamEQHighMidGain:
+        return "eq_highmid_gain";
+      case NAMGuitarPlugin::kParamEQHighMidFreq:
+        return "eq_highmid_freq";
+      case NAMGuitarPlugin::kParamEQHighMidQ:
+        return "eq_highmid_q";
+      case NAMGuitarPlugin::kParamEQHighGain:
+        return "eq_high_gain";
+      case NAMGuitarPlugin::kParamEQHighFreq:
+        return "eq_high_freq";
       default:
         return "";
       }
@@ -159,6 +181,50 @@ namespace namguitar
       if (key == "simplecab_brightness")
       {
         return NAMGuitarPlugin::kParamSimpleCabBrightness;
+      }
+      if (key == "eq_enabled")
+      {
+        return NAMGuitarPlugin::kParamEQEnabled;
+      }
+      if (key == "eq_low_gain")
+      {
+        return NAMGuitarPlugin::kParamEQLowGain;
+      }
+      if (key == "eq_low_freq")
+      {
+        return NAMGuitarPlugin::kParamEQLowFreq;
+      }
+      if (key == "eq_lowmid_gain")
+      {
+        return NAMGuitarPlugin::kParamEQLowMidGain;
+      }
+      if (key == "eq_lowmid_freq")
+      {
+        return NAMGuitarPlugin::kParamEQLowMidFreq;
+      }
+      if (key == "eq_lowmid_q")
+      {
+        return NAMGuitarPlugin::kParamEQLowMidQ;
+      }
+      if (key == "eq_highmid_gain")
+      {
+        return NAMGuitarPlugin::kParamEQHighMidGain;
+      }
+      if (key == "eq_highmid_freq")
+      {
+        return NAMGuitarPlugin::kParamEQHighMidFreq;
+      }
+      if (key == "eq_highmid_q")
+      {
+        return NAMGuitarPlugin::kParamEQHighMidQ;
+      }
+      if (key == "eq_high_gain")
+      {
+        return NAMGuitarPlugin::kParamEQHighGain;
+      }
+      if (key == "eq_high_freq")
+      {
+        return NAMGuitarPlugin::kParamEQHighFreq;
       }
       return std::nullopt;
     }
@@ -911,6 +977,39 @@ namespace namguitar
     case kParamSimpleCabBrightness:
       mDSP->SetSimpleCabBrightness(param->Value());
       break;
+    case kParamEQEnabled:
+      mDSP->SetEQEnabled(param->Bool());
+      break;
+    case kParamEQLowGain:
+      mDSP->SetEQBandGain(0, param->Value());
+      break;
+    case kParamEQLowFreq:
+      mDSP->SetEQBandFrequency(0, param->Value());
+      break;
+    case kParamEQLowMidGain:
+      mDSP->SetEQBandGain(1, param->Value());
+      break;
+    case kParamEQLowMidFreq:
+      mDSP->SetEQBandFrequency(1, param->Value());
+      break;
+    case kParamEQLowMidQ:
+      mDSP->SetEQBandQ(1, param->Value());
+      break;
+    case kParamEQHighMidGain:
+      mDSP->SetEQBandGain(2, param->Value());
+      break;
+    case kParamEQHighMidFreq:
+      mDSP->SetEQBandFrequency(2, param->Value());
+      break;
+    case kParamEQHighMidQ:
+      mDSP->SetEQBandQ(2, param->Value());
+      break;
+    case kParamEQHighGain:
+      mDSP->SetEQBandGain(3, param->Value());
+      break;
+    case kParamEQHighFreq:
+      mDSP->SetEQBandFrequency(3, param->Value());
+      break;
     default:
       break;
     }
@@ -934,6 +1033,18 @@ namespace namguitar
     GetParam(kParamSimpleCabBass)->InitDouble("Simple Cab Bass", 0.5, 0.0, 1.0, 0.01);
     GetParam(kParamSimpleCabPresence)->InitDouble("Simple Cab Presence", 0.5, 0.0, 1.0, 0.01);
     GetParam(kParamSimpleCabBrightness)->InitDouble("Simple Cab Brightness", 0.5, 0.0, 1.0, 0.01);
+    // Parametric EQ parameters
+    GetParam(kParamEQEnabled)->InitBool("EQ", false);
+    GetParam(kParamEQLowGain)->InitDouble("EQ Low Gain", 0.0, -12.0, 12.0, 0.1, "dB");
+    GetParam(kParamEQLowFreq)->InitDouble("EQ Low Freq", 100.0, 20.0, 500.0, 1.0, "Hz");
+    GetParam(kParamEQLowMidGain)->InitDouble("EQ Low-Mid Gain", 0.0, -12.0, 12.0, 0.1, "dB");
+    GetParam(kParamEQLowMidFreq)->InitDouble("EQ Low-Mid Freq", 500.0, 100.0, 2000.0, 1.0, "Hz");
+    GetParam(kParamEQLowMidQ)->InitDouble("EQ Low-Mid Q", 1.0, 0.1, 10.0, 0.1);
+    GetParam(kParamEQHighMidGain)->InitDouble("EQ High-Mid Gain", 0.0, -12.0, 12.0, 0.1, "dB");
+    GetParam(kParamEQHighMidFreq)->InitDouble("EQ High-Mid Freq", 2000.0, 500.0, 8000.0, 1.0, "Hz");
+    GetParam(kParamEQHighMidQ)->InitDouble("EQ High-Mid Q", 1.0, 0.1, 10.0, 0.1);
+    GetParam(kParamEQHighGain)->InitDouble("EQ High Gain", 0.0, -12.0, 12.0, 0.1, "dB");
+    GetParam(kParamEQHighFreq)->InitDouble("EQ High Freq", 8000.0, 2000.0, 16000.0, 1.0, "Hz");
   }
 
   void NAMGuitarPlugin::HandleWebViewMessages()

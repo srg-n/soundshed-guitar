@@ -82,6 +82,12 @@ namespace namguitar
     {
       cabSim.Prepare(mSampleRate);
     }
+
+    // Initialize parametric EQ
+    for (auto& eq : mParametricEQ)
+    {
+      eq.Prepare(mSampleRate);
+    }
   }
 
   void NAMDSPManager::Reset()
@@ -114,6 +120,12 @@ namespace namguitar
     for (auto& cabSim : mSimpleCabSim)
     {
       cabSim.Reset();
+    }
+
+    // Reset parametric EQ
+    for (auto& eq : mParametricEQ)
+    {
+      eq.Reset();
     }
   }
 
@@ -216,6 +228,30 @@ namespace namguitar
     for (auto& cabSim : mSimpleCabSim)
     {
       cabSim.SetBrightness(brightness);
+    }
+  }
+
+  void NAMDSPManager::SetEQBandGain(int band, double gainDb)
+  {
+    for (auto& eq : mParametricEQ)
+    {
+      eq.SetBandGain(band, gainDb);
+    }
+  }
+
+  void NAMDSPManager::SetEQBandFrequency(int band, double freqHz)
+  {
+    for (auto& eq : mParametricEQ)
+    {
+      eq.SetBandFrequency(band, freqHz);
+    }
+  }
+
+  void NAMDSPManager::SetEQBandQ(int band, double q)
+  {
+    for (auto& eq : mParametricEQ)
+    {
+      eq.SetBandQ(band, q);
     }
   }
 
@@ -405,6 +441,15 @@ namespace namguitar
         for (int frame = 0; frame < frames; ++frame)
         {
           channelBuffer[frame] = mSimpleCabSim[static_cast<std::size_t>(modelIdx)].Process(channelBuffer[frame]);
+        }
+      }
+
+      // Apply parametric EQ if enabled (post-cab for tone shaping)
+      if (mEQEnabled)
+      {
+        for (int frame = 0; frame < frames; ++frame)
+        {
+          channelBuffer[frame] = mParametricEQ[static_cast<std::size_t>(modelIdx)].Process(channelBuffer[frame]);
         }
       }
     };
