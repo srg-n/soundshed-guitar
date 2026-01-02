@@ -82,20 +82,45 @@
         </div>
 
         <div class="control-bar-group preset-group">
-          <button class="nav-btn" id="prev-preset">←</button>
-          <button class="nav-btn" id="next-preset">→</button>
-          <button class="text-btn">EDIT</button>
-          <button class="text-btn">DELETE</button>
-          <button class="text-btn">SAVE</button>
-          <button class="text-btn">SAVE AS...</button>
-          <button class="menu-btn">⋮</button>
-
+          <button class="nav-btn" id="prev-preset" title="Previous Preset">←</button>
+          <button class="nav-btn" id="next-preset" title="Next Preset">→</button>
+          
           <div class="preset-selector">
-            <span class="preset-favorite">♡</span>
+            <span class="preset-favorite" id="preset-favorite" title="Toggle Favorite">♡</span>
             <select id="preset-dropdown">
               <option>Default Preset</option>
             </select>
-            <button class="folder-btn" title="Browse">📁</button>
+          </div>
+
+          <div class="preset-actions">
+            <button class="preset-action-btn" id="preset-edit-btn" title="Edit Preset">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+            <button class="preset-action-btn" id="preset-save-btn" title="Save Preset">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                <polyline points="17 21 17 13 7 13 7 21"/>
+                <polyline points="7 3 7 8 15 8"/>
+              </svg>
+            </button>
+            <button class="preset-action-btn" id="preset-save-as-btn" title="Save As New Preset">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                <line x1="12" y1="11" x2="12" y2="17"/>
+                <line x1="9" y1="14" x2="15" y2="14"/>
+              </svg>
+            </button>
+            <button class="preset-action-btn preset-action-btn-danger" id="preset-delete-btn" title="Delete Preset">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                <line x1="10" y1="11" x2="10" y2="17"/>
+                <line x1="14" y1="11" x2="14" y2="17"/>
+              </svg>
+            </button>
           </div>
         </div>
 

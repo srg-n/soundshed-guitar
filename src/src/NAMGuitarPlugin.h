@@ -115,6 +115,11 @@ namespace namguitar
     [[nodiscard]] static namguitar::Preset ParsePresetFromJson(const nlohmann::json &jsonPreset);
     [[nodiscard]] static std::vector<std::uint8_t> DecodeBase64(const std::string &encoded);
     bool WriteFile(const std::filesystem::path &target, const std::vector<std::uint8_t> &data) const;
+    
+    // App settings persistence
+    void SaveAppSettings() const;
+    void LoadAppSettings();
+    void LoadLastSessionState();
 
     struct SignalTestRuntimeState
     {

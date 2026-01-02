@@ -14,7 +14,19 @@
       { "id": "tone", "value": 0.55 },
       { "id": "gate_enabled", "value": 0.0 },
       { "id": "gate_threshold", "value": -60.0 },
-      { "id": "mix", "value": 1.0 }
+      { "id": "mix", "value": 1.0 },
+      { "id": "transpose", "value": 0 },
+      { "id": "eq_enabled", "value": 0.0 },
+      { "id": "eq_low_gain", "value": 0.0 },
+      { "id": "eq_low_freq", "value": 100.0 },
+      { "id": "eq_lowmid_gain", "value": 0.0 },
+      { "id": "eq_lowmid_freq", "value": 400.0 },
+      { "id": "eq_lowmid_q", "value": 1.0 },
+      { "id": "eq_highmid_gain", "value": 0.0 },
+      { "id": "eq_highmid_freq", "value": 2000.0 },
+      { "id": "eq_highmid_q", "value": 1.0 },
+      { "id": "eq_high_gain", "value": 0.0 },
+      { "id": "eq_high_freq", "value": 8000.0 }
     ]
   },
   {
@@ -32,7 +44,19 @@
       { "id": "tone", "value": 0.5 },
       { "id": "gate_enabled", "value": 0.0 },
       { "id": "gate_threshold", "value": -55.0 },
-      { "id": "mix", "value": 1.0 }
+      { "id": "mix", "value": 1.0 },
+      { "id": "transpose", "value": 0 },
+      { "id": "eq_enabled", "value": 1.0 },
+      { "id": "eq_low_gain", "value": 2.0 },
+      { "id": "eq_low_freq", "value": 80.0 },
+      { "id": "eq_lowmid_gain", "value": -1.0 },
+      { "id": "eq_lowmid_freq", "value": 350.0 },
+      { "id": "eq_lowmid_q", "value": 1.2 },
+      { "id": "eq_highmid_gain", "value": 1.5 },
+      { "id": "eq_highmid_freq", "value": 3000.0 },
+      { "id": "eq_highmid_q", "value": 1.0 },
+      { "id": "eq_high_gain", "value": 1.0 },
+      { "id": "eq_high_freq", "value": 8000.0 }
     ]
   },
   {
@@ -50,7 +74,19 @@
       { "id": "tone", "value": 0.65 },
       { "id": "gate_enabled", "value": 1.0 },
       { "id": "gate_threshold", "value": -50.0 },
-      { "id": "mix", "value": 1.0 }
+      { "id": "mix", "value": 1.0 },
+      { "id": "transpose", "value": 0 },
+      { "id": "eq_enabled", "value": 1.0 },
+      { "id": "eq_low_gain", "value": -2.0 },
+      { "id": "eq_low_freq", "value": 100.0 },
+      { "id": "eq_lowmid_gain", "value": -3.0 },
+      { "id": "eq_lowmid_freq", "value": 400.0 },
+      { "id": "eq_lowmid_q", "value": 1.5 },
+      { "id": "eq_highmid_gain", "value": 2.0 },
+      { "id": "eq_highmid_freq", "value": 2500.0 },
+      { "id": "eq_highmid_q", "value": 1.2 },
+      { "id": "eq_high_gain", "value": 1.5 },
+      { "id": "eq_high_freq", "value": 6000.0 }
     ]
   },
    {
@@ -68,7 +104,19 @@
       { "id": "tone", "value": 0.65 },
       { "id": "gate_enabled", "value": 1.0 },
       { "id": "gate_threshold", "value": -50.0 },
-      { "id": "mix", "value": 1.0 }
+      { "id": "mix", "value": 1.0 },
+      { "id": "transpose", "value": 0 },
+      { "id": "eq_enabled", "value": 1.0 },
+      { "id": "eq_low_gain", "value": -3.0 },
+      { "id": "eq_low_freq", "value": 80.0 },
+      { "id": "eq_lowmid_gain", "value": -4.0 },
+      { "id": "eq_lowmid_freq", "value": 350.0 },
+      { "id": "eq_lowmid_q", "value": 2.0 },
+      { "id": "eq_highmid_gain", "value": 3.0 },
+      { "id": "eq_highmid_freq", "value": 3500.0 },
+      { "id": "eq_highmid_q", "value": 1.0 },
+      { "id": "eq_high_gain", "value": 2.0 },
+      { "id": "eq_high_freq", "value": 7000.0 }
     ]
   },
      {
@@ -86,7 +134,19 @@
       { "id": "tone", "value": 0.65 },
       { "id": "gate_enabled", "value": 1.0 },
       { "id": "gate_threshold", "value": -50.0 },
-      { "id": "mix", "value": 1.0 }
+      { "id": "mix", "value": 1.0 },
+      { "id": "transpose", "value": 0 },
+      { "id": "eq_enabled", "value": 1.0 },
+      { "id": "eq_low_gain", "value": -4.0 },
+      { "id": "eq_low_freq", "value": 90.0 },
+      { "id": "eq_lowmid_gain", "value": -5.0 },
+      { "id": "eq_lowmid_freq", "value": 400.0 },
+      { "id": "eq_lowmid_q", "value": 2.5 },
+      { "id": "eq_highmid_gain", "value": 4.0 },
+      { "id": "eq_highmid_freq", "value": 4000.0 },
+      { "id": "eq_highmid_q", "value": 1.2 },
+      { "id": "eq_high_gain", "value": 3.0 },
+      { "id": "eq_high_freq", "value": 8000.0 }
     ]
   }
 ]

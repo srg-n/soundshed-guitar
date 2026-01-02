@@ -1,5 +1,5 @@
 import { uiState, clonePreset } from "./state.js";
-import { renderActivePreset, applyPresetFromLibrary, populatePresetDropdown, updatePresetDropdownSelection, savePresetToLocalStorage } from "./presets.js";
+import { renderActivePreset, applyPresetFromLibrary, populatePresetDropdown, updatePresetDropdownSelection, savePresetToLocalStorage, updatePresetActionButtons } from "./presets.js";
 import { syncControlsFromState, handleInputModeChanged, handleAmpCabStateChanged } from "./controls.js";
 import { showNotification } from "./notifications.js";
 import { appendLog } from "./logging.js";
@@ -40,6 +40,7 @@ export function handleIncomingMessage(message: string): void {
       }
       renderActivePreset();
       syncControlsFromState();
+      updatePresetActionButtons();
       showNotification("");
       break;
     }
@@ -69,6 +70,7 @@ export function handleIncomingMessage(message: string): void {
       }
       renderActivePreset();
       syncControlsFromState();
+      updatePresetActionButtons();
       break;
     }
     case "signalPathTestResult": {

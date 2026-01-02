@@ -156,6 +156,7 @@ export async function applyPresetFromLibrary(presetId: string): Promise<void> {
     uiState.presetCache.set(presetPayload.id, clonePreset(presetPayload));
     uiState.activePresetId = presetPayload.id;
     renderPresetUI(clonePreset(presetPayload));
+    updatePresetActionButtons();
     postMessage({
       type: "loadPreset",
       preset: presetPayload,
@@ -364,10 +365,13 @@ export function closeSavePresetModal(): void {
   const modal = document.getElementById("save-preset-modal");
   if (modal) {
     modal.style.display = "none";
+    // Clear editing state
+    delete modal.dataset.editingPresetId;
   }
 }
 
 export function saveCurrentPreset(): void {
+  const modal = document.getElementById("save-preset-modal");
   const nameInput = document.getElementById("preset-name-input") as HTMLInputElement | null;
   const categoryInput = document.getElementById("preset-category-input") as HTMLInputElement | null;
   const descriptionInput = document.getElementById("preset-description-input") as HTMLTextAreaElement | null;
@@ -381,6 +385,9 @@ export function saveCurrentPreset(): void {
     return;
   }
 
+  // Check if we're editing an existing preset
+  const editingPresetId = modal?.dataset.editingPresetId;
+
   const activePreset = uiState.presetCache.get(uiState.activePresetId ?? "") ?? null;
   const baseAttachments = buildAttachments(
     activePreset?.audioFxModelId ?? null,
@@ -389,6 +396,35 @@ export function saveCurrentPreset(): void {
     activePreset?.customIrPath ?? null,
   );
 
+  if (editingPresetId) {
+    // Editing existing preset
+    const existingPreset = uiState.presetCache.get(editingPresetId);
+    if (existingPreset) {
+      const updatedPreset: Preset = {
+        ...existingPreset,
+        name,
+        category,
+        description,
+        attachments: baseAttachments,
+      };
+
+      savePresetToLocalStorage(updatedPreset);
+      uiState.presetCache.set(editingPresetId, updatedPreset);
+      const index = uiState.presets.findIndex((p) => p.id === editingPresetId);
+      if (index >= 0) {
+        uiState.presets[index] = updatedPreset;
+      }
+      uiState.filteredPresets = uiState.presets.slice();
+      populatePresetDropdown();
+      renderPresetUI(clonePreset(updatedPreset));
+      closeSavePresetModal();
+      showNotification("Preset updated", name);
+      updatePresetActionButtons();
+      return;
+    }
+  }
+
+  // Creating new preset
   const newPreset: Preset = {
     id: `${Date.now()}`,
     name,
@@ -406,6 +442,7 @@ export function saveCurrentPreset(): void {
   renderPresetUI(clonePreset(newPreset));
   closeSavePresetModal();
   showNotification("Preset saved", newPreset.name);
+  updatePresetActionButtons();
 }
 
 export function initializeSavePresetModal(): void {
@@ -438,10 +475,216 @@ export function initializeSavePresetModal(): void {
 }
 
 export function initializeSaveAsButton(): void {
-  const saveAsButtons = document.querySelectorAll(".text-btn");
-  saveAsButtons.forEach((btn) => {
-    if (btn.textContent?.trim() === "SAVE AS...") {
-      btn.addEventListener("click", openSavePresetModal);
+  const saveAsBtn = document.getElementById("preset-save-as-btn");
+  if (saveAsBtn) {
+    saveAsBtn.addEventListener("click", openSavePresetModal);
+  }
+}
+
+// Delete preset from localStorage
+export function deletePresetFromLocalStorage(presetId: string): boolean {
+  try {
+    const savedPresets = JSON.parse(localStorage.getItem("namguitar_user_presets") || "[]") as Preset[];
+    const index = savedPresets.findIndex((p) => p.id === presetId);
+    if (index >= 0) {
+      savedPresets.splice(index, 1);
+      localStorage.setItem("namguitar_user_presets", JSON.stringify(savedPresets));
+      console.log(`Preset '${presetId}' deleted from localStorage`);
+      return true;
     }
-  });
+    return false;
+  } catch (error) {
+    console.error("Failed to delete preset from localStorage", error);
+    return false;
+  }
+}
+
+// Check if preset is a user preset (can be edited/deleted)
+export function isUserPreset(presetId: string | null): boolean {
+  if (!presetId) return false;
+  const preset = uiState.presetCache.get(presetId);
+  if (!preset) return false;
+  // User presets have numeric IDs (timestamps) or start with "user-"
+  return /^\d+$/.test(presetId) || presetId.startsWith("user-");
+}
+
+// Delete current preset
+export function deleteCurrentPreset(): void {
+  const activePresetId = uiState.activePresetId;
+  if (!activePresetId) {
+    showNotification("Error", "No preset selected");
+    return;
+  }
+
+  if (!isUserPreset(activePresetId)) {
+    showNotification("Error", "Cannot delete factory presets");
+    return;
+  }
+
+  const preset = uiState.presetCache.get(activePresetId);
+  const presetName = preset?.name ?? "Unknown";
+
+  if (!confirm(`Are you sure you want to delete "${presetName}"?`)) {
+    return;
+  }
+
+  if (deletePresetFromLocalStorage(activePresetId)) {
+    // Remove from UI state
+    const index = uiState.presets.findIndex((p) => p.id === activePresetId);
+    if (index >= 0) {
+      uiState.presets.splice(index, 1);
+    }
+    uiState.filteredPresets = uiState.presets.slice();
+    uiState.presetCache.delete(activePresetId);
+
+    // Select first preset if available
+    if (uiState.presets.length > 0) {
+      uiState.activePresetId = uiState.presets[0].id;
+      applyPresetFromLibrary(uiState.activePresetId);
+    } else {
+      uiState.activePresetId = null;
+    }
+
+    populatePresetDropdown();
+    renderActivePreset();
+    showNotification("Preset deleted", presetName);
+  } else {
+    showNotification("Error", "Failed to delete preset");
+  }
+}
+
+// Save (overwrite) current preset
+export function saveOverwriteCurrentPreset(): void {
+  const activePresetId = uiState.activePresetId;
+  if (!activePresetId) {
+    showNotification("Error", "No preset selected");
+    return;
+  }
+
+  if (!isUserPreset(activePresetId)) {
+    showNotification("Error", "Cannot overwrite factory presets. Use 'Save As' instead.");
+    return;
+  }
+
+  const existingPreset = uiState.presetCache.get(activePresetId);
+  if (!existingPreset) {
+    showNotification("Error", "Preset not found");
+    return;
+  }
+
+  // Build updated preset with current parameters
+  const baseAttachments = buildAttachments(
+    existingPreset.audioFxModelId ?? null,
+    existingPreset.irId ?? null,
+    existingPreset.customModelPath ?? null,
+    existingPreset.customIrPath ?? null,
+  );
+
+  const updatedPreset: Preset = {
+    ...existingPreset,
+    attachments: baseAttachments,
+  };
+
+  // Save to localStorage
+  savePresetToLocalStorage(updatedPreset);
+
+  // Update cache
+  uiState.presetCache.set(activePresetId, updatedPreset);
+  const index = uiState.presets.findIndex((p) => p.id === activePresetId);
+  if (index >= 0) {
+    uiState.presets[index] = updatedPreset;
+  }
+
+  showNotification("Preset saved", existingPreset.name);
+}
+
+// Open edit preset modal (reuses save modal with pre-filled data)
+export function openEditPresetModal(): void {
+  const activePresetId = uiState.activePresetId;
+  if (!activePresetId) {
+    showNotification("Error", "No preset selected");
+    return;
+  }
+
+  if (!isUserPreset(activePresetId)) {
+    showNotification("Error", "Cannot edit factory presets. Use 'Save As' instead.");
+    return;
+  }
+
+  const preset = uiState.presetCache.get(activePresetId);
+  if (!preset) {
+    showNotification("Error", "Preset not found");
+    return;
+  }
+
+  const modal = document.getElementById("save-preset-modal");
+  if (!modal) return;
+
+  const modelPathSpan = document.getElementById("save-modal-model-path");
+  const irPathSpan = document.getElementById("save-modal-ir-path");
+
+  if (modelPathSpan) {
+    modelPathSpan.textContent = uiState.parameters.modelPath || "None";
+  }
+  if (irPathSpan) {
+    irPathSpan.textContent = uiState.parameters.irPath || "None";
+  }
+
+  // Pre-fill with existing preset data
+  const nameInput = document.getElementById("preset-name-input") as HTMLInputElement | null;
+  const categoryInput = document.getElementById("preset-category-input") as HTMLInputElement | null;
+  const descriptionInput = document.getElementById("preset-description-input") as HTMLTextAreaElement | null;
+
+  if (nameInput) nameInput.value = preset.name;
+  if (categoryInput) categoryInput.value = preset.category || "User";
+  if (descriptionInput) descriptionInput.value = preset.description || "";
+
+  // Store that we're editing, not creating
+  modal.dataset.editingPresetId = activePresetId;
+
+  modal.style.display = "flex";
+}
+
+// Update preset action button states
+export function updatePresetActionButtons(): void {
+  const editBtn = document.getElementById("preset-edit-btn") as HTMLButtonElement | null;
+  const saveBtn = document.getElementById("preset-save-btn") as HTMLButtonElement | null;
+  const deleteBtn = document.getElementById("preset-delete-btn") as HTMLButtonElement | null;
+
+  const canModify = isUserPreset(uiState.activePresetId);
+
+  if (editBtn) {
+    editBtn.disabled = !canModify;
+    editBtn.title = canModify ? "Edit Preset" : "Cannot edit factory presets";
+  }
+  if (saveBtn) {
+    saveBtn.disabled = !canModify;
+    saveBtn.title = canModify ? "Save Preset" : "Cannot overwrite factory presets";
+  }
+  if (deleteBtn) {
+    deleteBtn.disabled = !canModify;
+    deleteBtn.title = canModify ? "Delete Preset" : "Cannot delete factory presets";
+  }
+}
+
+// Initialize preset action buttons
+export function initializePresetActionButtons(): void {
+  const editBtn = document.getElementById("preset-edit-btn");
+  const saveBtn = document.getElementById("preset-save-btn");
+  const deleteBtn = document.getElementById("preset-delete-btn");
+
+  if (editBtn) {
+    editBtn.addEventListener("click", openEditPresetModal);
+  }
+
+  if (saveBtn) {
+    saveBtn.addEventListener("click", saveOverwriteCurrentPreset);
+  }
+
+  if (deleteBtn) {
+    deleteBtn.addEventListener("click", deleteCurrentPreset);
+  }
+
+  // Initial state
+  updatePresetActionButtons();
 }

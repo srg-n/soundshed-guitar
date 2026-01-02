@@ -519,6 +519,9 @@ namespace namguitar
       OnParamChange(paramIdx);
     }
 
+    // Load last session state (preset, parameters, model, IR) from settings file
+    LoadLastSessionState();
+
 #if PLUG_HAS_UI
     mMakeGraphicsFunc = [this]()
     {
@@ -1205,6 +1208,19 @@ namespace namguitar
     // Reset DSP state before applying new preset to avoid artifacts
     mDSP->Reset();
 
+    // First, reset all parameters to their default values
+    // This ensures parameters not specified in the preset get reset
+    for (int paramIdx = 0; paramIdx < kParamCount; ++paramIdx)
+    {
+      auto *param = GetParam(paramIdx);
+      if (param)
+      {
+        param->SetToDefault();
+        OnParamChange(paramIdx);
+      }
+    }
+
+    // Then apply the preset's parameter values
     for (const auto &parameter : preset.parameters)
     {
       const auto paramId = ParamIdFromKey(parameter.id);
@@ -1270,6 +1286,9 @@ namespace namguitar
       mActivePresetJson = presetJsonIter->dump();
       mPendingStateBroadcast = true;
 
+      // Save settings so this preset is restored on next startup
+      SaveAppSettings();
+
       if (mWebUI)
       {
         nlohmann::json message;
@@ -1313,6 +1332,9 @@ namespace namguitar
     {
       GetParam(*paramIdx)->Set(value);
       OnParamChange(*paramIdx);
+      
+      // Save settings to persist parameter changes across sessions
+      SaveAppSettings();
     }
   }
 
@@ -1363,6 +1385,9 @@ namespace namguitar
       mActivePresetJson.clear();
       mPendingStateBroadcast = true;
 
+      // Save settings so this model is restored on next startup
+      SaveAppSettings();
+
       if (mWebUI)
       {
         nlohmann::json message;
@@ -1411,6 +1436,9 @@ namespace namguitar
       mActivePresetJson.clear();
       mPendingStateBroadcast = true;
 
+      // Save settings so this IR is restored on next startup
+      SaveAppSettings();
+
       if (mWebUI)
       {
         nlohmann::json message;
@@ -1450,46 +1478,17 @@ namespace namguitar
     newPreset.category = presetCategory;
     newPreset.description = presetDescription;
 
-    // Capture current parameters
+    // Capture current parameters using the ParamKey mapping
     for (int paramIdx = 0; paramIdx < kParamCount; ++paramIdx)
     {
       const auto *param = GetParam(paramIdx);
       if (param)
       {
-        std::string key;
-        switch (static_cast<ParameterId>(paramIdx))
+        const std::string key = ParamKey(static_cast<ParameterId>(paramIdx));
+        if (!key.empty())
         {
-        case kParamInputTrim:
-          key = "input_trim";
-          break;
-        case kParamOutputTrim:
-          key = "output_trim";
-          break;
-        case kParamDrive:
-          key = "drive";
-          break;
-        case kParamTone:
-          key = "tone";
-          break;
-        case kParamGateEnabled:
-          key = "gate_enabled";
-          break;
-        case kParamGateThreshold:
-          key = "gate_threshold";
-          break;
-        case kParamMix:
-          key = "mix";
-          break;
-        case kParamDoublerEnabled:
-          key = "doubler_enabled";
-          break;
-        case kParamDoublerDelay:
-          key = "doubler_delay";
-          break;
-        default:
-          continue;
+          newPreset.parameters.push_back({key, param->Value()});
         }
-        newPreset.parameters.push_back({key, param->Value()});
       }
     }
 
@@ -1561,6 +1560,9 @@ namespace namguitar
     mActivePresetId = newPreset.id;
     mActivePresetJson = presetJson.dump();
     mPendingStateBroadcast = true;
+
+    // Save settings so this preset is restored on next startup
+    SaveAppSettings();
 
     if (mWebUI)
     {
@@ -2131,6 +2133,181 @@ namespace namguitar
     mSignalTestResultPending.store(false, std::memory_order_release);
     mSignalTestActive.store(true, std::memory_order_release);
     return true;
+  }
+
+  void NAMGuitarPlugin::SaveAppSettings() const
+  {
+    try
+    {
+      const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
+      (void)mFileSystem.EnsureDirectory(settingsDir);
+      const auto settingsFile = mFileSystem.ResolveSettingsFile();
+
+      nlohmann::json settings;
+      
+      // Save last preset info
+      settings["lastPresetId"] = mActivePresetId;
+      settings["lastPresetJson"] = mActivePresetJson;
+      settings["lastModelPath"] = mActiveModelPath;
+      settings["lastIRPath"] = mActiveIRPath;
+
+      // Save all current parameter values
+      nlohmann::json parameters = nlohmann::json::array();
+      for (int paramIdx = 0; paramIdx < kParamCount; ++paramIdx)
+      {
+        const auto *param = GetParam(paramIdx);
+        if (param)
+        {
+          const std::string key = ParamKey(static_cast<ParameterId>(paramIdx));
+          if (!key.empty())
+          {
+            parameters.push_back({{"id", key}, {"value", param->Value()}});
+          }
+        }
+      }
+      settings["parameters"] = std::move(parameters);
+
+      std::ofstream outputFile(settingsFile);
+      if (outputFile)
+      {
+        outputFile << settings.dump(2);
+        std::cout << "[Plugin] Saved app settings to: " << settingsFile.generic_string() << std::endl;
+      }
+    }
+    catch (const std::exception &e)
+    {
+      std::cerr << "[Plugin] Failed to save app settings: " << e.what() << std::endl;
+    }
+  }
+
+  void NAMGuitarPlugin::LoadAppSettings()
+  {
+    try
+    {
+      const auto settingsFile = mFileSystem.ResolveSettingsFile();
+      if (!std::filesystem::exists(settingsFile))
+      {
+        std::cout << "[Plugin] No settings file found at: " << settingsFile.generic_string() << std::endl;
+        return;
+      }
+
+      std::ifstream inputFile(settingsFile);
+      if (!inputFile)
+      {
+        std::cerr << "[Plugin] Failed to open settings file" << std::endl;
+        return;
+      }
+
+      nlohmann::json settings;
+      inputFile >> settings;
+
+      // Restore paths
+      mActivePresetId = settings.value("lastPresetId", "");
+      mActivePresetJson = settings.value("lastPresetJson", "");
+      mActiveModelPath = settings.value("lastModelPath", "");
+      mActiveIRPath = settings.value("lastIRPath", "");
+
+      // Restore parameters
+      if (settings.contains("parameters") && settings["parameters"].is_array())
+      {
+        for (const auto &paramJson : settings["parameters"])
+        {
+          const std::string id = paramJson.value("id", "");
+          const double value = paramJson.value("value", 0.0);
+          
+          const auto paramId = ParamIdFromKey(id);
+          if (paramId)
+          {
+            auto *param = GetParam(static_cast<int>(*paramId));
+            if (param)
+            {
+              param->Set(value);
+            }
+          }
+        }
+      }
+
+      std::cout << "[Plugin] Loaded app settings from: " << settingsFile.generic_string() << std::endl;
+    }
+    catch (const std::exception &e)
+    {
+      std::cerr << "[Plugin] Failed to load app settings: " << e.what() << std::endl;
+    }
+  }
+
+  void NAMGuitarPlugin::LoadLastSessionState()
+  {
+    if (!mDSP)
+    {
+      return;
+    }
+
+    LoadAppSettings();
+
+    // Lock DSP mutex during state restoration
+    std::lock_guard<std::mutex> lock(mDSPMutex);
+
+    // Apply loaded parameters to DSP
+    for (int paramIdx = 0; paramIdx < kParamCount; ++paramIdx)
+    {
+      OnParamChange(paramIdx);
+    }
+
+    // Load model if path is set
+    if (!mActiveModelPath.empty())
+    {
+      const std::filesystem::path modelPath{mActiveModelPath};
+      if (std::filesystem::exists(modelPath))
+      {
+        if (!mDSP->LoadModel(modelPath))
+        {
+          std::cerr << "[Plugin] Failed to load last model: " << mActiveModelPath << std::endl;
+          mActiveModelPath.clear();
+        }
+      }
+      else
+      {
+        mActiveModelPath.clear();
+      }
+    }
+
+    // Load IR if path is set
+    if (!mActiveIRPath.empty())
+    {
+      const std::filesystem::path irPath{mActiveIRPath};
+      if (std::filesystem::exists(irPath))
+      {
+        if (!mDSP->LoadImpulseResponse(irPath))
+        {
+          std::cerr << "[Plugin] Failed to load last IR: " << mActiveIRPath << std::endl;
+          mActiveIRPath.clear();
+        }
+      }
+      else
+      {
+        mActiveIRPath.clear();
+      }
+    }
+
+    // Restore preset from JSON if available
+    if (!mActivePresetJson.empty() && nlohmann::json::accept(mActivePresetJson))
+    {
+      try
+      {
+        const auto jsonPreset = nlohmann::json::parse(mActivePresetJson);
+        if (jsonPreset.is_object())
+        {
+          mActivePreset = ParsePresetFromJson(jsonPreset);
+        }
+      }
+      catch (...)
+      {
+        mActivePresetJson.clear();
+      }
+    }
+
+    mPendingStateBroadcast = true;
+    std::cout << "[Plugin] Last session state restored" << std::endl;
   }
 
 } // namespace namguitar
