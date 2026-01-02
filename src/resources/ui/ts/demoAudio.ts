@@ -39,10 +39,13 @@ export function renderDemoAudioControls(): string {
           <span class="play-icon">▶</span>
           Play
         </button>
-        <label class="repeat-toggle">
-          <input type="checkbox" id="demo-audio-repeat-checkbox" />
-          <span class="repeat-label">🔁 Repeat</span>
-        </label>
+        <div class="toggle-control demo-repeat-control">
+          <span class="toggle-label">REPEAT</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="demo-audio-repeat-checkbox" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
       </div>
     </div>
   `;

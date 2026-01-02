@@ -251,6 +251,7 @@ export function initializeControls(): void {
 
   initializeDoublerControls();
   initializeInputOutputKnobs();
+  initializeSimpleCabControls();
 }
 
 export function syncDoublerControlsFromState(): void {
@@ -323,6 +324,7 @@ export function syncControlsFromState(): void {
   });
 
   syncDoublerControlsFromState();
+  syncSimpleCabControlsFromState();
 }
 
 // Input mode state
@@ -468,3 +470,118 @@ export function handleAmpCabStateChanged(newAmpEnabled: boolean, newCabEnabled: 
     cabPowerSwitch.classList.toggle("off", !cabEnabled);
   }
 }
+
+// Simple Cab controls
+let simpleCabEnabled = false;
+
+function updateSimpleCabSectionState(): void {
+  const section = document.querySelector(".simplecab-section");
+  if (section) {
+    section.classList.toggle("enabled", simpleCabEnabled);
+  }
+}
+
+function sendSimpleCabStateToPlugin(): void {
+  setParameter("simplecab_enabled", simpleCabEnabled ? 1.0 : 0.0);
+  appendLog(`Simple Cab: ${simpleCabEnabled ? "ON" : "OFF"}`);
+}
+
+function initializeSimpleCabControls(): void {
+  const simpleCabToggle = document.getElementById("simplecab-toggle") as HTMLInputElement | null;
+  
+  if (simpleCabToggle) {
+    simpleCabToggle.addEventListener("change", () => {
+      simpleCabEnabled = simpleCabToggle.checked;
+      updateSimpleCabSectionState();
+      sendSimpleCabStateToPlugin();
+    });
+  }
+
+  // Initialize Bass knob
+  const bassKnob = document.querySelector('.knob[data-param="simplecab-bass"]') as HTMLElement | null;
+  if (bassKnob) {
+    const bassKnobInstance = new GenericKnob({
+      knobElement: bassKnob,
+      paramId: "simplecab_bass",
+      minValue: 0.0,
+      maxValue: 1.0,
+      defaultValue: 0.5,
+      displayFormat: (value) => `${Math.round(value * 100)}%`,
+      valueDisplayId: "simplecab-bass-value",
+      sensitivity: 0.005,
+    });
+    knobInstances.set("simplecab_bass", bassKnobInstance);
+  }
+
+  // Initialize Presence knob
+  const presenceKnob = document.querySelector('.knob[data-param="simplecab-presence"]') as HTMLElement | null;
+  if (presenceKnob) {
+    const presenceKnobInstance = new GenericKnob({
+      knobElement: presenceKnob,
+      paramId: "simplecab_presence",
+      minValue: 0.0,
+      maxValue: 1.0,
+      defaultValue: 0.5,
+      displayFormat: (value) => `${Math.round(value * 100)}%`,
+      valueDisplayId: "simplecab-presence-value",
+      sensitivity: 0.005,
+    });
+    knobInstances.set("simplecab_presence", presenceKnobInstance);
+  }
+
+  // Initialize Brightness knob
+  const brightnessKnob = document.querySelector('.knob[data-param="simplecab-brightness"]') as HTMLElement | null;
+  if (brightnessKnob) {
+    const brightnessKnobInstance = new GenericKnob({
+      knobElement: brightnessKnob,
+      paramId: "simplecab_brightness",
+      minValue: 0.0,
+      maxValue: 1.0,
+      defaultValue: 0.5,
+      displayFormat: (value) => `${Math.round(value * 100)}%`,
+      valueDisplayId: "simplecab-brightness-value",
+      sensitivity: 0.005,
+    });
+    knobInstances.set("simplecab_brightness", brightnessKnobInstance);
+  }
+
+  // Initial state update
+  updateSimpleCabSectionState();
+}
+
+export function syncSimpleCabControlsFromState(): void {
+  const paramValues: Record<string, number> = {};
+  if (Array.isArray(uiState.parameters.values)) {
+    uiState.parameters.values.forEach((param) => {
+      if (typeof param.value === "number") {
+        paramValues[param.id] = param.value;
+      }
+    });
+  }
+
+  // Sync toggle
+  const simpleCabToggle = document.getElementById("simplecab-toggle") as HTMLInputElement | null;
+  if (simpleCabToggle && typeof paramValues.simplecab_enabled === "number") {
+    simpleCabEnabled = paramValues.simplecab_enabled > 0.5;
+    simpleCabToggle.checked = simpleCabEnabled;
+    updateSimpleCabSectionState();
+  }
+
+  // Sync knobs
+  const bassKnobInstance = knobInstances.get("simplecab_bass");
+  if (bassKnobInstance && typeof paramValues.simplecab_bass === "number") {
+    bassKnobInstance.setValue(paramValues.simplecab_bass);
+  }
+
+  const presenceKnobInstance = knobInstances.get("simplecab_presence");
+  if (presenceKnobInstance && typeof paramValues.simplecab_presence === "number") {
+    presenceKnobInstance.setValue(paramValues.simplecab_presence);
+  }
+
+  const brightnessKnobInstance = knobInstances.get("simplecab_brightness");
+  if (brightnessKnobInstance && typeof paramValues.simplecab_brightness === "number") {
+    brightnessKnobInstance.setValue(paramValues.simplecab_brightness);
+  }
+}
+
+export { initializeSimpleCabControls };

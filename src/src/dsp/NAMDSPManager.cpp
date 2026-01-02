@@ -76,6 +76,12 @@ namespace namguitar
         LoadImpulseResponse(*currentIR);
       }
     }
+
+    // Initialize simple cabinet simulation
+    for (auto& cabSim : mSimpleCabSim)
+    {
+      cabSim.Prepare(mSampleRate);
+    }
   }
 
   void NAMDSPManager::Reset()
@@ -102,6 +108,12 @@ namespace namguitar
     for (auto &convolution : mIRConvolution)
     {
       convolution.Reset();
+    }
+
+    // Reset simple cabinet simulation
+    for (auto& cabSim : mSimpleCabSim)
+    {
+      cabSim.Reset();
     }
   }
 
@@ -181,6 +193,30 @@ namespace namguitar
   void NAMDSPManager::SetMix(double mix)
   {
     mMix = std::clamp(mix, 0.0, 1.0);
+  }
+
+  void NAMDSPManager::SetSimpleCabBass(double bass)
+  {
+    for (auto& cabSim : mSimpleCabSim)
+    {
+      cabSim.SetBass(bass);
+    }
+  }
+
+  void NAMDSPManager::SetSimpleCabPresence(double presence)
+  {
+    for (auto& cabSim : mSimpleCabSim)
+    {
+      cabSim.SetPresence(presence);
+    }
+  }
+
+  void NAMDSPManager::SetSimpleCabBrightness(double brightness)
+  {
+    for (auto& cabSim : mSimpleCabSim)
+    {
+      cabSim.SetBrightness(brightness);
+    }
   }
 
   void NAMDSPManager::SetDoublerEnabled(bool enabled)
@@ -362,6 +398,14 @@ namespace namguitar
       if (mCabEnabled && mIRConvolution[static_cast<std::size_t>(modelIdx)].IsInitialized())
       {
         ApplyImpulseResponse(channelBuffer, modelIdx);
+      }
+      else if (mSimpleCabEnabled)
+      {
+        // Apply simple filter-based cabinet simulation (faster alternative to IR)
+        for (int frame = 0; frame < frames; ++frame)
+        {
+          channelBuffer[frame] = mSimpleCabSim[static_cast<std::size_t>(modelIdx)].Process(channelBuffer[frame]);
+        }
       }
     };
 

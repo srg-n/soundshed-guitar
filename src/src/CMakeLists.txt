@@ -23,6 +23,7 @@ set(_namguitar_core_sources
   dsp/FFTConvolution.h
   dsp/OptimizedConvolver.cpp
   dsp/OptimizedConvolver.h
+  dsp/SimpleCabSim.h
   dsp/IRManager.cpp
   dsp/IRManager.h
   dsp/NAMDSPManager.cpp

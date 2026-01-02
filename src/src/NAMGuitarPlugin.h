@@ -70,6 +70,10 @@ namespace namguitar
       kParamDoublerEnabled,
       kParamDoublerDelay,
       kParamTranspose,
+      kParamSimpleCabEnabled,
+      kParamSimpleCabBass,
+      kParamSimpleCabPresence,
+      kParamSimpleCabBrightness,
       kParamCount
     };
 

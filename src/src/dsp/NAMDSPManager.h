@@ -17,6 +17,7 @@
 namespace nam { namespace factory { void ForceFactoryRegistration(); } }
 #include "dsp/IRManager.h"
 #include "dsp/OptimizedConvolver.h"
+#include "dsp/SimpleCabSim.h"
 
 namespace nam
 {
@@ -57,6 +58,13 @@ namespace namguitar
     [[nodiscard]] bool IsAmpEnabled() const noexcept { return mAmpEnabled; }
     void SetCabEnabled(bool enabled) { mCabEnabled = enabled; }
     [[nodiscard]] bool IsCabEnabled() const noexcept { return mCabEnabled; }
+    
+    // Simple cabinet simulation (alternative to IR convolution)
+    void SetSimpleCabEnabled(bool enabled) { mSimpleCabEnabled = enabled; }
+    [[nodiscard]] bool IsSimpleCabEnabled() const noexcept { return mSimpleCabEnabled; }
+    void SetSimpleCabBass(double bass);      // 0.0-1.0
+    void SetSimpleCabPresence(double presence); // 0.0-1.0
+    void SetSimpleCabBrightness(double brightness); // 0.0-1.0
     
     // Input mode settings
     void SetMonoMode(bool enabled) { mMonoMode = enabled; }
@@ -134,6 +142,10 @@ namespace namguitar
     // Amp and Cab enable state
     bool mAmpEnabled = true;   // NAM model processing enabled by default
     bool mCabEnabled = true;   // IR convolution enabled by default
+    bool mSimpleCabEnabled = false; // Simple cab sim disabled by default (use IR instead)
+    
+    // Simple cabinet simulation (filter-based, no IR)
+    std::array<SimpleCabSim, 2> mSimpleCabSim; // One per channel
     
     // Input mode settings
     bool mMonoMode = true;  // Default to mono mode

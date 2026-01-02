@@ -89,6 +89,14 @@ namespace namguitar
         return "doubler_delay";
       case NAMGuitarPlugin::kParamTranspose:
         return "transpose";
+      case NAMGuitarPlugin::kParamSimpleCabEnabled:
+        return "simplecab_enabled";
+      case NAMGuitarPlugin::kParamSimpleCabBass:
+        return "simplecab_bass";
+      case NAMGuitarPlugin::kParamSimpleCabPresence:
+        return "simplecab_presence";
+      case NAMGuitarPlugin::kParamSimpleCabBrightness:
+        return "simplecab_brightness";
       default:
         return "";
       }
@@ -135,6 +143,22 @@ namespace namguitar
       if (key == "transpose")
       {
         return NAMGuitarPlugin::kParamTranspose;
+      }
+      if (key == "simplecab_enabled")
+      {
+        return NAMGuitarPlugin::kParamSimpleCabEnabled;
+      }
+      if (key == "simplecab_bass")
+      {
+        return NAMGuitarPlugin::kParamSimpleCabBass;
+      }
+      if (key == "simplecab_presence")
+      {
+        return NAMGuitarPlugin::kParamSimpleCabPresence;
+      }
+      if (key == "simplecab_brightness")
+      {
+        return NAMGuitarPlugin::kParamSimpleCabBrightness;
       }
       return std::nullopt;
     }
@@ -875,6 +899,18 @@ namespace namguitar
     case kParamTranspose:
       mDSP->SetTranspose(static_cast<int>(std::round(param->Value())));
       break;
+    case kParamSimpleCabEnabled:
+      mDSP->SetSimpleCabEnabled(param->Bool());
+      break;
+    case kParamSimpleCabBass:
+      mDSP->SetSimpleCabBass(param->Value());
+      break;
+    case kParamSimpleCabPresence:
+      mDSP->SetSimpleCabPresence(param->Value());
+      break;
+    case kParamSimpleCabBrightness:
+      mDSP->SetSimpleCabBrightness(param->Value());
+      break;
     default:
       break;
     }
@@ -894,6 +930,10 @@ namespace namguitar
     GetParam(kParamDoublerEnabled)->InitBool("Doubler", false);
     GetParam(kParamDoublerDelay)->InitDouble("Doubler Delay", 6.0, 0.5, 50.0, 0.1, "ms");
     GetParam(kParamTranspose)->InitInt("Transpose", 0, -12, 12, "st");
+    GetParam(kParamSimpleCabEnabled)->InitBool("Simple Cab", false);
+    GetParam(kParamSimpleCabBass)->InitDouble("Simple Cab Bass", 0.5, 0.0, 1.0, 0.01);
+    GetParam(kParamSimpleCabPresence)->InitDouble("Simple Cab Presence", 0.5, 0.0, 1.0, 0.01);
+    GetParam(kParamSimpleCabBrightness)->InitDouble("Simple Cab Brightness", 0.5, 0.0, 1.0, 0.01);
   }
 
   void NAMGuitarPlugin::HandleWebViewMessages()

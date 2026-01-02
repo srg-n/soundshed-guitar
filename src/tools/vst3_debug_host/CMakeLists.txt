@@ -15,9 +15,10 @@ endif()
 
 set(VST3_SDK_DIR "${IPLUG2_DIR}/Dependencies/IPlug/VST3_SDK")
 
-# Verify VST3 SDK exists
+# Skip building if VST3 SDK not available
 if(NOT EXISTS "${VST3_SDK_DIR}/pluginterfaces")
-    message(FATAL_ERROR "VST3 SDK not found at ${VST3_SDK_DIR}")
+    message(WARNING "VST3 SDK not found at ${VST3_SDK_DIR} - skipping VST3DebugHost")
+    return()
 endif()
 
 add_executable(VST3DebugHost
