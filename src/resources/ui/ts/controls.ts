@@ -170,7 +170,7 @@ function initializeInputOutputKnobs(): void {
   if (inputKnob) {
     const inputKnobInstance = new GenericKnob({
       knobElement: inputKnob,
-      paramId: "input_level",
+      paramId: "input_trim",
       minValue: -12.0,
       maxValue: 12.0,
       defaultValue: 0.0,
@@ -178,7 +178,7 @@ function initializeInputOutputKnobs(): void {
       valueDisplayId: "input-value",
       sensitivity: 0.1,
     });
-    knobInstances.set("input_level", inputKnobInstance);
+    knobInstances.set("input_trim", inputKnobInstance);
   }
 
   // Initialize Output Level knob
@@ -186,7 +186,7 @@ function initializeInputOutputKnobs(): void {
   if (outputKnob) {
     const outputKnobInstance = new GenericKnob({
       knobElement: outputKnob,
-      paramId: "output_level",
+      paramId: "output_trim",
       minValue: -12.0,
       maxValue: 12.0,
       defaultValue: 0.0,
@@ -194,7 +194,7 @@ function initializeInputOutputKnobs(): void {
       valueDisplayId: "output-value",
       sensitivity: 0.1,
     });
-    knobInstances.set("output_level", outputKnobInstance);
+    knobInstances.set("output_trim", outputKnobInstance);
   }
 
   // Initialize Transpose knob
@@ -221,6 +221,56 @@ function initializeInputOutputKnobs(): void {
       },
     });
     knobInstances.set("transpose", transposeKnobInstance);
+  }
+}
+
+function initializeGateControls(): void {
+  const gateToggle = document.getElementById("gate-toggle") as HTMLInputElement | null;
+
+  if (gateToggle) {
+    gateToggle.addEventListener("change", () => {
+      const enabled = gateToggle.checked ? 1.0 : 0.0;
+      setParameter("gate_enabled", enabled);
+      appendLog(`gate_enabled → ${enabled}`);
+    });
+  }
+
+  // Initialize Gate Threshold knob
+  const thresholdKnob = document.querySelector('.knob[data-param="gate_threshold"]') as HTMLElement | null;
+  if (thresholdKnob) {
+    const thresholdKnobInstance = new GenericKnob({
+      knobElement: thresholdKnob,
+      paramId: "gate_threshold",
+      minValue: -80.0,
+      maxValue: -20.0,
+      defaultValue: -60.0,
+      displayFormat: (value) => `${value.toFixed(0)} dB`,
+      valueDisplayId: "gate-threshold-value",
+      sensitivity: 0.5,
+    });
+    knobInstances.set("gate_threshold", thresholdKnobInstance);
+  }
+}
+
+export function syncGateControlsFromState(): void {
+  const paramValues: Record<string, number> = {};
+  if (Array.isArray(uiState.parameters.values)) {
+    uiState.parameters.values.forEach((param) => {
+      if (typeof param.value === "number") {
+        paramValues[param.id] = param.value;
+      }
+    });
+  }
+
+  const gateToggle = document.getElementById("gate-toggle") as HTMLInputElement | null;
+  if (gateToggle && typeof paramValues.gate_enabled === "number") {
+    gateToggle.checked = paramValues.gate_enabled > 0.5;
+  }
+
+  // Sync threshold knob
+  const thresholdKnobInstance = knobInstances.get("gate_threshold");
+  if (thresholdKnobInstance && typeof paramValues.gate_threshold === "number") {
+    thresholdKnobInstance.setValue(paramValues.gate_threshold);
   }
 }
 
@@ -251,6 +301,7 @@ export function initializeControls(): void {
 
   initializeDoublerControls();
   initializeInputOutputKnobs();
+  initializeGateControls();
   initializeSimpleCabControls();
 }
 
@@ -276,15 +327,15 @@ export function syncDoublerControlsFromState(): void {
   }
 
   // Sync input level knob
-  const inputKnobInstance = knobInstances.get("input_level");
-  if (inputKnobInstance && typeof paramValues.input_level === "number") {
-    inputKnobInstance.setValue(paramValues.input_level);
+  const inputKnobInstance = knobInstances.get("input_trim");
+  if (inputKnobInstance && typeof paramValues.input_trim === "number") {
+    inputKnobInstance.setValue(paramValues.input_trim);
   }
 
   // Sync output level knob
-  const outputKnobInstance = knobInstances.get("output_level");
-  if (outputKnobInstance && typeof paramValues.output_level === "number") {
-    outputKnobInstance.setValue(paramValues.output_level);
+  const outputKnobInstance = knobInstances.get("output_trim");
+  if (outputKnobInstance && typeof paramValues.output_trim === "number") {
+    outputKnobInstance.setValue(paramValues.output_trim);
   }
 
   // Sync transpose knob
@@ -324,6 +375,7 @@ export function syncControlsFromState(): void {
   });
 
   syncDoublerControlsFromState();
+  syncGateControlsFromState();
   syncSimpleCabControlsFromState();
 }
 
