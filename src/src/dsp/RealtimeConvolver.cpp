@@ -102,9 +102,6 @@ namespace namguitar
     // Previous input block for overlap-save (needed for proper convolution)
     mPreviousInputBlock.assign(mPartitionSize, 0.0);
     
-    // Overlap buffer
-    mOverlapBuffer.assign(mPartitionSize, 0.0);
-    
     mInitialized = true;
     return true;
   }
@@ -149,15 +146,15 @@ namespace namguitar
     // Inverse FFT
     mFFT->Inverse(mFFTInputBuffer.data(), mAccumulator.data());
     
-    // Scale and extract output with overlap-add
+    // Overlap-Save output extraction:
+    // The first N samples contain circular convolution artifacts - DISCARD them
+    // The last N samples are the valid linear convolution result - KEEP them
     const double scale = 1.0 / static_cast<double>(mFFTSize);
     
     for (size_t i = 0; i < mPartitionSize; ++i)
     {
-      // First half: add to overlap from previous block
-      mOutputBuffer[i] = mOverlapBuffer[i] + mFFTInputBuffer[i].real() * scale;
-      // Second half becomes next overlap
-      mOverlapBuffer[i] = mFFTInputBuffer[mPartitionSize + i].real() * scale;
+      // Keep only the SECOND half of the IFFT output (valid linear convolution)
+      mOutputBuffer[i] = mFFTInputBuffer[mPartitionSize + i].real() * scale;
     }
     
     mOutputBufferReadPos = 0;
@@ -211,7 +208,6 @@ namespace namguitar
     // Clear buffers
     std::fill(mInputBuffer.begin(), mInputBuffer.end(), 0.0);
     std::fill(mOutputBuffer.begin(), mOutputBuffer.end(), 0.0);
-    std::fill(mOverlapBuffer.begin(), mOverlapBuffer.end(), 0.0);
     std::fill(mPreviousInputBlock.begin(), mPreviousInputBlock.end(), 0.0);
     mInputBufferPos = 0;
     mOutputBufferReadPos = mPartitionSize;

@@ -82,9 +82,6 @@ namespace namguitar
     std::vector<std::complex<double>> mFFTOutputBuffer;  // Output from FFT
     std::vector<std::complex<double>> mAccumulator;      // Freq domain accumulator
     
-    // Overlap-add state
-    std::vector<double> mOverlapBuffer;
-    
     // FFT plan
     std::unique_ptr<SimdFFT> mFFT;
   };
