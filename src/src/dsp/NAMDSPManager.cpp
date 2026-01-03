@@ -88,6 +88,10 @@ namespace namguitar
     {
       eq.Prepare(mSampleRate);
     }
+    
+    // Initialize delay and reverb effects
+    mDelay.Prepare(mSampleRate, mMaxBlockSize);
+    mReverb.Prepare(mSampleRate, mMaxBlockSize);
   }
 
   void NAMDSPManager::Reset()
@@ -127,6 +131,10 @@ namespace namguitar
     {
       eq.Reset();
     }
+    
+    // Reset delay and reverb effects
+    mDelay.Reset();
+    mReverb.Reset();
   }
 
   bool NAMDSPManager::LoadModel(const std::filesystem::path &modelPath)
@@ -593,6 +601,24 @@ namespace namguitar
       // Replace processed audio with pitch-shifted version
       std::copy(mPitchShiftedL.begin(), mPitchShiftedL.begin() + frames, mProcessedL.begin());
       std::copy(mPitchShiftedR.begin(), mPitchShiftedR.begin() + frames, mProcessedR.begin());
+    }
+
+    // Apply delay effect if enabled
+    if (mDelay.IsEnabled())
+    {
+      for (int frame = 0; frame < frames; ++frame)
+      {
+        mDelay.Process(mProcessedL[frame], mProcessedR[frame]);
+      }
+    }
+
+    // Apply reverb effect if enabled
+    if (mReverb.IsEnabled())
+    {
+      for (int frame = 0; frame < frames; ++frame)
+      {
+        mReverb.Process(mProcessedL[frame], mProcessedR[frame]);
+      }
     }
 
     // Output final signal with mix and output trim

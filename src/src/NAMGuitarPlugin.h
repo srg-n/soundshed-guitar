@@ -89,6 +89,16 @@ namespace namguitar
       kParamEQHighMidQ,
       kParamEQHighGain,
       kParamEQHighFreq,
+      // Delay effect parameters
+      kParamDelayEnabled,
+      kParamDelayTime,
+      kParamDelayFeedback,
+      kParamDelayMix,
+      // Reverb effect parameters
+      kParamReverbEnabled,
+      kParamReverbDecay,
+      kParamReverbDamping,
+      kParamReverbMix,
       kParamCount
     };
 

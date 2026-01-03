@@ -321,8 +321,73 @@
         <!-- Effects Panel -->
         <div class="tab-panel" id="panel-effects">
           <div class="panel-content">
-            <h2>Effects</h2>
-            <p>Add and configure effects pedals in your signal chain.</p>
+            <!-- Delay Effect -->
+            <div class="effect-section">
+              <div class="effect-header">
+                <span class="effect-label">DELAY</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="delay-toggle" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="effect-controls">
+                <div class="effect-knob-control">
+                  <span class="effect-knob-label">TIME</span>
+                  <div class="effect-knob" data-param="delay_time" data-value="300">
+                    <div class="knob-indicator"></div>
+                  </div>
+                  <span class="knob-value" id="delay-time-value">300 ms</span>
+                </div>
+                <div class="effect-knob-control">
+                  <span class="effect-knob-label">FEEDBACK</span>
+                  <div class="effect-knob" data-param="delay_feedback" data-value="30">
+                    <div class="knob-indicator"></div>
+                  </div>
+                  <span class="knob-value" id="delay-feedback-value">30%</span>
+                </div>
+                <div class="effect-knob-control">
+                  <span class="effect-knob-label">MIX</span>
+                  <div class="effect-knob" data-param="delay_mix" data-value="30">
+                    <div class="knob-indicator"></div>
+                  </div>
+                  <span class="knob-value" id="delay-mix-value">30%</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Reverb Effect -->
+            <div class="effect-section">
+              <div class="effect-header">
+                <span class="effect-label">REVERB</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="reverb-toggle" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="effect-controls">
+                <div class="effect-knob-control">
+                  <span class="effect-knob-label">DECAY</span>
+                  <div class="effect-knob" data-param="reverb_decay" data-value="0.5">
+                    <div class="knob-indicator"></div>
+                  </div>
+                  <span class="knob-value" id="reverb-decay-value">0.50</span>
+                </div>
+                <div class="effect-knob-control">
+                  <span class="effect-knob-label">DAMPING</span>
+                  <div class="effect-knob" data-param="reverb_damping" data-value="0.5">
+                    <div class="knob-indicator"></div>
+                  </div>
+                  <span class="knob-value" id="reverb-damping-value">0.50</span>
+                </div>
+                <div class="effect-knob-control">
+                  <span class="effect-knob-label">MIX</span>
+                  <div class="effect-knob" data-param="reverb_mix" data-value="30">
+                    <div class="knob-indicator"></div>
+                  </div>
+                  <span class="knob-value" id="reverb-mix-value">30%</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 

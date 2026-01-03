@@ -30,6 +30,8 @@ set(_namguitar_core_sources
   dsp/NAMDSPManager.h
   dsp/NAMFactoryForce.cpp
   dsp/ParametricEQ.h
+  dsp/DelayEffect.h
+  dsp/ReverbEffect.h
   models/ModelHasher.cpp
   models/ModelHasher.h
   network/PresetServiceClient.cpp

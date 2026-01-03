@@ -20,6 +20,8 @@ namespace nam { namespace factory { void ForceFactoryRegistration(); } }
 #include "dsp/RealtimeConvolver.h"
 #include "dsp/SimpleCabSim.h"
 #include "dsp/ParametricEQ.h"
+#include "dsp/DelayEffect.h"
+#include "dsp/ReverbEffect.h"
 
 namespace nam
 {
@@ -80,6 +82,20 @@ namespace namguitar
     void SetEQBandGain(int band, double gainDb);
     void SetEQBandFrequency(int band, double freqHz);
     void SetEQBandQ(int band, double q);
+    
+    // Delay effect
+    void SetDelayEnabled(bool enabled) { mDelay.SetEnabled(enabled); }
+    [[nodiscard]] bool IsDelayEnabled() const noexcept { return mDelay.IsEnabled(); }
+    void SetDelayTime(double milliseconds) { mDelay.SetDelayTime(milliseconds); }
+    void SetDelayFeedback(double feedback) { mDelay.SetFeedback(feedback); }
+    void SetDelayMix(double mix) { mDelay.SetMix(mix); }
+    
+    // Reverb effect
+    void SetReverbEnabled(bool enabled) { mReverb.SetEnabled(enabled); }
+    [[nodiscard]] bool IsReverbEnabled() const noexcept { return mReverb.IsEnabled(); }
+    void SetReverbDecay(double decay) { mReverb.SetDecay(decay); }
+    void SetReverbDamping(double damping) { mReverb.SetDamping(damping); }
+    void SetReverbMix(double mix) { mReverb.SetMix(mix); }
     
     // Input mode settings
     void SetMonoMode(bool enabled) { mMonoMode = enabled; }
@@ -165,6 +181,10 @@ namespace namguitar
     // Parametric EQ
     bool mEQEnabled = false;
     std::array<ParametricEQ, 2> mParametricEQ; // One per channel
+    
+    // Delay and Reverb effects
+    DelayEffect mDelay;
+    ReverbEffect mReverb;
     
     // Input mode settings
     bool mMonoMode = true;  // Default to mono mode

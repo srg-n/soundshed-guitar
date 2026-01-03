@@ -320,6 +320,8 @@ export function initializeControls(): void {
   initializeSimpleCabControls();
   initializeIRQualityControls();
   initializeEQControls();
+  initializeDelayControls();
+  initializeReverbControls();
 }
 
 export function syncDoublerControlsFromState(): void {
@@ -396,6 +398,8 @@ export function syncControlsFromState(): void {
   syncSimpleCabControlsFromState();
   syncIRQualityFromState();
   syncEQControlsFromState();
+  syncDelayControlsFromState();
+  syncReverbControlsFromState();
 }
 
 // Input mode state
@@ -919,4 +923,206 @@ export function syncEQControlsFromState(): void {
   });
 }
 
-export { initializeSimpleCabControls, initializeEQControls, initializeIRQualityControls };
+export { initializeSimpleCabControls, initializeEQControls, initializeIRQualityControls, initializeDelayControls, initializeReverbControls };
+
+// ===== Delay Effect Controls =====
+let delayEnabled = false;
+
+function updateDelaySectionState(): void {
+  const section = document.querySelector(".effect-section:has(#delay-toggle)");
+  if (section) {
+    section.classList.toggle("enabled", delayEnabled);
+  }
+}
+
+function initializeDelayControls(): void {
+  const delayToggle = document.getElementById("delay-toggle") as HTMLInputElement | null;
+
+  if (delayToggle) {
+    delayToggle.addEventListener("change", () => {
+      delayEnabled = delayToggle.checked;
+      setParameter("delay_enabled", delayEnabled ? 1.0 : 0.0);
+      appendLog(`delay_enabled → ${delayEnabled ? 1.0 : 0.0}`);
+      updateDelaySectionState();
+    });
+  }
+
+  // Delay Time knob
+  const delayTimeKnob = document.querySelector('.effect-knob[data-param="delay_time"]') as HTMLElement | null;
+  if (delayTimeKnob) {
+    const knobInstance = new GenericKnob({
+      knobElement: delayTimeKnob,
+      paramId: "delay_time",
+      minValue: 1.0,
+      maxValue: 2000.0,
+      defaultValue: 300.0,
+      displayFormat: (value) => `${Math.round(value)} ms`,
+      valueDisplayId: "delay-time-value",
+      sensitivity: 5.0,
+    });
+    knobInstances.set("delay_time", knobInstance);
+  }
+
+  // Delay Feedback knob
+  const delayFeedbackKnob = document.querySelector('.effect-knob[data-param="delay_feedback"]') as HTMLElement | null;
+  if (delayFeedbackKnob) {
+    const knobInstance = new GenericKnob({
+      knobElement: delayFeedbackKnob,
+      paramId: "delay_feedback",
+      minValue: 0.0,
+      maxValue: 95.0,
+      defaultValue: 30.0,
+      displayFormat: (value) => `${Math.round(value)}%`,
+      valueDisplayId: "delay-feedback-value",
+      sensitivity: 0.5,
+    });
+    knobInstances.set("delay_feedback", knobInstance);
+  }
+
+  // Delay Mix knob
+  const delayMixKnob = document.querySelector('.effect-knob[data-param="delay_mix"]') as HTMLElement | null;
+  if (delayMixKnob) {
+    const knobInstance = new GenericKnob({
+      knobElement: delayMixKnob,
+      paramId: "delay_mix",
+      minValue: 0.0,
+      maxValue: 100.0,
+      defaultValue: 30.0,
+      displayFormat: (value) => `${Math.round(value)}%`,
+      valueDisplayId: "delay-mix-value",
+      sensitivity: 0.5,
+    });
+    knobInstances.set("delay_mix", knobInstance);
+  }
+
+  updateDelaySectionState();
+}
+
+export function syncDelayControlsFromState(): void {
+  const paramValues: Record<string, number> = {};
+  if (Array.isArray(uiState.parameters.values)) {
+    uiState.parameters.values.forEach((param) => {
+      if (typeof param.value === "number") {
+        paramValues[param.id] = param.value;
+      }
+    });
+  }
+
+  // Sync toggle
+  const delayToggle = document.getElementById("delay-toggle") as HTMLInputElement | null;
+  if (delayToggle && typeof paramValues.delay_enabled === "number") {
+    delayEnabled = paramValues.delay_enabled > 0.5;
+    delayToggle.checked = delayEnabled;
+    updateDelaySectionState();
+  }
+
+  // Sync all knobs
+  const delayKnobs = ["delay_time", "delay_feedback", "delay_mix"];
+  delayKnobs.forEach((knobId) => {
+    const knobInstance = knobInstances.get(knobId);
+    if (knobInstance && typeof paramValues[knobId] === "number") {
+      knobInstance.setValue(paramValues[knobId]);
+    }
+  });
+}
+
+// ===== Reverb Effect Controls =====
+let reverbEnabled = false;
+
+function updateReverbSectionState(): void {
+  const section = document.querySelector(".effect-section:has(#reverb-toggle)");
+  if (section) {
+    section.classList.toggle("enabled", reverbEnabled);
+  }
+}
+
+function initializeReverbControls(): void {
+  const reverbToggle = document.getElementById("reverb-toggle") as HTMLInputElement | null;
+
+  if (reverbToggle) {
+    reverbToggle.addEventListener("change", () => {
+      reverbEnabled = reverbToggle.checked;
+      setParameter("reverb_enabled", reverbEnabled ? 1.0 : 0.0);
+      appendLog(`reverb_enabled → ${reverbEnabled ? 1.0 : 0.0}`);
+      updateReverbSectionState();
+    });
+  }
+
+  // Reverb Decay knob
+  const reverbDecayKnob = document.querySelector('.effect-knob[data-param="reverb_decay"]') as HTMLElement | null;
+  if (reverbDecayKnob) {
+    const knobInstance = new GenericKnob({
+      knobElement: reverbDecayKnob,
+      paramId: "reverb_decay",
+      minValue: 0.1,
+      maxValue: 0.99,
+      defaultValue: 0.5,
+      displayFormat: (value) => value.toFixed(2),
+      valueDisplayId: "reverb-decay-value",
+      sensitivity: 0.005,
+    });
+    knobInstances.set("reverb_decay", knobInstance);
+  }
+
+  // Reverb Damping knob
+  const reverbDampingKnob = document.querySelector('.effect-knob[data-param="reverb_damping"]') as HTMLElement | null;
+  if (reverbDampingKnob) {
+    const knobInstance = new GenericKnob({
+      knobElement: reverbDampingKnob,
+      paramId: "reverb_damping",
+      minValue: 0.0,
+      maxValue: 1.0,
+      defaultValue: 0.5,
+      displayFormat: (value) => value.toFixed(2),
+      valueDisplayId: "reverb-damping-value",
+      sensitivity: 0.005,
+    });
+    knobInstances.set("reverb_damping", knobInstance);
+  }
+
+  // Reverb Mix knob
+  const reverbMixKnob = document.querySelector('.effect-knob[data-param="reverb_mix"]') as HTMLElement | null;
+  if (reverbMixKnob) {
+    const knobInstance = new GenericKnob({
+      knobElement: reverbMixKnob,
+      paramId: "reverb_mix",
+      minValue: 0.0,
+      maxValue: 100.0,
+      defaultValue: 30.0,
+      displayFormat: (value) => `${Math.round(value)}%`,
+      valueDisplayId: "reverb-mix-value",
+      sensitivity: 0.5,
+    });
+    knobInstances.set("reverb_mix", knobInstance);
+  }
+
+  updateReverbSectionState();
+}
+
+export function syncReverbControlsFromState(): void {
+  const paramValues: Record<string, number> = {};
+  if (Array.isArray(uiState.parameters.values)) {
+    uiState.parameters.values.forEach((param) => {
+      if (typeof param.value === "number") {
+        paramValues[param.id] = param.value;
+      }
+    });
+  }
+
+  // Sync toggle
+  const reverbToggle = document.getElementById("reverb-toggle") as HTMLInputElement | null;
+  if (reverbToggle && typeof paramValues.reverb_enabled === "number") {
+    reverbEnabled = paramValues.reverb_enabled > 0.5;
+    reverbToggle.checked = reverbEnabled;
+    updateReverbSectionState();
+  }
+
+  // Sync all knobs
+  const reverbKnobs = ["reverb_decay", "reverb_damping", "reverb_mix"];
+  reverbKnobs.forEach((knobId) => {
+    const knobInstance = knobInstances.get(knobId);
+    if (knobInstance && typeof paramValues[knobId] === "number") {
+      knobInstance.setValue(paramValues[knobId]);
+    }
+  });
+}

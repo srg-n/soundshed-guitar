@@ -122,6 +122,24 @@ namespace namguitar
         return "eq_high_gain";
       case NAMGuitarPlugin::kParamEQHighFreq:
         return "eq_high_freq";
+      // Delay effect
+      case NAMGuitarPlugin::kParamDelayEnabled:
+        return "delay_enabled";
+      case NAMGuitarPlugin::kParamDelayTime:
+        return "delay_time";
+      case NAMGuitarPlugin::kParamDelayFeedback:
+        return "delay_feedback";
+      case NAMGuitarPlugin::kParamDelayMix:
+        return "delay_mix";
+      // Reverb effect
+      case NAMGuitarPlugin::kParamReverbEnabled:
+        return "reverb_enabled";
+      case NAMGuitarPlugin::kParamReverbDecay:
+        return "reverb_decay";
+      case NAMGuitarPlugin::kParamReverbDamping:
+        return "reverb_damping";
+      case NAMGuitarPlugin::kParamReverbMix:
+        return "reverb_mix";
       default:
         return "";
       }
@@ -232,6 +250,40 @@ namespace namguitar
       if (key == "eq_high_freq")
       {
         return NAMGuitarPlugin::kParamEQHighFreq;
+      }
+      // Delay effect
+      if (key == "delay_enabled")
+      {
+        return NAMGuitarPlugin::kParamDelayEnabled;
+      }
+      if (key == "delay_time")
+      {
+        return NAMGuitarPlugin::kParamDelayTime;
+      }
+      if (key == "delay_feedback")
+      {
+        return NAMGuitarPlugin::kParamDelayFeedback;
+      }
+      if (key == "delay_mix")
+      {
+        return NAMGuitarPlugin::kParamDelayMix;
+      }
+      // Reverb effect
+      if (key == "reverb_enabled")
+      {
+        return NAMGuitarPlugin::kParamReverbEnabled;
+      }
+      if (key == "reverb_decay")
+      {
+        return NAMGuitarPlugin::kParamReverbDecay;
+      }
+      if (key == "reverb_damping")
+      {
+        return NAMGuitarPlugin::kParamReverbDamping;
+      }
+      if (key == "reverb_mix")
+      {
+        return NAMGuitarPlugin::kParamReverbMix;
       }
       return std::nullopt;
     }
@@ -1026,6 +1078,32 @@ namespace namguitar
     case kParamEQHighFreq:
       mDSP->SetEQBandFrequency(3, param->Value());
       break;
+    // Delay effect
+    case kParamDelayEnabled:
+      mDSP->SetDelayEnabled(param->Bool());
+      break;
+    case kParamDelayTime:
+      mDSP->SetDelayTime(param->Value());
+      break;
+    case kParamDelayFeedback:
+      mDSP->SetDelayFeedback(param->Value() / 100.0);
+      break;
+    case kParamDelayMix:
+      mDSP->SetDelayMix(param->Value() / 100.0);
+      break;
+    // Reverb effect
+    case kParamReverbEnabled:
+      mDSP->SetReverbEnabled(param->Bool());
+      break;
+    case kParamReverbDecay:
+      mDSP->SetReverbDecay(param->Value());
+      break;
+    case kParamReverbDamping:
+      mDSP->SetReverbDamping(param->Value());
+      break;
+    case kParamReverbMix:
+      mDSP->SetReverbMix(param->Value() / 100.0);
+      break;
     default:
       break;
     }
@@ -1064,6 +1142,18 @@ namespace namguitar
     GetParam(kParamEQHighMidQ)->InitDouble("EQ High-Mid Q", 1.0, 0.1, 10.0, 0.1);
     GetParam(kParamEQHighGain)->InitDouble("EQ High Gain", 0.0, -12.0, 12.0, 0.1, "dB");
     GetParam(kParamEQHighFreq)->InitDouble("EQ High Freq", 8000.0, 2000.0, 16000.0, 1.0, "Hz");
+
+    // Delay effect parameters
+    GetParam(kParamDelayEnabled)->InitBool("Delay", false);
+    GetParam(kParamDelayTime)->InitDouble("Delay Time", 300.0, 1.0, 2000.0, 1.0, "ms");
+    GetParam(kParamDelayFeedback)->InitDouble("Delay Feedback", 30.0, 0.0, 95.0, 1.0, "%");
+    GetParam(kParamDelayMix)->InitDouble("Delay Mix", 30.0, 0.0, 100.0, 1.0, "%");
+
+    // Reverb effect parameters
+    GetParam(kParamReverbEnabled)->InitBool("Reverb", false);
+    GetParam(kParamReverbDecay)->InitDouble("Reverb Decay", 0.5, 0.1, 0.99, 0.01);
+    GetParam(kParamReverbDamping)->InitDouble("Reverb Damping", 0.5, 0.0, 1.0, 0.01);
+    GetParam(kParamReverbMix)->InitDouble("Reverb Mix", 30.0, 0.0, 100.0, 1.0, "%");
   }
 
   void NAMGuitarPlugin::HandleWebViewMessages()
