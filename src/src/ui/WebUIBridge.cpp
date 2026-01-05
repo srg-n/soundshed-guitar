@@ -8,6 +8,40 @@
 namespace namguitar
 {
 
+// Static member initialization
+std::atomic<bool> DllPinner::sShuttingDown{false};
+
+DllPinner::DllPinner()
+{
+#ifdef _WIN32
+  // Pin the DLL to prevent it from being unloaded while WebView2 callbacks are active
+  // This prevents crashes when WebView2 async callbacks execute after the plugin is "closed"
+  HMODULE hModule = nullptr;
+  if (GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
+        reinterpret_cast<LPCWSTR>(&DllPinner::sShuttingDown),
+        &hModule))
+  {
+    mPinnedModule = hModule;
+    std::cout << "[WebUI] DLL pinned successfully" << std::endl;
+  }
+  else
+  {
+    std::cerr << "[WebUI] Failed to pin DLL, error: " << GetLastError() << std::endl;
+  }
+#endif
+}
+
+DllPinner::~DllPinner()
+{
+#ifdef _WIN32
+  // Note: We intentionally do NOT unpin the DLL because WebView2 callbacks
+  // might still be pending. The DLL will remain loaded until the process exits.
+  // This is the safest approach for WebView2 in plugin environments.
+  std::cout << "[WebUI] DllPinner destroyed (DLL remains pinned)" << std::endl;
+#endif
+}
+
 namespace
 {
 std::string EscapeForJavaScriptString(const std::string& input)
@@ -42,43 +76,110 @@ std::string EscapeForJavaScriptString(const std::string& input)
 }
 } // namespace
 
+WebUIBridge::~WebUIBridge()
+{
+  std::cout << "[WebUI] WebUIBridge destructor called" << std::endl;
+  
+  // Signal that we're shutting down so WebView2 callbacks will bail out early
+  DllPinner::BeginShutdown();
+  
+  // Invalidate the validity flag so callbacks know this object is being destroyed
+  if (mValidityFlag) {
+    mValidityFlag->store(false);
+  }
+  
+  // Clear the initialized flag
+  mInitialized.store(false);
+  
+  // Clear handlers to prevent any callbacks
+  mHandler = nullptr;
+  mLogger = nullptr;
+  
+  // Note: mWebView is owned by IGraphics and will be cleaned up by it
+  // We just null our pointer
+  mWebView = nullptr;
+  
+  std::cout << "[WebUI] WebUIBridge destructor completed" << std::endl;
+}
+
 void WebUIBridge::Initialize(iplug::igraphics::IGraphics& graphics, const std::filesystem::path& resourceRoot)
 {
   using namespace iplug::igraphics;
 
   std::cout << "[WebUI] Initialize called" << std::endl;
+  std::cout.flush();
 
-  const std::filesystem::path htmlPath = resourceRoot / "ui" / "index.html";
-  IRECT bounds = graphics.GetBounds();
+  try {
+    // Pin the DLL before creating WebView to prevent unload during async callbacks
+    mDllPinner = std::make_unique<DllPinner>();
+    
+    const std::filesystem::path htmlPath = resourceRoot / "ui" / "index.html";
+    IRECT bounds = graphics.GetBounds();
 
-  if (mLogger) {
-    mLogger("Initializing WebView with bounds: " + std::to_string(bounds.W()) + "x" + std::to_string(bounds.H()));
-    mLogger("HTML path: " + htmlPath.generic_string());
+    std::cout << "[WebUI] Initializing WebView with bounds: " << bounds.W() << "x" << bounds.H() << std::endl;
+    std::cout << "[WebUI] HTML path: " << htmlPath.generic_string() << std::endl;
+    std::cout.flush();
+
+    if (mLogger) {
+      mLogger("Initializing WebView with bounds: " + std::to_string(bounds.W()) + "x" + std::to_string(bounds.H()));
+      mLogger("HTML path: " + htmlPath.generic_string());
+    }
+
+    // Store htmlPath in a member to avoid capturing by value
+    mHtmlPath = htmlPath;
+    
+    // Store a weak indicator that this object is valid
+    // We use a shared_ptr to a bool that we can check in callbacks
+    auto validityFlag = std::make_shared<std::atomic<bool>>(true);
+    mValidityFlag = validityFlag;
+
+    mWebView = new IWebViewControl(
+      bounds,
+      true,
+      [this, validityFlag](IWebViewControl*) {
+        // Check if we're shutting down or object is invalid before accessing any members
+        if (!validityFlag || !validityFlag->load() || DllPinner::IsShuttingDown()) {
+          return;
+        }
+        std::cout << "[WebUI] WebView ready callback triggered" << std::endl;
+        std::cout.flush();
+        if (mLogger) {
+          mLogger("WebView ready callback triggered");
+        }
+        LoadWebContent(mHtmlPath);
+      },
+      [this, validityFlag](IWebViewControl*, const char* jsonMsg) {
+        // Check if we're shutting down or object is invalid before accessing any members
+        if (!validityFlag || !validityFlag->load() || DllPinner::IsShuttingDown()) {
+          return;
+        }
+        // Queue incoming messages for processing on the main thread
+        // This is called from the WebView2 callback which may be on a different thread
+        try {
+          EnqueueIncomingMessage(jsonMsg ? jsonMsg : "");
+        } catch (...) {
+          std::cerr << "[WebUI] Exception in message callback" << std::endl;
+        }
+      },
+      true, // enable dev tools
+      false);
+
+    std::cout << "[WebUI] WebView control created, attaching to graphics" << std::endl;
+    std::cout.flush();
+    
+    if (mLogger) {
+      mLogger("WebView control created, attaching to graphics");
+    }
+
+    graphics.AttachControl(mWebView);
+    mInitialized.store(true);
+    
+    std::cout << "[WebUI] Initialize completed successfully" << std::endl;
+  } catch (const std::exception& e) {
+    std::cerr << "[WebUI] Exception during Initialize: " << e.what() << std::endl;
+  } catch (...) {
+    std::cerr << "[WebUI] Unknown exception during Initialize" << std::endl;
   }
-
-  mWebView = new IWebViewControl(
-    bounds,
-    true,
-    [this, htmlPath](IWebViewControl*) {
-      if (mLogger) {
-        mLogger("WebView ready callback triggered");
-      }
-      LoadWebContent(htmlPath);
-    },
-    [this](IWebViewControl*, const char* jsonMsg) {
-      if (mHandler)
-      {
-        mHandler(jsonMsg ? jsonMsg : "");
-      }
-    },
-    true, // enable dev tools
-    false);
-
-  if (mLogger) {
-    mLogger("WebView control created, attaching to graphics");
-  }
-
-  graphics.AttachControl(mWebView);
 }
 
 void WebUIBridge::RegisterMessageHandler(MessageHandler handler)
@@ -97,13 +198,44 @@ void WebUIBridge::EnqueueMessage(const std::string& message)
   mPendingMessages.push(message);
 }
 
-void WebUIBridge::PumpMessages()
+void WebUIBridge::EnqueueIncomingMessage(const std::string& message)
 {
-  if (!mWebView)
+  std::lock_guard<std::mutex> lock(mIncomingQueueMutex);
+  mIncomingMessages.push(message);
+}
+
+void WebUIBridge::ProcessIncomingMessages()
+{
+  if (!mHandler || DllPinner::IsShuttingDown())
   {
     return;
   }
 
+  std::queue<std::string> messages;
+  {
+    std::lock_guard<std::mutex> lock(mIncomingQueueMutex);
+    std::swap(messages, mIncomingMessages);
+  }
+
+  while (!messages.empty() && !DllPinner::IsShuttingDown())
+  {
+    const auto& message = messages.front();
+    mHandler(message);
+    messages.pop();
+  }
+}
+
+void WebUIBridge::PumpMessages()
+{
+  if (!mWebView || !mInitialized.load() || DllPinner::IsShuttingDown())
+  {
+    return;
+  }
+
+  // First, process incoming messages from the WebView on the main thread
+  ProcessIncomingMessages();
+
+  // Then, send outgoing messages to the WebView
   std::queue<std::string> messages;
   {
     std::lock_guard<std::mutex> lock(mQueueMutex);

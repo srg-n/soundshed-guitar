@@ -12,6 +12,7 @@
 #include <string>
 #include <iomanip>
 #include <sstream>
+#include <cmath>
 
 // VST3 SDK headers
 #include "pluginterfaces/base/ipluginbase.h"
@@ -573,9 +574,34 @@ private:
         }
         ok();
         
+        // Show window before attaching - some WebView2 implementations need this
+        ShowWindow(hwnd, SW_SHOW);
+        UpdateWindow(hwnd);
+        
+        // Pump messages briefly before attach to ensure window is fully ready
+        MSG msg;
+        for (int i = 0; i < 10; i++) {
+            while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
+            Sleep(10);
+        }
+        
         step("Attaching view to window (THIS IS WHERE CRASHES OFTEN OCCUR)");
+        bool attachSuccess = false;
         __try {
             tresult result = view->attached(hwnd, kPlatformTypeHWND);
+            
+            // Pump messages during and after attach to allow async WebView2 initialization
+            for (int i = 0; i < 50; i++) {
+                while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                    TranslateMessage(&msg);
+                    DispatchMessage(&msg);
+                }
+                Sleep(10);
+            }
+            
             if (result != kResultOk) {
                 fail("view->attached failed");
                 std::cout << "  Result: " << result << "\n";
@@ -583,6 +609,7 @@ private:
                 view->release();
                 return;
             }
+            attachSuccess = true;
         }
         __except(EXCEPTION_EXECUTE_HANDLER) {
             fail("Exception during view->attached");
@@ -591,23 +618,64 @@ private:
             view->release();
             return;
         }
-        ok();
         
-        step("Showing window briefly");
-        ShowWindow(hwnd, SW_SHOW);
-        UpdateWindow(hwnd);
-        
-        // Process messages for a moment to let the UI initialize
-        MSG msg;
-        DWORD startTime = GetTickCount();
-        while (GetTickCount() - startTime < 1000) { // 1 second
-            if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
-                TranslateMessage(&msg);
-                DispatchMessage(&msg);
-            }
-            Sleep(10);
+        if (!attachSuccess) {
+            return;
         }
         ok();
+        
+        step("Showing window and processing messages");
+        // Window is already shown, just update
+        UpdateWindow(hwnd);
+        
+        // Process messages for longer to let the UI fully initialize and test interactions
+        DWORD startTime = GetTickCount();
+        const DWORD displayDuration = 5000; // 5 seconds to allow UI to stabilize
+        int messageCount = 0;
+        
+        std::cout << "\n  [INFO] Processing window messages for " << (displayDuration/1000) << " seconds...\n";
+        
+        __try {
+            while (GetTickCount() - startTime < displayDuration) {
+                while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                    TranslateMessage(&msg);
+                    DispatchMessage(&msg);
+                    messageCount++;
+                }
+                Sleep(16); // ~60fps update rate
+                
+                // Progress indicator every second
+                DWORD elapsed = GetTickCount() - startTime;
+                if (elapsed > 0 && (elapsed % 1000) < 20) {
+                    std::cout << "  [PROGRESS] " << (elapsed/1000) << "s - " << messageCount << " messages processed\n";
+                }
+            }
+        }
+        __except(EXCEPTION_EXECUTE_HANDLER) {
+            std::cout << "\n";
+            fail("Exception during window message processing!");
+            std::cout << "  Exception code: 0x" << std::hex << GetExceptionCode() << std::dec << "\n";
+            std::cout << "  Messages processed before crash: " << messageCount << "\n";
+            
+            // Try to clean up gracefully
+            __try {
+                view->removed();
+            } __except(EXCEPTION_EXECUTE_HANDLER) {
+                std::cout << "  [WARN] Exception during emergency view->removed()\n";
+            }
+            
+            DestroyWindow(hwnd);
+            UnregisterClassA("VST3DebugHostWindow", GetModuleHandle(nullptr));
+            view->release();
+            return;
+        }
+        
+        std::cout << "  [INFO] Message loop completed, " << messageCount << " total messages\n";
+        ok();
+        
+        // Hide window before detaching to reduce chances of accessing invalid UI
+        ShowWindow(hwnd, SW_HIDE);
+        Sleep(100); // Brief pause for pending messages to complete
         
         step("Detaching view");
         __try {
@@ -615,11 +683,17 @@ private:
         }
         __except(EXCEPTION_EXECUTE_HANDLER) {
             fail("Exception during view->removed");
+            std::cout << "  Exception code: 0x" << std::hex << GetExceptionCode() << std::dec << "\n";
         }
         ok();
         
-        // Clean up
+        // Clean up - process any remaining messages first
+        while (PeekMessage(&msg, hwnd, 0, 0, PM_REMOVE)) {
+            DispatchMessage(&msg);
+        }
+        
         DestroyWindow(hwnd);
+        Sleep(50); // Brief pause before unregistering class
         UnregisterClassA("VST3DebugHostWindow", GetModuleHandle(nullptr));
         
         step("Releasing editor view");
@@ -665,10 +739,135 @@ private:
         }
         ok();
         
+        // Run audio processing for a few seconds
+        runAudioProcessingTest();
+        
         // Deactivate for cleanup
         step("Deactivating component");
         component->setActive(false);
         ok();
+    }
+    
+    void runAudioProcessingTest() {
+        if (!processor) {
+            info("No processor available, skipping audio test");
+            return;
+        }
+        
+        step("Running audio processing test (3 seconds)");
+        
+        const int32 blockSize = 512;
+        const double sampleRate = 44100.0;
+        const int numChannels = 2;
+        const double testDurationSeconds = 3.0;
+        const int totalBlocks = static_cast<int>((sampleRate * testDurationSeconds) / blockSize);
+        
+        // Allocate audio buffers
+        float* inputBufferData[numChannels];
+        float* outputBufferData[numChannels];
+        
+        for (int ch = 0; ch < numChannels; ++ch) {
+            inputBufferData[ch] = new float[blockSize];
+            outputBufferData[ch] = new float[blockSize];
+        }
+        
+        // Setup process data
+        Vst::ProcessData processData;
+        processData.processMode = Vst::kRealtime;
+        processData.symbolicSampleSize = Vst::kSample32;
+        processData.numSamples = blockSize;
+        processData.numInputs = 1;
+        processData.numOutputs = 1;
+        processData.inputParameterChanges = nullptr;
+        processData.outputParameterChanges = nullptr;
+        processData.inputEvents = nullptr;
+        processData.outputEvents = nullptr;
+        processData.processContext = nullptr;
+        
+        Vst::AudioBusBuffers inputBus;
+        inputBus.numChannels = numChannels;
+        inputBus.silenceFlags = 0;
+        inputBus.channelBuffers32 = inputBufferData;
+        
+        Vst::AudioBusBuffers outputBus;
+        outputBus.numChannels = numChannels;
+        outputBus.silenceFlags = 0;
+        outputBus.channelBuffers32 = outputBufferData;
+        
+        processData.inputs = &inputBus;
+        processData.outputs = &outputBus;
+        
+        int successfulBlocks = 0;
+        int failedBlocks = 0;
+        DWORD startTime = GetTickCount();
+        
+        std::cout << "\n";
+        
+        __try {
+            for (int block = 0; block < totalBlocks; ++block) {
+                // Fill input with a simple sine wave test signal
+                float phase = static_cast<float>(block * blockSize) / static_cast<float>(sampleRate);
+                for (int i = 0; i < blockSize; ++i) {
+                    float sample = 0.1f * sinf(2.0f * 3.14159265f * 440.0f * (phase + i / static_cast<float>(sampleRate)));
+                    for (int ch = 0; ch < numChannels; ++ch) {
+                        inputBufferData[ch][i] = sample;
+                        outputBufferData[ch][i] = 0.0f;
+                    }
+                }
+                
+                // Process audio
+                tresult result = processor->process(processData);
+                
+                if (result == kResultOk) {
+                    successfulBlocks++;
+                } else {
+                    failedBlocks++;
+                    if (failedBlocks == 1) {
+                        std::cout << "  [WARN] First process() failure at block " << block << ", result: " << result << "\n";
+                    }
+                }
+                
+                // Print progress every second
+                if (block > 0 && block % static_cast<int>(sampleRate / blockSize) == 0) {
+                    DWORD elapsed = GetTickCount() - startTime;
+                    std::cout << "  [PROGRESS] " << (elapsed / 1000) << "s elapsed, " 
+                              << successfulBlocks << " blocks processed OK, "
+                              << failedBlocks << " failed\n";
+                }
+            }
+        }
+        __except(EXCEPTION_EXECUTE_HANDLER) {
+            std::cout << "\n";
+            fail("Exception during audio processing!");
+            std::cout << "  Exception code: 0x" << std::hex << GetExceptionCode() << std::dec << "\n";
+            std::cout << "  Blocks completed before crash: " << successfulBlocks << "\n";
+            
+            // Cleanup
+            for (int ch = 0; ch < numChannels; ++ch) {
+                delete[] inputBufferData[ch];
+                delete[] outputBufferData[ch];
+            }
+            return;
+        }
+        
+        DWORD totalTime = GetTickCount() - startTime;
+        
+        // Cleanup
+        for (int ch = 0; ch < numChannels; ++ch) {
+            delete[] inputBufferData[ch];
+            delete[] outputBufferData[ch];
+        }
+        
+        std::cout << "  [RESULT] Audio processing test completed:\n";
+        std::cout << "    Total time: " << totalTime << "ms\n";
+        std::cout << "    Successful blocks: " << successfulBlocks << "/" << totalBlocks << "\n";
+        std::cout << "    Failed blocks: " << failedBlocks << "\n";
+        
+        if (failedBlocks == 0) {
+            ok();
+        } else {
+            std::cout << "  [WARN] Some audio blocks failed to process\n";
+        }
     }
     
     void cleanup() {

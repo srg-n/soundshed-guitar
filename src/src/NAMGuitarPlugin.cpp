@@ -1175,22 +1175,35 @@ namespace namguitar
 
   void NAMGuitarPlugin::InitializeGraphics(iplug::igraphics::IGraphics &graphics)
   {
+    std::cout << "[Plugin] InitializeGraphics called" << std::endl;
+    
     if (!mWebUI)
     {
+      std::cerr << "[Plugin] mWebUI is null in InitializeGraphics" << std::endl;
       return;
     }
 
-    WDL_String bundlePath;
-    iplug::BundleResourcePath(bundlePath, ::gHINSTANCE);
-    if (bundlePath.GetLength() == 0)
-    {
-      iplug::HostPath(bundlePath, nullptr);
-      bundlePath.Append("resources\\");
+    try {
+      WDL_String bundlePath;
+      iplug::BundleResourcePath(bundlePath, ::gHINSTANCE);
+      if (bundlePath.GetLength() == 0)
+      {
+        iplug::HostPath(bundlePath, nullptr);
+        bundlePath.Append("resources\\");
+      }
+      std::cout << "[Plugin] Resource path: " << bundlePath.Get() << std::endl;
+      
+      const std::filesystem::path resourceRoot = std::filesystem::path{bundlePath.Get()};
+      mResourceRoot = resourceRoot;
+      mWebUI->Initialize(graphics, resourceRoot);
+      mPendingStateBroadcast = true;
+      
+      std::cout << "[Plugin] InitializeGraphics completed" << std::endl;
+    } catch (const std::exception& e) {
+      std::cerr << "[Plugin] Exception in InitializeGraphics: " << e.what() << std::endl;
+    } catch (...) {
+      std::cerr << "[Plugin] Unknown exception in InitializeGraphics" << std::endl;
     }
-    const std::filesystem::path resourceRoot = std::filesystem::path{bundlePath.Get()};
-    mResourceRoot = resourceRoot;
-    mWebUI->Initialize(graphics, resourceRoot);
-    mPendingStateBroadcast = true;
   }
 
   void NAMGuitarPlugin::HandleUIMessage(const std::string &message)
