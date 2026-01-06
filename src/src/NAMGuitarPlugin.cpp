@@ -551,11 +551,11 @@ namespace namguitar
     // Write to a log file to verify execution
     FILE* logFile = fopen("c:\\temp\\plugin_log.txt", "a");
     if (logFile) {
-      fprintf(logFile, "[Plugin] Constructor called at %llu\n", (unsigned long long)time(NULL));
+      fprintf(logFile, "[Plugin] Constructor called at %llu, gHINSTANCE=%p\n", (unsigned long long)time(NULL), (void*)::gHINSTANCE);
       fclose(logFile);
     }
 
-    std::cout << "[Plugin] Constructor called" << std::endl;
+    std::cout << "[Plugin] Constructor called, gHINSTANCE=" << (void*)::gHINSTANCE << std::endl;
 
     // Initialize the resource root early so preset loading can find bundled assets
     WDL_String bundlePath;
@@ -811,7 +811,15 @@ namespace namguitar
 
   void NAMGuitarPlugin::OnIdle()
   {
-    // std::cout << "[Plugin] OnIdle called" << std::endl;
+    static int idleCount = 0;
+    idleCount++;
+    if (idleCount % 100 == 0) {
+      FILE* logFile = fopen("c:\\temp\\plugin_log.txt", "a");
+      if (logFile) {
+        fprintf(logFile, "[Plugin] OnIdle count=%d\n", idleCount);
+        fclose(logFile);
+      }
+    }
 
     // Handle preview started notification
     if (auto started = mPreviewStartedBuffer.exchange(nullptr, std::memory_order_acq_rel))

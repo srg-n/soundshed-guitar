@@ -8,8 +8,10 @@ project(VST3DebugHost)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Get iPlug2 path from parent
-if(NOT DEFINED IPLUG2_DIR)
+# Get iPlug2 path from parent (iPlug2_SOURCE_DIR is set by FetchDependencies.cmake)
+if(DEFINED iPlug2_SOURCE_DIR)
+    set(IPLUG2_DIR "${iPlug2_SOURCE_DIR}")
+elseif(NOT DEFINED IPLUG2_DIR)
     set(IPLUG2_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../_deps/iplug2-src")
 endif()
 

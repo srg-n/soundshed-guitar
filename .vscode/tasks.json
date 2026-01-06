@@ -63,6 +63,46 @@
       ],
       "group": "build",
       "problemMatcher": []
+    },
+    {
+      "label": "Build NAMGuitarFX VST3 Debug",
+      "type": "shell",
+      "command": "cmake",
+      "args": [
+        "--build",
+        "${workspaceFolder}/src/build",
+        "--config",
+        "Debug",
+        "--target",
+        "NAMGuitarFX_VST3"
+      ],
+      "group": "build",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "Build VST3DebugHost",
+      "type": "shell",
+      "command": "cmake",
+      "args": [
+        "--build",
+        "${workspaceFolder}/src/build",
+        "--config",
+        "Debug",
+        "--target",
+        "VST3DebugHost"
+      ],
+      "group": "build",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "Build VST3 and DebugHost",
+      "dependsOn": [
+        "Build NAMGuitarFX VST3 Debug",
+        "Build VST3DebugHost"
+      ],
+      "dependsOrder": "sequence",
+      "group": "build",
+      "problemMatcher": []
     }
   ]
 }

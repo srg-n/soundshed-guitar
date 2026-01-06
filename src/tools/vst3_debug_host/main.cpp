@@ -8,6 +8,7 @@
  */
 
 #include <Windows.h>
+#include <objbase.h>
 #include <iostream>
 #include <string>
 #include <iomanip>
@@ -925,8 +926,8 @@ int mainImpl(int argc, char* argv[]) {
     std::cout << "\n";
     
     const char* pluginPath;
-    const char* defaultPath = "C:\\Work\\GIT\\misc\\neuron-guitar\\build\\src\\platform\\vst3\\Release\\NAMGuitarFX.dll";
-    
+    const char* defaultPath = "C:\\Work\\GIT\\misc\\neuron-guitar\\src\\build\\NAMGuitarFX.vst3\\Contents\\x86_64-win\\NAMGuitarFX.vst3";
+
     if (argc < 2) {
         // Default to our plugin
         pluginPath = defaultPath;
@@ -940,6 +941,13 @@ int mainImpl(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
+    // Initialize COM for WebView2 support
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(hr)) {
+        printf("Failed to initialize COM: 0x%08X\n", hr);
+        return 1;
+    }
+    
     int result = 0;
     
     // Set up SEH to catch any unhandled exceptions
@@ -955,6 +963,8 @@ int main(int argc, char* argv[]) {
     
     printf("\nPress Enter to exit...");
     getchar();
+    
+    CoUninitialize();
     
     return result;
 }

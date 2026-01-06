@@ -137,6 +137,35 @@ NAMGuitarFX_OfflineProcessingTest.exe <input.wav> <output.wav> [modelPath] [irPa
 
 Model and IR paths are relative to `src/resources/` by default, or can be specified as absolute paths. The tool processes audio in 512-sample blocks at the input file's sample rate and outputs 16-bit stereo WAV files.
 
+### VST3 Debug Host
+
+A lightweight VST3 test host is included for debugging the plugin without requiring a full DAW. This tool loads the VST3 plugin in a standalone window with optional audio passthrough.
+
+**Building:**
+```powershell
+cmake --build ./src/build --config Debug --target VST3DebugHost
+```
+
+**Usage:**
+```powershell
+VST3DebugHost.exe [options]
+```
+
+**Options:**
+- `--windowed` or `-w` — Launch the plugin editor in a separate window (recommended for debugging)
+- `--plugin <path>` or `-p <path>` — Specify a custom VST3 plugin path (defaults to build output)
+
+**Examples:**
+```powershell
+# Launch with default plugin in windowed mode:
+./VST3DebugHost.exe --windowed
+
+# Launch with a specific plugin path:
+./VST3DebugHost.exe -w -p "C:/path/to/NAMGuitarFX.vst3"
+```
+
+The windowed mode is particularly useful when debugging WebView initialization issues or testing the UI without DAW interference. The debug host creates a minimal Win32 window to host the plugin editor.
+
 ### IR Processing Optimizations
 
 Impulse Response (cabinet simulation) processing has been optimized for real-time performance using industry-standard libraries and multi-threading:
