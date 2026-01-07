@@ -340,7 +340,38 @@ namespace namguitar
     blockAlign = ReadLittleEndian<std::uint16_t>(stream);
     bitsPerSample = ReadLittleEndian<std::uint16_t>(stream);
 
-    if (chunkSize > 16)
+    // Handle WAVE_FORMAT_EXTENSIBLE (65534 or 0xFFFE)
+    // This format is used for files with more than 2 channels, bit depths > 16, or non-standard channel masks
+    if (audioFormat == 65534 && chunkSize >= 40)
+    {
+      // Read cbSize (should be 22 for WAVEFORMATEXTENSIBLE)
+      const auto cbSize = ReadLittleEndian<std::uint16_t>(stream);
+      // Read validBitsPerSample (or wSamplesPerBlock or wReserved)
+      const auto validBitsPerSample = ReadLittleEndian<std::uint16_t>(stream);
+      // Read dwChannelMask
+      const auto channelMask = ReadLittleEndian<std::uint32_t>(stream);
+      
+      (void)cbSize;
+      (void)validBitsPerSample;
+      (void)channelMask;
+      
+      // Read SubFormat GUID (16 bytes)
+      // The first 2 bytes contain the actual audio format
+      const auto subFormat = ReadLittleEndian<std::uint16_t>(stream);
+      
+      // Skip remaining GUID bytes (14 bytes)
+      stream.seekg(14, std::ios::cur);
+      
+      // Use the SubFormat as the actual format
+      audioFormat = subFormat;
+      
+      // Skip any remaining extra bytes
+      if (chunkSize > 40)
+      {
+        stream.seekg(chunkSize - 40, std::ios::cur);
+      }
+    }
+    else if (chunkSize > 16)
     {
       stream.seekg(chunkSize - 16, std::ios::cur);
     }

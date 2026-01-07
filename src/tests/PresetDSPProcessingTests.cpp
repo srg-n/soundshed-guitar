@@ -363,6 +363,28 @@ int main()
     std::cout << "====================================================================\n";
     std::cout << "(Using single DSP instance to verify Reset() works between presets)\n\n";
 
+    // Helper to extract resource IDs from graph nodes
+    auto extractResourceIds = [](const nlohmann::json& preset, const std::string& nodeType, const std::string& resourceType)
+        -> std::vector<std::string> {
+      std::vector<std::string> ids;
+      if (!preset.contains("graph") || !preset["graph"].contains("nodes"))
+        return ids;
+      for (const auto& node : preset["graph"]["nodes"])
+      {
+        if (node.value("type", "") == nodeType && node.contains("resource"))
+        {
+          const auto& resource = node["resource"];
+          if (resource.value("type", "") == resourceType)
+          {
+            const std::string id = resource.value("id", "");
+            if (!id.empty())
+              ids.push_back(id);
+          }
+        }
+      }
+      return ids;
+    };
+
     // Create a single DSP manager to reuse across all presets
     // This tests that switching presets correctly resets DSP state
     namguitar::NAMDSPManager dsp;
@@ -372,23 +394,28 @@ int main()
     {
       const std::string presetId = preset.value("id", "<unnamed>");
       const std::string presetName = preset.value("name", presetId);
-      const std::string modelId = preset.value("audioFxModelId", "");
-      const std::string irId = preset.value("irId", "");
+
+      // Extract resource IDs from graph nodes (use first NAM and first IR)
+      auto modelIds = extractResourceIds(preset, "amp_nam", "nam");
+      auto irIds = extractResourceIds(preset, "cab_ir", "ir");
+
+      const std::string modelId = modelIds.empty() ? "" : modelIds[0];
+      const std::string irId = irIds.empty() ? "" : irIds[0];
 
       ++presetsTested;
       std::cout << "Testing: " << presetName << "... ";
 
       // Skip if model or IR not found in library
-      if (!modelLibrary.contains(modelId))
+      if (modelId.empty() || !modelLibrary.contains(modelId))
       {
-        recordError("Preset '" + presetName + "' references unknown model: " + modelId);
-        std::cout << "SKIP (unknown model)\n";
+        recordError("Preset '" + presetName + "' has no valid NAM model reference");
+        std::cout << "SKIP (no model)\n";
         continue;
       }
-      if (!irLibrary.contains(irId))
+      if (irId.empty() || !irLibrary.contains(irId))
       {
-        recordError("Preset '" + presetName + "' references unknown IR: " + irId);
-        std::cout << "SKIP (unknown IR)\n";
+        recordError("Preset '" + presetName + "' has no valid IR reference");
+        std::cout << "SKIP (no IR)\n";
         continue;
       }
 

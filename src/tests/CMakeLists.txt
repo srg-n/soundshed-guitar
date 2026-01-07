@@ -208,3 +208,20 @@ target_link_libraries(NAMGuitarFX_PresetStorageTests
 target_compile_features(NAMGuitarFX_PresetStorageTests PRIVATE cxx_std_20)
 
 add_test(NAME PresetStorageTests COMMAND NAMGuitarFX_PresetStorageTests)
+
+# WAV Loading Debug Test
+add_executable(TestWavLoad
+  TestWavLoad.cpp
+)
+
+target_include_directories(TestWavLoad
+  PRIVATE
+    ${NAMGUITAR_PROJECT_ROOT}/src
+)
+
+target_link_libraries(TestWavLoad
+  PRIVATE
+    NAMGuitarFXCore
+)
+
+target_compile_features(TestWavLoad PRIVATE cxx_std_20)

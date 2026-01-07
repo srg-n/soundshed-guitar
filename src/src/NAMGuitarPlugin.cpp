@@ -1343,7 +1343,7 @@ namespace namguitar
     for (const auto &node : preset.graph.nodes)
     {
       // Apply node parameters to plugin parameters based on node type
-      if (node.type == "nam_amp" || node.type == "nam")
+      if (node.type == "amp_nam" || node.type == "nam_amp" || node.type == "nam")
       {
         // Load NAM model if resource is specified
         if (node.resource && node.resource->IsValid())
@@ -1378,7 +1378,7 @@ namespace namguitar
           }
         }
       }
-      else if (node.type == "ir_cab" || node.type == "ir")
+      else if (node.type == "cab_ir" || node.type == "ir_cab" || node.type == "ir")
       {
         // Load IR if resource is specified
         if (node.resource && node.resource->IsValid())
@@ -1390,7 +1390,7 @@ namespace namguitar
           }
         }
       }
-      else if (node.type == "noise_gate" || node.type == "gate")
+      else if (node.type == "dynamics_gate" || node.type == "noise_gate" || node.type == "gate")
       {
         auto *gateEnabledParam = GetParam(kParamGateEnabled);
         if (gateEnabledParam)

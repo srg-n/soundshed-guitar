@@ -116,74 +116,129 @@ int main()
     int presetsLoaded = 0;
     int presetsTested = 0;
 
+    // Helper to extract resource IDs from graph nodes
+    auto extractResourceIds = [](const nlohmann::json& preset, const std::string& nodeType, const std::string& resourceType)
+        -> std::vector<std::string> {
+      std::vector<std::string> ids;
+      if (!preset.contains("graph") || !preset["graph"].contains("nodes"))
+        return ids;
+      for (const auto& node : preset["graph"]["nodes"])
+      {
+        if (node.value("type", "") == nodeType && node.contains("resource"))
+        {
+          const auto& resource = node["resource"];
+          if (resource.value("type", "") == resourceType)
+          {
+            const std::string id = resource.value("id", "");
+            if (!id.empty())
+              ids.push_back(id);
+          }
+        }
+      }
+      return ids;
+    };
+
     for (const auto& preset : presetsJson)
     {
       const std::string presetId = preset.value("id", "<unnamed>");
       const std::string presetName = preset.value("name", presetId);
-      const std::string modelId = preset.value("audioFxModelId", "");
-      const std::string irId = preset.value("irId", "");
+
+      // Extract resource IDs from graph nodes
+      auto modelIds = extractResourceIds(preset, "amp_nam", "nam");
+      auto irIds = extractResourceIds(preset, "cab_ir", "ir");
 
       ++presetsTested;
 
-      // Skip if model or IR not found in library (already caught by integrity test)
-      if (!modelLibrary.contains(modelId))
+      if (modelIds.empty())
       {
-        recordError("Preset '" + presetName + "' references unknown model: " + modelId);
+        recordError("Preset '" + presetName + "' has no amp_nam nodes with NAM resources");
         continue;
       }
-      if (!irLibrary.contains(irId))
+      if (irIds.empty())
       {
-        recordError("Preset '" + presetName + "' references unknown IR: " + irId);
+        recordError("Preset '" + presetName + "' has no cab_ir nodes with IR resources");
         continue;
       }
 
-      const fs::path modelPath = modelLibrary.at(modelId).filePath;
-      const fs::path irPath = irLibrary.at(irId).filePath;
+      bool presetValid = true;
 
       // Create a fresh DSP manager for each preset
       namguitar::NAMDSPManager dsp;
       dsp.Prepare(kTestSampleRate, kTestBlockSize);
 
-      // Test model loading
-      if (!fs::exists(modelPath))
+      // Test loading all NAM models in the preset
+      for (const auto& modelId : modelIds)
       {
-        recordError("Preset '" + presetName + "': model file does not exist: " + Describe(modelPath));
-        continue;
+        if (!modelLibrary.contains(modelId))
+        {
+          recordError("Preset '" + presetName + "' references unknown model: " + modelId);
+          presetValid = false;
+          continue;
+        }
+
+        const fs::path modelPath = modelLibrary.at(modelId).filePath;
+
+        if (!fs::exists(modelPath))
+        {
+          recordError("Preset '" + presetName + "': model file does not exist: " + Describe(modelPath));
+          presetValid = false;
+          continue;
+        }
+
+        if (!dsp.LoadModel(modelPath))
+        {
+          recordError("Preset '" + presetName + "': failed to load model from " + Describe(modelPath));
+          presetValid = false;
+          continue;
+        }
+
+        if (!dsp.HasModel())
+        {
+          recordError("Preset '" + presetName + "': model loaded but HasModel() returns false");
+          presetValid = false;
+          continue;
+        }
       }
 
-      if (!dsp.LoadModel(modelPath))
+      // Test loading all IRs in the preset
+      for (const auto& irId : irIds)
       {
-        recordError("Preset '" + presetName + "': failed to load model from " + Describe(modelPath));
-        continue;
+        if (!irLibrary.contains(irId))
+        {
+          recordError("Preset '" + presetName + "' references unknown IR: " + irId);
+          presetValid = false;
+          continue;
+        }
+
+        const fs::path irPath = irLibrary.at(irId).filePath;
+
+        if (!fs::exists(irPath))
+        {
+          recordError("Preset '" + presetName + "': IR file does not exist: " + Describe(irPath));
+          presetValid = false;
+          continue;
+        }
+
+        if (!dsp.LoadImpulseResponse(irPath))
+        {
+          recordError("Preset '" + presetName + "': failed to load IR from " + Describe(irPath));
+          presetValid = false;
+          continue;
+        }
+
+        if (!dsp.HasImpulseResponse())
+        {
+          recordError("Preset '" + presetName + "': IR loaded but HasImpulseResponse() returns false");
+          presetValid = false;
+          continue;
+        }
       }
 
-      if (!dsp.HasModel())
+      if (presetValid)
       {
-        recordError("Preset '" + presetName + "': model loaded but HasModel() returns false");
-        continue;
+        ++presetsLoaded;
+        std::cout << "  [OK] " << presetName << std::endl;
       }
-
-      // Test IR loading
-      if (!fs::exists(irPath))
-      {
-        recordError("Preset '" + presetName + "': IR file does not exist: " + Describe(irPath));
-        continue;
-      }
-
-      if (!dsp.LoadImpulseResponse(irPath))
-      {
-        recordError("Preset '" + presetName + "': failed to load IR from " + Describe(irPath));
-        continue;
-      }
-
-      if (!dsp.HasImpulseResponse())
-      {
-        recordError("Preset '" + presetName + "': IR loaded but HasImpulseResponse() returns false");
-        continue;
-      }
-
-      ++presetsLoaded;
-      std::cout << "  [OK] " << presetName << std::endl;
     }
 
     std::cout << "\nDSP Loading Results: " << presetsLoaded << "/" << presetsTested << " presets loaded successfully.\n";

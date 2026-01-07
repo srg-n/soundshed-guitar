@@ -2,7 +2,7 @@
   {
     "id": "ir-devils-lab-412v30",
     "hash": "ir001234567890123456789012345678abcdef1234567890abcdef12345678901234",
-    "filePath": "ir/Guitar/Devil's Lab (free)/4X12_V30_DEVIL'S_LAB.wav",
+    "filePath": "ir/Guitar/Devil's Lab/Hell.wav",
     "title": "Devil's Lab 4x12 V30",
     "description": "4x12 cabinet with Vintage 30 speakers",
     "category": "4x12",
@@ -11,7 +11,7 @@
   {
     "id": "ir-devils-lab-212v30",
     "hash": "ir012345678901234567890123456789abcdef1234567890abcdef123456789012345",
-    "filePath": "ir/Guitar/Devil's Lab (free)/2X12_V30_DEVIL'S_LAB.wav",
+    "filePath": "ir/Guitar/Devil's Lab/Warlord.wav",
     "title": "Devil's Lab 2x12 V30",
     "description": "2x12 cabinet with Vintage 30 speakers",
     "category": "2x12",
@@ -20,7 +20,7 @@
   {
     "id": "ir-devils-lab-112g12m",
     "hash": "ir12345678901234567890123456789abcdef1234567890abcdef1234567890123456",
-    "filePath": "ir/Guitar/Devil's Lab (free)/1X12_G12M_DEVIL'S_LAB.wav",
+    "filePath": "ir/Guitar/Devil's Lab/Blue Dragon.wav",
     "title": "Devil's Lab 1x12 G12M",
     "description": "1x12 cabinet with G12M Greenback",
     "category": "1x12",
@@ -29,7 +29,7 @@
   {
     "id": "ir-devils-lab-412creamback",
     "hash": "ir23456789012345678901234567890abcdef1234567890abcdef12345678901234567",
-    "filePath": "ir/Guitar/Devil's Lab (free)/4X12_CREAMBACK_DEVIL'S_LAB.wav",
+    "filePath": "ir/Guitar/Devil's Lab/Fierce.wav",
     "title": "Devil's Lab 4x12 Creamback",
     "description": "4x12 cabinet with Creamback speakers",
     "category": "4x12",
@@ -38,7 +38,7 @@
   {
     "id": "ir-devils-lab-212alnico",
     "hash": "ir34567890123456789012345678901abcdef1234567890abcdef123456789012345678",
-    "filePath": "ir/Guitar/Devil's Lab (free)/2X12_ALNICO_DEVIL'S_LAB.wav",
+    "filePath": "ir/Guitar/Devil's Lab/Coyote.wav",
     "title": "Devil's Lab 2x12 Alnico",
     "description": "2x12 cabinet with Alnico speakers",
     "category": "2x12",
@@ -47,7 +47,7 @@
   {
     "id": "ir-devils-lab-112jensen",
     "hash": "ir45678901234567890123456789012abcdef1234567890abcdef1234567890123456789",
-    "filePath": "ir/Guitar/Devil's Lab (free)/1X12_JENSEN_DEVIL'S_LAB.wav",
+    "filePath": "ir/Guitar/Devil's Lab/Fat Boy.wav",
     "title": "Devil's Lab 1x12 Jensen",
     "description": "1x12 cabinet with Jensen speaker - classic Fender tone",
     "category": "1x12",
@@ -56,7 +56,7 @@
   {
     "id": "ir-metaltune-412v30-sm57",
     "hash": "ir56789012345678901234567890123abcdef1234567890abcdef12345678901234567890",
-    "filePath": "ir/Guitar/MetalTune Music/4x12_V30_SM57.wav",
+    "filePath": "ir/Guitar/MetalTune Music/Mesa 57 V30 .wav",
     "title": "MetalTune 4x12 V30 SM57",
     "description": "4x12 V30 captured with SM57 - punchy midrange",
     "category": "4x12",
@@ -65,7 +65,7 @@
   {
     "id": "ir-metaltune-412v30-r121",
     "hash": "ir67890123456789012345678901234abcdef1234567890abcdef123456789012345678901",
-    "filePath": "ir/Guitar/MetalTune Music/4x12_V30_R121.wav",
+    "filePath": "ir/Guitar/MetalTune Music/Marshall 57.wav",
     "title": "MetalTune 4x12 V30 R121",
     "description": "4x12 V30 captured with Royer R121 - smooth and dark",
     "category": "4x12",
@@ -74,7 +74,7 @@
   {
     "id": "ir-scharrface-blend-tight",
     "hash": "ir78901234567890123456789012345abcdef1234567890abcdef1234567890123456789012",
-    "filePath": "ir/Guitar/Scharrface/Scharrface Blended IRs/SF_Blend_Tight_Modern.wav",
+    "filePath": "ir/Guitar/Scharrface/G12T-75, G12-65 blend 1.wav",
     "title": "Scharrface Tight Modern",
     "description": "Custom blended IR - tight and modern",
     "category": "Blended",
@@ -83,7 +83,7 @@
   {
     "id": "ir-scharrface-blend-vintage",
     "hash": "ir89012345678901234567890123456abcdef1234567890abcdef12345678901234567890123",
-    "filePath": "ir/Guitar/Scharrface/Scharrface Blended IRs/SF_Blend_Vintage_Rock.wav",
+    "filePath": "ir/Guitar/Scharrface/V30 G12-65 blend 1.wav",
     "title": "Scharrface Vintage Rock",
     "description": "Custom blended IR - vintage rock vibe",
     "category": "Blended",
@@ -110,7 +110,7 @@
   {
     "id": "ir-drbonkers-bass-810",
     "hash": "ir90123456789012345678901234567abcdef1234567890abcdef123456789012345678901234",
-    "filePath": "ir/Bass/Dr.Bonkers Sound Lab/Bass_8x10_Classic.wav",
+    "filePath": "ir/Bass/Misc/Bass/Ampeg 810 One.wav",
     "title": "Dr.Bonkers 8x10 Classic",
     "description": "Classic 8x10 bass cabinet tone",
     "category": "Bass",
@@ -119,7 +119,7 @@
   {
     "id": "ir-drbonkers-bass-115",
     "hash": "ir01234567890123456789012345678abcdef1234567890abcdef1234567890123456789012345",
-    "filePath": "ir/Bass/Dr.Bonkers Sound Lab/Bass_1x15_Deep.wav",
+    "filePath": "ir/Bass/Misc/Bass/SWR 115 Blend.wav",
     "title": "Dr.Bonkers 1x15 Deep",
     "description": "Deep 1x15 bass cabinet - extended lows",
     "category": "Bass",

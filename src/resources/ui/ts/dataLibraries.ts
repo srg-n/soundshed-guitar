@@ -1,4 +1,4 @@
-import type { Attachment, AudioFxModelEntry, IrLibraryEntry, Preset } from "./types.js";
+import type { Attachment, AudioFxModelEntry, IrLibraryEntry, Preset, GraphNode } from "./types.js";
 
 export const REMOTE_BASE_URL = window.AUDIOFX_REMOTE_BASE_URL ?? "";
 
@@ -59,6 +59,50 @@ export function buildAttachments(
   return attachments;
 }
 
+/**
+ * Extracts resource IDs from graph nodes for v2 presets
+ */
+function extractResourceIdsFromGraph(
+  preset: Preset,
+  nodeType: string,
+  resourceType: string,
+): string[] {
+  const ids: string[] = [];
+  if (!preset.graph?.nodes) return ids;
+
+  for (const node of preset.graph.nodes as GraphNode[]) {
+    if (node.type === nodeType && node.resource?.type === resourceType && node.resource?.id) {
+      ids.push(node.resource.id);
+    }
+  }
+  return ids;
+}
+
+/**
+ * Builds attachments from a preset, supporting both legacy (v1) and graph-based (v2) formats
+ */
+export function buildAttachmentsFromPreset(preset: Preset): Attachment[] {
+  // For v2 presets, extract from graph nodes
+  if (preset.formatVersion === 2 && preset.graph?.nodes) {
+    const modelIds = extractResourceIdsFromGraph(preset, "amp_nam", "nam");
+    const irIds = extractResourceIdsFromGraph(preset, "cab_ir", "ir");
+
+    // Use first model and IR found (for attachment compatibility)
+    const modelId = modelIds.length > 0 ? modelIds[0] : null;
+    const irId = irIds.length > 0 ? irIds[0] : null;
+
+    return buildAttachments(modelId, irId);
+  }
+
+  // Fallback for v1 presets (legacy format)
+  return buildAttachments(
+    preset.audioFxModelId ?? null,
+    preset.irId ?? null,
+    preset.customModelPath ?? null,
+    preset.customIrPath ?? null,
+  );
+}
+
 async function loadAudioFxModelLibrary(): Promise<AudioFxModelEntry[]> {
   try {
     const response = await fetch("data/audiofx-models.json");
@@ -94,7 +138,7 @@ async function loadDefaultPresets(): Promise<Preset[]> {
     const presets: Preset[] = await response.json();
     return presets.map((preset) => ({
       ...preset,
-      attachments: buildAttachments(preset.audioFxModelId ?? null, preset.irId ?? null),
+      attachments: buildAttachmentsFromPreset(preset),
     }));
   } catch (error) {
     console.error(`Error loading default presets: ${(error as Error).message}`);

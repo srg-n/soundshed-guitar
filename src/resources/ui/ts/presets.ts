@@ -2,7 +2,7 @@ import { appendLog } from "./logging.js";
 import { clearNotification, showNotification } from "./notifications.js";
 import { renderPresetDetails, renderPresetList } from "./views.js";
 import { clonePreset, uiState } from "./state.js";
-import { buildAttachments, getDefaultPresets, initializeDataLibraries, REMOTE_BASE_URL } from "./dataLibraries.js";
+import { buildAttachments, buildAttachmentsFromPreset, getDefaultPresets, initializeDataLibraries, REMOTE_BASE_URL } from "./dataLibraries.js";
 import { arrayBufferToBase64, isRemoteUrl, resolveAttachmentUrl } from "./utils.js";
 import type { Preset, Attachment } from "./types.js";
 import { bindDemoAudioControls } from "./demoAudio.js";
@@ -391,12 +391,7 @@ export function saveCurrentPreset(): void {
   const editingPresetId = modal?.dataset.editingPresetId;
 
   const activePreset = uiState.presetCache.get(uiState.activePresetId ?? "") ?? null;
-  const baseAttachments = buildAttachments(
-    activePreset?.audioFxModelId ?? null,
-    activePreset?.irId ?? null,
-    activePreset?.customModelPath ?? null,
-    activePreset?.customIrPath ?? null,
-  );
+  const baseAttachments = buildAttachmentsFromPreset(activePreset ?? {} as Preset);
 
   if (editingPresetId) {
     // Editing existing preset
@@ -574,13 +569,8 @@ export function saveOverwriteCurrentPreset(): void {
     return;
   }
 
-  // Build updated preset with current parameters
-  const baseAttachments = buildAttachments(
-    existingPreset.audioFxModelId ?? null,
-    existingPreset.irId ?? null,
-    existingPreset.customModelPath ?? null,
-    existingPreset.customIrPath ?? null,
-  );
+  // Build updated preset with current parameters from graph nodes
+  const baseAttachments = buildAttachmentsFromPreset(existingPreset);
 
   const updatedPreset: Preset = {
     ...existingPreset,

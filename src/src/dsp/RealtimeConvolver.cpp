@@ -174,6 +174,12 @@ namespace namguitar
     int i = 0;
     while (i < numSamples)
     {
+      // If output buffer exhausted, process next block
+      if (mOutputBufferReadPos >= mPartitionSize)
+      {
+        ProcessBlock();
+      }
+      
       // Output available samples
       while (mOutputBufferReadPos < mPartitionSize && i < numSamples)
       {
@@ -181,12 +187,6 @@ namespace namguitar
         mInputBuffer[mOutputBufferReadPos] = input[i];
         ++mOutputBufferReadPos;
         ++i;
-      }
-      
-      // If output buffer exhausted, process next block
-      if (mOutputBufferReadPos >= mPartitionSize && i < numSamples)
-      {
-        ProcessBlock();
       }
     }
   }

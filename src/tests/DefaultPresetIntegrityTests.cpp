@@ -125,24 +125,75 @@ int main()
       {
         const std::string presetId = preset.value("id", "<unnamed>");
 
-        const std::string modelId = preset.value("audioFxModelId", "");
-        if (modelId.empty())
+        // Validate that preset uses graph-based resource config (v2 format)
+        if (!preset.contains("graph"))
         {
-          recordError("Preset " + presetId + " is missing audioFxModelId");
-        }
-        else if (!modelLibrary.contains(modelId))
-        {
-          recordError("Preset " + presetId + " references unknown AudioFX model id " + modelId);
+          recordError("Preset " + presetId + " is missing 'graph' (formatVersion 2 required)");
+          continue;
         }
 
-        const std::string irId = preset.value("irId", "");
-        if (irId.empty())
+        const auto& graph = preset["graph"];
+        if (!graph.contains("nodes") || !graph["nodes"].is_array())
         {
-          recordError("Preset " + presetId + " is missing irId");
+          recordError("Preset " + presetId + " has invalid graph structure (missing nodes array)");
+          continue;
         }
-        else if (!irLibrary.contains(irId))
+
+        // Validate each node's resource references
+        for (const auto& node : graph["nodes"])
         {
-          recordError("Preset " + presetId + " references unknown IR id " + irId);
+          const std::string nodeId = node.value("id", "<unnamed>");
+          const std::string nodeType = node.value("type", "");
+
+          // Check if this node type requires a resource
+          if (nodeType == "amp_nam")
+          {
+            if (!node.contains("resource"))
+            {
+              recordError("Preset " + presetId + " node " + nodeId + " (amp_nam) is missing resource config");
+              continue;
+            }
+            const auto& resource = node["resource"];
+            const std::string resourceType = resource.value("type", "");
+            const std::string resourceId = resource.value("id", "");
+
+            if (resourceType != "nam")
+            {
+              recordError("Preset " + presetId + " node " + nodeId + " has invalid resource type: " + resourceType);
+            }
+            else if (resourceId.empty())
+            {
+              recordError("Preset " + presetId + " node " + nodeId + " is missing resource id");
+            }
+            else if (!modelLibrary.contains(resourceId))
+            {
+              recordError("Preset " + presetId + " node " + nodeId + " references unknown NAM model: " + resourceId);
+            }
+          }
+          else if (nodeType == "cab_ir")
+          {
+            if (!node.contains("resource"))
+            {
+              recordError("Preset " + presetId + " node " + nodeId + " (cab_ir) is missing resource config");
+              continue;
+            }
+            const auto& resource = node["resource"];
+            const std::string resourceType = resource.value("type", "");
+            const std::string resourceId = resource.value("id", "");
+
+            if (resourceType != "ir")
+            {
+              recordError("Preset " + presetId + " node " + nodeId + " has invalid resource type: " + resourceType);
+            }
+            else if (resourceId.empty())
+            {
+              recordError("Preset " + presetId + " node " + nodeId + " is missing resource id");
+            }
+            else if (!irLibrary.contains(resourceId))
+            {
+              recordError("Preset " + presetId + " node " + nodeId + " references unknown IR: " + resourceId);
+            }
+          }
         }
       }
     }
@@ -157,7 +208,7 @@ int main()
       return 1;
     }
 
-    std::cout << "All default presets reference valid models and IRs." << std::endl;
+    std::cout << "All default presets have valid graph-based resource references." << std::endl;
     return 0;
   }
   catch (const std::exception& ex)
