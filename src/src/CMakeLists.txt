@@ -62,18 +62,10 @@ set(_namguitar_core_sources
   network/PresetServiceClient.cpp
   network/PresetServiceClient.h
   
-  # Presets V1
-  presets/PresetManager.cpp
-  presets/PresetManager.h
+  # Presets
   presets/PresetStorage.cpp
   presets/PresetStorage.h
   presets/PresetTypes.h
-  
-  # Presets V2
-  presets/PresetTypesV2.h
-  presets/PresetStorageV2.h
-  presets/PresetStorageV2.cpp
-  presets/PresetMigration.h
   
   # Resources
   resources/ResourceLibrary.h

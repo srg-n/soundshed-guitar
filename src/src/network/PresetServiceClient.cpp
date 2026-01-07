@@ -170,39 +170,16 @@ namespace namguitar
 
 		Preset ParsePresetJson(const nlohmann::json &jsonPreset)
 		{
-			Preset preset;
-			preset.id = jsonPreset.value("id", "");
-			preset.name = jsonPreset.value("name", "");
-			preset.category = jsonPreset.value("category", "");
-			preset.description = jsonPreset.value("description", "");
-			preset.audioFxModelId = jsonPreset.value("audioFxModelId", "");
-			preset.irId = jsonPreset.value("irId", "");
-			preset.fxChain = jsonPreset.value("fxChain", std::vector<std::string>{});
-
-			if (jsonPreset.contains("attachments") && jsonPreset["attachments"].is_array())
+			// Use PresetStorage to deserialize the preset JSON
+			// The server should return V2 format presets
+			auto presetOpt = PresetStorage::DeserializeFromJson(jsonPreset.dump());
+			if (presetOpt)
 			{
-				for (const auto &attachmentJson : jsonPreset["attachments"])
-				{
-					PresetAttachment attachment;
-					attachment.type = attachmentJson.value("type", "");
-					attachment.filePath = std::filesystem::path(attachmentJson.value("path", ""));
-					attachment.hash = attachmentJson.value("hash", "");
-					preset.attachments.push_back(std::move(attachment));
-				}
+				return *presetOpt;
 			}
-
-			if (jsonPreset.contains("parameters") && jsonPreset["parameters"].is_array())
-			{
-				for (const auto &parameterJson : jsonPreset["parameters"])
-				{
-					PresetParameter parameter;
-					parameter.id = parameterJson.value("id", "");
-					parameter.value = parameterJson.value("value", 0.0);
-					preset.parameters.push_back(std::move(parameter));
-				}
-			}
-
-			return preset;
+			
+			// Return empty preset if parsing fails
+			return Preset{};
 		}
 
 		std::vector<Preset> ParsePresetResponse(const nlohmann::json &json)

@@ -17,8 +17,8 @@
 #include "config.h"
 #include "IPlug_include_in_plug_hdr.h"
 #include "models/ModelHasher.h"
-#include "presets/PresetManager.h"
 #include "presets/PresetTypes.h"
+#include "presets/PresetStorage.h"
 #include "util/FileSystem.h"
 
 namespace namguitar
@@ -119,11 +119,9 @@ namespace namguitar
     void HandleSetInputModeRequest(const nlohmann::json &payload);
     void HandleSetAmpCabStateRequest(const nlohmann::json &payload);
     void BroadcastState();
-    void ApplyPreset(namguitar::Preset &preset);
+    void ApplyPreset(const namguitar::Preset &preset);
     void ReportErrorToUI(std::string_view message, std::string_view detail = {});
-    [[nodiscard]] std::optional<std::filesystem::path> MaterializeAttachment(const PresetAttachment &attachment) const;
-    [[nodiscard]] std::filesystem::path ResolveAttachmentTarget(const PresetAttachment &attachment) const;
-    [[nodiscard]] static namguitar::Preset ParsePresetFromJson(const nlohmann::json &jsonPreset);
+    [[nodiscard]] std::optional<std::filesystem::path> ResolveResourceRef(const ResourceRef &ref) const;
     [[nodiscard]] static std::vector<std::uint8_t> DecodeBase64(const std::string &encoded);
     bool WriteFile(const std::filesystem::path &target, const std::vector<std::uint8_t> &data) const;
     
@@ -146,10 +144,10 @@ namespace namguitar
     };
 
     std::unique_ptr<NAMDSPManager> mDSP;
-    PresetManager mPresetManager;
     FileSystem mFileSystem;
     ModelHasher mHasher;
     std::filesystem::path mResourceRoot;
+    std::filesystem::path mUserPresetsPath;
     std::optional<Preset> mActivePreset;
     std::string mActivePresetJson;
     std::string mActivePresetId;

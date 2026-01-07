@@ -29,7 +29,7 @@
 #include "wdlstring.h"
 
 #include "dsp/NAMDSPManager.h"
-#include "presets/PresetManager.h"
+#include "presets/PresetStorage.h"
 
 namespace namguitar
 {
@@ -285,41 +285,6 @@ namespace namguitar
         return NAMGuitarPlugin::kParamReverbMix;
       }
       return std::nullopt;
-    }
-
-    nlohmann::json SerializePresetToJson(const Preset &preset)
-    {
-      nlohmann::json jsonPreset;
-      jsonPreset["id"] = preset.id;
-      jsonPreset["name"] = preset.name;
-      jsonPreset["category"] = preset.category;
-      jsonPreset["description"] = preset.description;
-      jsonPreset["audioFxModelId"] = preset.audioFxModelId;
-      jsonPreset["irId"] = preset.irId;
-      jsonPreset["fxChain"] = preset.fxChain;
-
-      nlohmann::json attachments = nlohmann::json::array();
-      for (const auto &attachment : preset.attachments)
-      {
-        nlohmann::json attachmentJson;
-        attachmentJson["type"] = attachment.type;
-        attachmentJson["filePath"] = attachment.filePath.generic_string();
-        attachmentJson["hash"] = attachment.hash;
-        attachments.push_back(std::move(attachmentJson));
-      }
-      jsonPreset["attachments"] = std::move(attachments);
-
-      nlohmann::json parameters = nlohmann::json::array();
-      for (const auto &parameter : preset.parameters)
-      {
-        parameters.push_back({
-            {"id", parameter.id},
-            {"value", parameter.value},
-        });
-      }
-      jsonPreset["parameters"] = std::move(parameters);
-
-      return jsonPreset;
     }
 
     std::uint32_t ReadUint32LE(const std::uint8_t *data)
@@ -968,19 +933,18 @@ namespace namguitar
       }
       else
       {
-        const auto jsonPreset = nlohmann::json::parse(mActivePresetJson);
-        if (!jsonPreset.is_object())
+        auto presetOpt = PresetStorage::DeserializeFromJson(mActivePresetJson);
+        if (!presetOpt)
         {
-          ReportErrorToUI("Failed to restore preset state", "Preset JSON is not an object");
+          ReportErrorToUI("Failed to restore preset state", "Preset JSON is not valid");
         }
         else
         {
-          Preset preset = ParsePresetFromJson(jsonPreset);
-          ApplyPreset(preset);
-          mActivePreset = preset;
+          ApplyPreset(*presetOpt);
+          mActivePreset = *presetOpt;
           if (mActivePresetId.empty())
           {
-            mActivePresetId = preset.id;
+            mActivePresetId = presetOpt->id;
           }
         }
       }
@@ -1315,15 +1279,18 @@ namespace namguitar
 
     if (mActivePreset)
     {
-      message["preset"] = SerializePresetToJson(*mActivePreset);
+      message["preset"] = nlohmann::json::parse(PresetStorage::SerializeToJson(*mActivePreset));
     }
 
-    // Include user presets from PresetManager
+    // Include user presets from user presets directory
     nlohmann::json userPresetsJson = nlohmann::json::array();
-    const auto userPresets = mPresetManager.ListPresets();
-    for (const auto &preset : userPresets)
+    if (!mUserPresetsPath.empty() && std::filesystem::exists(mUserPresetsPath))
     {
-      userPresetsJson.push_back(SerializePresetToJson(preset));
+      const auto userPresets = PresetStorage::LoadAllFromDirectory(mUserPresetsPath);
+      for (const auto &preset : userPresets)
+      {
+        userPresetsJson.push_back(nlohmann::json::parse(PresetStorage::SerializeToJson(preset)));
+      }
     }
     message["userPresets"] = std::move(userPresetsJson);
 
@@ -1331,7 +1298,7 @@ namespace namguitar
     mPendingStateBroadcast = false;
   }
 
-  void NAMGuitarPlugin::ApplyPreset(Preset &preset)
+  void NAMGuitarPlugin::ApplyPreset(const Preset &preset)
   {
     if (!mDSP)
     {
@@ -1350,61 +1317,215 @@ namespace namguitar
     mActiveModelPath.clear();
     mActiveIRPath.clear();
 
-    // First, reset all parameters to their default values
-    // This ensures parameters not specified in the preset get reset
-    for (int paramIdx = 0; paramIdx < kParamCount; ++paramIdx)
+    // Apply global settings from the preset
+    auto *inputTrimParam = GetParam(kParamInputTrim);
+    if (inputTrimParam)
     {
-      auto *param = GetParam(paramIdx);
-      if (param)
-      {
-        param->SetToDefault();
-        OnParamChange(paramIdx);
-      }
+      inputTrimParam->Set(preset.global.inputTrim);
+      OnParamChange(kParamInputTrim);
     }
 
-    // Then apply the preset's parameter values
-    for (const auto &parameter : preset.parameters)
+    auto *outputTrimParam = GetParam(kParamOutputTrim);
+    if (outputTrimParam)
     {
-      const auto paramId = ParamIdFromKey(parameter.id);
-      if (paramId)
-      {
-        const auto index = static_cast<int>(*paramId);
-        auto *param = GetParam(index);
-        if (param)
-        {
-          param->Set(parameter.value);
-          OnParamChange(index);
-        }
-      }
+      outputTrimParam->Set(preset.global.outputTrim);
+      OnParamChange(kParamOutputTrim);
     }
 
-    for (auto &attachment : preset.attachments)
+    auto *transposeParam = GetParam(kParamTranspose);
+    if (transposeParam)
     {
-      const auto resolvedPath = MaterializeAttachment(attachment);
-      if (!resolvedPath)
-      {
-        continue;
-      }
+      transposeParam->Set(static_cast<double>(preset.global.transpose));
+      OnParamChange(kParamTranspose);
+    }
 
-      attachment.filePath = *resolvedPath;
-      attachment.data.clear();
-
-      if (attachment.type == "nam" || attachment.type == "audiofx")
+    // Process each node in the signal graph
+    for (const auto &node : preset.graph.nodes)
+    {
+      // Apply node parameters to plugin parameters based on node type
+      if (node.type == "nam_amp" || node.type == "nam")
       {
-        if (mDSP->LoadModel(*resolvedPath))
+        // Load NAM model if resource is specified
+        if (node.resource && node.resource->IsValid())
         {
-          mActiveModelPath = resolvedPath->generic_string();
-        } else {
-          ReportErrorToUI("Failed to load model from preset", "Could not parse model file: " + resolvedPath->generic_string());
+          auto resolvedPath = ResolveResourceRef(*node.resource);
+          if (resolvedPath && mDSP->LoadModel(*resolvedPath))
+          {
+            mActiveModelPath = resolvedPath->generic_string();
+          }
+        }
+
+        // Apply node parameters
+        for (const auto &[key, value] : node.params)
+        {
+          if (key == "drive")
+          {
+            auto *driveParam = GetParam(kParamDrive);
+            if (driveParam)
+            {
+              driveParam->Set(value);
+              OnParamChange(kParamDrive);
+            }
+          }
+          else if (key == "tone")
+          {
+            auto *toneParam = GetParam(kParamTone);
+            if (toneParam)
+            {
+              toneParam->Set(value);
+              OnParamChange(kParamTone);
+            }
+          }
         }
       }
-      else if (attachment.type == "ir")
+      else if (node.type == "ir_cab" || node.type == "ir")
       {
-        if (mDSP->LoadImpulseResponse(*resolvedPath))
+        // Load IR if resource is specified
+        if (node.resource && node.resource->IsValid())
         {
-          mActiveIRPath = resolvedPath->generic_string();
-        }else {
-          ReportErrorToUI("Failed to load IR from preset", "Could not parse IR file: " + resolvedPath->generic_string());
+          auto resolvedPath = ResolveResourceRef(*node.resource);
+          if (resolvedPath && mDSP->LoadImpulseResponse(*resolvedPath))
+          {
+            mActiveIRPath = resolvedPath->generic_string();
+          }
+        }
+      }
+      else if (node.type == "noise_gate" || node.type == "gate")
+      {
+        auto *gateEnabledParam = GetParam(kParamGateEnabled);
+        if (gateEnabledParam)
+        {
+          gateEnabledParam->Set(node.enabled ? 1.0 : 0.0);
+          OnParamChange(kParamGateEnabled);
+        }
+
+        for (const auto &[key, value] : node.params)
+        {
+          if (key == "threshold")
+          {
+            auto *thresholdParam = GetParam(kParamGateThreshold);
+            if (thresholdParam)
+            {
+              thresholdParam->Set(value);
+              OnParamChange(kParamGateThreshold);
+            }
+          }
+        }
+      }
+      else if (node.type == "eq_parametric" || node.type == "eq")
+      {
+        auto *eqEnabledParam = GetParam(kParamEQEnabled);
+        if (eqEnabledParam)
+        {
+          eqEnabledParam->Set(node.enabled ? 1.0 : 0.0);
+          OnParamChange(kParamEQEnabled);
+        }
+
+        // Map EQ node parameters to plugin EQ parameters
+        for (const auto &[key, value] : node.params)
+        {
+          std::optional<ParameterId> paramId;
+          if (key == "lowGain") paramId = kParamEQLowGain;
+          else if (key == "lowFreq") paramId = kParamEQLowFreq;
+          else if (key == "lowMidGain") paramId = kParamEQLowMidGain;
+          else if (key == "lowMidFreq") paramId = kParamEQLowMidFreq;
+          else if (key == "lowMidQ") paramId = kParamEQLowMidQ;
+          else if (key == "highMidGain") paramId = kParamEQHighMidGain;
+          else if (key == "highMidFreq") paramId = kParamEQHighMidFreq;
+          else if (key == "highMidQ") paramId = kParamEQHighMidQ;
+          else if (key == "highGain") paramId = kParamEQHighGain;
+          else if (key == "highFreq") paramId = kParamEQHighFreq;
+
+          if (paramId)
+          {
+            auto *param = GetParam(static_cast<int>(*paramId));
+            if (param)
+            {
+              param->Set(value);
+              OnParamChange(static_cast<int>(*paramId));
+            }
+          }
+        }
+      }
+      else if (node.type == "delay")
+      {
+        auto *delayEnabledParam = GetParam(kParamDelayEnabled);
+        if (delayEnabledParam)
+        {
+          delayEnabledParam->Set(node.enabled ? 1.0 : 0.0);
+          OnParamChange(kParamDelayEnabled);
+        }
+
+        for (const auto &[key, value] : node.params)
+        {
+          std::optional<ParameterId> paramId;
+          if (key == "time") paramId = kParamDelayTime;
+          else if (key == "feedback") paramId = kParamDelayFeedback;
+          else if (key == "mix") paramId = kParamDelayMix;
+
+          if (paramId)
+          {
+            auto *param = GetParam(static_cast<int>(*paramId));
+            if (param)
+            {
+              param->Set(value);
+              OnParamChange(static_cast<int>(*paramId));
+            }
+          }
+        }
+      }
+      else if (node.type == "reverb")
+      {
+        auto *reverbEnabledParam = GetParam(kParamReverbEnabled);
+        if (reverbEnabledParam)
+        {
+          reverbEnabledParam->Set(node.enabled ? 1.0 : 0.0);
+          OnParamChange(kParamReverbEnabled);
+        }
+
+        for (const auto &[key, value] : node.params)
+        {
+          std::optional<ParameterId> paramId;
+          if (key == "decay") paramId = kParamReverbDecay;
+          else if (key == "damping") paramId = kParamReverbDamping;
+          else if (key == "mix") paramId = kParamReverbMix;
+
+          if (paramId)
+          {
+            auto *param = GetParam(static_cast<int>(*paramId));
+            if (param)
+            {
+              param->Set(value);
+              OnParamChange(static_cast<int>(*paramId));
+            }
+          }
+        }
+      }
+      else if (node.type == "simple_cab")
+      {
+        auto *simpleCabEnabledParam = GetParam(kParamSimpleCabEnabled);
+        if (simpleCabEnabledParam)
+        {
+          simpleCabEnabledParam->Set(node.enabled ? 1.0 : 0.0);
+          OnParamChange(kParamSimpleCabEnabled);
+        }
+
+        for (const auto &[key, value] : node.params)
+        {
+          std::optional<ParameterId> paramId;
+          if (key == "bass") paramId = kParamSimpleCabBass;
+          else if (key == "presence") paramId = kParamSimpleCabPresence;
+          else if (key == "brightness") paramId = kParamSimpleCabBrightness;
+
+          if (paramId)
+          {
+            auto *param = GetParam(static_cast<int>(*paramId));
+            if (param)
+            {
+              param->Set(value);
+              OnParamChange(static_cast<int>(*paramId));
+            }
+          }
         }
       }
     }
@@ -1420,11 +1541,17 @@ namespace namguitar
 
     try
     {
-      Preset preset = ParsePresetFromJson(*presetJsonIter);
-      ApplyPreset(preset);
+      auto presetOpt = PresetStorage::DeserializeFromJson(presetJsonIter->dump());
+      if (!presetOpt)
+      {
+        ReportErrorToUI("Failed to load preset", "Could not parse preset JSON");
+        return;
+      }
 
-      mActivePreset = preset;
-      mActivePresetId = preset.id;
+      ApplyPreset(*presetOpt);
+
+      mActivePreset = *presetOpt;
+      mActivePresetId = presetOpt->id;
       mActivePresetJson = presetJsonIter->dump();
       mPendingStateBroadcast = true;
 
@@ -1434,7 +1561,7 @@ namespace namguitar
       {
         nlohmann::json message;
         message["type"] = "presetLoaded";
-        message["preset"] = SerializePresetToJson(preset);
+        message["preset"] = *presetJsonIter;
         
         // Include current model/IR paths so UI can update signal path display
         nlohmann::json parameters;
@@ -1610,52 +1737,183 @@ namespace namguitar
       return;
     }
 
-    // Build the preset from current state
+    // Build the preset using V2 format with signal graph
     Preset newPreset;
     newPreset.id = "user-" + std::to_string(std::time(nullptr));
     newPreset.name = presetName;
     newPreset.category = presetCategory;
     newPreset.description = presetDescription;
+    newPreset.version = 2;
 
-    // Capture current parameters using the ParamKey mapping
-    for (int paramIdx = 0; paramIdx < kParamCount; ++paramIdx)
-    {
-      const auto *param = GetParam(paramIdx);
-      if (param)
-      {
-        const std::string key = ParamKey(static_cast<ParameterId>(paramIdx));
-        if (!key.empty())
-        {
-          newPreset.parameters.push_back({key, param->Value()});
-        }
-      }
-    }
+    // Capture global settings from current parameters
+    if (auto *param = GetParam(kParamInputTrim)) newPreset.global.inputTrim = param->Value();
+    if (auto *param = GetParam(kParamOutputTrim)) newPreset.global.outputTrim = param->Value();
+    if (auto *param = GetParam(kParamTranspose)) newPreset.global.transpose = static_cast<int>(param->Value());
 
-    // Add current model as attachment if loaded
+    // Build the signal graph nodes
+
+    // Input node (always first)
+    GraphNode inputNode;
+    inputNode.id = "input";
+    inputNode.type = kNodeTypeInput;
+    inputNode.category = "routing";
+    newPreset.graph.nodes.push_back(inputNode);
+
+    // Add NAM amp node if model is loaded
     if (!mActiveModelPath.empty())
     {
-      PresetAttachment modelAttachment;
-      modelAttachment.type = "nam";
-      modelAttachment.filePath = std::filesystem::path{mActiveModelPath};
-      newPreset.attachments.push_back(modelAttachment);
+      GraphNode ampNode;
+      ampNode.id = "amp";
+      ampNode.type = "nam_amp";
+      ampNode.category = "amp";
+      ampNode.enabled = true;
+
+      ampNode.resource = ResourceRef{};
+      ampNode.resource->filePath = std::filesystem::path{mActiveModelPath};
+
+      // Capture amp parameters
+      if (auto *param = GetParam(kParamDrive)) ampNode.params["drive"] = param->Value();
+      if (auto *param = GetParam(kParamTone)) ampNode.params["tone"] = param->Value();
+      if (auto *param = GetParam(kParamMix)) ampNode.params["mix"] = param->Value();
+
+      newPreset.graph.nodes.push_back(ampNode);
     }
 
-    // Add current IR as attachment if loaded
+    // Add noise gate node
+    if (auto *param = GetParam(kParamGateEnabled))
+    {
+      GraphNode gateNode;
+      gateNode.id = "gate";
+      gateNode.type = "noise_gate";
+      gateNode.category = "dynamics";
+      gateNode.enabled = param->Value() > 0.5;
+
+      if (auto *threshParam = GetParam(kParamGateThreshold))
+        gateNode.params["threshold"] = threshParam->Value();
+
+      newPreset.graph.nodes.push_back(gateNode);
+    }
+
+    // Add IR cab node if IR is loaded
     if (!mActiveIRPath.empty())
     {
-      PresetAttachment irAttachment;
-      irAttachment.type = "ir";
-      irAttachment.filePath = std::filesystem::path{mActiveIRPath};
-      newPreset.attachments.push_back(irAttachment);
+      GraphNode cabNode;
+      cabNode.id = "cab";
+      cabNode.type = "ir_cab";
+      cabNode.category = "cab";
+      cabNode.enabled = true;
+
+      cabNode.resource = ResourceRef{};
+      cabNode.resource->filePath = std::filesystem::path{mActiveIRPath};
+
+      newPreset.graph.nodes.push_back(cabNode);
     }
 
-    // Save preset to PresetManager (which handles persistence)
-    mPresetManager.SavePreset(newPreset);
+    // Add simple cab node
+    if (auto *param = GetParam(kParamSimpleCabEnabled))
+    {
+      GraphNode simpleCabNode;
+      simpleCabNode.id = "simple_cab";
+      simpleCabNode.type = "simple_cab";
+      simpleCabNode.category = "cab";
+      simpleCabNode.enabled = param->Value() > 0.5;
+
+      if (auto *p = GetParam(kParamSimpleCabBass)) simpleCabNode.params["bass"] = p->Value();
+      if (auto *p = GetParam(kParamSimpleCabPresence)) simpleCabNode.params["presence"] = p->Value();
+      if (auto *p = GetParam(kParamSimpleCabBrightness)) simpleCabNode.params["brightness"] = p->Value();
+
+      newPreset.graph.nodes.push_back(simpleCabNode);
+    }
+
+    // Add EQ node
+    if (auto *param = GetParam(kParamEQEnabled))
+    {
+      GraphNode eqNode;
+      eqNode.id = "eq";
+      eqNode.type = "eq_parametric";
+      eqNode.category = "eq";
+      eqNode.enabled = param->Value() > 0.5;
+
+      if (auto *p = GetParam(kParamEQLowGain)) eqNode.params["lowGain"] = p->Value();
+      if (auto *p = GetParam(kParamEQLowFreq)) eqNode.params["lowFreq"] = p->Value();
+      if (auto *p = GetParam(kParamEQLowMidGain)) eqNode.params["lowMidGain"] = p->Value();
+      if (auto *p = GetParam(kParamEQLowMidFreq)) eqNode.params["lowMidFreq"] = p->Value();
+      if (auto *p = GetParam(kParamEQLowMidQ)) eqNode.params["lowMidQ"] = p->Value();
+      if (auto *p = GetParam(kParamEQHighMidGain)) eqNode.params["highMidGain"] = p->Value();
+      if (auto *p = GetParam(kParamEQHighMidFreq)) eqNode.params["highMidFreq"] = p->Value();
+      if (auto *p = GetParam(kParamEQHighMidQ)) eqNode.params["highMidQ"] = p->Value();
+      if (auto *p = GetParam(kParamEQHighGain)) eqNode.params["highGain"] = p->Value();
+      if (auto *p = GetParam(kParamEQHighFreq)) eqNode.params["highFreq"] = p->Value();
+
+      newPreset.graph.nodes.push_back(eqNode);
+    }
+
+    // Add delay node
+    if (auto *param = GetParam(kParamDelayEnabled))
+    {
+      GraphNode delayNode;
+      delayNode.id = "delay";
+      delayNode.type = "delay";
+      delayNode.category = "fx";
+      delayNode.enabled = param->Value() > 0.5;
+
+      if (auto *p = GetParam(kParamDelayTime)) delayNode.params["time"] = p->Value();
+      if (auto *p = GetParam(kParamDelayFeedback)) delayNode.params["feedback"] = p->Value();
+      if (auto *p = GetParam(kParamDelayMix)) delayNode.params["mix"] = p->Value();
+
+      newPreset.graph.nodes.push_back(delayNode);
+    }
+
+    // Add reverb node
+    if (auto *param = GetParam(kParamReverbEnabled))
+    {
+      GraphNode reverbNode;
+      reverbNode.id = "reverb";
+      reverbNode.type = "reverb";
+      reverbNode.category = "fx";
+      reverbNode.enabled = param->Value() > 0.5;
+
+      if (auto *p = GetParam(kParamReverbDecay)) reverbNode.params["decay"] = p->Value();
+      if (auto *p = GetParam(kParamReverbDamping)) reverbNode.params["damping"] = p->Value();
+      if (auto *p = GetParam(kParamReverbMix)) reverbNode.params["mix"] = p->Value();
+
+      newPreset.graph.nodes.push_back(reverbNode);
+    }
+
+    // Output node (always last)
+    GraphNode outputNode;
+    outputNode.id = "output";
+    outputNode.type = kNodeTypeOutput;
+    outputNode.category = "routing";
+    newPreset.graph.nodes.push_back(outputNode);
+
+    // Build edges (linear chain for now)
+    for (size_t i = 0; i < newPreset.graph.nodes.size() - 1; ++i)
+    {
+      GraphEdge edge;
+      edge.from = newPreset.graph.nodes[i].id;
+      edge.to = newPreset.graph.nodes[i + 1].id;
+      newPreset.graph.edges.push_back(edge);
+    }
+
+    // Save preset to file in user presets directory
+    if (mUserPresetsPath.empty())
+    {
+      mUserPresetsPath = mResourceRoot / "presets" / "user";
+    }
+    std::filesystem::create_directories(mUserPresetsPath);
+    
+    std::filesystem::path presetPath = mUserPresetsPath / (newPreset.id + ".json");
+    if (!PresetStorage::SaveToFile(newPreset, presetPath))
+    {
+      ReportErrorToUI("Failed to save preset", "Could not write preset file");
+      return;
+    }
 
     // Update active preset
     mActivePreset = newPreset;
     mActivePresetId = newPreset.id;
-    mActivePresetJson = SerializePresetToJson(newPreset).dump();
+    mActivePresetJson = PresetStorage::SerializeToJson(newPreset);
     mPendingStateBroadcast = true;
 
     // Save settings so this preset is restored on next startup
@@ -1664,7 +1922,7 @@ namespace namguitar
     {
       nlohmann::json message;
       message["type"] = "presetSaved";
-      message["preset"] = SerializePresetToJson(newPreset);
+      message["preset"] = nlohmann::json::parse(mActivePresetJson);
       SendMessageToUI(message.dump());
     }
   }
@@ -1950,89 +2208,87 @@ namespace namguitar
     SendMessageToUI(payload.dump());
   }
 
-  std::optional<std::filesystem::path> NAMGuitarPlugin::MaterializeAttachment(const PresetAttachment &attachment) const
+  std::optional<std::filesystem::path> NAMGuitarPlugin::ResolveResourceRef(const ResourceRef &ref) const
   {
-    std::filesystem::path target = ResolveAttachmentTarget(attachment);
-    if (target.empty())
+    // Check for direct file path first
+    if (ref.IsFilePath())
     {
-      return std::nullopt;
-    }
-
-    if (!attachment.data.empty())
-    {
-      const auto data = DecodeBase64(attachment.data);
-      if (data.empty())
+      if (ref.filePath.is_absolute() && std::filesystem::exists(ref.filePath))
       {
-        return std::nullopt;
+        return ref.filePath;
       }
 
-      if (!WriteFile(target, data))
-      {
-        return std::nullopt;
-      }
-    }
-
-    if (!std::filesystem::exists(target))
-    {
-      return std::nullopt;
-    }
-
-    // skip file hash check just now
-    /*if (!attachment.hash.empty())
-    {
-      const auto hash = mHasher.HashFile(target);
-      if (!hash.empty() && hash != attachment.hash)
-      {
-        return std::nullopt;
-      }
-    }*/
-
-    return target;
-  }
-
-  std::filesystem::path NAMGuitarPlugin::ResolveAttachmentTarget(const PresetAttachment &attachment) const
-  {
-    if (!attachment.filePath.empty())
-    {
-      if (attachment.filePath.is_absolute())
-      {
-        return attachment.filePath;
-      }
-
-      // First check if the file exists in the bundled resources folder
+      // Try relative to resource root
       if (!mResourceRoot.empty())
       {
-        const auto resourcePath = mResourceRoot / attachment.filePath;
+        auto resourcePath = mResourceRoot / ref.filePath;
         if (std::filesystem::exists(resourcePath))
         {
           return resourcePath;
         }
       }
 
-      // Then check the user preset directory
-      if (const auto presetDir = mFileSystem.EnsureDirectory(mFileSystem.ResolvePresetDirectory()))
+      // Try relative to preset directory
+      if (auto presetDir = mFileSystem.EnsureDirectory(mFileSystem.ResolvePresetDirectory()))
       {
-        const auto presetPath = *presetDir / attachment.filePath;
+        auto presetPath = *presetDir / ref.filePath;
         if (std::filesystem::exists(presetPath))
         {
           return presetPath;
         }
-        // Return preset directory path even if file doesn't exist (for writing)
-        return presetPath;
       }
 
-      return attachment.filePath;
-    }
-
-    if (!attachment.hash.empty())
-    {
-      if (const auto presetDir = mFileSystem.EnsureDirectory(mFileSystem.ResolvePresetDirectory()))
+      // If the path looks like a filename (not a full path), check common resource subdirectories
+      if (ref.filePath.filename() == ref.filePath)
       {
-        return *presetDir / (attachment.hash + (attachment.type.empty() ? std::string{} : std::string{"."} + attachment.type));
+        std::vector<std::filesystem::path> searchPaths;
+        
+        if (!mResourceRoot.empty())
+        {
+          searchPaths.push_back(mResourceRoot / "amps" / ref.filePath);
+          searchPaths.push_back(mResourceRoot / "ir" / ref.filePath);
+          searchPaths.push_back(mResourceRoot / "models" / ref.filePath);
+        }
+
+        for (const auto& searchPath : searchPaths)
+        {
+          if (std::filesystem::exists(searchPath))
+          {
+            return searchPath;
+          }
+        }
       }
     }
 
-    return {};
+    // Check for library reference
+    if (ref.IsLibraryRef())
+    {
+      // Library resources should be resolved through ResourceLibrary
+      // For now, try common resource locations
+      if (!mResourceRoot.empty())
+      {
+        std::filesystem::path resourcePath;
+        
+        if (ref.resourceType == "nam")
+        {
+          resourcePath = mResourceRoot / "amps" / (ref.resourceId + ".nam");
+        }
+        else if (ref.resourceType == "ir")
+        {
+          resourcePath = mResourceRoot / "ir" / (ref.resourceId + ".wav");
+        }
+
+        if (!resourcePath.empty() && std::filesystem::exists(resourcePath))
+        {
+          return resourcePath;
+        }
+      }
+    }
+
+    // Embedded resources would need to be materialized from embeddedResources
+    // This is handled elsewhere for preset sharing
+
+    return std::nullopt;
   }
 
   std::vector<std::uint8_t> NAMGuitarPlugin::DecodeBase64(const std::string &encoded)
@@ -2109,58 +2365,6 @@ namespace namguitar
 
     output.write(reinterpret_cast<const char *>(data.data()), static_cast<std::streamsize>(data.size()));
     return output.good();
-  }
-
-  Preset NAMGuitarPlugin::ParsePresetFromJson(const nlohmann::json &jsonPreset)
-  {
-    Preset preset;
-    preset.id = jsonPreset.value("id", "");
-    preset.name = jsonPreset.value("name", "");
-    preset.category = jsonPreset.value("category", "");
-    preset.description = jsonPreset.value("description", "");
-    preset.audioFxModelId = jsonPreset.value("audioFxModelId", "");
-    preset.irId = jsonPreset.value("irId", "");
-
-    if (jsonPreset.contains("fxChain") && jsonPreset["fxChain"].is_array())
-    {
-      for (const auto &fx : jsonPreset["fxChain"])
-      {
-        preset.fxChain.push_back(fx.get<std::string>());
-      }
-    }
-
-    if (jsonPreset.contains("attachments") && jsonPreset["attachments"].is_array())
-    {
-      for (const auto &jsonAttachment : jsonPreset["attachments"])
-      {
-        PresetAttachment attachment;
-        attachment.type = jsonAttachment.value("type", "");
-        attachment.hash = jsonAttachment.value("hash", "");
-        if (jsonAttachment.contains("filePath"))
-        {
-          attachment.filePath = jsonAttachment.value("filePath", "");
-        }
-        else if (jsonAttachment.contains("path"))
-        {
-          attachment.filePath = jsonAttachment.value("path", "");
-        }
-        attachment.data = jsonAttachment.value("data", "");
-        preset.attachments.push_back(std::move(attachment));
-      }
-    }
-
-    if (jsonPreset.contains("parameters") && jsonPreset["parameters"].is_array())
-    {
-      for (const auto &jsonParameter : jsonPreset["parameters"])
-      {
-        PresetParameter entry;
-        entry.id = jsonParameter.value("id", "");
-        entry.value = jsonParameter.value("value", 0.0);
-        preset.parameters.push_back(entry);
-      }
-    }
-
-    return preset;
   }
 
   bool NAMGuitarPlugin::StartSignalPathTest(double frequencyHz, double durationSeconds)
@@ -2394,10 +2598,10 @@ namespace namguitar
     {
       try
       {
-        const auto jsonPreset = nlohmann::json::parse(mActivePresetJson);
-        if (jsonPreset.is_object())
+        auto presetOpt = PresetStorage::DeserializeFromJson(mActivePresetJson);
+        if (presetOpt)
         {
-          mActivePreset = ParsePresetFromJson(jsonPreset);
+          mActivePreset = *presetOpt;
         }
       }
       catch (...)

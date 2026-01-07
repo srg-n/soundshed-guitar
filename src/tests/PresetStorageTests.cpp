@@ -9,653 +9,538 @@
 #include <nlohmann/json.hpp>
 
 #include "presets/PresetTypes.h"
+#include "presets/PresetStorage.h"
 
 namespace fs = std::filesystem;
 
 namespace
 {
 
-// Minimal IByteChunk implementation for testing serialization
-class TestByteChunk
-{
-public:
-  int PutBytes(const void* data, int size)
-  {
-    const auto* bytes = static_cast<const char*>(data);
-    mData.insert(mData.end(), bytes, bytes + size);
-    return static_cast<int>(mData.size());
-  }
-
-  int GetBytes(void* dest, int size, int startPos) const
-  {
-    if (startPos < 0 || startPos + size > static_cast<int>(mData.size()))
-    {
-      return -1;
-    }
-    std::memcpy(dest, mData.data() + startPos, size);
-    return startPos + size;
-  }
-
-  [[nodiscard]] int Size() const { return static_cast<int>(mData.size()); }
-  void Clear() { mData.clear(); }
-  [[nodiscard]] const std::vector<char>& Data() const { return mData; }
-
-private:
-  std::vector<char> mData;
-};
-
-// JSON serialization functions matching PresetStorage implementation
-nlohmann::json SerializePreset(const namguitar::Preset& preset)
-{
-  nlohmann::json jsonPreset;
-  jsonPreset["id"] = preset.id;
-  jsonPreset["name"] = preset.name;
-  jsonPreset["category"] = preset.category;
-  jsonPreset["description"] = preset.description;
-  jsonPreset["audioFxModelId"] = preset.audioFxModelId;
-  jsonPreset["irId"] = preset.irId;
-  jsonPreset["fxChain"] = preset.fxChain;
-
-  nlohmann::json attachments = nlohmann::json::array();
-  for (const auto& attachment : preset.attachments)
-  {
-    nlohmann::json jsonAttachment = {
-        {"type", attachment.type},
-        {"id", attachment.id},
-        {"filePath", attachment.filePath.generic_string()},
-        {"hash", attachment.hash},
-    };
-    // Only include data field if non-empty to avoid bloating JSON
-    if (!attachment.data.empty())
-    {
-      jsonAttachment["data"] = attachment.data;
-    }
-    attachments.push_back(std::move(jsonAttachment));
-  }
-  jsonPreset["attachments"] = std::move(attachments);
-
-  nlohmann::json parameters = nlohmann::json::array();
-  for (const auto& parameter : preset.parameters)
-  {
-    parameters.push_back({
-        {"id", parameter.id},
-        {"value", parameter.value},
-    });
-  }
-  jsonPreset["parameters"] = std::move(parameters);
-
-  return jsonPreset;
-}
-
-nlohmann::json SerializeAllPresets(const std::vector<namguitar::Preset>& presets)
-{
-  nlohmann::json jsonRoot;
-  jsonRoot["presets"] = nlohmann::json::array();
-  for (const auto& preset : presets)
-  {
-    jsonRoot["presets"].push_back(SerializePreset(preset));
-  }
-  return jsonRoot;
-}
-
-namguitar::Preset DeserializePreset(const nlohmann::json& jsonPreset)
-{
-  namguitar::Preset preset;
-  preset.id = jsonPreset.value("id", "");
-  preset.name = jsonPreset.value("name", "");
-  preset.category = jsonPreset.value("category", "");
-  preset.description = jsonPreset.value("description", "");
-  preset.audioFxModelId = jsonPreset.value("audioFxModelId", "");
-  preset.irId = jsonPreset.value("irId", "");
-
-  if (jsonPreset.contains("fxChain") && jsonPreset["fxChain"].is_array())
-  {
-    for (const auto& fx : jsonPreset["fxChain"])
-    {
-      preset.fxChain.push_back(fx.get<std::string>());
-    }
-  }
-
-  if (jsonPreset.contains("attachments") && jsonPreset["attachments"].is_array())
-  {
-    for (const auto& jsonAttachment : jsonPreset["attachments"])
-    {
-      namguitar::PresetAttachment attachment;
-      attachment.type = jsonAttachment.value("type", "");
-      attachment.id = jsonAttachment.value("id", "");
-      attachment.hash = jsonAttachment.value("hash", "");
-      attachment.filePath = jsonAttachment.value("filePath", "");
-      attachment.data = jsonAttachment.value("data", "");
-      preset.attachments.push_back(std::move(attachment));
-    }
-  }
-
-  if (jsonPreset.contains("parameters") && jsonPreset["parameters"].is_array())
-  {
-    for (const auto& jsonParameter : jsonPreset["parameters"])
-    {
-      namguitar::PresetParameter parameter;
-      parameter.id = jsonParameter.value("id", "");
-      parameter.value = jsonParameter.value("value", 0.0);
-      preset.parameters.push_back(parameter);
-    }
-  }
-
-  return preset;
-}
-
-std::vector<namguitar::Preset> DeserializeAllPresets(const std::string& serialized)
-{
-  std::vector<namguitar::Preset> presets;
-  if (serialized.empty())
-  {
-    return presets;
-  }
-
-  nlohmann::json jsonRoot = nlohmann::json::parse(serialized, nullptr, false);
-  if (jsonRoot.is_discarded())
-  {
-    return presets;
-  }
-
-  if (!jsonRoot.contains("presets") || !jsonRoot["presets"].is_array())
-  {
-    return presets;
-  }
-
-  for (const auto& jsonPreset : jsonRoot["presets"])
-  {
-    presets.push_back(DeserializePreset(jsonPreset));
-  }
-
-  return presets;
-}
-
-// Helper to create a test preset with attachments
+// Helper to create a test preset with signal graph
 namguitar::Preset CreateTestPreset(
     const std::string& id,
     const std::string& name,
-    const std::string& modelId,
-    const std::string& irId,
-    bool includeAttachments = true)
+    const std::string& modelPath = "",
+    const std::string& irPath = "")
 {
   namguitar::Preset preset;
   preset.id = id;
   preset.name = name;
   preset.category = "Test";
   preset.description = "Test preset for unit testing";
-  preset.audioFxModelId = modelId;
-  preset.irId = irId;
-  preset.fxChain = {"noise_gate", "eq"};
+  preset.version = 2;
+  preset.author = "Test Author";
 
-  if (includeAttachments)
+  // Global settings
+  preset.global.inputTrim = -3.0;
+  preset.global.outputTrim = 1.5;
+  preset.global.transpose = 0;
+
+  // Build signal graph
+  
+  // Input node
+  namguitar::GraphNode inputNode;
+  inputNode.id = "input";
+  inputNode.type = namguitar::kNodeTypeInput;
+  inputNode.category = "routing";
+  preset.graph.nodes.push_back(inputNode);
+
+  // Noise gate node
+  namguitar::GraphNode gateNode;
+  gateNode.id = "gate";
+  gateNode.type = "noise_gate";
+  gateNode.category = "dynamics";
+  gateNode.enabled = true;
+  gateNode.params["threshold"] = -60.0;
+  preset.graph.nodes.push_back(gateNode);
+
+  // NAM amp node (if model path provided)
+  if (!modelPath.empty())
   {
-    // NAM model attachment
-    namguitar::PresetAttachment modelAttachment;
-    modelAttachment.type = "nam";
-    modelAttachment.id = modelId;
-    modelAttachment.filePath = fs::path("amps") / (modelId + ".nam");
-    modelAttachment.hash = "abc123def456";
-    preset.attachments.push_back(modelAttachment);
-
-    // IR attachment
-    namguitar::PresetAttachment irAttachment;
-    irAttachment.type = "ir";
-    irAttachment.id = irId;
-    irAttachment.filePath = fs::path("ir") / (irId + ".wav");
-    irAttachment.hash = "789xyz012abc";
-    preset.attachments.push_back(irAttachment);
+    namguitar::GraphNode ampNode;
+    ampNode.id = "amp";
+    ampNode.type = "nam_amp";
+    ampNode.category = "amp";
+    ampNode.enabled = true;
+    ampNode.params["drive"] = 0.5;
+    ampNode.params["tone"] = 0.6;
+    ampNode.resource = namguitar::ResourceRef{};
+    ampNode.resource->filePath = fs::path(modelPath);
+    preset.graph.nodes.push_back(ampNode);
   }
 
-  // Parameters
-  preset.parameters = {
-      {"input_trim", -3.0},
-      {"output_trim", 0.0},
-      {"drive", 0.5},
-      {"tone", 0.6},
-  };
+  // IR cab node (if IR path provided)
+  if (!irPath.empty())
+  {
+    namguitar::GraphNode cabNode;
+    cabNode.id = "cab";
+    cabNode.type = "ir_cab";
+    cabNode.category = "cab";
+    cabNode.enabled = true;
+    cabNode.resource = namguitar::ResourceRef{};
+    cabNode.resource->filePath = fs::path(irPath);
+    preset.graph.nodes.push_back(cabNode);
+  }
+
+  // EQ node
+  namguitar::GraphNode eqNode;
+  eqNode.id = "eq";
+  eqNode.type = "eq_parametric";
+  eqNode.category = "eq";
+  eqNode.enabled = false;
+  eqNode.params["lowGain"] = 0.0;
+  eqNode.params["lowFreq"] = 100.0;
+  preset.graph.nodes.push_back(eqNode);
+
+  // Output node
+  namguitar::GraphNode outputNode;
+  outputNode.id = "output";
+  outputNode.type = namguitar::kNodeTypeOutput;
+  outputNode.category = "routing";
+  preset.graph.nodes.push_back(outputNode);
+
+  // Build edges (linear chain)
+  for (size_t i = 0; i < preset.graph.nodes.size() - 1; ++i)
+  {
+    namguitar::GraphEdge edge;
+    edge.from = preset.graph.nodes[i].id;
+    edge.to = preset.graph.nodes[i + 1].id;
+    preset.graph.edges.push_back(edge);
+  }
 
   return preset;
 }
 
-// Comparison helpers
-bool AttachmentsEqual(const namguitar::PresetAttachment& a, const namguitar::PresetAttachment& b)
+// Helper to create a minimal preset
+namguitar::Preset CreateMinimalPreset(const std::string& id, const std::string& name)
 {
-  return a.type == b.type && a.id == b.id && a.filePath == b.filePath && a.hash == b.hash && a.data == b.data;
+  namguitar::Preset preset;
+  preset.id = id;
+  preset.name = name;
+  preset.version = 2;
+  return preset;
 }
 
-bool ParametersEqual(const namguitar::PresetParameter& a, const namguitar::PresetParameter& b)
+// Test fixture base for preset tests
+class PresetTestFixture
 {
-  constexpr double kEpsilon = 1e-9;
-  return a.id == b.id && std::abs(a.value - b.value) < kEpsilon;
-}
-
-bool PresetsEqual(const namguitar::Preset& a, const namguitar::Preset& b)
-{
-  if (a.id != b.id || a.name != b.name || a.category != b.category || a.description != b.description ||
-      a.audioFxModelId != b.audioFxModelId || a.irId != b.irId)
+public:
+  PresetTestFixture()
   {
-    return false;
+    mTempDir = fs::temp_directory_path() / "nam_preset_tests";
+    fs::create_directories(mTempDir);
   }
 
-  if (a.fxChain != b.fxChain)
+  ~PresetTestFixture()
   {
-    return false;
-  }
-
-  if (a.attachments.size() != b.attachments.size())
-  {
-    return false;
-  }
-
-  for (size_t i = 0; i < a.attachments.size(); ++i)
-  {
-    if (!AttachmentsEqual(a.attachments[i], b.attachments[i]))
+    try
     {
-      return false;
+      fs::remove_all(mTempDir);
+    }
+    catch (...)
+    {
     }
   }
 
-  if (a.parameters.size() != b.parameters.size())
+  fs::path mTempDir;
+};
+
+// Test: Serialize and deserialize a preset
+bool TestSerializeDeserialize()
+{
+  std::cout << "Test: SerializeDeserialize... ";
+
+  auto original = CreateTestPreset("test-1", "Test Preset", "models/amp.nam", "ir/cab.wav");
+
+  // Serialize
+  std::string json = namguitar::PresetStorage::SerializeToJson(original);
+  if (json.empty())
   {
+    std::cout << "FAIL (serialization returned empty string)" << std::endl;
     return false;
   }
 
-  for (size_t i = 0; i < a.parameters.size(); ++i)
+  // Deserialize
+  auto deserialized = namguitar::PresetStorage::DeserializeFromJson(json);
+  if (!deserialized)
   {
-    if (!ParametersEqual(a.parameters[i], b.parameters[i]))
-    {
-      return false;
-    }
+    std::cout << "FAIL (deserialization failed)" << std::endl;
+    return false;
   }
 
+  // Verify metadata
+  if (deserialized->id != original.id ||
+      deserialized->name != original.name ||
+      deserialized->category != original.category ||
+      deserialized->description != original.description ||
+      deserialized->version != original.version)
+  {
+    std::cout << "FAIL (metadata mismatch)" << std::endl;
+    return false;
+  }
+
+  // Verify global settings
+  if (deserialized->global.inputTrim != original.global.inputTrim ||
+      deserialized->global.outputTrim != original.global.outputTrim)
+  {
+    std::cout << "FAIL (global settings mismatch)" << std::endl;
+    return false;
+  }
+
+  // Verify graph node count
+  if (deserialized->graph.nodes.size() != original.graph.nodes.size())
+  {
+    std::cout << "FAIL (node count mismatch: " << deserialized->graph.nodes.size() 
+              << " vs " << original.graph.nodes.size() << ")" << std::endl;
+    return false;
+  }
+
+  // Verify graph edge count
+  if (deserialized->graph.edges.size() != original.graph.edges.size())
+  {
+    std::cout << "FAIL (edge count mismatch)" << std::endl;
+    return false;
+  }
+
+  std::cout << "PASS" << std::endl;
   return true;
 }
 
-// Test framework
-int gTestsPassed = 0;
-int gTestsFailed = 0;
-
-void ReportTest(const std::string& testName, bool passed, const std::string& message = "")
+// Test: Save and load preset from file
+bool TestSaveLoadFile()
 {
-  if (passed)
+  std::cout << "Test: SaveLoadFile... ";
+
+  PresetTestFixture fixture;
+  auto original = CreateTestPreset("file-test", "File Test Preset");
+
+  fs::path filePath = fixture.mTempDir / "test_preset.json";
+
+  // Save
+  if (!namguitar::PresetStorage::SaveToFile(original, filePath))
   {
-    std::cout << "  [PASS] " << testName << "\n";
-    ++gTestsPassed;
-  }
-  else
-  {
-    std::cout << "  [FAIL] " << testName;
-    if (!message.empty())
-    {
-      std::cout << " - " << message;
-    }
-    std::cout << "\n";
-    ++gTestsFailed;
-  }
-}
-
-// Test cases
-void TestSinglePresetSerializationRoundTrip()
-{
-  std::cout << "\n=== Single Preset Serialization Round-Trip ===\n";
-
-  const auto original = CreateTestPreset("test-001", "Test Preset", "model-abc", "ir-xyz");
-
-  const nlohmann::json serialized = SerializePreset(original);
-  const auto deserialized = DeserializePreset(serialized);
-
-  ReportTest("Basic fields preserved", original.id == deserialized.id && original.name == deserialized.name &&
-                                           original.category == deserialized.category &&
-                                           original.description == deserialized.description);
-
-  ReportTest("Model and IR IDs preserved",
-             original.audioFxModelId == deserialized.audioFxModelId && original.irId == deserialized.irId);
-
-  ReportTest("FX chain preserved", original.fxChain == deserialized.fxChain);
-
-  ReportTest("Attachment count preserved", original.attachments.size() == deserialized.attachments.size());
-
-  if (original.attachments.size() == deserialized.attachments.size() && !original.attachments.empty())
-  {
-    bool allAttachmentsMatch = true;
-    for (size_t i = 0; i < original.attachments.size(); ++i)
-    {
-      if (!AttachmentsEqual(original.attachments[i], deserialized.attachments[i]))
-      {
-        allAttachmentsMatch = false;
-        std::cout << "    Attachment " << i << " mismatch:\n";
-        std::cout << "      Original: type=" << original.attachments[i].type << ", id=" << original.attachments[i].id
-                  << ", path=" << original.attachments[i].filePath << ", hash=" << original.attachments[i].hash
-                  << "\n";
-        std::cout << "      Deserialized: type=" << deserialized.attachments[i].type
-                  << ", id=" << deserialized.attachments[i].id << ", path=" << deserialized.attachments[i].filePath
-                  << ", hash=" << deserialized.attachments[i].hash << "\n";
-      }
-    }
-    ReportTest("All attachments match", allAttachmentsMatch);
+    std::cout << "FAIL (save failed)" << std::endl;
+    return false;
   }
 
-  ReportTest("Parameter count preserved", original.parameters.size() == deserialized.parameters.size());
-
-  if (original.parameters.size() == deserialized.parameters.size() && !original.parameters.empty())
+  // Verify file exists
+  if (!fs::exists(filePath))
   {
-    bool allParamsMatch = true;
-    for (size_t i = 0; i < original.parameters.size(); ++i)
-    {
-      if (!ParametersEqual(original.parameters[i], deserialized.parameters[i]))
-      {
-        allParamsMatch = false;
-      }
-    }
-    ReportTest("All parameters match", allParamsMatch);
+    std::cout << "FAIL (file not created)" << std::endl;
+    return false;
   }
 
-  ReportTest("Full preset equality", PresetsEqual(original, deserialized));
-}
-
-void TestMultiplePresetsSerializationRoundTrip()
-{
-  std::cout << "\n=== Multiple Presets Serialization Round-Trip ===\n";
-
-  std::vector<namguitar::Preset> originals = {CreateTestPreset("preset-1", "Clean Tone", "model-clean", "ir-neutral"),
-                                              CreateTestPreset("preset-2", "Crunch", "model-crunch", "ir-warm"),
-                                              CreateTestPreset("preset-3", "High Gain", "model-metal", "ir-bright")};
-
-  const nlohmann::json serialized = SerializeAllPresets(originals);
-  const std::string jsonStr = serialized.dump();
-  const auto deserialized = DeserializeAllPresets(jsonStr);
-
-  ReportTest("Preset count preserved", originals.size() == deserialized.size());
-
-  bool allPresetsMatch = true;
-  for (size_t i = 0; i < originals.size() && i < deserialized.size(); ++i)
+  // Load
+  auto loaded = namguitar::PresetStorage::LoadFromFile(filePath);
+  if (!loaded)
   {
-    if (!PresetsEqual(originals[i], deserialized[i]))
-    {
-      allPresetsMatch = false;
-      std::cout << "    Preset " << i << " (" << originals[i].id << ") mismatch\n";
-    }
+    std::cout << "FAIL (load failed)" << std::endl;
+    return false;
   }
-  ReportTest("All presets match", allPresetsMatch);
-}
 
-void TestEmptyAttachmentsHandling()
-{
-  std::cout << "\n=== Empty Attachments Handling ===\n";
-
-  const auto original = CreateTestPreset("no-attach", "No Attachments", "model-x", "ir-y", false);
-
-  ReportTest("Original has no attachments", original.attachments.empty());
-
-  const nlohmann::json serialized = SerializePreset(original);
-  const auto deserialized = DeserializePreset(serialized);
-
-  ReportTest("Deserialized has no attachments", deserialized.attachments.empty());
-  ReportTest("Full preset equality (no attachments)", PresetsEqual(original, deserialized));
-}
-
-void TestAttachmentPathNormalization()
-{
-  std::cout << "\n=== Attachment Path Normalization ===\n";
-
-  namguitar::Preset preset;
-  preset.id = "path-test";
-  preset.name = "Path Test";
-
-  // Test with various path formats
-  namguitar::PresetAttachment attachment1;
-  attachment1.type = "nam";
-  attachment1.id = "model1";
-  attachment1.filePath = fs::path("path/to/model.nam");
-  attachment1.hash = "hash1";
-
-  namguitar::PresetAttachment attachment2;
-  attachment2.type = "ir";
-  attachment2.id = "ir1";
-  attachment2.filePath = fs::path("path\\to\\ir.wav"); // Windows-style path
-  attachment2.hash = "hash2";
-
-  preset.attachments = {attachment1, attachment2};
-
-  const nlohmann::json serialized = SerializePreset(preset);
-  const auto deserialized = DeserializePreset(serialized);
-
-  // Paths should be normalized to generic (forward-slash) format in JSON
-  const std::string serializedStr = serialized.dump();
-  const bool pathsNormalized = serializedStr.find("path/to/model.nam") != std::string::npos;
-  ReportTest("Paths normalized in JSON", pathsNormalized);
-
-  ReportTest("Attachment count preserved after path handling", preset.attachments.size() == deserialized.attachments.size());
-}
-
-void TestEmptyAndMissingFields()
-{
-  std::cout << "\n=== Empty and Missing Fields ===\n";
-
-  // Test with minimal preset (empty optional fields)
-  namguitar::Preset minimal;
-  minimal.id = "minimal";
-  minimal.name = "Minimal Preset";
-  // Leave other fields empty/default
-
-  const nlohmann::json serialized = SerializePreset(minimal);
-  const auto deserialized = DeserializePreset(serialized);
-
-  ReportTest("Minimal preset ID preserved", minimal.id == deserialized.id);
-  ReportTest("Minimal preset name preserved", minimal.name == deserialized.name);
-  ReportTest("Empty category handled", minimal.category == deserialized.category);
-  ReportTest("Empty audioFxModelId handled", minimal.audioFxModelId == deserialized.audioFxModelId);
-  ReportTest("Empty irId handled", minimal.irId == deserialized.irId);
-  ReportTest("Empty fxChain handled", minimal.fxChain == deserialized.fxChain);
-  ReportTest("Empty attachments handled", minimal.attachments.size() == deserialized.attachments.size());
-  ReportTest("Empty parameters handled", minimal.parameters.size() == deserialized.parameters.size());
-}
-
-void TestMissingAttachmentFieldsInJSON()
-{
-  std::cout << "\n=== Missing Attachment Fields in JSON ===\n";
-
-  // Simulate JSON that's missing some attachment fields (e.g., from older format)
-  const std::string jsonStr = R"({
-    "presets": [{
-      "id": "partial-attach",
-      "name": "Partial Attachment",
-      "audioFxModelId": "model-1",
-      "irId": "ir-1",
-      "attachments": [
-        {"type": "nam", "id": "model-1"},
-        {"type": "ir", "filePath": "ir/test.wav", "hash": "hashvalue"}
-      ]
-    }]
-  })";
-
-  const auto presets = DeserializeAllPresets(jsonStr);
-
-  ReportTest("Preset parsed with partial attachments", presets.size() == 1);
-
-  if (!presets.empty())
+  // Verify
+  if (loaded->id != original.id || loaded->name != original.name)
   {
-    const auto& preset = presets[0];
-    ReportTest("Attachment count is 2", preset.attachments.size() == 2);
-
-    if (preset.attachments.size() >= 2)
-    {
-      // First attachment: has type and id, missing filePath and hash
-      ReportTest("First attachment type preserved", preset.attachments[0].type == "nam");
-      ReportTest("First attachment id preserved", preset.attachments[0].id == "model-1");
-      ReportTest("First attachment missing filePath is empty", preset.attachments[0].filePath.empty());
-      ReportTest("First attachment missing hash is empty", preset.attachments[0].hash.empty());
-
-      // Second attachment: has type, filePath, hash, missing id
-      ReportTest("Second attachment type preserved", preset.attachments[1].type == "ir");
-      ReportTest("Second attachment missing id is empty", preset.attachments[1].id.empty());
-      ReportTest("Second attachment filePath preserved", preset.attachments[1].filePath == fs::path("ir/test.wav"));
-      ReportTest("Second attachment hash preserved", preset.attachments[1].hash == "hashvalue");
-    }
+    std::cout << "FAIL (loaded preset does not match)" << std::endl;
+    return false;
   }
+
+  std::cout << "PASS" << std::endl;
+  return true;
 }
 
-void TestAttachmentDataField()
+// Test: Load all presets from directory
+bool TestLoadAllFromDirectory()
 {
-  std::cout << "\n=== Attachment Data Field ===\n";
+  std::cout << "Test: LoadAllFromDirectory... ";
 
-  // The 'data' field is used for inline payload (e.g., base64)
-  namguitar::PresetAttachment attachment;
-  attachment.type = "nam";
-  attachment.id = "inline-model";
-  attachment.data = "base64encodeddata...";
-  attachment.hash = "datahash";
+  PresetTestFixture fixture;
+  fs::path presetDir = fixture.mTempDir / "presets";
+  fs::create_directories(presetDir);
 
-  namguitar::Preset preset;
-  preset.id = "data-test";
-  preset.name = "Data Field Test";
-  preset.attachments = {attachment};
+  // Save multiple presets
+  auto preset1 = CreateMinimalPreset("preset-1", "Preset One");
+  auto preset2 = CreateMinimalPreset("preset-2", "Preset Two");
+  auto preset3 = CreateMinimalPreset("preset-3", "Preset Three");
 
-  const nlohmann::json serialized = SerializePreset(preset);
-  
-  // Check if data field is serialized
-  const std::string serializedStr = serialized.dump();
-  const bool dataFieldSerialized = serializedStr.find("base64encodeddata") != std::string::npos;
-  
-  ReportTest("Data field serialized when non-empty", dataFieldSerialized);
-  
-  // Verify round-trip
-  const auto deserialized = DeserializePreset(serialized);
-  ReportTest("Data field preserved after round-trip", 
-             !deserialized.attachments.empty() && deserialized.attachments[0].data == "base64encodeddata...");
-  
-  // Test that empty data field is not serialized
-  namguitar::PresetAttachment attachmentNoData;
-  attachmentNoData.type = "ir";
-  attachmentNoData.id = "ir-no-data";
-  attachmentNoData.hash = "hash123";
-  
-  namguitar::Preset presetNoData;
-  presetNoData.id = "no-data-test";
-  presetNoData.name = "No Data Field Test";
-  presetNoData.attachments = {attachmentNoData};
-  
-  const nlohmann::json serializedNoData = SerializePreset(presetNoData);
-  const std::string serializedNoDataStr = serializedNoData.dump();
-  const bool dataKeyAbsent = serializedNoDataStr.find("\"data\"") == std::string::npos;
-  ReportTest("Data key omitted when empty", dataKeyAbsent);
+  namguitar::PresetStorage::SaveToFile(preset1, presetDir / "preset1.json");
+  namguitar::PresetStorage::SaveToFile(preset2, presetDir / "preset2.json");
+  namguitar::PresetStorage::SaveToFile(preset3, presetDir / "preset3.json");
+
+  // Create a non-preset file to ensure it's ignored
+  std::ofstream(presetDir / "readme.txt") << "not a preset";
+
+  // Load all
+  auto allPresets = namguitar::PresetStorage::LoadAllFromDirectory(presetDir);
+
+  if (allPresets.size() != 3)
+  {
+    std::cout << "FAIL (expected 3 presets, got " << allPresets.size() << ")" << std::endl;
+    return false;
+  }
+
+  std::cout << "PASS" << std::endl;
+  return true;
 }
 
-void TestInvalidJsonHandling()
+// Test: Signal graph node finding
+bool TestGraphNodeFinding()
 {
-  std::cout << "\n=== Invalid JSON Handling ===\n";
+  std::cout << "Test: GraphNodeFinding... ";
 
-  // Empty string
-  auto result1 = DeserializeAllPresets("");
-  ReportTest("Empty string returns empty vector", result1.empty());
+  auto preset = CreateTestPreset("find-test", "Find Test", "test.nam");
+
+  // Find existing node
+  const auto* foundNode = preset.graph.FindNode("amp");
+  if (!foundNode)
+  {
+    std::cout << "FAIL (could not find 'amp' node)" << std::endl;
+    return false;
+  }
+
+  if (foundNode->type != "nam_amp")
+  {
+    std::cout << "FAIL (found node has wrong type)" << std::endl;
+    return false;
+  }
+
+  // Find non-existing node
+  const auto* notFound = preset.graph.FindNode("nonexistent");
+  if (notFound != nullptr)
+  {
+    std::cout << "FAIL (found non-existent node)" << std::endl;
+    return false;
+  }
+
+  std::cout << "PASS" << std::endl;
+  return true;
+}
+
+// Test: ResourceRef validation
+bool TestResourceRefValidation()
+{
+  std::cout << "Test: ResourceRefValidation... ";
+
+  // Empty ref should be invalid
+  namguitar::ResourceRef emptyRef;
+  if (emptyRef.IsValid())
+  {
+    std::cout << "FAIL (empty ref should be invalid)" << std::endl;
+    return false;
+  }
+
+  // File path ref
+  namguitar::ResourceRef fileRef;
+  fileRef.filePath = "path/to/model.nam";
+  if (!fileRef.IsFilePath() || !fileRef.IsValid())
+  {
+    std::cout << "FAIL (file path ref should be valid)" << std::endl;
+    return false;
+  }
+
+  // Library ref
+  namguitar::ResourceRef libRef;
+  libRef.resourceType = "nam";
+  libRef.resourceId = "plexi-bright";
+  if (!libRef.IsLibraryRef() || !libRef.IsValid())
+  {
+    std::cout << "FAIL (library ref should be valid)" << std::endl;
+    return false;
+  }
+
+  // Embedded ref
+  namguitar::ResourceRef embRef;
+  embRef.embeddedId = "emb-001";
+  if (!embRef.IsEmbedded() || !embRef.IsValid())
+  {
+    std::cout << "FAIL (embedded ref should be valid)" << std::endl;
+    return false;
+  }
+
+  std::cout << "PASS" << std::endl;
+  return true;
+}
+
+// Test: Deserialize invalid JSON
+bool TestDeserializeInvalidJson()
+{
+  std::cout << "Test: DeserializeInvalidJson... ";
 
   // Invalid JSON
-  auto result2 = DeserializeAllPresets("{not valid json}");
-  ReportTest("Invalid JSON returns empty vector", result2.empty());
-
-  // Valid JSON but wrong structure
-  auto result3 = DeserializeAllPresets(R"({"not_presets": []})");
-  ReportTest("Missing 'presets' key returns empty vector", result3.empty());
-
-  // Presets key is not an array
-  auto result4 = DeserializeAllPresets(R"({"presets": "not an array"})");
-  ReportTest("Non-array 'presets' returns empty vector", result4.empty());
-}
-
-void TestByteChunkSerializationSimulation()
-{
-  std::cout << "\n=== Byte Chunk Serialization Simulation ===\n";
-
-  // Simulate what PresetStorage::Serialize does
-  const std::vector<namguitar::Preset> originals = {
-      CreateTestPreset("chunk-1", "Chunk Test 1", "model-a", "ir-a"),
-      CreateTestPreset("chunk-2", "Chunk Test 2", "model-b", "ir-b"),
-  };
-
-  // Serialize to chunk
-  TestByteChunk chunk;
-  const nlohmann::json serialized = SerializeAllPresets(originals);
-  const std::string payload = serialized.dump();
-  const uint32_t size = static_cast<uint32_t>(payload.size());
-  chunk.PutBytes(&size, sizeof(size));
-  chunk.PutBytes(payload.data(), static_cast<int>(payload.size()));
-
-  ReportTest("Chunk has data", chunk.Size() > 0);
-
-  // Deserialize from chunk (simulating Unserialize)
-  uint32_t readSize = 0;
-  int position = chunk.GetBytes(&readSize, sizeof(readSize), 0);
-  ReportTest("Size read correctly", readSize == size && position == sizeof(size));
-
-  std::string readPayload(readSize, '\0');
-  position = chunk.GetBytes(readPayload.data(), static_cast<int>(readSize), position);
-  ReportTest("Payload read correctly", position == static_cast<int>(sizeof(size) + readSize));
-
-  const auto deserialized = DeserializeAllPresets(readPayload);
-  ReportTest("Deserialized preset count matches", deserialized.size() == originals.size());
-
-  bool allMatch = true;
-  for (size_t i = 0; i < originals.size() && i < deserialized.size(); ++i)
+  auto result1 = namguitar::PresetStorage::DeserializeFromJson("not valid json");
+  if (result1)
   {
-    if (!PresetsEqual(originals[i], deserialized[i]))
-    {
-      allMatch = false;
-    }
+    std::cout << "FAIL (should fail on invalid JSON)" << std::endl;
+    return false;
   }
-  ReportTest("All presets match after byte chunk round-trip", allMatch);
+
+  // Empty JSON
+  auto result2 = namguitar::PresetStorage::DeserializeFromJson("");
+  if (result2)
+  {
+    std::cout << "FAIL (should fail on empty string)" << std::endl;
+    return false;
+  }
+
+  std::cout << "PASS" << std::endl;
+  return true;
 }
 
-void TestModelAndIRConsistency()
+// Test: Node parameters serialization
+bool TestNodeParams()
 {
-  std::cout << "\n=== Model and IR ID/Attachment Consistency ===\n";
+  std::cout << "Test: NodeParams... ";
 
-  // Test that audioFxModelId and irId are independent from attachments
-  namguitar::Preset preset;
-  preset.id = "consistency-test";
-  preset.name = "Consistency Test";
-  preset.audioFxModelId = "main-model";
-  preset.irId = "main-ir";
+  namguitar::Preset original;
+  original.id = "params-test";
+  original.name = "Params Test";
+  original.version = 2;
 
-  // Attachments reference different IDs (this is valid - presets can have multiple models)
-  namguitar::PresetAttachment extraModel;
-  extraModel.type = "nam";
-  extraModel.id = "alternate-model";
-  extraModel.filePath = "amps/alternate.nam";
+  namguitar::GraphNode node;
+  node.id = "test-node";
+  node.type = "test_effect";
+  node.enabled = true;
+  node.params["gain"] = 0.75;
+  node.params["frequency"] = 1000.0;
+  node.params["q"] = 1.414;
+  node.config["mode"] = "stereo";
+  node.config["algorithm"] = "vintage";
+  original.graph.nodes.push_back(node);
 
-  preset.attachments = {extraModel};
+  // Serialize and deserialize
+  std::string json = namguitar::PresetStorage::SerializeToJson(original);
+  auto deserialized = namguitar::PresetStorage::DeserializeFromJson(json);
 
-  const nlohmann::json serialized = SerializePreset(preset);
-  const auto deserialized = DeserializePreset(serialized);
+  if (!deserialized)
+  {
+    std::cout << "FAIL (deserialization failed)" << std::endl;
+    return false;
+  }
 
-  ReportTest("audioFxModelId preserved", deserialized.audioFxModelId == "main-model");
-  ReportTest("irId preserved", deserialized.irId == "main-ir");
-  ReportTest("Attachment ID preserved (different from audioFxModelId)",
-             !deserialized.attachments.empty() && deserialized.attachments[0].id == "alternate-model");
+  if (deserialized->graph.nodes.empty())
+  {
+    std::cout << "FAIL (no nodes in deserialized preset)" << std::endl;
+    return false;
+  }
+
+  const auto& deserializedNode = deserialized->graph.nodes[0];
+  
+  // Check params
+  if (deserializedNode.params.count("gain") == 0 ||
+      deserializedNode.params.at("gain") != 0.75)
+  {
+    std::cout << "FAIL (gain param mismatch)" << std::endl;
+    return false;
+  }
+
+  if (deserializedNode.params.count("frequency") == 0 ||
+      deserializedNode.params.at("frequency") != 1000.0)
+  {
+    std::cout << "FAIL (frequency param mismatch)" << std::endl;
+    return false;
+  }
+
+  // Check config
+  if (deserializedNode.config.count("mode") == 0 ||
+      deserializedNode.config.at("mode") != "stereo")
+  {
+    std::cout << "FAIL (mode config mismatch)" << std::endl;
+    return false;
+  }
+
+  std::cout << "PASS" << std::endl;
+  return true;
 }
 
-} // namespace
+// Test: Embedded resources
+bool TestEmbeddedResources()
+{
+  std::cout << "Test: EmbeddedResources... ";
+
+  namguitar::Preset original;
+  original.id = "embedded-test";
+  original.name = "Embedded Test";
+  original.version = 2;
+
+  // Add embedded resource
+  namguitar::EmbeddedResource embedded;
+  embedded.id = "emb-model-1";
+  embedded.type = "nam";
+  embedded.name = "Embedded Model";
+  embedded.hash = "abc123def456";
+  embedded.originalPath = "original/path/model.nam";
+  original.embeddedResources.push_back(embedded);
+
+  // Add node referencing embedded resource
+  namguitar::GraphNode node;
+  node.id = "amp";
+  node.type = "nam_amp";
+  node.resource = namguitar::ResourceRef{};
+  node.resource->embeddedId = "emb-model-1";
+  original.graph.nodes.push_back(node);
+
+  // Serialize and deserialize
+  std::string json = namguitar::PresetStorage::SerializeToJson(original);
+  auto deserialized = namguitar::PresetStorage::DeserializeFromJson(json);
+
+  if (!deserialized)
+  {
+    std::cout << "FAIL (deserialization failed)" << std::endl;
+    return false;
+  }
+
+  if (deserialized->embeddedResources.size() != 1)
+  {
+    std::cout << "FAIL (embedded resource count mismatch)" << std::endl;
+    return false;
+  }
+
+  const auto& embRes = deserialized->embeddedResources[0];
+  if (embRes.id != "emb-model-1" || embRes.type != "nam" || embRes.hash != "abc123def456")
+  {
+    std::cout << "FAIL (embedded resource data mismatch)" << std::endl;
+    return false;
+  }
+
+  std::cout << "PASS" << std::endl;
+  return true;
+}
+
+} // anonymous namespace
 
 int main()
 {
-  std::cout << "================================================\n";
-  std::cout << "   Preset Storage Serialization Tests\n";
-  std::cout << "================================================\n";
+  std::cout << "========================================" << std::endl;
+  std::cout << "PresetStorage V2 Tests" << std::endl;
+  std::cout << "========================================" << std::endl;
 
-  TestSinglePresetSerializationRoundTrip();
-  TestMultiplePresetsSerializationRoundTrip();
-  TestEmptyAttachmentsHandling();
-  TestAttachmentPathNormalization();
-  TestEmptyAndMissingFields();
-  TestMissingAttachmentFieldsInJSON();
-  TestAttachmentDataField();
-  TestInvalidJsonHandling();
-  TestByteChunkSerializationSimulation();
-  TestModelAndIRConsistency();
+  int passed = 0;
+  int failed = 0;
 
-  std::cout << "\n================================================\n";
-  std::cout << "Results: " << gTestsPassed << " passed, " << gTestsFailed << " failed\n";
-  std::cout << "================================================\n";
+  auto runTest = [&](bool (*testFn)())
+  {
+    if (testFn())
+    {
+      ++passed;
+    }
+    else
+    {
+      ++failed;
+    }
+  };
 
-  return gTestsFailed > 0 ? 1 : 0;
+  runTest(TestSerializeDeserialize);
+  runTest(TestSaveLoadFile);
+  runTest(TestLoadAllFromDirectory);
+  runTest(TestGraphNodeFinding);
+  runTest(TestResourceRefValidation);
+  runTest(TestDeserializeInvalidJson);
+  runTest(TestNodeParams);
+  runTest(TestEmbeddedResources);
+
+  std::cout << "========================================" << std::endl;
+  std::cout << "Results: " << passed << " passed, " << failed << " failed" << std::endl;
+  std::cout << "========================================" << std::endl;
+
+  return failed > 0 ? 1 : 0;
 }

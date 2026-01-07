@@ -1,6 +1,6 @@
 #pragma once
 
-#include "presets/PresetTypesV2.h"
+#include "presets/PresetTypes.h"
 #include "dsp/SignalGraphExecutor.h"
 #include "dsp/EffectRegistry.h"
 #include "resources/ResourceLibrary.h"
@@ -63,7 +63,7 @@ namespace namguitar
      * @param preset The preset to load
      * @return true if the preset was loaded successfully
      */
-    bool LoadPreset(const PresetV2& preset)
+    bool LoadPreset(const Preset& preset)
     {
       mCurrentPreset = preset;
 
@@ -71,9 +71,9 @@ namespace namguitar
       mExecutor = std::make_unique<SignalGraphExecutor>(preset.graph);
 
       // Apply global settings
-      mInputTrim = preset.globals.inputTrim;
-      mOutputTrim = preset.globals.outputTrim;
-      mMasterVolume = preset.globals.masterVolume;
+      mInputTrim = preset.global.inputTrim;
+      mOutputTrim = preset.global.outputTrim;
+      mMasterVolume = 1.0; // Master volume not in GlobalSettings
 
       // Resolve resources for all nodes
       ResolveResources(preset);
@@ -204,7 +204,7 @@ namespace namguitar
     /**
      * Get the current preset state.
      */
-    [[nodiscard]] const PresetV2& GetCurrentPreset() const { return mCurrentPreset; }
+    [[nodiscard]] const Preset& GetCurrentPreset() const { return mCurrentPreset; }
 
     /**
      * Get the resource library for managing pre-defined resources.
@@ -217,7 +217,7 @@ namespace namguitar
     [[nodiscard]] bool HasPreset() const { return mExecutor != nullptr; }
 
   private:
-    void ResolveResources(const PresetV2& preset)
+    void ResolveResources(const Preset& preset)
     {
       for (const auto& node : preset.graph.nodes)
       {
@@ -263,7 +263,7 @@ namespace namguitar
 
     std::unique_ptr<SignalGraphExecutor> mExecutor;
     std::unique_ptr<ResourceLibrary> mResourceLibrary;
-    PresetV2 mCurrentPreset;
+    Preset mCurrentPreset;
 
     double mSampleRate = 0.0;
     int mMaxBlockSize = 0;

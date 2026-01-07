@@ -1,41 +1,29 @@
 #pragma once
 
+#include "presets/PresetTypes.h"
 #include <optional>
 #include <string>
 #include <vector>
 
-#include "models/ModelHasher.h"
-#include "presets/PresetTypes.h"
-#include "util/FileSystem.h"
-
-namespace iplug
-{
-  class IByteChunk;
-}
-
 namespace namguitar
 {
+  /**
+   * Serialization and storage for presets.
+   */
   class PresetStorage
   {
   public:
-    PresetStorage();
-    ~PresetStorage();
+    // JSON serialization
+    [[nodiscard]] static std::string SerializeToJson(const Preset& preset);
+    [[nodiscard]] static std::optional<Preset> DeserializeFromJson(const std::string& json);
 
-    bool Serialize(iplug::IByteChunk &chunk) const;
-    int Unserialize(const iplug::IByteChunk &chunk, int startPos);
+    // File operations
+    [[nodiscard]] static bool SaveToFile(const Preset& preset, const std::filesystem::path& path);
+    [[nodiscard]] static std::optional<Preset> LoadFromFile(const std::filesystem::path& path);
 
-    void SavePreset(const Preset &preset);
-    [[nodiscard]] std::vector<Preset> ListPresets() const;
-    [[nodiscard]] std::optional<Preset> FindPreset(const std::string &id) const;
-
-  private:
-    void PersistToDisk() const;
-    void LoadFromDisk();
-    void EnsureDefaultPresets();
-
-    std::vector<Preset> mPresets;
-    FileSystem mFileSystem;
-    ModelHasher mHasher;
-    std::filesystem::path mPresetFile;
+    // Directory operations
+    [[nodiscard]] static std::vector<Preset> LoadAllFromDirectory(const std::filesystem::path& directory);
+    static void SaveAllToDirectory(const std::vector<Preset>& presets, const std::filesystem::path& directory);
   };
+
 } // namespace namguitar
