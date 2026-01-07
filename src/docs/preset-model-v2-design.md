@@ -5,12 +5,13 @@
 This document outlines a redesigned preset data model that supports:
 1. **Top-level summary information** - metadata for browsing/searching
 2. **Global parameters section** - master settings independent of signal path
-3. **Flexible signal graph** - allowing splits, parallel paths, and mixing
+3. **Flexible signal graph** - allowing any effect in any order, splits, parallel paths, and mixing
 
 ## Design Goals
 
 - **Simplicity** - Keep the model minimal while enabling flexibility
-- **Signal Path Flexibility** - Support splitting amp/cab into parallel paths
+- **Extensibility** - Support arbitrary effect types via string identifiers
+- **Signal Path Flexibility** - Any effect in any order, parallel paths, multiple instances
 - **Backwards Compatible** - Support migration from v1 presets
 - **Serialization-Friendly** - Easy JSON/binary representation
 
@@ -52,50 +53,49 @@ Parameters that apply to the entire preset, independent of signal routing:
 struct GlobalSettings {
     double inputTrim = 0.0;            // Input gain in dB
     double outputTrim = 0.0;           // Master output in dB
-    double mix = 1.0;                  // Wet/dry mix (0.0-1.0)
     int transpose = 0;                 // Pitch shift in semitones
-    
-    // Noise gate (pre-signal path)
-    bool gateEnabled = false;
-    double gateThreshold = -60.0;      // dB
-    
-    // Optional future: input conditioning, tuner reference, etc.
+    // Optional future: tuner reference, MIDI channel, etc.
 };
 ```
 
 ### Signal Graph Model
 
-A simple directed graph where nodes are processing units and edges define signal flow.
+A directed graph where nodes are processing units identified by string type.
+Any effect can appear in any order and multiple times.
 
 ```cpp
-// Node types that can appear in the signal graph
-enum class NodeType {
-    Input,          // Graph entry point
-    Output,         // Graph exit point  
-    Splitter,       // 1 input → N outputs (signal copy)
-    Mixer,          // N inputs → 1 output (sum/average)
-    Amp,            // NAM model processor
-    Cab,            // IR convolution or simple cab sim
-    EQ,             // Parametric EQ
-    Delay,          // Delay effect
-    Reverb,         // Reverb effect
-    // Future: Compressor, Chorus, Phaser, etc.
-};
-
+/**
+ * A node in the signal graph.
+ * 
+ * Node types are arbitrary strings allowing unlimited extensibility.
+ * The category helps UI grouping but doesn't restrict placement.
+ * 
+ * Reserved types for routing:
+ *   "input"    - Graph entry point (exactly one required)
+ *   "output"   - Graph exit point (exactly one required)
+ *   "splitter" - 1 input → N outputs (signal copy)
+ *   "mixer"    - N inputs → 1 output (sum with optional gain per input)
+ */
 struct GraphNode {
-    std::string id;                    // Node identifier (for edge references)
-    NodeType type;
+    std::string id;                    // Unique node ID within this graph
+    std::string type;                  // Effect type identifier (e.g., "nam_amp", "ir_cab", "eq_parametric")
+    std::string category;              // UI grouping: "amp", "cab", "eq", "dynamics", "modulation", "delay", "reverb", "utility"
+    std::string label;                 // Optional display name override
     bool enabled = true;               // Bypass toggle
-    std::map<std::string, double> params;  // Type-specific parameters
-    std::string resourceId;            // Reference to attachment (for Amp/Cab)
+    
+    // Parameters - flexible key/value for any effect type
+    std::map<std::string, double> params;      // Numeric parameters
+    std::map<std::string, std::string> config; // String config (e.g., algorithm selection)
+    
+    std::string resourceId;            // Reference to attachment (for effects that need external files)
 };
 
 struct GraphEdge {
     std::string from;                  // Source node ID
     std::string to;                    // Destination node ID
-    int fromPort = 0;                  // Output port index (for splitters)
-    int toPort = 0;                    // Input port index (for mixers)
-    double gain = 1.0;                 // Edge gain (for mixing balance)
+    int fromPort = 0;                  // Output port index (for splitters: 0, 1, 2...)
+    int toPort = 0;                    // Input port index (for mixers: 0, 1, 2...)
+    double gain = 1.0;                 // Edge gain multiplier (for mixing balance)
 };
 
 struct SignalGraph {
@@ -103,6 +103,70 @@ struct SignalGraph {
     std::vector<GraphEdge> edges;
 };
 ```
+
+---
+
+## Effect Type Registry (Runtime)
+
+Effects are registered at runtime. The preset only stores type strings.
+
+```cpp
+/**
+ * Describes an available effect type.
+ * This is NOT stored in presets - it's runtime metadata.
+ */
+struct EffectTypeInfo {
+    std::string type;                  // Unique type ID (e.g., "nam_amp_v1")
+    std::string displayName;           // "NAM Amp"
+    std::string category;              // "amp", "cab", "eq", "dynamics", "modulation", "delay", "reverb", "utility"
+    std::string description;           // User-facing description
+    bool requiresResource = false;     // Does this need an external file (model, IR, etc.)?
+    std::vector<ParameterDef> params;  // Parameter definitions for UI
+};
+
+struct ParameterDef {
+    std::string id;
+    std::string displayName;
+    double defaultValue;
+    double minValue;
+    double maxValue;
+    std::string unit;                  // "dB", "Hz", "ms", "%", etc.
+};
+```
+
+### Example Effect Types
+
+| Type ID | Category | Description |
+|---------|----------|-------------|
+| `nam_amp` | amp | NAM neural amp model |
+| `amp_clean` | amp | Built-in clean amp sim |
+| `amp_crunch` | amp | Built-in crunch amp sim |
+| `ir_cab` | cab | IR-based cabinet (convolution) |
+| `cab_simple` | cab | Algorithmic cabinet simulation |
+| `eq_parametric` | eq | 4-band parametric EQ |
+| `eq_graphic` | eq | 10-band graphic EQ |
+| `eq_tilt` | eq | Simple tilt EQ |
+| `comp_opto` | dynamics | Optical compressor |
+| `comp_vca` | dynamics | VCA compressor |
+| `comp_fet` | dynamics | FET compressor |
+| `gate_noise` | dynamics | Noise gate |
+| `chorus_analog` | modulation | Analog-style chorus |
+| `chorus_digital` | modulation | Digital chorus |
+| `flanger` | modulation | Flanger |
+| `phaser` | modulation | Phaser |
+| `tremolo` | modulation | Tremolo |
+| `vibrato` | modulation | Vibrato |
+| `delay_digital` | delay | Digital delay |
+| `delay_tape` | delay | Tape delay emulation |
+| `delay_analog` | delay | Analog bucket-brigade delay |
+| `reverb_room` | reverb | Room reverb |
+| `reverb_hall` | reverb | Hall reverb |
+| `reverb_plate` | reverb | Plate reverb |
+| `reverb_spring` | reverb | Spring reverb |
+| `reverb_shimmer` | reverb | Shimmer reverb |
+| `gain` | utility | Simple gain stage |
+| `splitter` | utility | Signal splitter (1→N) |
+| `mixer` | utility | Signal mixer (N→1) |
 
 ---
 
@@ -118,21 +182,20 @@ struct SignalGraph {
   "category": "Crunch",
   "global": {
     "inputTrim": -3.0,
-    "outputTrim": 0.0,
-    "mix": 1.0,
-    "gateEnabled": true,
-    "gateThreshold": -55.0
+    "outputTrim": 0.0
   },
   "graph": {
     "nodes": [
-      { "id": "in", "type": "Input" },
-      { "id": "amp", "type": "Amp", "resourceId": "att-nam-001", "params": { "drive": 0.6, "tone": 0.5 } },
-      { "id": "cab", "type": "Cab", "resourceId": "att-ir-001" },
-      { "id": "eq", "type": "EQ", "params": { "lowGain": 2.0, "lowFreq": 80, "midGain": -1.0, "midFreq": 400, "highGain": 1.5, "highFreq": 8000 } },
-      { "id": "out", "type": "Output" }
+      { "id": "in", "type": "input" },
+      { "id": "gate", "type": "gate_noise", "category": "dynamics", "params": { "threshold": -55.0, "release": 50 } },
+      { "id": "amp", "type": "nam_amp", "category": "amp", "resourceId": "att-nam-001", "params": { "drive": 0.6, "tone": 0.5 } },
+      { "id": "cab", "type": "ir_cab", "category": "cab", "resourceId": "att-ir-001" },
+      { "id": "eq", "type": "eq_parametric", "category": "eq", "params": { "lowGain": 2.0, "lowFreq": 80, "midGain": -1.0, "midFreq": 400, "highGain": 1.5, "highFreq": 8000 } },
+      { "id": "out", "type": "output" }
     ],
     "edges": [
-      { "from": "in", "to": "amp" },
+      { "from": "in", "to": "gate" },
+      { "from": "gate", "to": "amp" },
       { "from": "amp", "to": "cab" },
       { "from": "cab", "to": "eq" },
       { "from": "eq", "to": "out" }
@@ -145,9 +208,9 @@ struct SignalGraph {
 }
 ```
 
-### Dual Cab (Split After Amp)
+### Dual Cab with Different Cab Types
 
-Classic technique: one amp, two different cabs blended together.
+Blend a NAM-captured cab with an algorithmic simple cab.
 
 ```json
 {
@@ -156,13 +219,13 @@ Classic technique: one amp, two different cabs blended together.
   "version": 2,
   "graph": {
     "nodes": [
-      { "id": "in", "type": "Input" },
-      { "id": "amp", "type": "Amp", "resourceId": "att-nam-001" },
-      { "id": "split", "type": "Splitter" },
-      { "id": "cab1", "type": "Cab", "resourceId": "att-ir-sm57" },
-      { "id": "cab2", "type": "Cab", "resourceId": "att-ir-421" },
-      { "id": "mix", "type": "Mixer" },
-      { "id": "out", "type": "Output" }
+      { "id": "in", "type": "input" },
+      { "id": "amp", "type": "nam_amp", "category": "amp", "resourceId": "att-nam-001" },
+      { "id": "split", "type": "splitter", "category": "utility" },
+      { "id": "cab1", "type": "ir_cab", "category": "cab", "resourceId": "att-ir-sm57" },
+      { "id": "cab2", "type": "cab_simple", "category": "cab", "params": { "bass": 0.6, "presence": 0.5, "brightness": 0.4 } },
+      { "id": "mix", "type": "mixer", "category": "utility" },
+      { "id": "out", "type": "output" }
     ],
     "edges": [
       { "from": "in", "to": "amp" },
@@ -177,22 +240,86 @@ Classic technique: one amp, two different cabs blended together.
 }
 ```
 
-### Parallel Amp Paths (Wet/Dry Rig)
+### Effects Before Amp (Unconventional Chain)
 
-One path through the amp/cab, one clean path blended back.
+Reverb before amp for ambient textures - any order is valid.
 
 ```json
 {
   "id": "preset-003",
+  "name": "Ambient Swells",
+  "version": 2,
+  "graph": {
+    "nodes": [
+      { "id": "in", "type": "input" },
+      { "id": "comp", "type": "comp_opto", "category": "dynamics", "params": { "threshold": -20, "ratio": 4, "attack": 10, "release": 200 } },
+      { "id": "reverb1", "type": "reverb_shimmer", "category": "reverb", "params": { "decay": 0.8, "shimmer": 0.6, "mix": 0.4 } },
+      { "id": "amp", "type": "amp_clean", "category": "amp", "params": { "gain": 0.3, "tone": 0.6 } },
+      { "id": "cab", "type": "cab_simple", "category": "cab" },
+      { "id": "delay", "type": "delay_tape", "category": "delay", "params": { "time": 375, "feedback": 0.4, "mix": 0.3 } },
+      { "id": "out", "type": "output" }
+    ],
+    "edges": [
+      { "from": "in", "to": "comp" },
+      { "from": "comp", "to": "reverb1" },
+      { "from": "reverb1", "to": "amp" },
+      { "from": "amp", "to": "cab" },
+      { "from": "cab", "to": "delay" },
+      { "from": "delay", "to": "out" }
+    ]
+  }
+}
+```
+
+### Multiple Instances of Same Effect
+
+Two EQs and two compressors in one chain.
+
+```json
+{
+  "id": "preset-004",
+  "name": "Studio Polish",
+  "version": 2,
+  "graph": {
+    "nodes": [
+      { "id": "in", "type": "input" },
+      { "id": "eq_pre", "type": "eq_parametric", "category": "eq", "label": "Pre EQ", "params": { "lowCut": 80 } },
+      { "id": "comp1", "type": "comp_fet", "category": "dynamics", "label": "FET Comp", "params": { "ratio": 8, "attack": 1 } },
+      { "id": "amp", "type": "nam_amp", "category": "amp", "resourceId": "att-nam-001" },
+      { "id": "cab", "type": "ir_cab", "category": "cab", "resourceId": "att-ir-001" },
+      { "id": "eq_post", "type": "eq_parametric", "category": "eq", "label": "Post EQ", "params": { "highShelf": 3.0, "highFreq": 8000 } },
+      { "id": "comp2", "type": "comp_opto", "category": "dynamics", "label": "Opto Comp", "params": { "ratio": 2, "attack": 30 } },
+      { "id": "out", "type": "output" }
+    ],
+    "edges": [
+      { "from": "in", "to": "eq_pre" },
+      { "from": "eq_pre", "to": "comp1" },
+      { "from": "comp1", "to": "amp" },
+      { "from": "amp", "to": "cab" },
+      { "from": "cab", "to": "eq_post" },
+      { "from": "eq_post", "to": "comp2" },
+      { "from": "comp2", "to": "out" }
+    ]
+  }
+}
+```
+
+### Parallel Wet/Dry Rig
+
+Clean blend with processed signal.
+
+```json
+{
+  "id": "preset-005",
   "name": "Wet/Dry Blend",
   "graph": {
     "nodes": [
-      { "id": "in", "type": "Input" },
-      { "id": "split", "type": "Splitter" },
-      { "id": "amp", "type": "Amp", "resourceId": "att-nam-001" },
-      { "id": "cab", "type": "Cab", "resourceId": "att-ir-001" },
-      { "id": "mix", "type": "Mixer" },
-      { "id": "out", "type": "Output" }
+      { "id": "in", "type": "input" },
+      { "id": "split", "type": "splitter", "category": "utility" },
+      { "id": "amp", "type": "nam_amp", "category": "amp", "resourceId": "att-nam-001" },
+      { "id": "cab", "type": "ir_cab", "category": "cab", "resourceId": "att-ir-001" },
+      { "id": "mix", "type": "mixer", "category": "utility" },
+      { "id": "out", "type": "output" }
     ],
     "edges": [
       { "from": "in", "to": "split" },
@@ -215,34 +342,39 @@ One path through the amp/cab, one clean path blended back.
 2. Add JSON serialization/deserialization in `PresetStorageV2.cpp`
 3. Add migration function: `PresetV1 → PresetV2`
 
-### Phase 2: Graph Execution Engine
+### Phase 2: Effect Type Registry
+1. Create `EffectRegistry` class for runtime effect type registration
+2. Define `EffectProcessor` interface for all effects
+3. Implement processor classes for each built-in effect type
+4. Support dynamic loading of effect types (future: plugins)
+
+### Phase 3: Graph Execution Engine
 1. Create `SignalGraphExecutor` class
 2. Topological sort for execution order
 3. Buffer management for parallel paths
-4. Integrate with `NAMDSPManager`
+4. Handle unknown effect types gracefully (bypass with warning)
 
-### Phase 3: UI Integration
+### Phase 4: UI Integration
 1. Update preset JSON format in JavaScript
-2. Add visual graph editor (future)
-3. Quick presets for common patterns:
-   - "Linear" (Amp → Cab → EQ → FX)
-   - "Dual Cab" (Amp → Split → 2x Cab → Mix)
-   - "Parallel" (Split → Amp Path / Clean Path → Mix)
+2. Effect browser organized by category
+3. Drag-and-drop graph editor (future)
+4. Quick templates for common patterns
 
-### Phase 4: Testing & Migration
+### Phase 5: Testing & Migration
 1. Update `PresetStorageTests.cpp` for v2 format
 2. Create graph execution tests
 3. Ensure v1 presets auto-migrate on load
+4. Test with unknown/missing effect types
 
 ---
 
 ## Simplifications Made
 
-1. **No arbitrary routing** - Splitter/Mixer pattern keeps graph simple
-2. **Single input/output** - No multi-input/output presets (stereo handled internally)
-3. **Fixed node types** - Extensible via enum, not arbitrary plugins
-4. **Parameters in nodes** - Each node owns its params, no shared parameter buses
-5. **Attachments by reference** - Nodes reference attachments by ID, not embedded data
+1. **String-based types** - No compile-time enum, unlimited extensibility
+2. **Categories for UI only** - Don't restrict placement, just help browsing
+3. **Single input/output** - Stereo handled internally per node
+4. **Parameters as maps** - Flexible key/value, no fixed schema per effect
+5. **Graceful degradation** - Unknown types bypass, don't crash
 
 ---
 
@@ -250,7 +382,7 @@ One path through the amp/cab, one clean path blended back.
 
 ```
 src/presets/
-├── PresetTypes.h          # Keep for backwards compat
+├── PresetTypes.h          # Keep for backwards compat (v1)
 ├── PresetTypesV2.h        # New data model
 ├── PresetStorage.h/cpp    # Keep for v1
 ├── PresetStorageV2.h/cpp  # New serialization
@@ -258,8 +390,44 @@ src/presets/
 └── SignalGraph.h/cpp      # Graph data structures
 
 src/dsp/
+├── EffectRegistry.h/cpp       # Effect type registration
+├── EffectProcessor.h          # Base interface for all effects
 ├── SignalGraphExecutor.h/cpp  # Graph execution engine
-└── NodeProcessors.h/cpp       # Per-node-type processors
+└── effects/                   # Effect implementations by category
+    ├── amps/
+    │   ├── NAMAmp.cpp
+    │   ├── CleanAmp.cpp
+    │   └── CrunchAmp.cpp
+    ├── cabs/
+    │   ├── IRCab.cpp
+    │   └── SimpleCab.cpp
+    ├── dynamics/
+    │   ├── NoiseGate.cpp
+    │   ├── OptoCompressor.cpp
+    │   ├── VCACompressor.cpp
+    │   └── FETCompressor.cpp
+    ├── eq/
+    │   ├── ParametricEQ.cpp
+    │   ├── GraphicEQ.cpp
+    │   └── TiltEQ.cpp
+    ├── modulation/
+    │   ├── Chorus.cpp
+    │   ├── Flanger.cpp
+    │   ├── Phaser.cpp
+    │   └── Tremolo.cpp
+    ├── delay/
+    │   ├── DigitalDelay.cpp
+    │   ├── TapeDelay.cpp
+    │   └── AnalogDelay.cpp
+    ├── reverb/
+    │   ├── RoomReverb.cpp
+    │   ├── HallReverb.cpp
+    │   ├── PlateReverb.cpp
+    │   └── SpringReverb.cpp
+    └── utility/
+        ├── Gain.cpp
+        ├── Splitter.cpp
+        └── Mixer.cpp
 ```
 
 ---
@@ -270,16 +438,82 @@ When loading a preset:
 1. Check `version` field (missing = v1)
 2. If v1, call `MigrateV1ToV2()`:
    - Copy metadata fields
-   - Create linear graph: Input → Amp → Cab → EQ → Delay → Reverb → Output
-   - Map `fxChain` to enabled nodes
-   - Map parameters to appropriate nodes
+   - Create linear graph based on v1 `fxChain`:
+     - Input → [Gate if enabled] → Amp → Cab → [EQ if enabled] → [Delay if enabled] → [Reverb if enabled] → Output
+   - Map `audioFxModelId` → `nam_amp` node with resourceId
+   - Map `irId` → `ir_cab` node with resourceId
+   - Map parameters to appropriate node params
 3. Save migrated preset in v2 format
+
+---
+
+## Effect Processor Interface
+
+```cpp
+/**
+ * Base interface for all effect processors.
+ * Each effect type implements this interface.
+ */
+class EffectProcessor {
+public:
+    virtual ~EffectProcessor() = default;
+    
+    // Lifecycle
+    virtual void Prepare(double sampleRate, int maxBlockSize) = 0;
+    virtual void Reset() = 0;
+    
+    // Processing (stereo in/out)
+    virtual void Process(float** inputs, float** outputs, int numSamples) = 0;
+    
+    // Parameters
+    virtual void SetParam(const std::string& key, double value) = 0;
+    virtual void SetConfig(const std::string& key, const std::string& value) = 0;
+    virtual double GetParam(const std::string& key) const = 0;
+    
+    // Resource loading (for effects that need external files)
+    virtual bool LoadResource(const std::filesystem::path& path) { return true; }
+    virtual bool RequiresResource() const { return false; }
+    
+    // Bypass
+    virtual void SetEnabled(bool enabled) { mEnabled = enabled; }
+    virtual bool IsEnabled() const { return mEnabled; }
+    
+protected:
+    bool mEnabled = true;
+};
+
+/**
+ * Factory function type for creating effect processors.
+ */
+using EffectFactory = std::function<std::unique_ptr<EffectProcessor>()>;
+
+/**
+ * Registry for effect types.
+ */
+class EffectRegistry {
+public:
+    static EffectRegistry& Instance();
+    
+    void Register(const std::string& type, const EffectTypeInfo& info, EffectFactory factory);
+    std::unique_ptr<EffectProcessor> Create(const std::string& type);
+    
+    std::vector<EffectTypeInfo> GetAllTypes() const;
+    std::vector<EffectTypeInfo> GetTypesByCategory(const std::string& category) const;
+    bool HasType(const std::string& type) const;
+    
+private:
+    std::map<std::string, EffectTypeInfo> mTypeInfo;
+    std::map<std::string, EffectFactory> mFactories;
+};
+```
 
 ---
 
 ## Questions to Resolve
 
-1. **Stereo handling** - Should splitter create stereo pairs or mono duplicates?
-2. **Parameter smoothing** - Per-node or global smoothing strategy?
-3. **Graph validation** - How strict on cycles, disconnected nodes?
+1. **Stereo handling** - Should each node declare mono/stereo preference?
+2. **Parameter smoothing** - Per-effect or centralized smoothing?
+3. **Graph validation** - How strict? Allow cycles for feedback effects?
 4. **Max complexity** - Limit on node count for performance?
+5. **Unknown types** - Bypass silently, show warning, or block preset load?
+6. **Version compatibility** - How to handle presets using newer effect types?
