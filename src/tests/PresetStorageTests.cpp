@@ -263,9 +263,9 @@ bool TestLoadAllFromDirectory()
   auto preset2 = CreateMinimalPreset("preset-2", "Preset Two");
   auto preset3 = CreateMinimalPreset("preset-3", "Preset Three");
 
-  namguitar::PresetStorage::SaveToFile(preset1, presetDir / "preset1.json");
-  namguitar::PresetStorage::SaveToFile(preset2, presetDir / "preset2.json");
-  namguitar::PresetStorage::SaveToFile(preset3, presetDir / "preset3.json");
+  (void)namguitar::PresetStorage::SaveToFile(preset1, presetDir / "preset1.json");
+  (void)namguitar::PresetStorage::SaveToFile(preset2, presetDir / "preset2.json");
+  (void)namguitar::PresetStorage::SaveToFile(preset3, presetDir / "preset3.json");
 
   // Create a non-preset file to ensure it's ignored
   std::ofstream(presetDir / "readme.txt") << "not a preset";

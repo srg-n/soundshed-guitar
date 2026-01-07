@@ -202,6 +202,7 @@ target_include_directories(NAMGuitarFX_PresetStorageTests
 
 target_link_libraries(NAMGuitarFX_PresetStorageTests
   PRIVATE
+    NAMGuitarFXCore
     nlohmann_json::nlohmann_json
 )
 

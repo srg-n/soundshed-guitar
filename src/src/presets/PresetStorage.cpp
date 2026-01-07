@@ -401,7 +401,7 @@ namespace namguitar
     for (const auto& preset : presets)
     {
       auto filename = preset.id + ".json";
-      SaveToFile(preset, directory / filename);
+      (void)SaveToFile(preset, directory / filename);
     }
   }
 
