@@ -3,6 +3,7 @@
 #include "presets/PresetTypes.h"
 #include "dsp/SignalGraphExecutor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/effects/BuiltinEffects.h"
 #include "resources/ResourceLibrary.h"
 #include <memory>
 #include <filesystem>
@@ -24,6 +25,8 @@ namespace namguitar
     GraphDSPManager()
       : mResourceLibrary(std::make_unique<ResourceLibrary>())
     {
+      // Register all built-in effects on first use
+      RegisterAllEffects();
     }
 
     /**

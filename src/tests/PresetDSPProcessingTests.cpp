@@ -271,9 +271,17 @@ ProcessingTestResult TestGraphDSPProcessing(namguitar::GraphDSPManager& dsp, int
   double* outputs[2] = {outputL.data(), outputR.data()};
 
   // Process audio through DSP graph
+  // NOTE: Process multiple blocks to account for FFT convolution latency in IR effects.
+  // IR convolution using UPOLS algorithm has latency equal to the partition size (typically
+  // equal to the block size). We process a few blocks to "warm up" the convolver.
+  constexpr int kWarmupBlocks = 3;  // Enough to fill convolver delay line
+  
   try
   {
-    dsp.Process(inputs, outputs, blockSize);
+    for (int i = 0; i < kWarmupBlocks; ++i)
+    {
+      dsp.Process(inputs, outputs, blockSize);
+    }
   }
   catch (const std::exception& ex)
   {
@@ -286,7 +294,7 @@ ProcessingTestResult TestGraphDSPProcessing(namguitar::GraphDSPManager& dsp, int
     return result;
   }
 
-  // Analyze output
+  // Analyze output (from the last processed block, after warm-up)
   result.outputAnalysis = AnalyzeSignal(outputL);
 
   // Validate output
@@ -403,6 +411,9 @@ ProcessingTestResult TestPresetSwitching(namguitar::GraphDSPManager& dsp,
   double* inputs[2] = {inputL.data(), inputR.data()};
   double* outputs[2] = {outputL.data(), outputR.data()};
 
+  // Process multiple blocks to account for FFT convolution latency
+  constexpr int kWarmupBlocks = 3;
+
   // Load first preset
   if (!dsp.LoadPreset(preset1))
   {
@@ -410,10 +421,13 @@ ProcessingTestResult TestPresetSwitching(namguitar::GraphDSPManager& dsp,
     return result;
   }
 
-  // Process with first preset
+  // Process with first preset (warm up the convolver)
   try
   {
-    dsp.Process(inputs, outputs, blockSize);
+    for (int i = 0; i < kWarmupBlocks; ++i)
+    {
+      dsp.Process(inputs, outputs, blockSize);
+    }
   }
   catch (const std::exception& ex)
   {
@@ -431,10 +445,13 @@ ProcessingTestResult TestPresetSwitching(namguitar::GraphDSPManager& dsp,
     return result;
   }
 
-  // Process with second preset
+  // Process with second preset (warm up the new convolver)
   try
   {
-    dsp.Process(inputs, outputs, blockSize);
+    for (int i = 0; i < kWarmupBlocks; ++i)
+    {
+      dsp.Process(inputs, outputs, blockSize);
+    }
   }
   catch (const std::exception& ex)
   {

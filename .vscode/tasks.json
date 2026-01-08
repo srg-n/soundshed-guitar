@@ -103,6 +103,34 @@
       "dependsOrder": "sequence",
       "group": "build",
       "problemMatcher": []
+    },
+    {
+      "label": "Build All Tests",
+      "type": "shell",
+      "command": "cmake",
+      "args": [
+        "--build",
+        "${workspaceFolder}/src/build",
+        "--config",
+        "Debug"
+      ],
+      "group": "build",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "Run All Tests",
+      "type": "shell",
+      "command": "ctest",
+      "args": [
+        "--build-config",
+        "Debug",
+        "--output-on-failure"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/src/build"
+      },
+      "group": "test",
+      "problemMatcher": []
     }
   ]
 }
