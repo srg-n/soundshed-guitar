@@ -28,6 +28,11 @@ export function handleIncomingMessage(message: string): void {
           irPath: (parameters as { irPath?: string }).irPath ?? "",
         };
       }
+      // Process resource library
+      const resourceLibrary = (payload as { resourceLibrary?: Record<string, unknown[]> }).resourceLibrary;
+      if (resourceLibrary) {
+        uiState.resourceLibrary = resourceLibrary as import("./types.js").ResourceLibrary;
+      }
       uiState.signalTest = null;
       const preset = (payload as { preset?: Preset }).preset;
       if (preset) {

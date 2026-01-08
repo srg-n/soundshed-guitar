@@ -1281,6 +1281,22 @@ namespace namguitar
     {
       HandleSetAmpCabStateRequest(payload);
     }
+    else if (type == "updateNodeParam")
+    {
+      HandleUpdateNodeParamRequest(payload);
+    }
+    else if (type == "updateNodeBypass")
+    {
+      HandleUpdateNodeBypassRequest(payload);
+    }
+    else if (type == "updateNodeResource")
+    {
+      HandleUpdateNodeResourceRequest(payload);
+    }
+    else if (type == "browseNodeResource")
+    {
+      HandleBrowseNodeResourceRequest(payload);
+    }
   }
 
   void NAMGuitarPlugin::BroadcastState()
@@ -1310,6 +1326,25 @@ namespace namguitar
       }
     }
     message["userPresets"] = std::move(userPresetsJson);
+
+    // Include resource library for UI to present resource choices
+    nlohmann::json resourceLibraryJson = nlohmann::json::object();
+    const auto allResources = mResourceLibrary.GetAllResources();
+    for (const auto &res : allResources)
+    {
+      if (!resourceLibraryJson.contains(res.type))
+      {
+        resourceLibraryJson[res.type] = nlohmann::json::array();
+      }
+      nlohmann::json resJson;
+      resJson["id"] = res.id;
+      resJson["name"] = res.name;
+      resJson["category"] = res.category;
+      resJson["description"] = res.description;
+      resJson["filePath"] = res.filePath.generic_string();
+      resourceLibraryJson[res.type].push_back(std::move(resJson));
+    }
+    message["resourceLibrary"] = std::move(resourceLibraryJson);
 
     SendMessageToUI(message.dump());
     mPendingStateBroadcast = false;
@@ -2138,6 +2173,173 @@ namespace namguitar
       message["cabEnabled"] = mDSP->IsCabEnabled();
       SendMessageToUI(message.dump());
     }
+  }
+
+  void NAMGuitarPlugin::HandleUpdateNodeParamRequest(const nlohmann::json &payload)
+  {
+    const std::string nodeId = payload.value("nodeId", "");
+    const std::string paramKey = payload.value("paramKey", "");
+    const double value = payload.value("value", 0.0);
+
+    if (nodeId.empty() || paramKey.empty())
+    {
+      return;
+    }
+
+    // Update the parameter in the active preset's graph
+    if (mActivePreset)
+    {
+      GraphNode* node = mActivePreset->graph.FindNode(nodeId);
+      if (node)
+      {
+        node->params[paramKey] = value;
+        
+        // Re-serialize the preset JSON to reflect the change
+        mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+        
+        // Apply the updated preset to DSP
+        ApplyPreset(*mActivePreset);
+        
+        // Broadcast state change to UI
+        mPendingStateBroadcast = true;
+      }
+    }
+  }
+
+  void NAMGuitarPlugin::HandleUpdateNodeBypassRequest(const nlohmann::json &payload)
+  {
+    const std::string nodeId = payload.value("nodeId", "");
+    const bool bypassed = payload.value("bypassed", false);
+
+    if (nodeId.empty())
+    {
+      return;
+    }
+
+    // Update the bypass state in the active preset's graph
+    if (mActivePreset)
+    {
+      GraphNode* node = mActivePreset->graph.FindNode(nodeId);
+      if (node)
+      {
+        node->enabled = !bypassed;
+        
+        // Re-serialize the preset JSON to reflect the change
+        mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+        
+        // Apply the updated preset to DSP
+        ApplyPreset(*mActivePreset);
+        
+        // Broadcast state change to UI
+        mPendingStateBroadcast = true;
+      }
+    }
+  }
+
+  void NAMGuitarPlugin::HandleUpdateNodeResourceRequest(const nlohmann::json &payload)
+  {
+    const std::string nodeId = payload.value("nodeId", "");
+    const std::string resourceType = payload.value("resourceType", "");
+    const std::string resourceId = payload.value("resourceId", "");
+    const std::string filePath = payload.value("filePath", "");
+
+    if (nodeId.empty())
+    {
+      return;
+    }
+
+    // Update the resource in the active preset's graph
+    if (mActivePreset)
+    {
+      GraphNode* node = mActivePreset->graph.FindNode(nodeId);
+      if (node)
+      {
+        if (!resourceId.empty())
+        {
+          // Library resource
+          ResourceRef ref;
+          ref.resourceType = resourceType;
+          ref.resourceId = resourceId;
+          node->resource = ref;
+        }
+        else if (!filePath.empty())
+        {
+          // Custom file path
+          ResourceRef ref;
+          ref.resourceType = resourceType;
+          ref.filePath = filePath;
+          node->resource = ref;
+        }
+        else
+        {
+          // Clear resource
+          node->resource.reset();
+        }
+        
+        // Re-serialize the preset JSON to reflect the change
+        mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+        
+        // Apply the updated preset to DSP
+        ApplyPreset(*mActivePreset);
+        
+        // Broadcast state change to UI
+        mPendingStateBroadcast = true;
+      }
+    }
+  }
+
+  void NAMGuitarPlugin::HandleBrowseNodeResourceRequest(const nlohmann::json &payload)
+  {
+    const std::string nodeId = payload.value("nodeId", "");
+    const std::string resourceType = payload.value("resourceType", "");
+
+    if (nodeId.empty() || resourceType.empty())
+    {
+      return;
+    }
+
+#ifdef _WIN32
+    wchar_t filePath[MAX_PATH] = {0};
+    
+    OPENFILENAMEW ofn = {0};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = nullptr;
+    
+    // Set filter based on resource type
+    if (resourceType == "nam")
+    {
+      ofn.lpstrFilter = L"NAM Model Files (*.nam)\0*.nam\0JSON Files (*.json)\0*.json\0All Files (*.*)\0*.*\0";
+      ofn.lpstrTitle = L"Select NAM Model";
+    }
+    else if (resourceType == "ir")
+    {
+      ofn.lpstrFilter = L"IR Files (*.wav)\0*.wav\0All Files (*.*)\0*.*\0";
+      ofn.lpstrTitle = L"Select IR File";
+    }
+    else
+    {
+      ofn.lpstrFilter = L"All Files (*.*)\0*.*\0";
+      ofn.lpstrTitle = L"Select Resource File";
+    }
+    
+    ofn.lpstrFile = filePath;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+    
+    if (GetOpenFileNameW(&ofn))
+    {
+      std::filesystem::path selectedPath{filePath};
+      
+      // Update the node resource with the selected file
+      nlohmann::json updatePayload;
+      updatePayload["nodeId"] = nodeId;
+      updatePayload["resourceType"] = resourceType;
+      updatePayload["filePath"] = selectedPath.generic_string();
+      HandleUpdateNodeResourceRequest(updatePayload);
+    }
+#else
+    ReportErrorToUI("Browse not supported", "File browser is only available on Windows");
+#endif
   }
 
   void NAMGuitarPlugin::HandlePreviewDemoRequest(const nlohmann::json &payload)

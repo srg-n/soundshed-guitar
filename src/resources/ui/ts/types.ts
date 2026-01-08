@@ -128,6 +128,20 @@ export interface DemoSample {
   path: string;
 }
 
+export interface LibraryResource {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  filePath: string;
+}
+
+export interface ResourceLibrary {
+  nam?: LibraryResource[];
+  ir?: LibraryResource[];
+  [key: string]: LibraryResource[] | undefined;
+}
+
 export interface UiState {
   presets: Preset[];
   filteredPresets: Preset[];
@@ -138,6 +152,7 @@ export interface UiState {
   demoAudioSelectedId: string | null;
   demoAudioRepeat: boolean;
   logs: LogEntry[];
+  resourceLibrary: ResourceLibrary;
 }
 
 declare global {

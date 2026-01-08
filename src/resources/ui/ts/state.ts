@@ -31,6 +31,7 @@ export const uiState: UiState = {
   demoAudioSelectedId: DEMO_AUDIO_SAMPLES.length ? DEMO_AUDIO_SAMPLES[0].id : null,
   demoAudioRepeat: false,
   logs: [],
+  resourceLibrary: {},
 };
 
 export function clonePreset<T extends Preset | null>(preset: T): T {

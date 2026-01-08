@@ -1,5 +1,5 @@
 import { uiState } from "./state.js";
-import type { Preset, GraphNode, GraphEdge } from "./types.js";
+import type { Preset, GraphNode, GraphEdge, LibraryResource } from "./types.js";
 import { postMessage } from "./bridge.js";
 import { EffectTypeRegistry } from "./presetV2.js";
 
@@ -304,6 +304,48 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
     </button>
   `;
 
+  // Build resource selector if this node type requires a resource
+  let resourceSelector = "";
+  if (typeInfo?.requiresResource && typeInfo.resourceType) {
+    const resourceType = typeInfo.resourceType;
+    const resources = uiState.resourceLibrary[resourceType] || [];
+    const currentResourceId = node.resource?.id || "";
+    const currentFilePath = node.resource?.filePath || "";
+    
+    const resourceOptions = resources.map((res: LibraryResource) => {
+      const selected = res.id === currentResourceId ? "selected" : "";
+      return `<option value="${res.id}" ${selected}>${res.name}</option>`;
+    }).join("");
+    
+    const resourceLabel = resourceType === "nam" ? "Model" : resourceType === "ir" ? "IR" : "Resource";
+    const browseAccept = resourceType === "nam" ? ".nam,.json" : resourceType === "ir" ? ".wav" : "*";
+    
+    resourceSelector = `
+      <div class="node-resource-selector">
+        <label>${resourceLabel}</label>
+        <div class="resource-controls">
+          <select 
+            class="resource-dropdown" 
+            data-node-id="${node.id}" 
+            data-resource-type="${resourceType}"
+          >
+            <option value="">-- Select from Library --</option>
+            ${resourceOptions}
+            ${currentFilePath ? `<option value="__custom__" selected>Custom: ${currentFilePath.split("/").pop()}</option>` : ""}
+          </select>
+          <button 
+            class="resource-browse-btn" 
+            data-node-id="${node.id}" 
+            data-resource-type="${resourceType}"
+            data-accept="${browseAccept}"
+            title="Browse for file..."
+          >📁</button>
+        </div>
+        ${currentFilePath ? `<div class="resource-path-info" title="${currentFilePath}">${currentFilePath}</div>` : ""}
+      </div>
+    `;
+  }
+
   nodeParamsPanelElement.innerHTML = `
     <div class="node-params-header">
       <div class="node-params-title">
@@ -313,11 +355,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
       <button class="close-params-btn">×</button>
     </div>
     <div class="node-params-body">
-      ${node.resource ? `
-        <div class="node-resource-info">
-          <strong>Resource:</strong> ${node.resource.id || "Custom"}
-        </div>
-      ` : ""}
+      ${resourceSelector}
       <div class="params-controls">
         ${paramControls}
       </div>
@@ -329,6 +367,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
 
   // Bind controls
   bindNodeParamControls(node, preset);
+  bindResourceControls(node, preset);
   bindCloseButton();
   bindBypassButton(node, preset);
 }
@@ -381,6 +420,35 @@ function bindNodeParamControls(node: GraphNode, preset: Preset): void {
   });
 }
 
+function bindResourceControls(node: GraphNode, preset: Preset): void {
+  // Bind resource dropdown
+  const dropdown = nodeParamsPanelElement?.querySelector(".resource-dropdown") as HTMLSelectElement | null;
+  if (dropdown) {
+    dropdown.addEventListener("change", () => {
+      const nodeId = dropdown.dataset.nodeId;
+      const resourceType = dropdown.dataset.resourceType;
+      const resourceId = dropdown.value;
+      
+      if (nodeId && resourceType && resourceId && resourceId !== "__custom__") {
+        sendNodeResourceUpdate(nodeId, resourceType, resourceId, "");
+      }
+    });
+  }
+  
+  // Bind browse button
+  const browseBtn = nodeParamsPanelElement?.querySelector(".resource-browse-btn") as HTMLButtonElement | null;
+  if (browseBtn) {
+    browseBtn.addEventListener("click", () => {
+      const nodeId = browseBtn.dataset.nodeId;
+      const resourceType = browseBtn.dataset.resourceType;
+      
+      if (nodeId && resourceType) {
+        sendBrowseNodeResource(nodeId, resourceType);
+      }
+    });
+  }
+}
+
 function bindCloseButton(): void {
   const closeBtn = nodeParamsPanelElement?.querySelector(".close-params-btn");
   if (closeBtn) {
@@ -423,5 +491,23 @@ function sendNodeBypassUpdate(nodeId: string, bypassed: boolean): void {
     type: "updateNodeBypass",
     nodeId,
     bypassed,
+  });
+}
+
+function sendNodeResourceUpdate(nodeId: string, resourceType: string, resourceId: string, filePath: string): void {
+  postMessage({
+    type: "updateNodeResource",
+    nodeId,
+    resourceType,
+    resourceId,
+    filePath,
+  });
+}
+
+function sendBrowseNodeResource(nodeId: string, resourceType: string): void {
+  postMessage({
+    type: "browseNodeResource",
+    nodeId,
+    resourceType,
   });
 }

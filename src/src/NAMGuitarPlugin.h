@@ -119,6 +119,10 @@ namespace namguitar
     void HandleTunerRequest(const nlohmann::json &payload);
     void HandleSetInputModeRequest(const nlohmann::json &payload);
     void HandleSetAmpCabStateRequest(const nlohmann::json &payload);
+    void HandleUpdateNodeParamRequest(const nlohmann::json &payload);
+    void HandleUpdateNodeBypassRequest(const nlohmann::json &payload);
+    void HandleUpdateNodeResourceRequest(const nlohmann::json &payload);
+    void HandleBrowseNodeResourceRequest(const nlohmann::json &payload);
     void BroadcastState();
     void ApplyPreset(const namguitar::Preset &preset);
     void ReportErrorToUI(std::string_view message, std::string_view detail = {});
