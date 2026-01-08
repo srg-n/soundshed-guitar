@@ -94,18 +94,22 @@ class GenericKnob {
     this.currentValue = newValue;
     this.knobElement.dataset.value = newValue.toString();
     this.updateDisplay(newValue);
+    
+    // Send parameter value while dragging
+    setParameter(this.paramId, this.currentValue);
+    
+    if (this.onValueChange) {
+      this.onValueChange(this.currentValue);
+    }
   }
 
   private onMouseUp(): void {
     if (!this.isDragging) return;
     
     this.isDragging = false;
+    // Final value send and log on release
     setParameter(this.paramId, this.currentValue);
     appendLog(`${this.paramId} → ${this.currentValue.toFixed(2)}`);
-    
-    if (this.onValueChange) {
-      this.onValueChange(this.currentValue);
-    }
   }
 
   private updateDisplay(value: number): void {

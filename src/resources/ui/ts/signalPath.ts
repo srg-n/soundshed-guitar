@@ -361,12 +361,19 @@ function bindNodeParamControls(node: GraphNode, preset: Preset): void {
       if (valueDisplay) {
         valueDisplay.textContent = `${value.toFixed(2)}${unit}`;
       }
+      
+      // Send value while dragging
+      const nodeId = input.dataset.nodeId;
+      if (nodeId && paramKey) {
+        sendNodeParamUpdate(nodeId, paramKey, value);
+      }
     });
 
     input.addEventListener("change", () => {
       const nodeId = input.dataset.nodeId;
       const value = parseFloat(input.value);
       
+      // Final value send on release
       if (nodeId && paramKey) {
         sendNodeParamUpdate(nodeId, paramKey, value);
       }
