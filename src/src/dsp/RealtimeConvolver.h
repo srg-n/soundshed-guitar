@@ -50,13 +50,21 @@ namespace namguitar
     void Reset();
 
     [[nodiscard]] bool IsInitialized() const noexcept { return mInitialized; }
-    [[nodiscard]] int GetLatency() const noexcept { return static_cast<int>(mPartitionSize); }
+    [[nodiscard]] int GetLatency() const noexcept { return mUseDirectConvolution ? 0 : static_cast<int>(mPartitionSize); }
     [[nodiscard]] size_t GetNumPartitions() const noexcept { return mNumPartitions; }
 
   private:
     void ProcessBlock();
+    void ProcessDirect(const double* input, double* output, int numSamples);
 
     bool mInitialized = false;
+    bool mUseDirectConvolution = false;  // For short IRs, use direct FIR convolution (no latency)
+    
+    // Direct convolution (for short IRs)
+    std::vector<float> mDirectIR;
+    std::vector<double> mDirectHistory;  // Ring buffer for FIR filter state
+    size_t mDirectHistoryPos = 0;
+    static constexpr size_t kDirectConvolutionThreshold = 64;  // Use direct convolution for IRs <= this length
     
     // Partition configuration
     size_t mPartitionSize = 0;

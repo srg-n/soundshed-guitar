@@ -9,6 +9,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <vector>
@@ -19,6 +22,8 @@
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+namespace fs = std::filesystem;
 
 namespace
 {
@@ -764,6 +769,392 @@ namespace
     }
   }
 
+  // ==========================================================================
+  // Long IR Tests - Tests using actual IR files from resources
+  // ==========================================================================
+
+  /**
+   * @brief Load a WAV file and return the samples as float vector
+   */
+  bool LoadWavFile(const fs::path& path, std::vector<float>& samples, double& sampleRate)
+  {
+    std::ifstream file(path, std::ios::binary);
+    if (!file)
+      return false;
+
+    // Read RIFF header
+    char riff[4];
+    file.read(riff, 4);
+    if (std::memcmp(riff, "RIFF", 4) != 0)
+      return false;
+
+    file.seekg(8, std::ios::beg);
+    char wave[4];
+    file.read(wave, 4);
+    if (std::memcmp(wave, "WAVE", 4) != 0)
+      return false;
+
+    uint16_t audioFormat = 0;
+    uint16_t numChannels = 0;
+    uint16_t bitsPerSample = 0;
+    uint32_t wavSampleRate = 0;
+
+    // Find chunks
+    while (file)
+    {
+      char chunkId[4];
+      uint32_t chunkSize;
+      file.read(chunkId, 4);
+      if (!file) break;
+      file.read(reinterpret_cast<char*>(&chunkSize), 4);
+      if (!file) break;
+
+      if (std::memcmp(chunkId, "fmt ", 4) == 0)
+      {
+        file.read(reinterpret_cast<char*>(&audioFormat), 2);
+        file.read(reinterpret_cast<char*>(&numChannels), 2);
+        file.read(reinterpret_cast<char*>(&wavSampleRate), 4);
+        sampleRate = static_cast<double>(wavSampleRate);
+        file.seekg(6, std::ios::cur); // Skip byte rate and block align
+        file.read(reinterpret_cast<char*>(&bitsPerSample), 2);
+        file.seekg(chunkSize - 16, std::ios::cur);
+      }
+      else if (std::memcmp(chunkId, "data", 4) == 0)
+      {
+        if (audioFormat == 3) // IEEE float
+        {
+          size_t numSamples = chunkSize / sizeof(float);
+          samples.resize(numSamples);
+          file.read(reinterpret_cast<char*>(samples.data()), chunkSize);
+        }
+        else if (bitsPerSample == 16)
+        {
+          size_t numSamples = chunkSize / sizeof(int16_t);
+          std::vector<int16_t> rawSamples(numSamples);
+          file.read(reinterpret_cast<char*>(rawSamples.data()), chunkSize);
+          samples.resize(numSamples);
+          for (size_t i = 0; i < numSamples; ++i)
+            samples[i] = static_cast<float>(rawSamples[i]) / 32768.0f;
+        }
+        else if (bitsPerSample == 24)
+        {
+          size_t numSamples = chunkSize / 3;
+          samples.resize(numSamples);
+          for (size_t i = 0; i < numSamples; ++i)
+          {
+            uint8_t bytes[3];
+            file.read(reinterpret_cast<char*>(bytes), 3);
+            int32_t value = (static_cast<int32_t>(bytes[2]) << 16) |
+                            (static_cast<int32_t>(bytes[1]) << 8) |
+                            static_cast<int32_t>(bytes[0]);
+            if (value & 0x800000) value |= 0xFF000000; // Sign extend
+            samples[i] = static_cast<float>(value) / 8388608.0f;
+          }
+        }
+        else
+        {
+          return false; // Unsupported format
+        }
+        return true;
+      }
+      else
+      {
+        file.seekg(chunkSize, std::ios::cur);
+      }
+    }
+    return false;
+  }
+
+#ifdef NAMGUITAR_TEST_RESOURCES_DIR
+  // Test 16: Load and process with real cabinet IR WAV file
+  bool TestRealCabinetIR()
+  {
+    std::cout << "Test: Real cabinet IR (421 1960.wav)... ";
+
+    try
+    {
+      const fs::path resourcesDir = fs::path(NAMGUITAR_TEST_RESOURCES_DIR);
+      const fs::path irPath = resourcesDir / "ir" / "421 1960.wav";
+
+      if (!fs::exists(irPath))
+      {
+        std::cout << "SKIPPED (file not found: " << irPath.string() << ")\n";
+        return true; // Skip, don't fail
+      }
+
+      std::vector<float> irSamples;
+      double irSampleRate;
+      if (!LoadWavFile(irPath, irSamples, irSampleRate))
+      {
+        std::cout << "FAILED - Could not load WAV file\n";
+        return false;
+      }
+
+      std::cout << "(IR: " << irSamples.size() << " samples @ " << irSampleRate << "Hz) ";
+
+      // This is a long IR - should use FFT convolution
+      if (irSamples.size() <= 64)
+      {
+        std::cout << "FAILED - Expected long IR (>64 samples)\n";
+        return false;
+      }
+
+      IRConvolutionTester tester;
+      tester.SetImpulse(irSamples);
+
+      // Generate 1 second of test audio
+      const int numSamples = static_cast<int>(kSampleRate);
+      std::vector<double> testSignal(numSamples);
+      for (int i = 0; i < numSamples; ++i)
+      {
+        testSignal[i] = 0.5 * std::sin(2.0 * M_PI * 440.0 * i / kSampleRate);
+      }
+
+      // Process in blocks
+      const int blockSize = 512;
+      for (int offset = 0; offset < numSamples; offset += blockSize)
+      {
+        int currentBlockSize = std::min(blockSize, numSamples - offset);
+        std::vector<double> block(testSignal.begin() + offset,
+                                   testSignal.begin() + offset + currentBlockSize);
+        tester.Convolve(block);
+
+        // Verify no NaN/Inf
+        for (int i = 0; i < currentBlockSize; ++i)
+        {
+          if (std::isnan(block[i]) || std::isinf(block[i]))
+          {
+            std::cout << "FAILED - Invalid sample at block offset " << offset << "\n";
+            return false;
+          }
+        }
+      }
+
+      std::cout << "OK\n";
+      return true;
+    }
+    catch (const std::exception& e)
+    {
+      std::cout << "FAILED - Exception: " << e.what() << "\n";
+      return false;
+    }
+  }
+
+  // Test 17: Long IR latency characteristics
+  bool TestLongIRLatency()
+  {
+    std::cout << "Test: Long IR FFT convolution latency... ";
+
+    try
+    {
+      const fs::path resourcesDir = fs::path(NAMGUITAR_TEST_RESOURCES_DIR);
+      const fs::path irPath = resourcesDir / "ir" / "421 1960.wav";
+
+      if (!fs::exists(irPath))
+      {
+        std::cout << "SKIPPED (file not found)\n";
+        return true;
+      }
+
+      std::vector<float> irSamples;
+      double irSampleRate;
+      if (!LoadWavFile(irPath, irSamples, irSampleRate))
+      {
+        std::cout << "FAILED - Could not load WAV file\n";
+        return false;
+      }
+
+      // Long IRs use FFT convolution which has latency
+      // The first output samples will be zeros (latency)
+      IRConvolutionTester tester;
+      tester.SetImpulse(irSamples);
+
+      // Create an impulse input
+      std::vector<double> impulseInput(1024, 0.0);
+      impulseInput[0] = 1.0;
+
+      tester.Convolve(impulseInput);
+
+      // For FFT convolution, we expect some initial latency (zeros at start)
+      // The latency should be at most the partition size (typically 256-512)
+      int firstNonZeroIdx = -1;
+      for (int i = 0; i < static_cast<int>(impulseInput.size()); ++i)
+      {
+        if (std::abs(impulseInput[i]) > 1e-10)
+        {
+          firstNonZeroIdx = i;
+          break;
+        }
+      }
+
+      // FFT convolution has some latency, but should be reasonable
+      const int maxExpectedLatency = 512; // Partition size
+      if (firstNonZeroIdx < 0)
+      {
+        std::cout << "FAILED - No output detected\n";
+        return false;
+      }
+      else if (firstNonZeroIdx > maxExpectedLatency)
+      {
+        std::cout << "FAILED - Latency too high: " << firstNonZeroIdx << " samples\n";
+        return false;
+      }
+
+      std::cout << "OK (latency: " << firstNonZeroIdx << " samples)\n";
+      return true;
+    }
+    catch (const std::exception& e)
+    {
+      std::cout << "FAILED - Exception: " << e.what() << "\n";
+      return false;
+    }
+  }
+
+  // Test 18: Multiple long IR files
+  bool TestMultipleLongIRs()
+  {
+    std::cout << "Test: Multiple long IR files... ";
+
+    try
+    {
+      const fs::path resourcesDir = fs::path(NAMGUITAR_TEST_RESOURCES_DIR);
+      const fs::path irDir = resourcesDir / "ir";
+
+      // Test files to try
+      std::vector<std::string> testFiles = {
+        "421 1960.wav",
+        "906 1960.wav",
+        "i5 1960.wav",
+        "test.wav"
+      };
+
+      int testedCount = 0;
+      for (const auto& filename : testFiles)
+      {
+        const fs::path irPath = irDir / filename;
+        if (!fs::exists(irPath))
+          continue;
+
+        std::vector<float> irSamples;
+        double irSampleRate;
+        if (!LoadWavFile(irPath, irSamples, irSampleRate))
+          continue;
+
+        // Skip if too short (already covered by other tests)
+        if (irSamples.size() <= 64)
+          continue;
+
+        IRConvolutionTester tester;
+        tester.SetImpulse(irSamples);
+
+        // Generate test signal
+        std::vector<double> testSignal(4096);
+        for (size_t i = 0; i < testSignal.size(); ++i)
+        {
+          testSignal[i] = 0.5 * std::sin(2.0 * M_PI * 440.0 * i / kSampleRate);
+        }
+
+        tester.Convolve(testSignal);
+
+        // Verify output validity
+        for (size_t i = 0; i < testSignal.size(); ++i)
+        {
+          if (std::isnan(testSignal[i]) || std::isinf(testSignal[i]))
+          {
+            std::cout << "FAILED on " << filename << " at sample " << i << "\n";
+            return false;
+          }
+        }
+
+        ++testedCount;
+      }
+
+      if (testedCount == 0)
+      {
+        std::cout << "SKIPPED (no IR files found)\n";
+        return true;
+      }
+
+      std::cout << "OK (" << testedCount << " IR files tested)\n";
+      return true;
+    }
+    catch (const std::exception& e)
+    {
+      std::cout << "FAILED - Exception: " << e.what() << "\n";
+      return false;
+    }
+  }
+
+  // Test 19: Long IR with extended processing (stress test)
+  bool TestLongIRExtendedProcessing()
+  {
+    std::cout << "Test: Long IR extended processing (10 seconds)... ";
+
+    try
+    {
+      const fs::path resourcesDir = fs::path(NAMGUITAR_TEST_RESOURCES_DIR);
+      const fs::path irPath = resourcesDir / "ir" / "421 1960.wav";
+
+      if (!fs::exists(irPath))
+      {
+        std::cout << "SKIPPED (file not found)\n";
+        return true;
+      }
+
+      std::vector<float> irSamples;
+      double irSampleRate;
+      if (!LoadWavFile(irPath, irSamples, irSampleRate))
+      {
+        std::cout << "FAILED - Could not load WAV file\n";
+        return false;
+      }
+
+      IRConvolutionTester tester;
+      tester.SetImpulse(irSamples);
+
+      // Process 10 seconds of audio in blocks
+      const int totalSamples = static_cast<int>(kSampleRate * 10.0);
+      const int blockSize = 512;
+      int processedBlocks = 0;
+
+      for (int offset = 0; offset < totalSamples; offset += blockSize)
+      {
+        int currentBlockSize = std::min(blockSize, totalSamples - offset);
+        
+        // Generate block of test signal
+        std::vector<double> block(currentBlockSize);
+        for (int i = 0; i < currentBlockSize; ++i)
+        {
+          int sampleIdx = offset + i;
+          block[i] = 0.5 * std::sin(2.0 * M_PI * 440.0 * sampleIdx / kSampleRate);
+        }
+
+        tester.Convolve(block);
+
+        // Spot check for validity
+        for (int i = 0; i < currentBlockSize; ++i)
+        {
+          if (std::isnan(block[i]) || std::isinf(block[i]))
+          {
+            std::cout << "FAILED at block " << processedBlocks << "\n";
+            return false;
+          }
+        }
+
+        ++processedBlocks;
+      }
+
+      std::cout << "OK (" << processedBlocks << " blocks processed)\n";
+      return true;
+    }
+    catch (const std::exception& e)
+    {
+      std::cout << "FAILED - Exception: " << e.what() << "\n";
+      return false;
+    }
+  }
+#endif // NAMGUITAR_TEST_RESOURCES_DIR
+
 } // anonymous namespace
 
 int main()
@@ -800,6 +1191,14 @@ int main()
   runTest(TestLargeScaleRealtimeProcessing);
   runTest(TestImpulseToStepResponse);
   runTest(TestFrequencyResponseStability);
+
+#ifdef NAMGUITAR_TEST_RESOURCES_DIR
+  // Long IR tests using actual IR files
+  runTest(TestRealCabinetIR);
+  runTest(TestLongIRLatency);
+  runTest(TestMultipleLongIRs);
+  runTest(TestLongIRExtendedProcessing);
+#endif
 
   std::cout << "\n===========================================\n";
   std::cout << "Results: " << passed << "/" << (passed + failed) << " tests passed.\n";

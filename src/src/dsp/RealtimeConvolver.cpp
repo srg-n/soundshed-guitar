@@ -29,13 +29,27 @@ namespace namguitar
   bool RealtimeConvolver::SetImpulse(const std::vector<float>& irSamples, int blockSize)
   {
     mInitialized = false;
+    mUseDirectConvolution = false;
     
     if (irSamples.empty() || blockSize <= 0)
     {
       mIRPartitionsFFT.clear();
       mInputFFTDelayLine.clear();
       mFFT.reset();
+      mDirectIR.clear();
+      mDirectHistory.clear();
       return false;
+    }
+
+    // For very short IRs, use direct convolution (zero latency)
+    if (irSamples.size() <= kDirectConvolutionThreshold)
+    {
+      mDirectIR = irSamples;
+      mDirectHistory.assign(irSamples.size(), 0.0);
+      mDirectHistoryPos = 0;
+      mUseDirectConvolution = true;
+      mInitialized = true;
+      return true;
     }
 
     // Use a larger partition size for better efficiency with long IRs
@@ -106,6 +120,30 @@ namespace namguitar
     return true;
   }
 
+  void RealtimeConvolver::ProcessDirect(const double* input, double* output, int numSamples)
+  {
+    const size_t irLen = mDirectIR.size();
+    
+    for (int i = 0; i < numSamples; ++i)
+    {
+      // Store new sample in history
+      mDirectHistory[mDirectHistoryPos] = input[i];
+      
+      // Direct FIR convolution: output[n] = sum(input[n-k] * ir[k])
+      double sum = 0.0;
+      for (size_t k = 0; k < irLen; ++k)
+      {
+        // Calculate index into circular history buffer
+        size_t histIdx = (mDirectHistoryPos + irLen - k) % irLen;
+        sum += mDirectHistory[histIdx] * static_cast<double>(mDirectIR[k]);
+      }
+      output[i] = sum;
+      
+      // Advance history position
+      mDirectHistoryPos = (mDirectHistoryPos + 1) % irLen;
+    }
+  }
+
   void RealtimeConvolver::ProcessBlock()
   {
     // Prepare FFT input: [previous samples | current samples]
@@ -171,6 +209,13 @@ namespace namguitar
       return;
     }
 
+    // Use direct convolution for short IRs (zero latency)
+    if (mUseDirectConvolution)
+    {
+      ProcessDirect(input, output, numSamples);
+      return;
+    }
+
     int i = 0;
     while (i < numSamples)
     {
@@ -195,6 +240,14 @@ namespace namguitar
   {
     if (!mInitialized)
     {
+      return;
+    }
+    
+    // Reset direct convolution state
+    if (mUseDirectConvolution)
+    {
+      std::fill(mDirectHistory.begin(), mDirectHistory.end(), 0.0);
+      mDirectHistoryPos = 0;
       return;
     }
     
