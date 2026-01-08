@@ -78,7 +78,7 @@ namespace namguitar
       // Apply global settings
       mInputTrim = preset.global.inputTrim;
       mOutputTrim = preset.global.outputTrim;
-      mMasterVolume = 1.0; // Master volume not in GlobalSettings
+      mOutputVolume = preset.global.outputVolume;
 
       // Resolve resources for all nodes
       ResolveResources(preset);
@@ -124,8 +124,8 @@ namespace namguitar
       // Process through the graph
       mExecutor->Process(floatInputs, floatOutputs, numSamples);
 
-      // Apply output trim and master volume
-      double outputGain = std::pow(10.0, mOutputTrim / 20.0) * mMasterVolume;
+      // Apply output trim and output volume
+      double outputGain = std::pow(10.0, mOutputTrim / 20.0) * mOutputVolume;
       for (int i = 0; i < numSamples; ++i)
       {
         if (outputs[0])
@@ -198,12 +198,12 @@ namespace namguitar
     }
 
     /**
-     * Set master volume.
+     * Set output volume (linear 0.0-1.0).
      */
-    void SetMasterVolume(double linear)
+    void SetOutputVolume(double linear)
     {
-      mMasterVolume = linear;
-      // Note: masterVolume is not in GlobalSettings, tracked separately
+      mOutputVolume = linear;
+      mCurrentPreset.global.outputVolume = linear;
     }
 
     /**
@@ -276,7 +276,7 @@ namespace namguitar
 
     double mInputTrim = 0.0;
     double mOutputTrim = 0.0;
-    double mMasterVolume = 1.0;
+    double mOutputVolume = 1.0;
 
     // Float buffers for SignalGraphExecutor
     std::vector<float> mInputBufferL;

@@ -12,7 +12,8 @@
     "globals": {
       "inputTrim": 0,
       "outputTrim": 0,
-      "masterVolume": 0.8
+      "outputVolume": 0.8,
+      "transpose": 0
     },
     "graph": {
       "nodes": [
@@ -58,7 +59,8 @@
     "globals": {
       "inputTrim": 0,
       "outputTrim": 0,
-      "masterVolume": 0.8
+      "outputVolume": 0.8,
+      "transpose": 0
     },
     "graph": {
       "nodes": [
@@ -104,7 +106,8 @@
     "globals": {
       "inputTrim": 0,
       "outputTrim": 0,
-      "masterVolume": 0.75
+      "outputVolume": 0.75,
+      "transpose": 0
     },
     "graph": {
       "nodes": [
@@ -160,7 +163,8 @@
     "globals": {
       "inputTrim": -3,
       "outputTrim": 0,
-      "masterVolume": 0.75
+      "outputVolume": 0.75,
+      "transpose": 0
     },
     "graph": {
       "nodes": [
@@ -206,7 +210,8 @@
     "globals": {
       "inputTrim": -6,
       "outputTrim": -3,
-      "masterVolume": 0.7
+      "outputVolume": 0.7,
+      "transpose": 0
     },
     "graph": {
       "nodes": [
@@ -283,7 +288,8 @@
     "globals": {
       "inputTrim": -6,
       "outputTrim": -3,
-      "masterVolume": 0.7
+      "outputVolume": 0.7,
+      "transpose": 0
     },
     "graph": {
       "nodes": [
@@ -339,7 +345,8 @@
     "globals": {
       "inputTrim": -6,
       "outputTrim": -6,
-      "masterVolume": 0.65
+      "outputVolume": 0.65,
+      "transpose": 0
     },
     "graph": {
       "nodes": [
@@ -395,7 +402,8 @@
     "globals": {
       "inputTrim": -3,
       "outputTrim": 0,
-      "masterVolume": 0.75
+      "outputVolume": 0.75,
+      "transpose": 0
     },
     "graph": {
       "nodes": [
@@ -484,7 +492,8 @@
     "globals": {
       "inputTrim": -6,
       "outputTrim": -3,
-      "masterVolume": 0.7
+      "outputVolume": 0.7,
+      "transpose": 0
     },
     "graph": {
       "nodes": [
@@ -583,7 +592,8 @@
     "globals": {
       "inputTrim": -3,
       "outputTrim": 0,
-      "masterVolume": 0.75
+      "outputVolume": 0.75,
+      "transpose": 0
     },
     "graph": {
       "nodes": [
@@ -659,7 +669,8 @@
     "globals": {
       "inputTrim": 0,
       "outputTrim": 0,
-      "masterVolume": 0.8
+      "outputVolume": 0.8,
+      "transpose": 0
     },
     "graph": {
       "nodes": [
@@ -715,7 +726,8 @@
     "globals": {
       "inputTrim": 0,
       "outputTrim": -3,
-      "masterVolume": 0.75
+      "outputVolume": 0.75,
+      "transpose": 0
     },
     "graph": {
       "nodes": [

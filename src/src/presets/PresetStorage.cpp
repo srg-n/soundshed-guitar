@@ -202,6 +202,7 @@ namespace namguitar
     nlohmann::json global;
     global["inputTrim"] = preset.global.inputTrim;
     global["outputTrim"] = preset.global.outputTrim;
+    global["outputVolume"] = preset.global.outputVolume;
     global["transpose"] = preset.global.transpose;
     json["global"] = global;
 
@@ -290,6 +291,7 @@ namespace namguitar
       {
         preset.global.inputTrim = globalJson.value("inputTrim", 0.0);
         preset.global.outputTrim = globalJson.value("outputTrim", 0.0);
+        preset.global.outputVolume = globalJson.value("outputVolume", 1.0);
         preset.global.transpose = globalJson.value("transpose", 0);
       }
 

@@ -104,9 +104,10 @@ namespace namguitar
    */
   struct GlobalSettings
   {
-    double inputTrim = 0.0;  // Input gain in dB
-    double outputTrim = 0.0; // Master output in dB
-    int transpose = 0;       // Pitch shift in semitones
+    double inputTrim = 0.0;   // Input gain in dB
+    double outputTrim = 0.0;  // Output trim in dB
+    double outputVolume = 1.0; // Output volume (0.0-1.0 linear)
+    int transpose = 0;        // Pitch shift in semitones
   };
 
   /**
