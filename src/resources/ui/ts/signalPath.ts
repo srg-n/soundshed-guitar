@@ -87,16 +87,161 @@ export function renderSignalPathBar(): void {
 
   signalPathPresetNameElement.textContent = activePreset.name || "Unnamed Preset";
 
-  // Check if V2 format with graph
-  if (activePreset.formatVersion === 2 && activePreset.graph?.nodes) {
-    renderV2SignalPath(activePreset);
+  // Render graph-based signal path (supports parallel paths)
+  if (activePreset.graph?.nodes) {
+    renderGraphSignalPath(activePreset);
   } else {
-    // V1 format or no graph
-    renderV1SignalPath(activePreset);
+    // Empty preset - show only input/output
+    signalPathNodesElement.innerHTML = `
+      <div class="signal-graph-container">
+        <div class="signal-graph-row">
+          <div class="signal-node input-node">
+            <div class="node-icon">🎤</div>
+            <div class="node-info">
+              <div class="node-name">Input</div>
+            </div>
+          </div>
+          <div class="signal-connector"></div>
+          <div class="signal-node output-node">
+            <div class="node-icon">🔈</div>
+            <div class="node-info">
+              <div class="node-name">Output</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
   }
 }
 
-function renderV2SignalPath(preset: Preset): void {
+/**
+ * Represents a segment in the signal path graph layout.
+ * A segment can be a single node or a parallel split.
+ */
+interface PathSegment {
+  type: "node" | "parallel";
+  node?: GraphNode;
+  branches?: PathSegment[][];
+}
+
+/**
+ * Builds the visual layout structure from the graph.
+ * This analyzes the graph topology and creates a layout with parallel branches.
+ */
+function buildGraphLayout(nodes: GraphNode[], edges: GraphEdge[]): PathSegment[] {
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+  
+  // Build adjacency lists
+  const outgoing = new Map<string, GraphEdge[]>();
+  const incoming = new Map<string, GraphEdge[]>();
+  
+  edges.forEach((edge) => {
+    if (!outgoing.has(edge.from)) outgoing.set(edge.from, []);
+    if (!incoming.has(edge.to)) incoming.set(edge.to, []);
+    outgoing.get(edge.from)!.push(edge);
+    incoming.get(edge.to)!.push(edge);
+  });
+  
+  const visited = new Set<string>();
+  const segments: PathSegment[] = [];
+  
+  /**
+   * Traverse from a starting node, building path segments.
+   * Returns the segments and the set of ending node IDs.
+   */
+  function traverse(startId: string): { segments: PathSegment[]; endIds: Set<string> } {
+    const result: PathSegment[] = [];
+    const endIds = new Set<string>();
+    let currentId: string | null = startId;
+    
+    while (currentId && !visited.has(currentId)) {
+      // Skip special IDs
+      if (currentId === "__input__" || currentId === "__output__") {
+        const outs: GraphEdge[] = outgoing.get(currentId) || [];
+        if (outs.length === 1) {
+          currentId = outs[0].to;
+          continue;
+        } else if (outs.length > 1) {
+          // Split at input - handle as parallel branches
+          const branches: PathSegment[][] = [];
+          outs.forEach((edge: GraphEdge) => {
+            if (edge.to !== "__output__") {
+              const branchResult = traverse(edge.to);
+              if (branchResult.segments.length > 0) {
+                branches.push(branchResult.segments);
+              }
+              branchResult.endIds.forEach((id) => endIds.add(id));
+            }
+          });
+          if (branches.length > 0) {
+            result.push({ type: "parallel", branches });
+          }
+          currentId = null;
+        } else {
+          currentId = null;
+        }
+        continue;
+      }
+      
+      visited.add(currentId);
+      const node = nodeMap.get(currentId);
+      
+      if (node) {
+        const outs: GraphEdge[] = outgoing.get(currentId) || [];
+        
+        // Check if this is a splitter (multiple outputs)
+        if (outs.length > 1 && node.type !== "mixer") {
+          result.push({ type: "node", node });
+          
+          // Create parallel branches
+          const branches: PathSegment[][] = [];
+          const branchEndIds = new Set<string>();
+          
+          outs.forEach((edge: GraphEdge) => {
+            if (edge.to !== "__output__" && !visited.has(edge.to)) {
+              const branchResult = traverse(edge.to);
+              if (branchResult.segments.length > 0) {
+                branches.push(branchResult.segments);
+              }
+              branchResult.endIds.forEach((id) => branchEndIds.add(id));
+            }
+          });
+          
+          if (branches.length > 0) {
+            result.push({ type: "parallel", branches });
+          }
+          
+          // Find convergence point (mixer)
+          branchEndIds.forEach((id) => endIds.add(id));
+          currentId = null;
+        } else {
+          // Single path - add node and continue
+          result.push({ type: "node", node });
+          
+          if (outs.length === 1 && outs[0].to !== "__output__") {
+            currentId = outs[0].to;
+          } else {
+            endIds.add(currentId);
+            currentId = null;
+          }
+        }
+      } else {
+        currentId = null;
+      }
+    }
+    
+    return { segments: result, endIds };
+  }
+  
+  // Start traversal from __input__
+  const { segments: mainSegments } = traverse("__input__");
+  return mainSegments;
+}
+
+/**
+ * Renders the signal path graph with support for parallel branches.
+ */
+function renderGraphSignalPath(preset: Preset): void {
   if (!signalPathNodesElement || !preset.graph) {
     return;
   }
@@ -104,46 +249,30 @@ function renderV2SignalPath(preset: Preset): void {
   const nodes = preset.graph.nodes;
   const edges = preset.graph.edges;
 
-  // Build execution order from graph
-  const executionOrder = buildExecutionOrder(nodes, edges);
-
-  const nodeElements = executionOrder.map((node) => {
-    const icon = getNodeIcon(node.type);
-    const categoryClass = getCategoryClass(node.category);
-    const bypassedClass = node.bypassed ? "bypassed" : "";
-    
-    let resourceLabel = "";
-    if (node.resource) {
-      resourceLabel = `<div class="node-resource">${node.resource.id || "Custom"}</div>`;
-    }
-
-    return `
-      <div class="signal-node ${categoryClass} ${bypassedClass}" data-node-id="${node.id}">
-        <div class="node-icon">${icon}</div>
-        <div class="node-info">
-          <div class="node-name">${node.displayName}</div>
-          <div class="node-type">${node.type}</div>
-          ${resourceLabel}
-        </div>
-        ${node.bypassed ? '<div class="node-bypass-badge">Bypassed</div>' : ""}
-      </div>
-    `;
-  }).join('<div class="signal-arrow">→</div>');
+  // Build the layout structure
+  const segments = buildGraphLayout(nodes, edges);
+  
+  // Render segments to HTML
+  const segmentsHtml = renderSegments(segments);
 
   signalPathNodesElement.innerHTML = `
-    <div class="signal-node input">
-      <div class="node-icon">🎤</div>
-      <div class="node-info">
-        <div class="node-name">Input</div>
-      </div>
-    </div>
-    <div class="signal-arrow">→</div>
-    ${nodeElements}
-    <div class="signal-arrow">→</div>
-    <div class="signal-node output">
-      <div class="node-icon">🔈</div>
-      <div class="node-info">
-        <div class="node-name">Output</div>
+    <div class="signal-graph-container">
+      <div class="signal-graph-row">
+        <div class="signal-node input-node">
+          <div class="node-icon">🎤</div>
+          <div class="node-info">
+            <div class="node-name">Input</div>
+          </div>
+        </div>
+        ${segmentsHtml ? '<div class="signal-connector"></div>' : ''}
+        ${segmentsHtml}
+        ${segmentsHtml ? '<div class="signal-connector"></div>' : ''}
+        <div class="signal-node output-node">
+          <div class="node-icon">🔈</div>
+          <div class="node-info">
+            <div class="node-name">Output</div>
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -152,83 +281,77 @@ function renderV2SignalPath(preset: Preset): void {
   bindNodeClickHandlers(preset);
 }
 
-function renderV1SignalPath(preset: Preset): void {
-  if (!signalPathNodesElement) {
-    return;
+/**
+ * Renders path segments to HTML, handling parallel branches recursively.
+ */
+function renderSegments(segments: PathSegment[]): string {
+  return segments.map((segment, index) => {
+    const connector = index > 0 ? '<div class="signal-connector"></div>' : '';
+    
+    if (segment.type === "node" && segment.node) {
+      return connector + renderNodeElement(segment.node);
+    } else if (segment.type === "parallel" && segment.branches) {
+      return connector + renderParallelBranches(segment.branches);
+    }
+    return '';
+  }).join('');
+}
+
+/**
+ * Renders a single effect node.
+ */
+function renderNodeElement(node: GraphNode): string {
+  const icon = getNodeIcon(node.type);
+  const categoryClass = getCategoryClass(node.category);
+  const bypassedClass = node.bypassed ? "bypassed" : "";
+  
+  let resourceLabel = "";
+  if (node.resource) {
+    resourceLabel = `<div class="node-resource">${node.resource.id || "Custom"}</div>`;
   }
 
-  // Legacy V1 format - show amp and cab
-  const nodes: string[] = [];
-
-  if (preset.audioFxModelId || preset.customModelPath) {
-    nodes.push(`
-      <div class="signal-node amp">
-        <div class="node-icon">🎸</div>
-        <div class="node-info">
-          <div class="node-name">Amp</div>
-          <div class="node-type">${preset.audioFxModelId || "Custom"}</div>
-        </div>
-      </div>
-    `);
-  }
-
-  if (preset.irId || preset.customIrPath) {
-    nodes.push(`
-      <div class="signal-node cab">
-        <div class="node-icon">🔊</div>
-        <div class="node-info">
-          <div class="node-name">Cabinet</div>
-          <div class="node-type">${preset.irId || "Custom"}</div>
-        </div>
-      </div>
-    `);
-  }
-
-  signalPathNodesElement.innerHTML = `
-    <div class="signal-node input">
-      <div class="node-icon">🎤</div>
+  return `
+    <div class="signal-node ${categoryClass} ${bypassedClass}" data-node-id="${node.id}">
+      <div class="node-icon">${icon}</div>
       <div class="node-info">
-        <div class="node-name">Input</div>
+        <div class="node-name">${node.displayName}</div>
+        <div class="node-type">${node.type}</div>
+        ${resourceLabel}
       </div>
-    </div>
-    ${nodes.length > 0 ? '<div class="signal-arrow">→</div>' + nodes.join('<div class="signal-arrow">→</div>') + '<div class="signal-arrow">→</div>' : ""}
-    <div class="signal-node output">
-      <div class="node-icon">🔈</div>
-      <div class="node-info">
-        <div class="node-name">Output</div>
-      </div>
+      ${node.bypassed ? '<div class="node-bypass-badge">OFF</div>' : ""}
     </div>
   `;
 }
 
-function buildExecutionOrder(nodes: GraphNode[], edges: GraphEdge[]): GraphNode[] {
-  // Simple topological sort for linear chains
-  // For now, assume mostly linear signal flow
-  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-  const visited = new Set<string>();
-  const order: GraphNode[] = [];
-
-  function visit(nodeId: string): void {
-    if (visited.has(nodeId) || nodeId === "__input__" || nodeId === "__output__") {
-      return;
-    }
-    visited.add(nodeId);
-
-    const node = nodeMap.get(nodeId);
-    if (node) {
-      order.push(node);
-    }
-
-    // Visit downstream nodes
-    const outgoingEdges = edges.filter((e) => e.from === nodeId);
-    outgoingEdges.forEach((edge) => visit(edge.to));
-  }
-
-  // Start from input
-  const inputEdges = edges.filter((e) => e.from === "__input__");
-  inputEdges.forEach((edge) => visit(edge.to));
-
-  return order;
+/**
+ * Renders parallel branches with visual split/join indicators.
+ */
+function renderParallelBranches(branches: PathSegment[][]): string {
+  if (branches.length === 0) return '';
+  if (branches.length === 1) return renderSegments(branches[0]);
+  
+  const branchesHtml = branches.map((branch, index) => {
+    const branchContent = renderSegments(branch);
+    return `
+      <div class="parallel-branch" data-branch-index="${index}">
+        ${branchContent}
+      </div>
+    `;
+  }).join('');
+  
+  return `
+    <div class="parallel-container">
+      <div class="parallel-split">
+        <div class="split-icon">⤵️</div>
+      </div>
+      <div class="parallel-branches">
+        ${branchesHtml}
+      </div>
+      <div class="parallel-join">
+        <div class="join-icon">⤴️</div>
+      </div>
+    </div>
+  `;
 }
 
 function bindNodeClickHandlers(preset: Preset): void {

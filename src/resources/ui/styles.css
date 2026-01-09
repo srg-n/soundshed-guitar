@@ -2230,6 +2230,103 @@ body {
   border-bottom: 4px solid transparent;
 }
 
+/* ===== Signal Graph Layout ===== */
+.signal-graph-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  min-width: max-content;
+}
+
+.signal-graph-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+/* ===== Parallel Branches ===== */
+.parallel-container {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.parallel-split,
+.parallel-join {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: linear-gradient(180deg, #3a3a44 0%, #2e2e38 100%);
+  border: 2px solid #5a5a68;
+  border-radius: 6px;
+  min-width: 32px;
+  min-height: 32px;
+}
+
+.split-icon,
+.join-icon {
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+.parallel-branches {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 4px;
+  background: rgba(90, 90, 104, 0.15);
+  border-radius: 8px;
+  border: 1px dashed #4a4a58;
+  margin: 0 4px;
+}
+
+.parallel-branch {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 4px 8px;
+  background: rgba(46, 46, 56, 0.5);
+  border-radius: 6px;
+  border-left: 3px solid #e07848;
+  position: relative;
+}
+
+.parallel-branch::before {
+  content: attr(data-branch-index);
+  position: absolute;
+  left: -16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 9px;
+  font-weight: 700;
+  color: #e07848;
+  background: #2e2e38;
+  padding: 2px 4px;
+  border-radius: 3px;
+  display: none; /* Hide branch numbers for now */
+}
+
+.parallel-branch:nth-child(1) {
+  border-left-color: #e07848;
+}
+
+.parallel-branch:nth-child(2) {
+  border-left-color: #48a8e0;
+}
+
+.parallel-branch:nth-child(3) {
+  border-left-color: #48e078;
+}
+
+.parallel-branch:nth-child(4) {
+  border-left-color: #e048a8;
+}
+}
+
 .signal-path-info {
   display: flex;
   flex-direction: column;
