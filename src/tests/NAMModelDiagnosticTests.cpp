@@ -5,8 +5,8 @@
  * processing is working correctly. It tests:
  * 
  * 1. Model loading and initialization
- * 2. Direct model processing (bypassing NAMDSPManager)
- * 3. NAMDSPManager processing pipeline
+ * 2. Direct model processing (bypassing AmpModelManager)
+ * 3. AmpModelManager processing pipeline
  * 4. Signal integrity through each stage
  * 
  * Run with various test signals to diagnose garbled output issues.
@@ -25,7 +25,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "dsp/NAMDSPManager.h"
+#include "dsp/AmpModelManager.h"
 #include "IPlugConstants.h"
 #include "NAM/dsp.h"
 #include "NAM/get_dsp.h"
@@ -321,16 +321,16 @@ bool TestDirectModelProcessing(const fs::path& modelPath)
 }
 
 // ============================================================================
-// Test: NAMDSPManager Processing Pipeline
+// Test: AmpModelManager Processing Pipeline
 // ============================================================================
 
 bool TestDSPManagerPipeline(const fs::path& modelPath, const fs::path& irPath)
 {
-  std::cout << "\n=== Test: NAMDSPManager Processing Pipeline ===\n";
+  std::cout << "\n=== Test: AmpModelManager Processing Pipeline ===\n";
   std::cout << "Model: " << modelPath.filename().string() << "\n";
   std::cout << "IR: " << (irPath.empty() ? "(none)" : irPath.filename().string()) << "\n\n";
 
-  namguitar::NAMDSPManager dsp;
+  guitarfx::AmpModelManager dsp;
   
   // Initialize
   dsp.Prepare(kTestSampleRate, kTestBlockSize);
@@ -464,7 +464,7 @@ bool TestDSPManagerPipeline(const fs::path& modelPath, const fs::path& irPath)
 bool TestDirectVsManager(const fs::path& modelPath)
 {
   std::cout << "\n=== Test: Direct Model vs DSP Manager Comparison ===\n";
-  std::cout << "This test compares NAM model output when called directly vs through NAMDSPManager\n\n";
+  std::cout << "This test compares NAM model output when called directly vs through AmpModelManager\n\n";
 
   // Load model directly
   auto directModel = nam::get_dsp(modelPath);
@@ -476,7 +476,7 @@ bool TestDirectVsManager(const fs::path& modelPath)
   directModel->ResetAndPrewarm(kTestSampleRate, kTestBlockSize);
 
   // Set up DSP manager
-  namguitar::NAMDSPManager dsp;
+  guitarfx::AmpModelManager dsp;
   dsp.Prepare(kTestSampleRate, kTestBlockSize);
   if (!dsp.LoadModel(modelPath))
   {
@@ -567,13 +567,13 @@ bool TestDirectVsManager(const fs::path& modelPath)
 
 int main(int argc, char* argv[])
 {
-#ifndef NAMGUITAR_TEST_RESOURCES_DIR
-#error "NAMGUITAR_TEST_RESOURCES_DIR must be defined"
+#ifndef GUITARFX_TEST_RESOURCES_DIR
+#error "GUITARFX_TEST_RESOURCES_DIR must be defined"
 #endif
 
   try
   {
-    const fs::path resourcesDir = fs::path(NAMGUITAR_TEST_RESOURCES_DIR);
+    const fs::path resourcesDir = fs::path(GUITARFX_TEST_RESOURCES_DIR);
     const fs::path dataDir = resourcesDir / "ui" / "data";
 
     std::cout << "NAM Model Diagnostic Tests\n";

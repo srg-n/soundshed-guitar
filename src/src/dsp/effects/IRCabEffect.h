@@ -7,7 +7,7 @@
 #include <vector>
 #include <fstream>
 
-namespace namguitar
+namespace guitarfx
 {
   /**
    * Impulse Response cabinet simulation effect.
@@ -305,4 +305,4 @@ namespace namguitar
     });
   }
 
-} // namespace namguitar
+} // namespace guitarfx

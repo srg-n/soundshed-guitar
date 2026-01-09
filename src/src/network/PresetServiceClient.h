@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace namguitar
+namespace guitarfx
 {
   struct Preset;
 
@@ -26,4 +26,4 @@ namespace namguitar
   private:
     std::string mBaseUrl;
   };
-} // namespace namguitar
+} // namespace guitarfx

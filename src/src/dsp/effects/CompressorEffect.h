@@ -5,7 +5,7 @@
 #include <cmath>
 #include <algorithm>
 
-namespace namguitar
+namespace guitarfx
 {
   /**
    * VCA-style compressor with standard controls.
@@ -356,4 +356,4 @@ namespace namguitar
     }
   }
 
-} // namespace namguitar
+} // namespace guitarfx

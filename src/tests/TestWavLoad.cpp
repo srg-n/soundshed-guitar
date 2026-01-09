@@ -22,7 +22,7 @@ int main() {
         std::cout << "Exists: " << (fs::exists(fullPath) ? "YES" : "NO") << std::endl;
         
         if (fs::exists(fullPath)) {
-            namguitar::IRManager irManager;
+            guitarfx::IRManager irManager;
             bool loaded = irManager.LoadImpulseResponse(fullPath, 48000.0);
             std::cout << "Load result: " << (loaded ? "SUCCESS" : "FAILED") << std::endl;
             if (loaded) {

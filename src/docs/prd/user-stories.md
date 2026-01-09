@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document captures user stories for NeuronGuitar, organized by persona and feature area. Each story follows the format: "As a [persona], I want to [action], so that [benefit]."
+This document captures user stories for GuitarFX, organized by persona and feature area. Each story follows the format: "As a [persona], I want to [action], so that [benefit]."
 
 ## Home Recordist Stories
 

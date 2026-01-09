@@ -1,6 +1,6 @@
 include(FetchContent)
 
-if(NAMGUITAR_FETCH_DEPENDENCIES)
+if(GUITARFX_FETCH_DEPENDENCIES)
   message(STATUS "Fetching iPlug2 and NeuralAmpModelerCore dependencies")
 
   # Check for local iPlug2 copy first (with VST3_SDK included)

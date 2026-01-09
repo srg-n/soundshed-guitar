@@ -1,218 +1,218 @@
-set(NAMGUITAR_PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
-get_filename_component(NAMGUITAR_PROJECT_ROOT "${NAMGUITAR_PROJECT_ROOT}" ABSOLUTE)
-set(NAMGUITAR_RESOURCES_DIR "${NAMGUITAR_PROJECT_ROOT}/resources")
-file(TO_CMAKE_PATH "${NAMGUITAR_RESOURCES_DIR}" NAMGUITAR_RESOURCES_DIR_NORMALIZED)
+set(GUITARFX_PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
+get_filename_component(GUITARFX_PROJECT_ROOT "${GUITARFX_PROJECT_ROOT}" ABSOLUTE)
+set(GUITARFX_RESOURCES_DIR "${GUITARFX_PROJECT_ROOT}/resources")
+file(TO_CMAKE_PATH "${GUITARFX_RESOURCES_DIR}" GUITARFX_RESOURCES_DIR_NORMALIZED)
 
-add_executable(NAMGuitarFX_PresetTests
+add_executable(GuitarFX_PresetTests
   DefaultPresetIntegrityTests.cpp
 )
 
-target_link_libraries(NAMGuitarFX_PresetTests
+target_link_libraries(GuitarFX_PresetTests
   PRIVATE
     nlohmann_json::nlohmann_json
 )
 
-target_compile_features(NAMGuitarFX_PresetTests PRIVATE cxx_std_20)
+target_compile_features(GuitarFX_PresetTests PRIVATE cxx_std_20)
 
-target_compile_definitions(NAMGuitarFX_PresetTests
+target_compile_definitions(GuitarFX_PresetTests
   PRIVATE
-    NAMGUITAR_TEST_RESOURCES_DIR="${NAMGUITAR_RESOURCES_DIR_NORMALIZED}"
+    GUITARFX_TEST_RESOURCES_DIR="${GUITARFX_RESOURCES_DIR_NORMALIZED}"
 )
 
-add_test(NAME DefaultPresetIntegrityTests COMMAND NAMGuitarFX_PresetTests)
+add_test(NAME DefaultPresetIntegrityTests COMMAND GuitarFX_PresetTests)
 
 # DSP Loading Test - verifies that each preset can load its model and IR into the DSP manager
-add_executable(NAMGuitarFX_DSPLoadingTests
+add_executable(GuitarFX_DSPLoadingTests
   PresetDSPLoadingTests.cpp
 )
 
-target_include_directories(NAMGuitarFX_DSPLoadingTests
+target_include_directories(GuitarFX_DSPLoadingTests
   PRIVATE
-    ${NAMGUITAR_PROJECT_ROOT}/src
+    ${GUITARFX_PROJECT_ROOT}/src
     ${NeuralAmpModelerCore_SOURCE_DIR}
 )
 
-target_link_libraries(NAMGuitarFX_DSPLoadingTests
+target_link_libraries(GuitarFX_DSPLoadingTests
   PRIVATE
-    NAMGuitarFXCore
+    GuitarFXCore
     nlohmann_json::nlohmann_json
 )
 
-target_compile_features(NAMGuitarFX_DSPLoadingTests PRIVATE cxx_std_20)
+target_compile_features(GuitarFX_DSPLoadingTests PRIVATE cxx_std_20)
 
-target_compile_definitions(NAMGuitarFX_DSPLoadingTests
+target_compile_definitions(GuitarFX_DSPLoadingTests
   PRIVATE
-    NAMGUITAR_TEST_RESOURCES_DIR="${NAMGUITAR_RESOURCES_DIR_NORMALIZED}"
+    GUITARFX_TEST_RESOURCES_DIR="${GUITARFX_RESOURCES_DIR_NORMALIZED}"
 )
 
-add_test(NAME PresetDSPLoadingTests COMMAND NAMGuitarFX_DSPLoadingTests)
+add_test(NAME PresetDSPLoadingTests COMMAND GuitarFX_DSPLoadingTests)
 
 # DSP Processing Test - verifies that each preset can process audio without errors
-add_executable(NAMGuitarFX_DSPProcessingTests
+add_executable(GuitarFX_DSPProcessingTests
   PresetDSPProcessingTests.cpp
 )
 
-target_include_directories(NAMGuitarFX_DSPProcessingTests
+target_include_directories(GuitarFX_DSPProcessingTests
   PRIVATE
-    ${NAMGUITAR_PROJECT_ROOT}/src
+    ${GUITARFX_PROJECT_ROOT}/src
     ${NeuralAmpModelerCore_SOURCE_DIR}
 )
 
-target_link_libraries(NAMGuitarFX_DSPProcessingTests
+target_link_libraries(GuitarFX_DSPProcessingTests
   PRIVATE
-    NAMGuitarFXCore
+    GuitarFXCore
     nlohmann_json::nlohmann_json
 )
 
-target_compile_features(NAMGuitarFX_DSPProcessingTests PRIVATE cxx_std_20)
+target_compile_features(GuitarFX_DSPProcessingTests PRIVATE cxx_std_20)
 
-target_compile_definitions(NAMGuitarFX_DSPProcessingTests
+target_compile_definitions(GuitarFX_DSPProcessingTests
   PRIVATE
-    NAMGUITAR_TEST_RESOURCES_DIR="${NAMGUITAR_RESOURCES_DIR_NORMALIZED}"
+    GUITARFX_TEST_RESOURCES_DIR="${GUITARFX_RESOURCES_DIR_NORMALIZED}"
 )
 
-add_test(NAME PresetDSPProcessingTests COMMAND NAMGuitarFX_DSPProcessingTests)
+add_test(NAME PresetDSPProcessingTests COMMAND GuitarFX_DSPProcessingTests)
 
 # IR Convolution Unit Tests - verifies the convolution algorithm correctness
-add_executable(NAMGuitarFX_IRConvolutionTests
+add_executable(GuitarFX_IRConvolutionTests
   IRConvolutionTests.cpp
 )
 
-target_include_directories(NAMGuitarFX_IRConvolutionTests
+target_include_directories(GuitarFX_IRConvolutionTests
   PRIVATE
-    ${NAMGUITAR_PROJECT_ROOT}/src
+    ${GUITARFX_PROJECT_ROOT}/src
     ${NeuralAmpModelerCore_SOURCE_DIR}
 )
 
-target_link_libraries(NAMGuitarFX_IRConvolutionTests
+target_link_libraries(GuitarFX_IRConvolutionTests
   PRIVATE
-    NAMGuitarFXCore
+    GuitarFXCore
 )
 
-target_compile_features(NAMGuitarFX_IRConvolutionTests PRIVATE cxx_std_20)
+target_compile_features(GuitarFX_IRConvolutionTests PRIVATE cxx_std_20)
 
-target_compile_definitions(NAMGuitarFX_IRConvolutionTests
+target_compile_definitions(GuitarFX_IRConvolutionTests
   PRIVATE
-    NAMGUITAR_TEST_RESOURCES_DIR="${NAMGUITAR_RESOURCES_DIR_NORMALIZED}"
+    GUITARFX_TEST_RESOURCES_DIR="${GUITARFX_RESOURCES_DIR_NORMALIZED}"
 )
 
-add_test(NAME IRConvolutionTests COMMAND NAMGuitarFX_IRConvolutionTests)
+add_test(NAME IRConvolutionTests COMMAND GuitarFX_IRConvolutionTests)
 
 # NAM Model Diagnostic Tests - detailed diagnostics for model processing issues
-add_executable(NAMGuitarFX_ModelDiagnosticTests
+add_executable(GuitarFX_ModelDiagnosticTests
   NAMModelDiagnosticTests.cpp
 )
 
-target_include_directories(NAMGuitarFX_ModelDiagnosticTests
+target_include_directories(GuitarFX_ModelDiagnosticTests
   PRIVATE
-    ${NAMGUITAR_PROJECT_ROOT}/src
+    ${GUITARFX_PROJECT_ROOT}/src
     ${NeuralAmpModelerCore_SOURCE_DIR}
 )
 
-target_link_libraries(NAMGuitarFX_ModelDiagnosticTests
+target_link_libraries(GuitarFX_ModelDiagnosticTests
   PRIVATE
-    NAMGuitarFXCore
+    GuitarFXCore
     nlohmann_json::nlohmann_json
 )
 
-target_compile_features(NAMGuitarFX_ModelDiagnosticTests PRIVATE cxx_std_20)
+target_compile_features(GuitarFX_ModelDiagnosticTests PRIVATE cxx_std_20)
 
-target_compile_definitions(NAMGuitarFX_ModelDiagnosticTests
+target_compile_definitions(GuitarFX_ModelDiagnosticTests
   PRIVATE
-    NAMGUITAR_TEST_RESOURCES_DIR="${NAMGUITAR_RESOURCES_DIR_NORMALIZED}"
+    GUITARFX_TEST_RESOURCES_DIR="${GUITARFX_RESOURCES_DIR_NORMALIZED}"
 )
 
-add_test(NAME NAMModelDiagnosticTests COMMAND NAMGuitarFX_ModelDiagnosticTests)
+add_test(NAME NAMModelDiagnosticTests COMMAND GuitarFX_ModelDiagnosticTests)
 
 # Sample Rate and Buffer Size Tests - diagnoses sample rate and buffer issues
-add_executable(NAMGuitarFX_SampleRateBufferTests
+add_executable(GuitarFX_SampleRateBufferTests
   SampleRateBufferTests.cpp
 )
 
-target_include_directories(NAMGuitarFX_SampleRateBufferTests
+target_include_directories(GuitarFX_SampleRateBufferTests
   PRIVATE
-    ${NAMGUITAR_PROJECT_ROOT}/src
+    ${GUITARFX_PROJECT_ROOT}/src
     ${NeuralAmpModelerCore_SOURCE_DIR}
 )
 
-target_link_libraries(NAMGuitarFX_SampleRateBufferTests
+target_link_libraries(GuitarFX_SampleRateBufferTests
   PRIVATE
-    NAMGuitarFXCore
+    GuitarFXCore
     nlohmann_json::nlohmann_json
 )
 
-target_compile_features(NAMGuitarFX_SampleRateBufferTests PRIVATE cxx_std_20)
+target_compile_features(GuitarFX_SampleRateBufferTests PRIVATE cxx_std_20)
 
-target_compile_definitions(NAMGuitarFX_SampleRateBufferTests
+target_compile_definitions(GuitarFX_SampleRateBufferTests
   PRIVATE
-    NAMGUITAR_TEST_RESOURCES_DIR="${NAMGUITAR_RESOURCES_DIR_NORMALIZED}"
+    GUITARFX_TEST_RESOURCES_DIR="${GUITARFX_RESOURCES_DIR_NORMALIZED}"
 )
 
-add_test(NAME SampleRateBufferTests COMMAND NAMGuitarFX_SampleRateBufferTests)
+add_test(NAME SampleRateBufferTests COMMAND GuitarFX_SampleRateBufferTests)
 # Real Audio Processing Tests - tests the full DSP pipeline with actual audio processing
-add_executable(NAMGuitarFX_RealAudioProcessingTests
+add_executable(GuitarFX_RealAudioProcessingTests
   RealAudioProcessingTests.cpp
 )
 
-target_include_directories(NAMGuitarFX_RealAudioProcessingTests
+target_include_directories(GuitarFX_RealAudioProcessingTests
   PRIVATE
-    ${NAMGUITAR_PROJECT_ROOT}/src
+    ${GUITARFX_PROJECT_ROOT}/src
     ${NeuralAmpModelerCore_SOURCE_DIR}
 )
 
-target_link_libraries(NAMGuitarFX_RealAudioProcessingTests
+target_link_libraries(GuitarFX_RealAudioProcessingTests
   PRIVATE
-    NAMGuitarFXCore
+    GuitarFXCore
 )
 
-target_compile_features(NAMGuitarFX_RealAudioProcessingTests PRIVATE cxx_std_20)
+target_compile_features(GuitarFX_RealAudioProcessingTests PRIVATE cxx_std_20)
 
-add_test(NAME RealAudioProcessingTests COMMAND NAMGuitarFX_RealAudioProcessingTests)
+add_test(NAME RealAudioProcessingTests COMMAND GuitarFX_RealAudioProcessingTests)
 
 # Offline Processing Test App - processes WAV files through complete DSP pipeline
 # Note: This is a utility app, not added as a CTest, and disabled due to missing PresetManager.h
-# add_executable(NAMGuitarFX_OfflineProcessingTest
+# add_executable(GuitarFX_OfflineProcessingTest
 #   OfflineProcessingTest.cpp
 # )
 # 
-# target_include_directories(NAMGuitarFX_OfflineProcessingTest
+# target_include_directories(GuitarFX_OfflineProcessingTest
 #   PRIVATE
-#     ${NAMGUITAR_PROJECT_ROOT}/src
+#     ${GUITARFX_PROJECT_ROOT}/src
 #     ${NeuralAmpModelerCore_SOURCE_DIR}
 # )
 # 
-# target_link_libraries(NAMGuitarFX_OfflineProcessingTest
+# target_link_libraries(GuitarFX_OfflineProcessingTest
 #   PRIVATE
-#     NAMGuitarFXCore
+#     GuitarFXCore
 #     nlohmann_json::nlohmann_json
 # )
 # 
-# target_compile_features(NAMGuitarFX_OfflineProcessingTest PRIVATE cxx_std_20)
+# target_compile_features(GuitarFX_OfflineProcessingTest PRIVATE cxx_std_20)
 # 
-# target_compile_definitions(NAMGuitarFX_OfflineProcessingTest
+# target_compile_definitions(GuitarFX_OfflineProcessingTest
 #   PRIVATE
-#     NAMGUITAR_TEST_RESOURCES_DIR="${NAMGUITAR_RESOURCES_DIR_NORMALIZED}"
+#     GUITARFX_TEST_RESOURCES_DIR="${GUITARFX_RESOURCES_DIR_NORMALIZED}"
 # )
 
 # Preset Storage Serialization Tests - verifies preset serialization/deserialization with attachments
-add_executable(NAMGuitarFX_PresetStorageTests
+add_executable(GuitarFX_PresetStorageTests
   PresetStorageTests.cpp
 )
 
-target_include_directories(NAMGuitarFX_PresetStorageTests
+target_include_directories(GuitarFX_PresetStorageTests
   PRIVATE
-    ${NAMGUITAR_PROJECT_ROOT}/src
+    ${GUITARFX_PROJECT_ROOT}/src
 )
 
-target_link_libraries(NAMGuitarFX_PresetStorageTests
+target_link_libraries(GuitarFX_PresetStorageTests
   PRIVATE
-    NAMGuitarFXCore
+    GuitarFXCore
     nlohmann_json::nlohmann_json
 )
 
-target_compile_features(NAMGuitarFX_PresetStorageTests PRIVATE cxx_std_20)
+target_compile_features(GuitarFX_PresetStorageTests PRIVATE cxx_std_20)
 
-add_test(NAME PresetStorageTests COMMAND NAMGuitarFX_PresetStorageTests)
+add_test(NAME PresetStorageTests COMMAND GuitarFX_PresetStorageTests)
 
 # WAV Loading Debug Test
 add_executable(TestWavLoad
@@ -221,12 +221,12 @@ add_executable(TestWavLoad
 
 target_include_directories(TestWavLoad
   PRIVATE
-    ${NAMGUITAR_PROJECT_ROOT}/src
+    ${GUITARFX_PROJECT_ROOT}/src
 )
 
 target_link_libraries(TestWavLoad
   PRIVATE
-    NAMGuitarFXCore
+    GuitarFXCore
 )
 
 target_compile_features(TestWavLoad PRIVATE cxx_std_20)

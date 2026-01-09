@@ -1,4 +1,4 @@
-#include "NAMDSPManager.h"
+#include "AmpModelManager.h"
 
 #include <algorithm>
 #include <cmath>
@@ -9,7 +9,7 @@
 #include "NAM/get_dsp.h"
 #include "RealtimeConvolver.h"
 
-namespace namguitar
+namespace guitarfx
 {
   namespace
   {
@@ -32,15 +32,15 @@ namespace namguitar
 
   } // namespace
 
-  NAMDSPManager::NAMDSPManager()
+  AmpModelManager::AmpModelManager()
   {
     // Ensure NAM factory registrations are not optimized out by the linker
     nam::factory::ForceFactoryRegistration();
   }
 
-  NAMDSPManager::~NAMDSPManager() = default;
+  AmpModelManager::~AmpModelManager() = default;
 
-  void NAMDSPManager::Prepare(double sampleRate, int maxBlockSize)
+  void AmpModelManager::Prepare(double sampleRate, int maxBlockSize)
   {
     const double previousSampleRate = mSampleRate;
     mSampleRate = sampleRate;
@@ -94,7 +94,7 @@ namespace namguitar
     mReverb.Prepare(mSampleRate, mMaxBlockSize);
   }
 
-  void NAMDSPManager::Reset()
+  void AmpModelManager::Reset()
   {
     for (auto &model : mModels)
     {
@@ -137,7 +137,7 @@ namespace namguitar
     mReverb.Reset();
   }
 
-  bool NAMDSPManager::LoadModel(const std::filesystem::path &modelPath)
+  bool AmpModelManager::LoadModel(const std::filesystem::path &modelPath)
   {
     try
     {
@@ -161,7 +161,7 @@ namespace namguitar
     }
   }
 
-  bool NAMDSPManager::LoadImpulseResponse(const std::filesystem::path &impulsePath)
+  bool AmpModelManager::LoadImpulseResponse(const std::filesystem::path &impulsePath)
   {
     if (!mIRManager.LoadImpulseResponse(impulsePath, mSampleRate))
     {
@@ -178,7 +178,7 @@ namespace namguitar
     return true;
   }
 
-  void NAMDSPManager::ClearModel()
+  void AmpModelManager::ClearModel()
   {
     for (auto& model : mModels)
     {
@@ -186,7 +186,7 @@ namespace namguitar
     }
   }
 
-  void NAMDSPManager::ClearImpulseResponse()
+  void AmpModelManager::ClearImpulseResponse()
   {
     mIRManager.Clear();
     for (auto& convolution : mIRConvolution)
@@ -195,7 +195,7 @@ namespace namguitar
     }
   }
 
-  void NAMDSPManager::SetIRQuality(IRQuality quality)
+  void AmpModelManager::SetIRQuality(IRQuality quality)
   {
     if (mIRManager.GetQuality() == quality)
     {
@@ -215,44 +215,44 @@ namespace namguitar
     }
   }
 
-  void NAMDSPManager::SetInputTrim(double decibels)
+  void AmpModelManager::SetInputTrim(double decibels)
   {
     mInputTrimDb = decibels;
     mInputTrimLinear = DbToLinear(decibels);
   }
 
-  void NAMDSPManager::SetOutputTrim(double decibels)
+  void AmpModelManager::SetOutputTrim(double decibels)
   {
     mOutputTrimDb = decibels;
     mOutputTrimLinear = DbToLinear(decibels);
   }
 
-  void NAMDSPManager::SetDrive(double amount)
+  void AmpModelManager::SetDrive(double amount)
   {
     mDriveAmount = std::clamp(amount, 0.0, 1.0);
   }
 
-  void NAMDSPManager::SetTone(double tilt)
+  void AmpModelManager::SetTone(double tilt)
   {
     mToneTilt = std::clamp(tilt, -1.0, 1.0);
   }
 
-  void NAMDSPManager::SetGateEnabled(bool enabled)
+  void AmpModelManager::SetGateEnabled(bool enabled)
   {
     mGateEnabled = enabled;
   }
 
-  void NAMDSPManager::SetGateThreshold(double decibels)
+  void AmpModelManager::SetGateThreshold(double decibels)
   {
     mGateThreshold = decibels;
   }
 
-  void NAMDSPManager::SetMix(double mix)
+  void AmpModelManager::SetMix(double mix)
   {
     mMix = std::clamp(mix, 0.0, 1.0);
   }
 
-  void NAMDSPManager::SetSimpleCabBass(double bass)
+  void AmpModelManager::SetSimpleCabBass(double bass)
   {
     for (auto& cabSim : mSimpleCabSim)
     {
@@ -260,7 +260,7 @@ namespace namguitar
     }
   }
 
-  void NAMDSPManager::SetSimpleCabPresence(double presence)
+  void AmpModelManager::SetSimpleCabPresence(double presence)
   {
     for (auto& cabSim : mSimpleCabSim)
     {
@@ -268,7 +268,7 @@ namespace namguitar
     }
   }
 
-  void NAMDSPManager::SetSimpleCabBrightness(double brightness)
+  void AmpModelManager::SetSimpleCabBrightness(double brightness)
   {
     for (auto& cabSim : mSimpleCabSim)
     {
@@ -276,7 +276,7 @@ namespace namguitar
     }
   }
 
-  void NAMDSPManager::SetEQBandGain(int band, double gainDb)
+  void AmpModelManager::SetEQBandGain(int band, double gainDb)
   {
     for (auto& eq : mParametricEQ)
     {
@@ -284,7 +284,7 @@ namespace namguitar
     }
   }
 
-  void NAMDSPManager::SetEQBandFrequency(int band, double freqHz)
+  void AmpModelManager::SetEQBandFrequency(int band, double freqHz)
   {
     for (auto& eq : mParametricEQ)
     {
@@ -292,7 +292,7 @@ namespace namguitar
     }
   }
 
-  void NAMDSPManager::SetEQBandQ(int band, double q)
+  void AmpModelManager::SetEQBandQ(int band, double q)
   {
     for (auto& eq : mParametricEQ)
     {
@@ -300,12 +300,12 @@ namespace namguitar
     }
   }
 
-  void NAMDSPManager::SetDoublerEnabled(bool enabled)
+  void AmpModelManager::SetDoublerEnabled(bool enabled)
   {
     mDoublerEnabled = enabled;
   }
 
-  void NAMDSPManager::SetDoublerDelay(double milliseconds)
+  void AmpModelManager::SetDoublerDelay(double milliseconds)
   {
     mDoublerDelayMs = std::clamp(milliseconds, 0.5, 50.0);
     mDoublerDelaySamples = static_cast<int>(mDoublerDelayMs * mSampleRate / 1000.0);
@@ -319,7 +319,7 @@ namespace namguitar
     }
   }
 
-  void NAMDSPManager::SetTranspose(int semitones)
+  void AmpModelManager::SetTranspose(int semitones)
   {
     mTransposeSemitones = std::clamp(semitones, -12, 12);
     
@@ -338,7 +338,7 @@ namespace namguitar
     }
   }
 
-  void NAMDSPManager::Process(iplug::sample **inputs, iplug::sample **outputs, int nFrames)
+  void AmpModelManager::Process(iplug::sample **inputs, iplug::sample **outputs, int nFrames)
   {
 
     /*
@@ -643,7 +643,7 @@ namespace namguitar
     }
   }
 
-  double NAMDSPManager::ApplyDrive(double sample) const
+  double AmpModelManager::ApplyDrive(double sample) const
   {
     // Soft clip the signal to emulate preamp saturation before it hits the NAM block.
     const double drive = 1.0 + mDriveAmount * 9.0;
@@ -651,7 +651,7 @@ namespace namguitar
     return SanitizeDenormal(driven);
   }
 
-  double NAMDSPManager::ApplyTone(double sample, int channel)
+  double AmpModelManager::ApplyTone(double sample, int channel)
   {
     // Split the spectrum with a one-pole filter pair so we can tilt towards lows or highs.
     const double cutoff = 400.0;
@@ -667,7 +667,7 @@ namespace namguitar
     return SanitizeDenormal(low * (1.0 - mix) + high * mix);
   }
 
-  double NAMDSPManager::ApplyGate(double sample, int channel)
+  double AmpModelManager::ApplyGate(double sample, int channel)
   {
     if (!mGateEnabled)
     {
@@ -692,7 +692,7 @@ namespace namguitar
 
   // Applies FFT-based convolution with a cabinet impulse response (IR)
   // Uses Uniformly Partitioned Overlap-Save (UPOLS) for real-time performance
-  void NAMDSPManager::ApplyImpulseResponse(std::vector<double> &channelSamples, int channel) const
+  void AmpModelManager::ApplyImpulseResponse(std::vector<double> &channelSamples, int channel) const
   {
     if (channel < 0 || channel >= kNumChannels)
     {
@@ -711,17 +711,17 @@ namespace namguitar
     channelSamples = std::move(output);
   }
 
-  bool NAMDSPManager::HasModel() const noexcept
+  bool AmpModelManager::HasModel() const noexcept
   {
     return mModels[0] != nullptr;
   }
 
-  bool NAMDSPManager::HasImpulseResponse() const noexcept
+  bool AmpModelManager::HasImpulseResponse() const noexcept
   {
     return mIRManager.HasImpulse();
   }
 
-  void NAMDSPManager::SetImpulseResponseForTest(const std::vector<float>& impulse)
+  void AmpModelManager::SetImpulseResponseForTest(const std::vector<float>& impulse)
   {
     mIRManager.SetImpulse(impulse);
     // Initialize FFT convolution with test impulse
@@ -731,12 +731,12 @@ namespace namguitar
     }
   }
 
-  void NAMDSPManager::ApplyImpulseResponseForTest(std::vector<double>& channelSamples, int channel)
+  void AmpModelManager::ApplyImpulseResponseForTest(std::vector<double>& channelSamples, int channel)
   {
     ApplyImpulseResponse(channelSamples, channel);
   }
 
-  void NAMDSPManager::SetTunerEnabled(bool enabled)
+  void AmpModelManager::SetTunerEnabled(bool enabled)
   {
     mTunerEnabled = enabled;
     if (enabled)
@@ -748,17 +748,17 @@ namespace namguitar
     }
   }
 
-  void NAMDSPManager::SetTunerCallback(TunerCallback callback)
+  void AmpModelManager::SetTunerCallback(TunerCallback callback)
   {
     mTunerCallback = std::move(callback);
   }
 
-  void NAMDSPManager::SetTunerReferenceFrequency(double frequency)
+  void AmpModelManager::SetTunerReferenceFrequency(double frequency)
   {
     mTunerReferenceFrequency = std::clamp(frequency, 400.0, 480.0);
   }
 
-  void NAMDSPManager::ProcessTuner(iplug::sample** inputs, int nFrames)
+  void AmpModelManager::ProcessTuner(iplug::sample** inputs, int nFrames)
   {
     // Use the main input channel setting (same as DSP processing)
     const int ch = mInputChannel;
@@ -803,7 +803,7 @@ namespace namguitar
     }
   }
 
-  double NAMDSPManager::DetectPitch(const std::vector<double>& samples) const
+  double AmpModelManager::DetectPitch(const std::vector<double>& samples) const
   {
     // Autocorrelation-based pitch detection (YIN-inspired algorithm)
     const std::size_t n = samples.size();
@@ -917,7 +917,7 @@ namespace namguitar
     return mSampleRate / period;
   }
 
-  NAMDSPManager::TunerResult NAMDSPManager::FrequencyToNote(double frequency) const
+  AmpModelManager::TunerResult AmpModelManager::FrequencyToNote(double frequency) const
   {
     TunerResult result;
     
@@ -979,4 +979,4 @@ namespace namguitar
     return result;
   }
 
-} // namespace namguitar
+} // namespace guitarfx

@@ -22,7 +22,7 @@ class IWebViewControl;
 } // namespace igraphics
 } // namespace iplug
 
-namespace namguitar
+namespace guitarfx
 {
 
 // Helper to pin the DLL while WebView2 callbacks might be active
@@ -83,4 +83,4 @@ private:
   // Shared validity flag for checking if object is still valid in callbacks
   std::shared_ptr<std::atomic<bool>> mValidityFlag;
 };
-} // namespace namguitar
+} // namespace guitarfx

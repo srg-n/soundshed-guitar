@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace namguitar
+namespace guitarfx
 {
   class IRManager
   {
@@ -55,4 +55,4 @@ namespace namguitar
     double mImpulseSampleRate = 0.0;
     IRQuality mQuality = IRQuality::Standard;
   };
-} // namespace namguitar
+} // namespace guitarfx

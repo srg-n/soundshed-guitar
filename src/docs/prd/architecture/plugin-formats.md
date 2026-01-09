@@ -2,7 +2,7 @@
 
 ## Overview
 
-NeuronGuitar supports multiple plugin formats to ensure compatibility with all major digital audio workstations (DAWs). Each format wrapper adapts the core plugin functionality to the specific API requirements of the target platform.
+GuitarFX supports multiple plugin formats to ensure compatibility with all major digital audio workstations (DAWs). Each format wrapper adapts the core plugin functionality to the specific API requirements of the target platform.
 
 ## Supported Formats
 
@@ -261,10 +261,10 @@ AAX_SDK_ROOT=/path/to/aax-sdk
 ### Build Targets
 
 ```
-NAMGuitarFX_VST3    # VST3 plugin bundle
-NAMGuitarFX_AU      # Audio Unit bundle (macOS)
-NAMGuitarFX_AAX     # AAX plugin (requires SDK)
-NAMGuitarFX_App     # Standalone application
+GuitarFX_VST3    # VST3 plugin bundle
+GuitarFX_AU      # Audio Unit bundle (macOS)
+GuitarFX_AAX     # AAX plugin (requires SDK)
+GuitarFX_App     # Standalone application
 ```
 
 ## Distribution

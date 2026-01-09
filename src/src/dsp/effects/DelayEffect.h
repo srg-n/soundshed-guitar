@@ -5,7 +5,7 @@
 #include <cmath>
 #include <vector>
 
-namespace namguitar
+namespace guitarfx
 {
   /**
    * Simple delay effect.
@@ -137,4 +137,4 @@ namespace namguitar
     });
   }
 
-} // namespace namguitar
+} // namespace guitarfx

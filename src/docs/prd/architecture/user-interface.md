@@ -2,7 +2,7 @@
 
 ## Overview
 
-The NeuronGuitar user interface is implemented as a web-based single-page application (SPA) hosted within a native WebView control. This approach enables rich, responsive UI development using standard web technologies while maintaining cross-platform compatibility.
+The GuitarFX user interface is implemented as a web-based single-page application (SPA) hosted within a native WebView control. This approach enables rich, responsive UI development using standard web technologies while maintaining cross-platform compatibility.
 
 ## Design Goals
 

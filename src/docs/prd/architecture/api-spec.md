@@ -2,13 +2,13 @@
 
 ## Overview
 
-This document specifies the REST API for the NeuronGuitar remote preset service. The API enables preset discovery, download, and community sharing.
+This document specifies the REST API for the GuitarFX remote preset service. The API enables preset discovery, download, and community sharing.
 
 ## Base URL
 
 ```
-Production: https://api.neuronguitar.io/v1
-Staging:    https://api-staging.neuronguitar.io/v1
+Production: https://api.guitarfx.io/v1
+Staging:    https://api-staging.guitarfx.io/v1
 ```
 
 ## Authentication
@@ -166,7 +166,7 @@ GET /presets/search?q=crunch&category=Rock&sort=downloads&limit=10
       ],
       "createdAt": "2026-01-01T12:00:00Z",
       "updatedAt": "2026-01-05T08:30:00Z",
-      "thumbnailUrl": "https://cdn.neuronguitar.io/thumbs/abc123.png"
+      "thumbnailUrl": "https://cdn.guitarfx.io/thumbs/abc123.png"
     }
   ]
 }
@@ -212,7 +212,7 @@ GET /presets/{id}
         {"id": "gate", "type": "gate_noise", "params": {"threshold": -55.0}},
         {
           "id": "amp",
-          "type": "nam_amp",
+          "type": "amp_nam",
           "resource": {"resourceType": "nam", "resourceId": "plexi-bright"},
           "params": {"drive": 0.6, "tone": 0.5}
         },
@@ -428,7 +428,7 @@ Calculate next/previous pages:
 
 The API version is included in the URL path:
 ```
-https://api.neuronguitar.io/v1/presets/search
+https://api.guitarfx.io/v1/presets/search
 ```
 
 ### Version Changes

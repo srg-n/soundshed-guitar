@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace namguitar
+namespace guitarfx
 {
   /**
    * Reference to a resource (NAM model, IR, etc.)
@@ -49,7 +49,7 @@ namespace namguitar
   struct GraphNode
   {
     std::string id;       // Unique node ID within this graph
-    std::string type;     // Effect type (e.g., "nam_amp", "ir_cab", "eq_parametric")
+    std::string type;     // Effect type (e.g., "amp_nam", "ir_cab", "eq_parametric")
     std::string category; // UI grouping: "amp", "cab", "eq", "dynamics", etc.
     std::string label;    // Optional display name override
     bool enabled = true;  // Bypass toggle
@@ -142,4 +142,4 @@ namespace namguitar
   constexpr const char* kNodeTypeSplitter = "splitter";
   constexpr const char* kNodeTypeMixer = "mixer";
 
-} // namespace namguitar
+} // namespace guitarfx

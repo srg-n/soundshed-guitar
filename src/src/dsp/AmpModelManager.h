@@ -33,13 +33,13 @@ namespace iplug
   class IParam;
 }
 
-namespace namguitar
+namespace guitarfx
 {
-  class NAMDSPManager
+  class AmpModelManager
   {
   public:
-    NAMDSPManager();
-    ~NAMDSPManager();
+    AmpModelManager();
+    ~AmpModelManager();
 
     void Prepare(double sampleRate, int maxBlockSize);
     void Reset();
@@ -235,4 +235,4 @@ namespace namguitar
     static constexpr std::size_t kTunerBufferSize = 4096;  // ~85ms at 48kHz for good low-frequency detection
     static constexpr std::size_t kTunerUpdateInterval = 2048;  // Update every ~42ms at 48kHz
   };
-} // namespace namguitar
+} // namespace guitarfx

@@ -3,11 +3,11 @@
 #include <filesystem>
 #include <string>
 
-namespace namguitar
+namespace guitarfx
 {
   class ModelHasher
   {
   public:
     [[nodiscard]] std::string HashFile(const std::filesystem::path &filePath) const;
   };
-} // namespace namguitar
+} // namespace guitarfx

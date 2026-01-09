@@ -5,7 +5,7 @@
 #include "IControls.h"
 #include "IWebViewControl.h"
 
-namespace namguitar
+namespace guitarfx
 {
 
 // Static member initialization
@@ -320,4 +320,4 @@ void WebUIBridge::SetupJavaScriptBridge()
   });
 }
 
-} // namespace namguitar
+} // namespace guitarfx

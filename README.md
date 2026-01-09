@@ -20,7 +20,7 @@ NeuronGuitar is an experimental iPlug2-based guitar processing plugin that fuses
 │  │  ├─ iplug2-src/            # iPlug2 framework
 │  │  └─ nam-src/               # NeuralAmpModelerCore DSP engine
 │  ├─ config/
-│  │  └─ NAMGuitarConfig.h      # Branding and plugin configuration
+│  │  └─ GuitarFXConfig.h      # Branding and plugin configuration
 │  ├─ resources/
 │  │  ├─ ui/                    # Web UI assets served by the WebView
 │  │  │  ├─ index.html
@@ -30,9 +30,9 @@ NeuronGuitar is an experimental iPlug2-based guitar processing plugin that fuses
 │  │  ├─ amps/                  # Default NAM models
 │  │  └─ ir/                    # Default impulse responses
 │  ├─ src/
-│  │  ├─ NAMGuitarPlugin.cpp    # iPlug2 plugin entry points
-│  │  ├─ NAMGuitarPlugin.h
-│  │  ├─ dsp/                   # Audio processing core (NAMDSPManager, IRManager)
+│  │  ├─ GuitarFXPlugin.cpp    # iPlug2 plugin entry points
+│  │  ├─ GuitarFXPlugin.h
+│  │  ├─ dsp/                   # Audio processing core (AmpModelManager, IRManager)
 │  │  ├─ models/                # Model hashing helpers
 │  │  ├─ presets/               # Preset data management (PresetManager, PresetStorage)
 │  │  ├─ network/               # Preset service client for remote API
@@ -53,7 +53,7 @@ NeuronGuitar is an experimental iPlug2-based guitar processing plugin that fuses
    ```
 
 2. **Configure dependencies**
-   CMake scripts will fetch the required third-party libraries (iPlug2, NeuralAmpModelerCore, and their dependencies) automatically via FetchContent when `NAMGUITAR_FETCH_DEPENDENCIES` is enabled (default). Dependencies are downloaded to the `_deps/` folder.
+   CMake scripts will fetch the required third-party libraries (iPlug2, NeuralAmpModelerCore, and their dependencies) automatically via FetchContent when `GUITARFX_FETCH_DEPENDENCIES` is enabled (default). Dependencies are downloaded to the `_deps/` folder.
 
 3. **Configure the build**
    ```powershell
@@ -87,11 +87,11 @@ The `cmake/Toolchain` logic emits warnings when a requested SDK is unavailable; 
 
 ## Branding
 
-Plugin branding is configured in `src/config/NAMGuitarConfig.h`:
-- `NAM_BRAND_COMPANY_STR` – Manufacturer name (currently "Soundshed")
-- `NAM_BRAND_PRODUCT_STR` – Product name (currently "Neuron FX")
-- `NAM_BRAND_DISPLAY_STR` – Combined display name
-- `NAM_BRAND_DOMAIN_STR` – Bundle identifier domain
+Plugin branding is configured in `src/config/GuitarFXConfig.h`:
+- `GUITARFX_BRAND_COMPANY_STR` – Manufacturer name (currently "Soundshed")
+- `GUITARFX_BRAND_PRODUCT_STR` – Product name (currently "Neuron FX")
+- `GUITARFX_BRAND_DISPLAY_STR` – Combined display name
+- `GUITARFX_BRAND_DOMAIN_STR` – Bundle identifier domain
 
 These macros propagate to `PLUG_NAME`, `PLUG_MFR`, and all plugin format wrappers. Rebuild after editing to update resources and plugin metadata.
 
@@ -104,8 +104,8 @@ The preset service is implemented in `src/src/network/PresetServiceClient`. Remo
 - Audio-related code is documented inline to clarify processing decisions.
 - The UI bridge exposes a message-based API between JavaScript and the C++ core. See `src/src/ui/WebUIBridge.*` and `src/resources/ui/main.js`.
 - The UI is authored in TypeScript (see `src/resources/ui/ts/`) and compiled to JavaScript.
-- Unit tests are located in `src/tests/` and can be run via CTest after building with `NAMGUITAR_ENABLE_TESTS=ON`.
-- Debug tools including a VST3 test host are available when building with `NAMGUITAR_ENABLE_TOOLS=ON`.
+- Unit tests are located in `src/tests/` and can be run via CTest after building with `GUITARFX_ENABLE_TESTS=ON`.
+- Debug tools including a VST3 test host are available when building with `GUITARFX_ENABLE_TOOLS=ON`.
 
 ### Offline Processing Test Utility
 
@@ -113,24 +113,24 @@ The project includes an offline WAV processing utility for testing and debugging
 
 **Building:**
 ```powershell
-cmake --build build --config Debug --target NAMGuitarFX_OfflineProcessingTest
+cmake --build build --config Debug --target GuitarFX_OfflineProcessingTest
 ```
 
 **Usage:**
 ```powershell
-NAMGuitarFX_OfflineProcessingTest.exe <input.wav> <output.wav> [modelPath] [irPath]
+GuitarFX_OfflineProcessingTest.exe <input.wav> <output.wav> [modelPath] [irPath]
 ```
 
 **Examples:**
 ```powershell
 # Passthrough mode (DSP processing without model/IR):
-./NAMGuitarFX_OfflineProcessingTest.exe input.wav output.wav
+./GuitarFX_OfflineProcessingTest.exe input.wav output.wav
 
 # With NAM model only:
-./NAMGuitarFX_OfflineProcessingTest.exe input.wav output.wav "amps/Guitar/model.nam"
+./GuitarFX_OfflineProcessingTest.exe input.wav output.wav "amps/Guitar/model.nam"
 
 # Full DSP chain (model + cabinet IR):
-./NAMGuitarFX_OfflineProcessingTest.exe input.wav output.wav "amps/Guitar/model.nam" "ir/cabinet.wav"
+./GuitarFX_OfflineProcessingTest.exe input.wav output.wav "amps/Guitar/model.nam" "ir/cabinet.wav"
 
 
 ```
@@ -161,7 +161,7 @@ VST3DebugHost.exe [options]
 ./VST3DebugHost.exe --windowed
 
 # Launch with a specific plugin path:
-./VST3DebugHost.exe -w -p "C:/path/to/NAMGuitarFX.vst3"
+./VST3DebugHost.exe -w -p "C:/path/to/GuitarFX.vst3"
 ```
 
 The windowed mode is particularly useful when debugging WebView initialization issues or testing the UI without DAW interference. The debug host creates a minimal Win32 window to host the plugin editor.
@@ -200,4 +200,4 @@ cmake --build ./src/build --config Release
 
 ## License
 
-NAMGuitarFX is distributed under the MIT license. Third-party components retain their upstream licenses (iPlug2, NeuralAmpModelerCore, and other dependencies).
+GuitarFX is distributed under the MIT license. Third-party components retain their upstream licenses (iPlug2, NeuralAmpModelerCore, and other dependencies).

@@ -4,7 +4,7 @@
 #include <nlohmann/json.hpp>
 #include <fstream>
 
-namespace namguitar
+namespace guitarfx
 {
   ResourceLibrary::ResourceLibrary() = default;
   ResourceLibrary::~ResourceLibrary() = default;
@@ -206,4 +206,4 @@ namespace namguitar
     }
   }
 
-} // namespace namguitar
+} // namespace guitarfx

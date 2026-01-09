@@ -2,7 +2,7 @@
  * @file IRConvolutionTests.cpp
  * @brief Unit tests for IR (Impulse Response) convolution algorithm
  *
- * Tests the NAMDSPManager::ApplyImpulseResponse function with known inputs and expected outputs
+ * Tests the AmpModelManager::ApplyImpulseResponse function with known inputs and expected outputs
  * to verify the convolution implementation is mathematically correct, and verifies realtime
  * audio processing with clean output and no latency.
  */
@@ -16,7 +16,7 @@
 #include <memory>
 #include <vector>
 
-#include "dsp/NAMDSPManager.h"
+#include "dsp/AmpModelManager.h"
 
 // Define M_PI if not available
 #ifndef M_PI
@@ -71,14 +71,14 @@ namespace
   }
 
   /**
-   * @brief Helper class to test NAMDSPManager's IR convolution
+   * @brief Helper class to test AmpModelManager's IR convolution
    */
   class IRConvolutionTester
   {
   public:
     IRConvolutionTester()
     {
-      mDSPManager = std::make_unique<namguitar::NAMDSPManager>();
+      mDSPManager = std::make_unique<guitarfx::AmpModelManager>();
       mDSPManager->Prepare(kSampleRate, kBlockSize);
     }
 
@@ -98,7 +98,7 @@ namespace
     }
 
   private:
-    std::unique_ptr<namguitar::NAMDSPManager> mDSPManager;
+    std::unique_ptr<guitarfx::AmpModelManager> mDSPManager;
   };
 
   // Test 1: Simple identity IR [1.0] should pass through unchanged
@@ -263,10 +263,10 @@ namespace
     return true;
   }
 
-  // Test 6: Compare NAMDSPManager with reference implementation
+  // Test 6: Compare AmpModelManager with reference implementation
   bool TestAgainstReference()
   {
-    std::cout << "Test: NAMDSPManager vs reference implementation... ";
+    std::cout << "Test: AmpModelManager vs reference implementation... ";
 
     // Use a more complex IR and input
     std::vector<float> impulse = { 0.3f, 0.5f, 0.2f, -0.1f, 0.1f };
@@ -275,7 +275,7 @@ namespace
     // Get reference result
     std::vector<double> referenceOutput = ReferenceConvolve(input, impulse);
 
-    // Get NAMDSPManager result
+    // Get AmpModelManager result
     IRConvolutionTester tester;
     tester.SetImpulse(impulse);
     std::vector<double> dspOutput = input;
@@ -350,7 +350,7 @@ namespace
     // Get reference result
     std::vector<double> expected = ReferenceConvolve(input, impulse);
 
-    // Get NAMDSPManager result
+    // Get AmpModelManager result
     IRConvolutionTester tester;
     tester.SetImpulse(impulse);
     std::vector<double> result = input;
@@ -865,7 +865,7 @@ namespace
     return false;
   }
 
-#ifdef NAMGUITAR_TEST_RESOURCES_DIR
+#ifdef GUITARFX_TEST_RESOURCES_DIR
   // Test 16: Load and process with real cabinet IR WAV file
   bool TestRealCabinetIR()
   {
@@ -873,7 +873,7 @@ namespace
 
     try
     {
-      const fs::path resourcesDir = fs::path(NAMGUITAR_TEST_RESOURCES_DIR);
+      const fs::path resourcesDir = fs::path(GUITARFX_TEST_RESOURCES_DIR);
       const fs::path irPath = resourcesDir / "ir" / "421 1960.wav";
 
       if (!fs::exists(irPath))
@@ -947,7 +947,7 @@ namespace
 
     try
     {
-      const fs::path resourcesDir = fs::path(NAMGUITAR_TEST_RESOURCES_DIR);
+      const fs::path resourcesDir = fs::path(GUITARFX_TEST_RESOURCES_DIR);
       const fs::path irPath = resourcesDir / "ir" / "421 1960.wav";
 
       if (!fs::exists(irPath))
@@ -1017,7 +1017,7 @@ namespace
 
     try
     {
-      const fs::path resourcesDir = fs::path(NAMGUITAR_TEST_RESOURCES_DIR);
+      const fs::path resourcesDir = fs::path(GUITARFX_TEST_RESOURCES_DIR);
       const fs::path irDir = resourcesDir / "ir";
 
       // Test files to try
@@ -1092,7 +1092,7 @@ namespace
 
     try
     {
-      const fs::path resourcesDir = fs::path(NAMGUITAR_TEST_RESOURCES_DIR);
+      const fs::path resourcesDir = fs::path(GUITARFX_TEST_RESOURCES_DIR);
       const fs::path irPath = resourcesDir / "ir" / "421 1960.wav";
 
       if (!fs::exists(irPath))
@@ -1153,13 +1153,13 @@ namespace
       return false;
     }
   }
-#endif // NAMGUITAR_TEST_RESOURCES_DIR
+#endif // GUITARFX_TEST_RESOURCES_DIR
 
 } // anonymous namespace
 
 int main()
 {
-  std::cout << "IR Convolution Tests (using NAMDSPManager)\n";
+  std::cout << "IR Convolution Tests (using AmpModelManager)\n";
   std::cout << "===========================================\n\n";
 
   int passed = 0;
@@ -1192,7 +1192,7 @@ int main()
   runTest(TestImpulseToStepResponse);
   runTest(TestFrequencyResponseStability);
 
-#ifdef NAMGUITAR_TEST_RESOURCES_DIR
+#ifdef GUITARFX_TEST_RESOURCES_DIR
   // Long IR tests using actual IR files
   runTest(TestRealCabinetIR);
   runTest(TestLongIRLatency);

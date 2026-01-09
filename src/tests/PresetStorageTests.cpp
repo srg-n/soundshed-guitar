@@ -17,13 +17,13 @@ namespace
 {
 
 // Helper to create a test preset with signal graph
-namguitar::Preset CreateTestPreset(
+guitarfx::Preset CreateTestPreset(
     const std::string& id,
     const std::string& name,
     const std::string& modelPath = "",
     const std::string& irPath = "")
 {
-  namguitar::Preset preset;
+  guitarfx::Preset preset;
   preset.id = id;
   preset.name = name;
   preset.category = "Test";
@@ -39,14 +39,14 @@ namguitar::Preset CreateTestPreset(
   // Build signal graph
   
   // Input node
-  namguitar::GraphNode inputNode;
+  guitarfx::GraphNode inputNode;
   inputNode.id = "input";
-  inputNode.type = namguitar::kNodeTypeInput;
+  inputNode.type = guitarfx::kNodeTypeInput;
   inputNode.category = "routing";
   preset.graph.nodes.push_back(inputNode);
 
   // Noise gate node
-  namguitar::GraphNode gateNode;
+  guitarfx::GraphNode gateNode;
   gateNode.id = "gate";
   gateNode.type = "noise_gate";
   gateNode.category = "dynamics";
@@ -57,14 +57,14 @@ namguitar::Preset CreateTestPreset(
   // NAM amp node (if model path provided)
   if (!modelPath.empty())
   {
-    namguitar::GraphNode ampNode;
+    guitarfx::GraphNode ampNode;
     ampNode.id = "amp";
-    ampNode.type = "nam_amp";
+    ampNode.type = "amp_nam";
     ampNode.category = "amp";
     ampNode.enabled = true;
     ampNode.params["drive"] = 0.5;
     ampNode.params["tone"] = 0.6;
-    ampNode.resource = namguitar::ResourceRef{};
+    ampNode.resource = guitarfx::ResourceRef{};
     ampNode.resource->filePath = fs::path(modelPath);
     preset.graph.nodes.push_back(ampNode);
   }
@@ -72,18 +72,18 @@ namguitar::Preset CreateTestPreset(
   // IR cab node (if IR path provided)
   if (!irPath.empty())
   {
-    namguitar::GraphNode cabNode;
+    guitarfx::GraphNode cabNode;
     cabNode.id = "cab";
     cabNode.type = "ir_cab";
     cabNode.category = "cab";
     cabNode.enabled = true;
-    cabNode.resource = namguitar::ResourceRef{};
+    cabNode.resource = guitarfx::ResourceRef{};
     cabNode.resource->filePath = fs::path(irPath);
     preset.graph.nodes.push_back(cabNode);
   }
 
   // EQ node
-  namguitar::GraphNode eqNode;
+  guitarfx::GraphNode eqNode;
   eqNode.id = "eq";
   eqNode.type = "eq_parametric";
   eqNode.category = "eq";
@@ -93,16 +93,16 @@ namguitar::Preset CreateTestPreset(
   preset.graph.nodes.push_back(eqNode);
 
   // Output node
-  namguitar::GraphNode outputNode;
+  guitarfx::GraphNode outputNode;
   outputNode.id = "output";
-  outputNode.type = namguitar::kNodeTypeOutput;
+  outputNode.type = guitarfx::kNodeTypeOutput;
   outputNode.category = "routing";
   preset.graph.nodes.push_back(outputNode);
 
   // Build edges (linear chain)
   for (size_t i = 0; i < preset.graph.nodes.size() - 1; ++i)
   {
-    namguitar::GraphEdge edge;
+    guitarfx::GraphEdge edge;
     edge.from = preset.graph.nodes[i].id;
     edge.to = preset.graph.nodes[i + 1].id;
     preset.graph.edges.push_back(edge);
@@ -112,9 +112,9 @@ namguitar::Preset CreateTestPreset(
 }
 
 // Helper to create a minimal preset
-namguitar::Preset CreateMinimalPreset(const std::string& id, const std::string& name)
+guitarfx::Preset CreateMinimalPreset(const std::string& id, const std::string& name)
 {
-  namguitar::Preset preset;
+  guitarfx::Preset preset;
   preset.id = id;
   preset.name = name;
   preset.version = 2;
@@ -153,7 +153,7 @@ bool TestSerializeDeserialize()
   auto original = CreateTestPreset("test-1", "Test Preset", "models/amp.nam", "ir/cab.wav");
 
   // Serialize
-  std::string json = namguitar::PresetStorage::SerializeToJson(original);
+  std::string json = guitarfx::PresetStorage::SerializeToJson(original);
   if (json.empty())
   {
     std::cout << "FAIL (serialization returned empty string)" << std::endl;
@@ -161,7 +161,7 @@ bool TestSerializeDeserialize()
   }
 
   // Deserialize
-  auto deserialized = namguitar::PresetStorage::DeserializeFromJson(json);
+  auto deserialized = guitarfx::PresetStorage::DeserializeFromJson(json);
   if (!deserialized)
   {
     std::cout << "FAIL (deserialization failed)" << std::endl;
@@ -217,7 +217,7 @@ bool TestSaveLoadFile()
   fs::path filePath = fixture.mTempDir / "test_preset.json";
 
   // Save
-  if (!namguitar::PresetStorage::SaveToFile(original, filePath))
+  if (!guitarfx::PresetStorage::SaveToFile(original, filePath))
   {
     std::cout << "FAIL (save failed)" << std::endl;
     return false;
@@ -231,7 +231,7 @@ bool TestSaveLoadFile()
   }
 
   // Load
-  auto loaded = namguitar::PresetStorage::LoadFromFile(filePath);
+  auto loaded = guitarfx::PresetStorage::LoadFromFile(filePath);
   if (!loaded)
   {
     std::cout << "FAIL (load failed)" << std::endl;
@@ -263,15 +263,15 @@ bool TestLoadAllFromDirectory()
   auto preset2 = CreateMinimalPreset("preset-2", "Preset Two");
   auto preset3 = CreateMinimalPreset("preset-3", "Preset Three");
 
-  (void)namguitar::PresetStorage::SaveToFile(preset1, presetDir / "preset1.json");
-  (void)namguitar::PresetStorage::SaveToFile(preset2, presetDir / "preset2.json");
-  (void)namguitar::PresetStorage::SaveToFile(preset3, presetDir / "preset3.json");
+  (void)guitarfx::PresetStorage::SaveToFile(preset1, presetDir / "preset1.json");
+  (void)guitarfx::PresetStorage::SaveToFile(preset2, presetDir / "preset2.json");
+  (void)guitarfx::PresetStorage::SaveToFile(preset3, presetDir / "preset3.json");
 
   // Create a non-preset file to ensure it's ignored
   std::ofstream(presetDir / "readme.txt") << "not a preset";
 
   // Load all
-  auto allPresets = namguitar::PresetStorage::LoadAllFromDirectory(presetDir);
+  auto allPresets = guitarfx::PresetStorage::LoadAllFromDirectory(presetDir);
 
   if (allPresets.size() != 3)
   {
@@ -298,7 +298,7 @@ bool TestGraphNodeFinding()
     return false;
   }
 
-  if (foundNode->type != "nam_amp")
+  if (foundNode->type != "amp_nam")
   {
     std::cout << "FAIL (found node has wrong type)" << std::endl;
     return false;
@@ -322,7 +322,7 @@ bool TestResourceRefValidation()
   std::cout << "Test: ResourceRefValidation... ";
 
   // Empty ref should be invalid
-  namguitar::ResourceRef emptyRef;
+  guitarfx::ResourceRef emptyRef;
   if (emptyRef.IsValid())
   {
     std::cout << "FAIL (empty ref should be invalid)" << std::endl;
@@ -330,7 +330,7 @@ bool TestResourceRefValidation()
   }
 
   // File path ref
-  namguitar::ResourceRef fileRef;
+  guitarfx::ResourceRef fileRef;
   fileRef.filePath = "path/to/model.nam";
   if (!fileRef.IsFilePath() || !fileRef.IsValid())
   {
@@ -339,7 +339,7 @@ bool TestResourceRefValidation()
   }
 
   // Library ref
-  namguitar::ResourceRef libRef;
+  guitarfx::ResourceRef libRef;
   libRef.resourceType = "nam";
   libRef.resourceId = "plexi-bright";
   if (!libRef.IsLibraryRef() || !libRef.IsValid())
@@ -349,7 +349,7 @@ bool TestResourceRefValidation()
   }
 
   // Embedded ref
-  namguitar::ResourceRef embRef;
+  guitarfx::ResourceRef embRef;
   embRef.embeddedId = "emb-001";
   if (!embRef.IsEmbedded() || !embRef.IsValid())
   {
@@ -367,7 +367,7 @@ bool TestDeserializeInvalidJson()
   std::cout << "Test: DeserializeInvalidJson... ";
 
   // Invalid JSON
-  auto result1 = namguitar::PresetStorage::DeserializeFromJson("not valid json");
+  auto result1 = guitarfx::PresetStorage::DeserializeFromJson("not valid json");
   if (result1)
   {
     std::cout << "FAIL (should fail on invalid JSON)" << std::endl;
@@ -375,7 +375,7 @@ bool TestDeserializeInvalidJson()
   }
 
   // Empty JSON
-  auto result2 = namguitar::PresetStorage::DeserializeFromJson("");
+  auto result2 = guitarfx::PresetStorage::DeserializeFromJson("");
   if (result2)
   {
     std::cout << "FAIL (should fail on empty string)" << std::endl;
@@ -391,12 +391,12 @@ bool TestNodeParams()
 {
   std::cout << "Test: NodeParams... ";
 
-  namguitar::Preset original;
+  guitarfx::Preset original;
   original.id = "params-test";
   original.name = "Params Test";
   original.version = 2;
 
-  namguitar::GraphNode node;
+  guitarfx::GraphNode node;
   node.id = "test-node";
   node.type = "test_effect";
   node.enabled = true;
@@ -408,8 +408,8 @@ bool TestNodeParams()
   original.graph.nodes.push_back(node);
 
   // Serialize and deserialize
-  std::string json = namguitar::PresetStorage::SerializeToJson(original);
-  auto deserialized = namguitar::PresetStorage::DeserializeFromJson(json);
+  std::string json = guitarfx::PresetStorage::SerializeToJson(original);
+  auto deserialized = guitarfx::PresetStorage::DeserializeFromJson(json);
 
   if (!deserialized)
   {
@@ -457,13 +457,13 @@ bool TestEmbeddedResources()
 {
   std::cout << "Test: EmbeddedResources... ";
 
-  namguitar::Preset original;
+  guitarfx::Preset original;
   original.id = "embedded-test";
   original.name = "Embedded Test";
   original.version = 2;
 
   // Add embedded resource
-  namguitar::EmbeddedResource embedded;
+  guitarfx::EmbeddedResource embedded;
   embedded.id = "emb-model-1";
   embedded.type = "nam";
   embedded.name = "Embedded Model";
@@ -472,16 +472,16 @@ bool TestEmbeddedResources()
   original.embeddedResources.push_back(embedded);
 
   // Add node referencing embedded resource
-  namguitar::GraphNode node;
+  guitarfx::GraphNode node;
   node.id = "amp";
-  node.type = "nam_amp";
-  node.resource = namguitar::ResourceRef{};
+  node.type = "amp_nam";
+  node.resource = guitarfx::ResourceRef{};
   node.resource->embeddedId = "emb-model-1";
   original.graph.nodes.push_back(node);
 
   // Serialize and deserialize
-  std::string json = namguitar::PresetStorage::SerializeToJson(original);
-  auto deserialized = namguitar::PresetStorage::DeserializeFromJson(json);
+  std::string json = guitarfx::PresetStorage::SerializeToJson(original);
+  auto deserialized = guitarfx::PresetStorage::DeserializeFromJson(json);
 
   if (!deserialized)
   {

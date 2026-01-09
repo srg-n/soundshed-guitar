@@ -178,7 +178,7 @@ struct GraphValidationResult
 // Graph Validation
 // ============================================================================
 
-GraphValidationResult ValidatePresetGraph(const namguitar::Preset& preset)
+GraphValidationResult ValidatePresetGraph(const guitarfx::Preset& preset)
 {
   GraphValidationResult result;
   
@@ -249,7 +249,7 @@ GraphValidationResult ValidatePresetGraph(const namguitar::Preset& preset)
 // DSP Processing Tests
 // ============================================================================
 
-ProcessingTestResult TestGraphDSPProcessing(namguitar::GraphDSPManager& dsp, int blockSize, double sampleRate)
+ProcessingTestResult TestGraphDSPProcessing(guitarfx::GraphDSPManager& dsp, int blockSize, double sampleRate)
 {
   ProcessingTestResult result;
 
@@ -335,7 +335,7 @@ ProcessingTestResult TestGraphDSPProcessing(namguitar::GraphDSPManager& dsp, int
 }
 
 // Process multiple blocks to test stability over time
-ProcessingTestResult TestGraphDSPStability(namguitar::GraphDSPManager& dsp, int blockSize, double sampleRate, int numBlocks)
+ProcessingTestResult TestGraphDSPStability(guitarfx::GraphDSPManager& dsp, int blockSize, double sampleRate, int numBlocks)
 {
   ProcessingTestResult result;
 
@@ -393,9 +393,9 @@ ProcessingTestResult TestGraphDSPStability(namguitar::GraphDSPManager& dsp, int 
 }
 
 // Test that switching presets properly resets DSP state
-ProcessingTestResult TestPresetSwitching(namguitar::GraphDSPManager& dsp, 
-                                          const namguitar::Preset& preset1,
-                                          const namguitar::Preset& preset2,
+ProcessingTestResult TestPresetSwitching(guitarfx::GraphDSPManager& dsp, 
+                                          const guitarfx::Preset& preset1,
+                                          const guitarfx::Preset& preset2,
                                           int blockSize, double sampleRate)
 {
   ProcessingTestResult result;
@@ -493,7 +493,7 @@ struct ResourceValidation
   fs::path irFilePath;
 };
 
-ResourceValidation ValidatePresetResources(const namguitar::Preset& preset, 
+ResourceValidation ValidatePresetResources(const guitarfx::Preset& preset, 
                                             const nlohmann::json& modelsLibrary,
                                             const nlohmann::json& irLibrary,
                                             const fs::path& resourcesDir)
@@ -587,12 +587,12 @@ ResourceValidation ValidatePresetResources(const namguitar::Preset& preset,
 
 int main()
 {
-#ifndef NAMGUITAR_TEST_RESOURCES_DIR
-#error "NAMGUITAR_TEST_RESOURCES_DIR must be defined"
+#ifndef GUITARFX_TEST_RESOURCES_DIR
+#error "GUITARFX_TEST_RESOURCES_DIR must be defined"
 #endif
   try
   {
-    const fs::path resourcesDir = fs::path(NAMGUITAR_TEST_RESOURCES_DIR);
+    const fs::path resourcesDir = fs::path(GUITARFX_TEST_RESOURCES_DIR);
     const fs::path dataDir = resourcesDir / "ui" / "data";
 
     std::vector<std::string> errors;
@@ -616,11 +616,11 @@ int main()
     }
 
     // Parse all presets upfront
-    std::vector<namguitar::Preset> presets;
+    std::vector<guitarfx::Preset> presets;
     for (const auto& presetJson : presetsJson)
     {
       std::string jsonStr = presetJson.dump();
-      auto presetOpt = namguitar::PresetStorage::DeserializeFromJson(jsonStr);
+      auto presetOpt = guitarfx::PresetStorage::DeserializeFromJson(jsonStr);
       if (presetOpt)
       {
         presets.push_back(*presetOpt);
@@ -635,7 +635,7 @@ int main()
     std::cout << "Loaded " << presets.size() << " presets from JSON\n\n";
 
     // Create a single GraphDSPManager to reuse (tests preset switching)
-    namguitar::GraphDSPManager dsp;
+    guitarfx::GraphDSPManager dsp;
     
     // Populate the resource library from JSON files
     auto& library = dsp.GetResourceLibrary();
@@ -643,7 +643,7 @@ int main()
     // Load NAM models into library
     for (const auto& entry : audioModelsJson)
     {
-      namguitar::LibraryResource resource;
+      guitarfx::LibraryResource resource;
       resource.type = "nam";
       resource.id = entry.value("id", "");
       resource.name = entry.value("title", entry.value("name", resource.id));
@@ -660,7 +660,7 @@ int main()
     // Load IRs into library
     for (const auto& entry : irLibraryJson)
     {
-      namguitar::LibraryResource resource;
+      guitarfx::LibraryResource resource;
       resource.type = "ir";
       resource.id = entry.value("id", "");
       resource.name = entry.value("title", entry.value("name", resource.id));

@@ -5,7 +5,7 @@
 #include <array>
 #include <cmath>
 
-namespace namguitar
+namespace guitarfx
 {
   namespace
   {
@@ -239,4 +239,4 @@ namespace namguitar
     });
   }
 
-} // namespace namguitar
+} // namespace guitarfx

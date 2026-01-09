@@ -5,7 +5,7 @@
 #include <fstream>
 #include <sstream>
 
-namespace namguitar
+namespace guitarfx
 {
 
   std::string ModelHasher::HashFile(const std::filesystem::path &filePath) const
@@ -36,4 +36,4 @@ namespace namguitar
     return stream.str();
   }
 
-} // namespace namguitar
+} // namespace guitarfx

@@ -1,4 +1,4 @@
-# VST3 wrapper target for NAMGuitarFX plugin
+# VST3 wrapper target for GuitarFX plugin
 
 if(NOT DEFINED iPlug2_SOURCE_DIR)
   message(FATAL_ERROR "iPlug2 source directory is not available; ensure dependencies are fetched before enabling the VST3 target.")
@@ -61,17 +61,17 @@ set(_webview_sources
 )
 
 set(_nam_vst3_sources
-  NAMGuitarFX_VST3.cpp
-  ../../NAMGuitarPlugin.cpp
+  GuitarFX_VST3.cpp
+  ../../GuitarFXPlugin.cpp
   ${_vst3_sdk_sources}
   ${_iplug2_core_sources}
   ${_iplug2_vst3_sources}
   ${_webview_sources}
 )
 
-add_library(NAMGuitarFX_VST3 MODULE ${_nam_vst3_sources})
+add_library(GuitarFX_VST3 MODULE ${_nam_vst3_sources})
 
-target_compile_definitions(NAMGuitarFX_VST3 PRIVATE 
+target_compile_definitions(GuitarFX_VST3 PRIVATE 
   VST3_API 
   IPLUG_EDITOR=1 
   IPLUG_DSP=1
@@ -80,9 +80,9 @@ target_compile_definitions(NAMGuitarFX_VST3 PRIVATE
   NO_IGRAPHICS
 )
 
-# Include all paths needed for compiling NAMGuitarPlugin.cpp with VST3_API
+# Include all paths needed for compiling GuitarFXPlugin.cpp with VST3_API
 # Note: IGraphics directories are still included for header compatibility but IGraphics is not compiled
-target_include_directories(NAMGuitarFX_VST3 PRIVATE
+target_include_directories(GuitarFX_VST3 PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../..
   ${CMAKE_CURRENT_SOURCE_DIR}/../../../config
   ${CMAKE_CURRENT_SOURCE_DIR}/../../../resources
@@ -101,9 +101,9 @@ target_include_directories(NAMGuitarFX_VST3 PRIVATE
   ${NeuralAmpModelerCore_SOURCE_DIR}/Dependencies/nlohmann
 )
 
-target_link_libraries(NAMGuitarFX_VST3
+target_link_libraries(GuitarFX_VST3
   PRIVATE
-    NAMGuitarFXCore
+    GuitarFXCore
     WebView2::Loader
     wil::headers
     shlwapi
@@ -118,9 +118,9 @@ target_link_libraries(NAMGuitarFX_VST3
     wininet
 )
 
-set_target_properties(NAMGuitarFX_VST3 PROPERTIES
-  OUTPUT_NAME NAMGuitarFX
-  FOLDER NAMGuitarFX/Formats
+set_target_properties(GuitarFX_VST3 PROPERTIES
+  OUTPUT_NAME GuitarFX
+  FOLDER GuitarFX/Formats
 )
 
 # Create VST3 bundle structure
@@ -128,21 +128,21 @@ set_target_properties(NAMGuitarFX_VST3 PROPERTIES
 # <name>.vst3/Contents/x86_64-win/<name>.vst3 (the DLL)
 # <name>.vst3/Contents/Resources/ (resources)
 
-set(VST3_BUNDLE_DIR "${CMAKE_BINARY_DIR}/NAMGuitarFX.vst3")
+set(VST3_BUNDLE_DIR "${CMAKE_BINARY_DIR}/GuitarFX.vst3")
 set(VST3_CONTENTS_DIR "${VST3_BUNDLE_DIR}/Contents")
 set(VST3_ARCH_DIR "${VST3_CONTENTS_DIR}/x86_64-win")
 set(VST3_RESOURCES_DIR "${VST3_CONTENTS_DIR}/Resources")
 
 # Post-build commands to create bundle
-add_custom_command(TARGET NAMGuitarFX_VST3 POST_BUILD
+add_custom_command(TARGET GuitarFX_VST3 POST_BUILD
   # Create directory structure
   COMMAND ${CMAKE_COMMAND} -E make_directory "${VST3_ARCH_DIR}"
   COMMAND ${CMAKE_COMMAND} -E make_directory "${VST3_RESOURCES_DIR}"
   
   # Copy the DLL to the bundle
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "$<TARGET_FILE:NAMGuitarFX_VST3>"
-    "${VST3_ARCH_DIR}/NAMGuitarFX.vst3"
+    "$<TARGET_FILE:GuitarFX_VST3>"
+    "${VST3_ARCH_DIR}/GuitarFX.vst3"
   
   # Copy resources
   COMMAND ${CMAKE_COMMAND} -E copy_directory

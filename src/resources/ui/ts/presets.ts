@@ -171,14 +171,14 @@ export async function applyPresetFromLibrary(presetId: string): Promise<void> {
 
 export function savePresetToLocalStorage(preset: Preset): void {
   try {
-    const savedPresets = JSON.parse(localStorage.getItem("namguitar_user_presets") || "[]") as Preset[];
+    const savedPresets = JSON.parse(localStorage.getItem("guitarfx_user_presets") || "[]") as Preset[];
     const existingIndex = savedPresets.findIndex((p) => p.id === preset.id);
     if (existingIndex >= 0) {
       savedPresets[existingIndex] = preset;
     } else {
       savedPresets.push(preset);
     }
-    localStorage.setItem("namguitar_user_presets", JSON.stringify(savedPresets));
+    localStorage.setItem("guitarfx_user_presets", JSON.stringify(savedPresets));
     console.log(`Preset '${preset.name}' saved to localStorage`);
   } catch (error) {
     console.error("Failed to save preset to localStorage", error);
@@ -187,7 +187,7 @@ export function savePresetToLocalStorage(preset: Preset): void {
 
 export function loadPresetsFromLocalStorage(): Preset[] {
   try {
-    const savedPresets = JSON.parse(localStorage.getItem("namguitar_user_presets") || "[]") as Preset[];
+    const savedPresets = JSON.parse(localStorage.getItem("guitarfx_user_presets") || "[]") as Preset[];
     console.log(`Loaded ${savedPresets.length} user presets from localStorage`);
     return savedPresets;
   } catch (error) {
@@ -481,11 +481,11 @@ export function initializeSaveAsButton(): void {
 // Delete preset from localStorage
 export function deletePresetFromLocalStorage(presetId: string): boolean {
   try {
-    const savedPresets = JSON.parse(localStorage.getItem("namguitar_user_presets") || "[]") as Preset[];
+    const savedPresets = JSON.parse(localStorage.getItem("guitarfx_user_presets") || "[]") as Preset[];
     const index = savedPresets.findIndex((p) => p.id === presetId);
     if (index >= 0) {
       savedPresets.splice(index, 1);
-      localStorage.setItem("namguitar_user_presets", JSON.stringify(savedPresets));
+      localStorage.setItem("guitarfx_user_presets", JSON.stringify(savedPresets));
       console.log(`Preset '${presetId}' deleted from localStorage`);
       return true;
     }

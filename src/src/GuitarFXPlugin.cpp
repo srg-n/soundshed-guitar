@@ -1,4 +1,4 @@
-#include "NAMGuitarPlugin.h"
+#include "GuitarFXPlugin.h"
 
 #include <algorithm>
 #include <array>
@@ -29,26 +29,26 @@
 #include "IPlugPaths.h"
 #include "wdlstring.h"
 
-#include "dsp/NAMDSPManager.h"
+#include "dsp/AmpModelManager.h"
 #include "presets/PresetStorage.h"
 
-namespace namguitar
+namespace guitarfx
 {
   namespace
   {
     constexpr int kNumPrograms = 0;
     constexpr double kTwoPi = 6.28318530717958647692;
 
-    std::string ParamKey(NAMGuitarPlugin::ParameterId paramId);
+    std::string ParamKey(GuitarFXPlugin::ParameterId paramId);
 
-    nlohmann::json SerializeParametersToJson(const NAMGuitarPlugin &plugin)
+    nlohmann::json SerializeParametersToJson(const GuitarFXPlugin &plugin)
     {
       nlohmann::json parameters = nlohmann::json::array();
-      for (int paramIdx = 0; paramIdx < NAMGuitarPlugin::kParamCount; ++paramIdx)
+      for (int paramIdx = 0; paramIdx < GuitarFXPlugin::kParamCount; ++paramIdx)
       {
         const auto *param = plugin.GetParam(paramIdx);
         nlohmann::json paramJson;
-        std::string key = ParamKey(static_cast<NAMGuitarPlugin::ParameterId>(paramIdx));
+        std::string key = ParamKey(static_cast<GuitarFXPlugin::ParameterId>(paramIdx));
         if (key.empty())
         {
           key = param->GetName();
@@ -61,229 +61,229 @@ namespace namguitar
 
       nlohmann::json payload;
       payload["parameters"] = std::move(parameters);
-      payload["gateEnabled"] = plugin.GetParam(NAMGuitarPlugin::kParamGateEnabled)->Bool();
-      payload["gateThreshold"] = plugin.GetParam(NAMGuitarPlugin::kParamGateThreshold)->Value();
+      payload["gateEnabled"] = plugin.GetParam(GuitarFXPlugin::kParamGateEnabled)->Bool();
+      payload["gateThreshold"] = plugin.GetParam(GuitarFXPlugin::kParamGateThreshold)->Value();
       return payload;
     }
 
-    std::string ParamKey(NAMGuitarPlugin::ParameterId paramId)
+    std::string ParamKey(GuitarFXPlugin::ParameterId paramId)
     {
       switch (paramId)
       {
-      case NAMGuitarPlugin::kParamInputTrim:
+      case GuitarFXPlugin::kParamInputTrim:
         return "input_trim";
-      case NAMGuitarPlugin::kParamOutputTrim:
+      case GuitarFXPlugin::kParamOutputTrim:
         return "output_trim";
-      case NAMGuitarPlugin::kParamDrive:
+      case GuitarFXPlugin::kParamDrive:
         return "drive";
-      case NAMGuitarPlugin::kParamTone:
+      case GuitarFXPlugin::kParamTone:
         return "tone";
-      case NAMGuitarPlugin::kParamGateEnabled:
+      case GuitarFXPlugin::kParamGateEnabled:
         return "gate_enabled";
-      case NAMGuitarPlugin::kParamGateThreshold:
+      case GuitarFXPlugin::kParamGateThreshold:
         return "gate_threshold";
-      case NAMGuitarPlugin::kParamMix:
+      case GuitarFXPlugin::kParamMix:
         return "mix";
-      case NAMGuitarPlugin::kParamDoublerEnabled:
+      case GuitarFXPlugin::kParamDoublerEnabled:
         return "doubler_enabled";
-      case NAMGuitarPlugin::kParamDoublerDelay:
+      case GuitarFXPlugin::kParamDoublerDelay:
         return "doubler_delay";
-      case NAMGuitarPlugin::kParamTranspose:
+      case GuitarFXPlugin::kParamTranspose:
         return "transpose";
-      case NAMGuitarPlugin::kParamSimpleCabEnabled:
+      case GuitarFXPlugin::kParamSimpleCabEnabled:
         return "simplecab_enabled";
-      case NAMGuitarPlugin::kParamSimpleCabBass:
+      case GuitarFXPlugin::kParamSimpleCabBass:
         return "simplecab_bass";
-      case NAMGuitarPlugin::kParamSimpleCabPresence:
+      case GuitarFXPlugin::kParamSimpleCabPresence:
         return "simplecab_presence";
-      case NAMGuitarPlugin::kParamSimpleCabBrightness:
+      case GuitarFXPlugin::kParamSimpleCabBrightness:
         return "simplecab_brightness";
-      case NAMGuitarPlugin::kParamIRQuality:
+      case GuitarFXPlugin::kParamIRQuality:
         return "ir_quality";
-      case NAMGuitarPlugin::kParamEQEnabled:
+      case GuitarFXPlugin::kParamEQEnabled:
         return "eq_enabled";
-      case NAMGuitarPlugin::kParamEQLowGain:
+      case GuitarFXPlugin::kParamEQLowGain:
         return "eq_low_gain";
-      case NAMGuitarPlugin::kParamEQLowFreq:
+      case GuitarFXPlugin::kParamEQLowFreq:
         return "eq_low_freq";
-      case NAMGuitarPlugin::kParamEQLowMidGain:
+      case GuitarFXPlugin::kParamEQLowMidGain:
         return "eq_lowmid_gain";
-      case NAMGuitarPlugin::kParamEQLowMidFreq:
+      case GuitarFXPlugin::kParamEQLowMidFreq:
         return "eq_lowmid_freq";
-      case NAMGuitarPlugin::kParamEQLowMidQ:
+      case GuitarFXPlugin::kParamEQLowMidQ:
         return "eq_lowmid_q";
-      case NAMGuitarPlugin::kParamEQHighMidGain:
+      case GuitarFXPlugin::kParamEQHighMidGain:
         return "eq_highmid_gain";
-      case NAMGuitarPlugin::kParamEQHighMidFreq:
+      case GuitarFXPlugin::kParamEQHighMidFreq:
         return "eq_highmid_freq";
-      case NAMGuitarPlugin::kParamEQHighMidQ:
+      case GuitarFXPlugin::kParamEQHighMidQ:
         return "eq_highmid_q";
-      case NAMGuitarPlugin::kParamEQHighGain:
+      case GuitarFXPlugin::kParamEQHighGain:
         return "eq_high_gain";
-      case NAMGuitarPlugin::kParamEQHighFreq:
+      case GuitarFXPlugin::kParamEQHighFreq:
         return "eq_high_freq";
       // Delay effect
-      case NAMGuitarPlugin::kParamDelayEnabled:
+      case GuitarFXPlugin::kParamDelayEnabled:
         return "delay_enabled";
-      case NAMGuitarPlugin::kParamDelayTime:
+      case GuitarFXPlugin::kParamDelayTime:
         return "delay_time";
-      case NAMGuitarPlugin::kParamDelayFeedback:
+      case GuitarFXPlugin::kParamDelayFeedback:
         return "delay_feedback";
-      case NAMGuitarPlugin::kParamDelayMix:
+      case GuitarFXPlugin::kParamDelayMix:
         return "delay_mix";
       // Reverb effect
-      case NAMGuitarPlugin::kParamReverbEnabled:
+      case GuitarFXPlugin::kParamReverbEnabled:
         return "reverb_enabled";
-      case NAMGuitarPlugin::kParamReverbDecay:
+      case GuitarFXPlugin::kParamReverbDecay:
         return "reverb_decay";
-      case NAMGuitarPlugin::kParamReverbDamping:
+      case GuitarFXPlugin::kParamReverbDamping:
         return "reverb_damping";
-      case NAMGuitarPlugin::kParamReverbMix:
+      case GuitarFXPlugin::kParamReverbMix:
         return "reverb_mix";
       default:
         return "";
       }
     }
 
-    std::optional<NAMGuitarPlugin::ParameterId> ParamIdFromKey(const std::string &key)
+    std::optional<GuitarFXPlugin::ParameterId> ParamIdFromKey(const std::string &key)
     {
       if (key == "input_trim")
       {
-        return NAMGuitarPlugin::kParamInputTrim;
+        return GuitarFXPlugin::kParamInputTrim;
       }
       if (key == "output_trim")
       {
-        return NAMGuitarPlugin::kParamOutputTrim;
+        return GuitarFXPlugin::kParamOutputTrim;
       }
       if (key == "drive")
       {
-        return NAMGuitarPlugin::kParamDrive;
+        return GuitarFXPlugin::kParamDrive;
       }
       if (key == "tone")
       {
-        return NAMGuitarPlugin::kParamTone;
+        return GuitarFXPlugin::kParamTone;
       }
       if (key == "gate_enabled")
       {
-        return NAMGuitarPlugin::kParamGateEnabled;
+        return GuitarFXPlugin::kParamGateEnabled;
       }
       if (key == "gate_threshold")
       {
-        return NAMGuitarPlugin::kParamGateThreshold;
+        return GuitarFXPlugin::kParamGateThreshold;
       }
       if (key == "mix")
       {
-        return NAMGuitarPlugin::kParamMix;
+        return GuitarFXPlugin::kParamMix;
       }
       if (key == "doubler_enabled")
       {
-        return NAMGuitarPlugin::kParamDoublerEnabled;
+        return GuitarFXPlugin::kParamDoublerEnabled;
       }
       if (key == "doubler_delay")
       {
-        return NAMGuitarPlugin::kParamDoublerDelay;
+        return GuitarFXPlugin::kParamDoublerDelay;
       }
       if (key == "transpose")
       {
-        return NAMGuitarPlugin::kParamTranspose;
+        return GuitarFXPlugin::kParamTranspose;
       }
       if (key == "simplecab_enabled")
       {
-        return NAMGuitarPlugin::kParamSimpleCabEnabled;
+        return GuitarFXPlugin::kParamSimpleCabEnabled;
       }
       if (key == "simplecab_bass")
       {
-        return NAMGuitarPlugin::kParamSimpleCabBass;
+        return GuitarFXPlugin::kParamSimpleCabBass;
       }
       if (key == "simplecab_presence")
       {
-        return NAMGuitarPlugin::kParamSimpleCabPresence;
+        return GuitarFXPlugin::kParamSimpleCabPresence;
       }
       if (key == "simplecab_brightness")
       {
-        return NAMGuitarPlugin::kParamSimpleCabBrightness;
+        return GuitarFXPlugin::kParamSimpleCabBrightness;
       }
       if (key == "ir_quality")
       {
-        return NAMGuitarPlugin::kParamIRQuality;
+        return GuitarFXPlugin::kParamIRQuality;
       }
       if (key == "eq_enabled")
       {
-        return NAMGuitarPlugin::kParamEQEnabled;
+        return GuitarFXPlugin::kParamEQEnabled;
       }
       if (key == "eq_low_gain")
       {
-        return NAMGuitarPlugin::kParamEQLowGain;
+        return GuitarFXPlugin::kParamEQLowGain;
       }
       if (key == "eq_low_freq")
       {
-        return NAMGuitarPlugin::kParamEQLowFreq;
+        return GuitarFXPlugin::kParamEQLowFreq;
       }
       if (key == "eq_lowmid_gain")
       {
-        return NAMGuitarPlugin::kParamEQLowMidGain;
+        return GuitarFXPlugin::kParamEQLowMidGain;
       }
       if (key == "eq_lowmid_freq")
       {
-        return NAMGuitarPlugin::kParamEQLowMidFreq;
+        return GuitarFXPlugin::kParamEQLowMidFreq;
       }
       if (key == "eq_lowmid_q")
       {
-        return NAMGuitarPlugin::kParamEQLowMidQ;
+        return GuitarFXPlugin::kParamEQLowMidQ;
       }
       if (key == "eq_highmid_gain")
       {
-        return NAMGuitarPlugin::kParamEQHighMidGain;
+        return GuitarFXPlugin::kParamEQHighMidGain;
       }
       if (key == "eq_highmid_freq")
       {
-        return NAMGuitarPlugin::kParamEQHighMidFreq;
+        return GuitarFXPlugin::kParamEQHighMidFreq;
       }
       if (key == "eq_highmid_q")
       {
-        return NAMGuitarPlugin::kParamEQHighMidQ;
+        return GuitarFXPlugin::kParamEQHighMidQ;
       }
       if (key == "eq_high_gain")
       {
-        return NAMGuitarPlugin::kParamEQHighGain;
+        return GuitarFXPlugin::kParamEQHighGain;
       }
       if (key == "eq_high_freq")
       {
-        return NAMGuitarPlugin::kParamEQHighFreq;
+        return GuitarFXPlugin::kParamEQHighFreq;
       }
       // Delay effect
       if (key == "delay_enabled")
       {
-        return NAMGuitarPlugin::kParamDelayEnabled;
+        return GuitarFXPlugin::kParamDelayEnabled;
       }
       if (key == "delay_time")
       {
-        return NAMGuitarPlugin::kParamDelayTime;
+        return GuitarFXPlugin::kParamDelayTime;
       }
       if (key == "delay_feedback")
       {
-        return NAMGuitarPlugin::kParamDelayFeedback;
+        return GuitarFXPlugin::kParamDelayFeedback;
       }
       if (key == "delay_mix")
       {
-        return NAMGuitarPlugin::kParamDelayMix;
+        return GuitarFXPlugin::kParamDelayMix;
       }
       // Reverb effect
       if (key == "reverb_enabled")
       {
-        return NAMGuitarPlugin::kParamReverbEnabled;
+        return GuitarFXPlugin::kParamReverbEnabled;
       }
       if (key == "reverb_decay")
       {
-        return NAMGuitarPlugin::kParamReverbDecay;
+        return GuitarFXPlugin::kParamReverbDecay;
       }
       if (key == "reverb_damping")
       {
-        return NAMGuitarPlugin::kParamReverbDamping;
+        return GuitarFXPlugin::kParamReverbDamping;
       }
       if (key == "reverb_mix")
       {
-        return NAMGuitarPlugin::kParamReverbMix;
+        return GuitarFXPlugin::kParamReverbMix;
       }
       return std::nullopt;
     }
@@ -512,8 +512,8 @@ namespace namguitar
 
   } // namespace
 
-  NAMGuitarPlugin::NAMGuitarPlugin(const iplug::InstanceInfo &info)
-      : iplug::Plugin(info, iplug::MakeConfig(kParamCount, kNumPrograms)), mDSP(std::make_unique<NAMDSPManager>())
+  GuitarFXPlugin::GuitarFXPlugin(const iplug::InstanceInfo &info)
+      : iplug::Plugin(info, iplug::MakeConfig(kParamCount, kNumPrograms)), mDSP(std::make_unique<AmpModelManager>())
   {
     // Write to a log file to verify execution
     FILE* logFile = fopen("c:\\temp\\plugin_log.txt", "a");
@@ -575,14 +575,14 @@ namespace namguitar
   }
 
 #ifdef VST3_API
-  Steinberg::tresult PLUGIN_API NAMGuitarPlugin::initialize(FUnknown* context)
+  Steinberg::tresult PLUGIN_API GuitarFXPlugin::initialize(FUnknown* context)
   {
     std::cout << "[Plugin] initialize called" << std::endl;
     return iplug::Plugin::initialize(context);
   }
 #endif
 
-  void NAMGuitarPlugin::ProcessBlock(iplug::sample **inputs, iplug::sample **outputs, int nFrames)
+  void GuitarFXPlugin::ProcessBlock(iplug::sample **inputs, iplug::sample **outputs, int nFrames)
   {
     if (!mDSP)
     {
@@ -761,7 +761,7 @@ namespace namguitar
     mDSP->Process(inputs, outputs, nFrames);
   }
 
-  void NAMGuitarPlugin::OnReset()
+  void GuitarFXPlugin::OnReset()
   {
     if (!mDSP)
     {
@@ -779,7 +779,7 @@ namespace namguitar
     mPreviewCursor.store(0, std::memory_order_release);
   }
 
-  void NAMGuitarPlugin::OnIdle()
+  void GuitarFXPlugin::OnIdle()
   {
     static int idleCount = 0;
     idleCount++;
@@ -884,7 +884,7 @@ namespace namguitar
     }
   }
 
-  bool NAMGuitarPlugin::SerializeState(iplug::IByteChunk &chunk) const
+  bool GuitarFXPlugin::SerializeState(iplug::IByteChunk &chunk) const
   {
     bool success = chunk.PutStr(mActivePresetJson.c_str());
     success &= chunk.PutStr(mActivePresetId.c_str());
@@ -893,7 +893,7 @@ namespace namguitar
     return success;
   }
 
-  int NAMGuitarPlugin::UnserializeState(const iplug::IByteChunk &chunk, int startPos)
+  int GuitarFXPlugin::UnserializeState(const iplug::IByteChunk &chunk, int startPos)
   {
     int position = startPos;
 
@@ -958,7 +958,7 @@ namespace namguitar
     return position;
   }
 
-  void NAMGuitarPlugin::OnParamChange(int paramIdx)
+  void GuitarFXPlugin::OnParamChange(int paramIdx)
   {
     if (!mDSP)
     {
@@ -1016,7 +1016,7 @@ namespace namguitar
       mDSP->SetSimpleCabBrightness(param->Value());
       break;
     case kParamIRQuality:
-      mDSP->SetIRQuality(namguitar::GetIRQualityFromInt(static_cast<int>(param->Value())));
+      mDSP->SetIRQuality(guitarfx::GetIRQualityFromInt(static_cast<int>(param->Value())));
       break;
     case kParamEQEnabled:
       mDSP->SetEQEnabled(param->Bool());
@@ -1084,7 +1084,7 @@ namespace namguitar
     mPendingStateBroadcast = true;
   }
 
-  void NAMGuitarPlugin::InitializeParameters()
+  void GuitarFXPlugin::InitializeParameters()
   {
     GetParam(kParamInputTrim)->InitDouble("Input Trim", 0.0, -24.0, 12.0, 0.1, "dB");
     GetParam(kParamOutputTrim)->InitDouble("Output Trim", 0.0, -24.0, 12.0, 0.1, "dB");
@@ -1130,7 +1130,7 @@ namespace namguitar
   }
 
   // Send a JSON message to the WebView UI
-  void NAMGuitarPlugin::SendMessageToUI(const std::string& jsonMessage)
+  void GuitarFXPlugin::SendMessageToUI(const std::string& jsonMessage)
   {
     // Call the JavaScript handler function in the WebView
     // The UI registers window.IPlugReceiveData to receive messages as a JSON string
@@ -1154,7 +1154,7 @@ namespace namguitar
   // Override to intercept custom JSON messages before base class processing
   // The base class expects messages with a "msg" field for iPlug2 internal protocol.
   // Our UI sends custom messages with a "type" field instead.
-  void NAMGuitarPlugin::OnMessageFromWebView(const char* jsonStr)
+  void GuitarFXPlugin::OnMessageFromWebView(const char* jsonStr)
   {
     if (!jsonStr)
     {
@@ -1187,7 +1187,7 @@ namespace namguitar
 
   // Handle messages from the WebView via OnMessage callback
   // The WebViewEditorDelegate calls this for arbitrary messages (SAMFUI from JS)
-  bool NAMGuitarPlugin::OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData)
+  bool GuitarFXPlugin::OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData)
   {
     // msgTag == -1 means this is a JSON message from SendArbitraryMsgFromUI
     if (msgTag == -1 && dataSize > 0 && pData != nullptr)
@@ -1200,7 +1200,7 @@ namespace namguitar
     return false;
   }
 
-  void NAMGuitarPlugin::HandleUIMessage(const std::string &message)
+  void GuitarFXPlugin::HandleUIMessage(const std::string &message)
   {
     if (!nlohmann::json::accept(message))
     {
@@ -1227,7 +1227,7 @@ namespace namguitar
     }
 
     const std::string type = payload.value("type", "");
-    std::cerr << "[NAMGuitarPlugin] Received UI message of type: " << type << std::endl;
+    std::cerr << "[GuitarFXPlugin] Received UI message of type: " << type << std::endl;
     
     if (type == "loadPreset")
     {
@@ -1299,7 +1299,7 @@ namespace namguitar
     }
   }
 
-  void NAMGuitarPlugin::BroadcastState()
+  void GuitarFXPlugin::BroadcastState()
   {
     nlohmann::json message;
     message["type"] = "state";
@@ -1350,7 +1350,7 @@ namespace namguitar
     mPendingStateBroadcast = false;
   }
 
-  void NAMGuitarPlugin::ApplyPreset(const Preset &preset)
+  void GuitarFXPlugin::ApplyPreset(const Preset &preset)
   {
     if (!mDSP)
     {
@@ -1583,7 +1583,7 @@ namespace namguitar
     }
   }
 
-  void NAMGuitarPlugin::HandlePresetLoadRequest(const nlohmann::json &payload)
+  void GuitarFXPlugin::HandlePresetLoadRequest(const nlohmann::json &payload)
   {
     const auto presetJsonIter = payload.find("preset");
     if (presetJsonIter == payload.end() || !presetJsonIter->is_object())
@@ -1636,12 +1636,12 @@ namespace namguitar
     }
   }
 
-  void NAMGuitarPlugin::HandleStateRequest()
+  void GuitarFXPlugin::HandleStateRequest()
   {
     mPendingStateBroadcast = true;
   }
 
-  void NAMGuitarPlugin::HandleSetParameterRequest(const nlohmann::json &payload)
+  void GuitarFXPlugin::HandleSetParameterRequest(const nlohmann::json &payload)
   {
     const std::string paramId = payload.value("id", "");
     const double value = payload.value("value", 0.0);
@@ -1658,7 +1658,7 @@ namespace namguitar
     }
   }
 
-  void NAMGuitarPlugin::HandleSignalTestRequest(const nlohmann::json &payload)
+  void GuitarFXPlugin::HandleSignalTestRequest(const nlohmann::json &payload)
   {
     const double frequency = payload.value("frequency", 440.0);
     const double duration = payload.value("duration", 1.0);
@@ -1671,7 +1671,7 @@ namespace namguitar
     ReportErrorToUI("Unable to start signal path test", "Another test is already running or DSP is not ready");
   }
 
-  void NAMGuitarPlugin::HandleLoadModelRequest(const nlohmann::json &payload)
+  void GuitarFXPlugin::HandleLoadModelRequest(const nlohmann::json &payload)
   {
     if (!mDSP)
     {
@@ -1721,7 +1721,7 @@ namespace namguitar
     }
   }
 
-  void NAMGuitarPlugin::HandleLoadIRRequest(const nlohmann::json &payload)
+  void GuitarFXPlugin::HandleLoadIRRequest(const nlohmann::json &payload)
   {
     if (!mDSP)
     {
@@ -1771,20 +1771,20 @@ namespace namguitar
     }
   }
 
-  void NAMGuitarPlugin::HandleSavePresetRequest(const nlohmann::json &payload)
+  void GuitarFXPlugin::HandleSavePresetRequest(const nlohmann::json &payload)
   {
-    std::cerr << "[NAMGuitarPlugin] HandleSavePresetRequest called" << std::endl;
+    std::cerr << "[GuitarFXPlugin] HandleSavePresetRequest called" << std::endl;
     
     const std::string presetName = payload.value("name", "");
     const std::string presetCategory = payload.value("category", "User");
     const std::string presetDescription = payload.value("description", "");
 
-    std::cerr << "[NAMGuitarPlugin] Saving preset: name=" << presetName 
+    std::cerr << "[GuitarFXPlugin] Saving preset: name=" << presetName 
               << ", category=" << presetCategory << std::endl;
 
     if (presetName.empty())
     {
-      std::cerr << "[NAMGuitarPlugin] Error: Preset name is empty" << std::endl;
+      std::cerr << "[GuitarFXPlugin] Error: Preset name is empty" << std::endl;
       ReportErrorToUI("Cannot save preset", "Preset name is required");
       return;
     }
@@ -1816,7 +1816,7 @@ namespace namguitar
     {
       GraphNode ampNode;
       ampNode.id = "amp";
-      ampNode.type = "nam_amp";
+      ampNode.type = "amp_nam";
       ampNode.category = "amp";
       ampNode.enabled = true;
 
@@ -1979,7 +1979,7 @@ namespace namguitar
     }
   }
 
-  void NAMGuitarPlugin::HandleBrowseModelRequest()
+  void GuitarFXPlugin::HandleBrowseModelRequest()
   {
 #ifdef _WIN32
     wchar_t filePath[MAX_PATH] = {0};
@@ -2005,7 +2005,7 @@ namespace namguitar
 #endif
   }
 
-  void NAMGuitarPlugin::HandleBrowseIRRequest()
+  void GuitarFXPlugin::HandleBrowseIRRequest()
   {
 #ifdef _WIN32
     wchar_t filePath[MAX_PATH] = {0};
@@ -2031,7 +2031,7 @@ namespace namguitar
 #endif
   }
 
-  void NAMGuitarPlugin::HandleTunerRequest(const nlohmann::json &payload)
+  void GuitarFXPlugin::HandleTunerRequest(const nlohmann::json &payload)
   {
     if (!mDSP)
     {
@@ -2043,7 +2043,7 @@ namespace namguitar
     if (action == "start")
     {
       // Set up the tuner callback
-      mDSP->SetTunerCallback([this](const NAMDSPManager::TunerResult& result) {
+      mDSP->SetTunerCallback([this](const AmpModelManager::TunerResult& result) {
         std::lock_guard<std::mutex> lock(mTunerMutex);
         mPendingTunerData.noteName = result.noteName;
         mPendingTunerData.octave = result.octave;
@@ -2113,7 +2113,7 @@ namespace namguitar
     }
   }
 
-  void NAMGuitarPlugin::HandleSetInputModeRequest(const nlohmann::json &payload)
+  void GuitarFXPlugin::HandleSetInputModeRequest(const nlohmann::json &payload)
   {
     if (!mDSP)
     {
@@ -2144,7 +2144,7 @@ namespace namguitar
     }
   }
 
-  void NAMGuitarPlugin::HandleSetAmpCabStateRequest(const nlohmann::json &payload)
+  void GuitarFXPlugin::HandleSetAmpCabStateRequest(const nlohmann::json &payload)
   {
     if (!mDSP)
     {
@@ -2175,7 +2175,7 @@ namespace namguitar
     }
   }
 
-  void NAMGuitarPlugin::HandleUpdateNodeParamRequest(const nlohmann::json &payload)
+  void GuitarFXPlugin::HandleUpdateNodeParamRequest(const nlohmann::json &payload)
   {
     const std::string nodeId = payload.value("nodeId", "");
     const std::string paramKey = payload.value("paramKey", "");
@@ -2205,7 +2205,7 @@ namespace namguitar
     }
   }
 
-  void NAMGuitarPlugin::ApplyNodeParameter(const GraphNode& node, const std::string& paramKey, double value)
+  void GuitarFXPlugin::ApplyNodeParameter(const GraphNode& node, const std::string& paramKey, double value)
   {
     // Map node type and param key to plugin parameter
     if (node.type == "amp_nam" || node.type == "nam_amp" || node.type == "nam")
@@ -2315,7 +2315,7 @@ namespace namguitar
     }
   }
 
-  void NAMGuitarPlugin::HandleUpdateNodeBypassRequest(const nlohmann::json &payload)
+  void GuitarFXPlugin::HandleUpdateNodeBypassRequest(const nlohmann::json &payload)
   {
     const std::string nodeId = payload.value("nodeId", "");
     const bool bypassed = payload.value("bypassed", false);
@@ -2345,7 +2345,7 @@ namespace namguitar
     }
   }
 
-  void NAMGuitarPlugin::HandleUpdateNodeResourceRequest(const nlohmann::json &payload)
+  void GuitarFXPlugin::HandleUpdateNodeResourceRequest(const nlohmann::json &payload)
   {
     const std::string nodeId = payload.value("nodeId", "");
     const std::string resourceType = payload.value("resourceType", "");
@@ -2397,7 +2397,7 @@ namespace namguitar
     }
   }
 
-  void NAMGuitarPlugin::HandleBrowseNodeResourceRequest(const nlohmann::json &payload)
+  void GuitarFXPlugin::HandleBrowseNodeResourceRequest(const nlohmann::json &payload)
   {
     const std::string nodeId = payload.value("nodeId", "");
     const std::string resourceType = payload.value("resourceType", "");
@@ -2451,7 +2451,7 @@ namespace namguitar
 #endif
   }
 
-  void NAMGuitarPlugin::HandlePreviewDemoRequest(const nlohmann::json &payload)
+  void GuitarFXPlugin::HandlePreviewDemoRequest(const nlohmann::json &payload)
   {
     if (!mDSP)
     {
@@ -2523,7 +2523,7 @@ namespace namguitar
     mPreviewCompletedBuffer.store(nullptr, std::memory_order_release);
   }
 
-  void NAMGuitarPlugin::ReportErrorToUI(std::string_view message, std::string_view detail)
+  void GuitarFXPlugin::ReportErrorToUI(std::string_view message, std::string_view detail)
   {
     nlohmann::json payload;
     payload["type"] = "error";
@@ -2536,7 +2536,7 @@ namespace namguitar
     SendMessageToUI(payload.dump());
   }
 
-  std::optional<std::filesystem::path> NAMGuitarPlugin::ResolveResourceRef(const ResourceRef &ref) const
+  std::optional<std::filesystem::path> GuitarFXPlugin::ResolveResourceRef(const ResourceRef &ref) const
   {
     // Check for direct file path first
     if (ref.IsFilePath())
@@ -2625,7 +2625,7 @@ namespace namguitar
     return std::nullopt;
   }
 
-  std::vector<std::uint8_t> NAMGuitarPlugin::DecodeBase64(const std::string &encoded)
+  std::vector<std::uint8_t> GuitarFXPlugin::DecodeBase64(const std::string &encoded)
   {
     static const std::array<int, 256> decodeTable = []()
     {
@@ -2675,7 +2675,7 @@ namespace namguitar
     return output;
   }
 
-  bool NAMGuitarPlugin::WriteFile(const std::filesystem::path &target, const std::vector<std::uint8_t> &data) const
+  bool GuitarFXPlugin::WriteFile(const std::filesystem::path &target, const std::vector<std::uint8_t> &data) const
   {
     if (target.empty())
     {
@@ -2701,7 +2701,7 @@ namespace namguitar
     return output.good();
   }
 
-  bool NAMGuitarPlugin::StartSignalPathTest(double frequencyHz, double durationSeconds)
+  bool GuitarFXPlugin::StartSignalPathTest(double frequencyHz, double durationSeconds)
   {
     if (!mDSP)
     {
@@ -2758,7 +2758,7 @@ namespace namguitar
     return true;
   }
 
-  void NAMGuitarPlugin::SaveAppSettings() const
+  void GuitarFXPlugin::SaveAppSettings() const
   {
     try
     {
@@ -2803,7 +2803,7 @@ namespace namguitar
     }
   }
 
-  void NAMGuitarPlugin::LoadAppSettings()
+  void GuitarFXPlugin::LoadAppSettings()
   {
     try
     {
@@ -2873,7 +2873,7 @@ namespace namguitar
     }
   }
 
-  void NAMGuitarPlugin::LoadResourceLibraries()
+  void GuitarFXPlugin::LoadResourceLibraries()
   {
     if (mResourceRoot.empty())
     {
@@ -3002,7 +3002,7 @@ namespace namguitar
     }
   }
 
-  void NAMGuitarPlugin::LoadLastSessionState()
+  void GuitarFXPlugin::LoadLastSessionState()
   {
     if (!mDSP)
     {
@@ -3077,4 +3077,4 @@ namespace namguitar
     std::cout << "[Plugin] Last session state restored" << std::endl;
   }
 
-} // namespace namguitar
+} // namespace guitarfx

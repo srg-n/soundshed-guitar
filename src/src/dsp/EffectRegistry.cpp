@@ -1,7 +1,7 @@
 #include "dsp/EffectRegistry.h"
 #include "dsp/EffectProcessor.h"
 
-namespace namguitar
+namespace guitarfx
 {
   EffectRegistry& EffectRegistry::Instance()
   {
@@ -84,4 +84,4 @@ namespace namguitar
     return std::nullopt;
   }
 
-} // namespace namguitar
+} // namespace guitarfx

@@ -14,7 +14,7 @@
 #include "httplib.h"
 #include "presets/PresetStorage.h"
 
-namespace namguitar
+namespace guitarfx
 {
 	namespace
 	{
@@ -289,4 +289,4 @@ namespace namguitar
 			.detach();
 	}
 
-} // namespace namguitar
+} // namespace guitarfx

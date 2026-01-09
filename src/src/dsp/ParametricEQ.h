@@ -4,7 +4,7 @@
 #include <numbers>
 #include <array>
 
-namespace namguitar
+namespace guitarfx
 {
   // 4-band Parametric EQ with:
   // - Band 1: Low Shelf (Bass) - adjustable frequency and gain
@@ -221,4 +221,4 @@ namespace namguitar
     std::array<double, kNumBands> mState2 = {0.0, 0.0, 0.0, 0.0};
   };
 
-} // namespace namguitar
+} // namespace guitarfx

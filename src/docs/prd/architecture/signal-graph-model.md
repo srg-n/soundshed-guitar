@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Signal Graph Model defines how audio processing nodes are connected and executed in NeuronGuitar. It enables flexible effect ordering, parallel signal paths, and mixing—going beyond traditional linear effect chains.
+The Signal Graph Model defines how audio processing nodes are connected and executed in GuitarFX. It enables flexible effect ordering, parallel signal paths, and mixing—going beyond traditional linear effect chains.
 
 ## Design Goals
 
@@ -65,7 +65,7 @@ input → effect1 → effect2 → effect3 → output
   "nodes": [
     {"id": "in", "type": "input"},
     {"id": "fx1", "type": "gate_noise"},
-    {"id": "fx2", "type": "nam_amp"},
+    {"id": "fx2", "type": "amp_nam"},
     {"id": "fx3", "type": "ir_cab"},
     {"id": "out", "type": "output"}
   ],
@@ -90,7 +90,7 @@ input → amp → split   → mixer → output
 {
   "nodes": [
     {"id": "in", "type": "input"},
-    {"id": "amp", "type": "nam_amp"},
+    {"id": "amp", "type": "amp_nam"},
     {"id": "split", "type": "splitter"},
     {"id": "cab1", "type": "ir_cab"},
     {"id": "cab2", "type": "ir_cab"},
@@ -270,7 +270,7 @@ Node parameters stored as key-value pairs:
 ```json
 {
   "id": "amp1",
-  "type": "nam_amp",
+  "type": "amp_nam",
   "params": {
     "drive": 0.65,
     "tone": 0.5,
@@ -292,7 +292,7 @@ Nodes that require external resources (NAM models, IRs) use ResourceRef:
 ```json
 {
   "id": "amp1",
-  "type": "nam_amp",
+  "type": "amp_nam",
   "resource": {
     "resourceType": "nam",
     "resourceId": "plexi-bright"

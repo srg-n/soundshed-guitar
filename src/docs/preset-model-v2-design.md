@@ -113,7 +113,7 @@ struct EmbeddedResource {
  */
 struct GraphNode {
     std::string id;                    // Unique node ID within this graph
-    std::string type;                  // Effect type identifier (e.g., "nam_amp", "ir_cab", "eq_parametric")
+    std::string type;                  // Effect type identifier (e.g., "amp_nam", "ir_cab", "eq_parametric")
     std::string category;              // UI grouping: "amp", "cab", "eq", "dynamics", "modulation", "delay", "reverb", "utility"
     std::string label;                 // Optional display name override
     bool enabled = true;               // Bypass toggle
@@ -269,7 +269,7 @@ Using pre-defined library resources - no embedded data needed.
       { "id": "gate", "type": "gate_noise", "category": "dynamics", "params": { "threshold": -55.0, "release": 50 } },
       { 
         "id": "amp", 
-        "type": "nam_amp", 
+        "type": "amp_nam", 
         "category": "amp", 
         "resource": { "resourceType": "nam", "resourceId": "plexi-bright" },
         "params": { "drive": 0.6, "tone": 0.5 } 
@@ -308,7 +308,7 @@ Using a file path for a custom NAM model not in the library.
       { "id": "in", "type": "input" },
       { 
         "id": "amp", 
-        "type": "nam_amp", 
+        "type": "amp_nam", 
         "category": "amp", 
         "resource": { "filePath": "C:/Users/me/NAM Models/my-custom-amp.nam" },
         "params": { "drive": 0.5 } 
@@ -344,7 +344,7 @@ For sharing presets with custom files - embed the data.
       { "id": "in", "type": "input" },
       { 
         "id": "amp", 
-        "type": "nam_amp", 
+        "type": "amp_nam", 
         "category": "amp", 
         "resource": { "embeddedId": "emb-001" },
         "params": { "drive": 0.7 } 
@@ -389,7 +389,7 @@ Blend a library IR cab with an algorithmic simple cab.
       { "id": "in", "type": "input" },
       { 
         "id": "amp", 
-        "type": "nam_amp", 
+        "type": "amp_nam", 
         "category": "amp", 
         "resource": { "resourceType": "nam", "resourceId": "jcm800-hot" }
       },
@@ -469,7 +469,7 @@ Two EQs and two compressors in one chain.
       { "id": "comp1", "type": "comp_fet", "category": "dynamics", "label": "FET Comp", "params": { "ratio": 8, "attack": 1 } },
       { 
         "id": "amp", 
-        "type": "nam_amp", 
+        "type": "amp_nam", 
         "category": "amp", 
         "resource": { "resourceType": "nam", "resourceId": "twin-reverb" }
       },

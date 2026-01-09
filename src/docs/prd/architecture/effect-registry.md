@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Effect Registry provides a dynamic registration system for audio effect types in NeuronGuitar. It enables extensibility by allowing new effect types to be added without modifying core code, and provides metadata for UI generation and preset validation.
+The Effect Registry provides a dynamic registration system for audio effect types in GuitarFX. It enables extensibility by allowing new effect types to be added without modifying core code, and provides metadata for UI generation and preset validation.
 
 ## Design Goals
 
@@ -331,7 +331,7 @@ The registry provides data for the effect palette UI:
       "name": "Amplifiers",
       "effects": [
         {
-          "typeId": "nam_amp",
+          "typeId": "amp_nam",
           "name": "NAM Amp",
           "description": "Neural amp modeler",
           "requiresResource": true

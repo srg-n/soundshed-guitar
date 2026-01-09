@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines security requirements and implementations for NeuronGuitar, covering data protection, secure communication, input validation, and privacy considerations.
+This document outlines security requirements and implementations for GuitarFX, covering data protection, secure communication, input validation, and privacy considerations.
 
 ## Security Principles
 
@@ -58,8 +58,8 @@ Certificate Requirements:
 For enhanced security against MITM:
 ```
 Pinned certificates:
-- api.neuronguitar.io: sha256/ABC123...
-- cdn.neuronguitar.io: sha256/DEF456...
+- api.guitarfx.io: sha256/ABC123...
+- cdn.guitarfx.io: sha256/DEF456...
 
 Backup pins for certificate rotation included
 ```
@@ -176,7 +176,7 @@ Content-Security-Policy:
     script-src 'self';
     style-src 'self' 'unsafe-inline';
     img-src 'self' data:;
-    connect-src 'self' https://api.neuronguitar.io;
+    connect-src 'self' https://api.guitarfx.io;
     font-src 'self';
     object-src 'none';
     frame-ancestors 'none';
@@ -364,7 +364,7 @@ log_error("TLS handshake failed: certificate expired")
 
 ### Security Issue Handling
 
-1. Report received (security@neuronguitar.io)
+1. Report received (security@guitarfx.io)
 2. Triage and severity assessment
 3. Fix development (private)
 4. Coordinated disclosure

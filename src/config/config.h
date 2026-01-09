@@ -1,20 +1,20 @@
 #pragma once
 
-#include "NAMGuitarConfig.h"
+#include "GuitarFXConfig.h"
 
-#define PLUG_CLASS_NAME namguitar::NAMGuitarPlugin
+#define PLUG_CLASS_NAME guitarfx::GuitarFXPlugin
 #define PLUG_HOST_RESIZE 1
 
-#define AUV2_ENTRY NAMGuitarFX_Entry
-#define AUV2_ENTRY_STR "NAMGuitarFX_Entry"
-#define AUV2_FACTORY NAMGuitarFX_Factory
-#define AUV2_VIEW_CLASS NAMGuitarFX_View
-#define AUV2_VIEW_CLASS_STR "NAMGuitarFX_View"
+#define AUV2_ENTRY GuitarFX_Entry
+#define AUV2_ENTRY_STR "GuitarFX_Entry"
+#define AUV2_FACTORY GuitarFX_Factory
+#define AUV2_VIEW_CLASS GuitarFX_View
+#define AUV2_VIEW_CLASS_STR "GuitarFX_View"
 
-#define AAX_TYPE_IDS 'NmFx'
-#define AAX_TYPE_IDS_AUDIOSUITE 'NmFa'
-#define AAX_PLUG_MFR_STR "NrnG"
-#define AAX_PLUG_NAME_STR PLUG_NAME "\nNAMG"
+#define AAX_TYPE_IDS 'GtFx'
+#define AAX_TYPE_IDS_AUDIOSUITE 'GtFa'
+#define AAX_PLUG_MFR_STR "GtFx"
+#define AAX_PLUG_NAME_STR PLUG_NAME "\nGFX"
 #define AAX_PLUG_CATEGORY_STR "Effect"
 #define AAX_DOES_AUDIOSUITE 0
 

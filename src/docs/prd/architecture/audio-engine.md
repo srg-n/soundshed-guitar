@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Audio Engine is responsible for all real-time digital signal processing in NeuronGuitar. It processes audio through a configurable signal graph of effect nodes, including neural amp models, impulse response convolution, and traditional DSP effects.
+The Audio Engine is responsible for all real-time digital signal processing in GuitarFX. It processes audio through a configurable signal graph of effect nodes, including neural amp models, impulse response convolution, and traditional DSP effects.
 
 ## Design Goals
 

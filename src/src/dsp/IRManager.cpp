@@ -8,7 +8,7 @@
 #include <fstream>
 #include <limits>
 
-namespace namguitar
+namespace guitarfx
 {
   namespace
   {
@@ -462,4 +462,4 @@ namespace namguitar
     return true;
   }
 
-} // namespace namguitar
+} // namespace guitarfx

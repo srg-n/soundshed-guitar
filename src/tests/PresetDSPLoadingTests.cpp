@@ -8,7 +8,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "dsp/NAMDSPManager.h"
+#include "dsp/AmpModelManager.h"
 
 // Force factory registration by referencing factory functions directly.
 // This ensures the translation units with static factory::Helper registrations
@@ -58,12 +58,12 @@ std::string Describe(const fs::path& path)
 
 int main()
 {
-#ifndef NAMGUITAR_TEST_RESOURCES_DIR
-#error "NAMGUITAR_TEST_RESOURCES_DIR must be defined"
+#ifndef GUITARFX_TEST_RESOURCES_DIR
+#error "GUITARFX_TEST_RESOURCES_DIR must be defined"
 #endif
   try
   {
-    const fs::path resourcesDir = fs::path(NAMGUITAR_TEST_RESOURCES_DIR);
+    const fs::path resourcesDir = fs::path(GUITARFX_TEST_RESOURCES_DIR);
     const fs::path dataDir = resourcesDir / "ui" / "data";
 
     std::vector<std::string> errors;
@@ -163,7 +163,7 @@ int main()
       bool presetValid = true;
 
       // Create a fresh DSP manager for each preset
-      namguitar::NAMDSPManager dsp;
+      guitarfx::AmpModelManager dsp;
       dsp.Prepare(kTestSampleRate, kTestBlockSize);
 
       // Test loading all NAM models in the preset

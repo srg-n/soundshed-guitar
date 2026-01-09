@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace namguitar
+namespace guitarfx
 {
   struct ResourceRef;
 
@@ -64,4 +64,4 @@ namespace namguitar
     [[nodiscard]] static std::string MakeKey(const std::string& type, const std::string& id);
   };
 
-} // namespace namguitar
+} // namespace guitarfx

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Network Client handles all communication between NeuronGuitar and remote services, primarily the community preset repository. It provides search, download, and (future) upload capabilities.
+The Network Client handles all communication between GuitarFX and remote services, primarily the community preset repository. It provides search, download, and (future) upload capabilities.
 
 ## Design Goals
 
@@ -62,7 +62,7 @@ struct Response:
 | Timeout | 30s | Request timeout |
 | Retry Count | 3 | Automatic retries |
 | Retry Delay | 1s, 2s, 4s | Exponential backoff |
-| User Agent | NeuronGuitar/1.0 | Client identifier |
+| User Agent | GuitarFX/1.0 | Client identifier |
 
 ## Preset Service Client
 

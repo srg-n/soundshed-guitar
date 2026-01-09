@@ -33,7 +33,7 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-namespace namguitar
+namespace guitarfx
 {
   // Memory alignment for SIMD operations
   constexpr size_t SIMD_ALIGN = 32;  // AVX alignment (works for SSE2 too)
@@ -437,4 +437,4 @@ namespace namguitar
     std::vector<size_t> mBitReversed;
   };
 
-} // namespace namguitar
+} // namespace guitarfx

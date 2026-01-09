@@ -9,7 +9,7 @@
 #include <vector>
 #include <cmath>
 
-namespace namguitar
+namespace guitarfx
 {
   /**
    * Neural Amp Modeler effect - wrapper around NAM DSP library.
@@ -163,4 +163,4 @@ namespace namguitar
     });
   }
 
-} // namespace namguitar
+} // namespace guitarfx

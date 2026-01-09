@@ -2,7 +2,7 @@
  * @file RealAudioProcessingTests.cpp
  * @brief Tests for real audio processing through the complete DSP pipeline
  *
- * These tests process actual audio through NAMDSPManager::Process() with specific
+ * These tests process actual audio through AmpModelManager::Process() with specific
  * DSP settings and capture the output to validate against expected behavior.
  * This tests the full signal chain: input trim, gate, drive, tone, NAM model,
  * IR convolution, doubler, pitch shift, and output trim.
@@ -15,7 +15,7 @@
 #include <memory>
 #include <vector>
 
-#include "dsp/NAMDSPManager.h"
+#include "dsp/AmpModelManager.h"
 #include "IPlugConstants.h"
 
 namespace
@@ -190,7 +190,7 @@ bool TestPassthrough()
 
   try
   {
-    auto dspManager = std::make_unique<namguitar::NAMDSPManager>();
+    auto dspManager = std::make_unique<guitarfx::AmpModelManager>();
     dspManager->Prepare(kSampleRate, kBlockSize);
 
     // Setup with typical settings
@@ -274,7 +274,7 @@ bool TestOutputTrim()
 
   try
   {
-    auto dspManager = std::make_unique<namguitar::NAMDSPManager>();
+    auto dspManager = std::make_unique<guitarfx::AmpModelManager>();
     dspManager->Prepare(kSampleRate, kBlockSize);
 
     // Setup with moderate settings
@@ -357,7 +357,7 @@ bool TestNoClipping()
 
   try
   {
-    auto dspManager = std::make_unique<namguitar::NAMDSPManager>();
+    auto dspManager = std::make_unique<guitarfx::AmpModelManager>();
     dspManager->Prepare(kSampleRate, kBlockSize);
 
     // Setup: Moderate settings
@@ -432,7 +432,7 @@ bool TestAudioQuality()
 
   try
   {
-    auto dspManager = std::make_unique<namguitar::NAMDSPManager>();
+    auto dspManager = std::make_unique<guitarfx::AmpModelManager>();
     dspManager->Prepare(kSampleRate, kBlockSize);
 
     // Setup: Moderate settings
@@ -540,7 +540,7 @@ bool TestCabinetIRProcessing()
 
   try
   {
-    auto dspManager = std::make_unique<namguitar::NAMDSPManager>();
+    auto dspManager = std::make_unique<guitarfx::AmpModelManager>();
     dspManager->Prepare(kSampleRate, kBlockSize);
 
     // Setup with cabinet IR enabled
@@ -637,7 +637,7 @@ bool TestCabinetIRProcessing()
 
 int main()
 {
-  std::cout << "Real Audio Processing Tests (NAMDSPManager::Process)\n";
+  std::cout << "Real Audio Processing Tests (AmpModelManager::Process)\n";
   std::cout << "====================================================\n\n";
 
   int passed = 0;

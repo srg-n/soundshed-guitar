@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Preset System manages the storage, retrieval, and synchronization of NeuronGuitar presets. It supports local persistence, remote discovery, and portable preset sharing with embedded resources.
+The Preset System manages the storage, retrieval, and synchronization of GuitarFX presets. It supports local persistence, remote discovery, and portable preset sharing with embedded resources.
 
 ## Design Goals
 
@@ -44,7 +44,7 @@ Handles persistence to the local filesystem.
 
 **Storage Structure:**
 ```
-~/.neuronguitar/
+~/.guitarfx/
 ├── presets/
 │   ├── index.json           # Preset metadata index
 │   ├── user/                 # User-created presets
@@ -305,7 +305,7 @@ Migration:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| Presets Directory | ~/.neuronguitar/presets | Local storage path |
+| Presets Directory | ~/.guitarfx/presets | Local storage path |
 | Max Cache Size | 500 MB | Resource cache limit |
 | Search Cache TTL | 1 hour | Remote search cache duration |
 | Auto-Download | true | Download missing resources |

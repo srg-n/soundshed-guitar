@@ -8,7 +8,7 @@
 #include <queue>
 #include <set>
 
-namespace namguitar
+namespace guitarfx
 {
   SignalGraphExecutor::SignalGraphExecutor() = default;
   SignalGraphExecutor::~SignalGraphExecutor() = default;
@@ -425,4 +425,4 @@ namespace namguitar
     return nullptr;
   }
 
-} // namespace namguitar
+} // namespace guitarfx

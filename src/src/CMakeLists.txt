@@ -1,4 +1,4 @@
-# NAMGuitarFXCore static library containing the shared plugin implementation.
+# GuitarFXCore static library containing the shared plugin implementation.
 # Format-specific targets in the platform subdirectory link against this library.
 
 # NeuralAmpModelerCore sources - compiled directly since the upstream project
@@ -13,12 +13,12 @@ set(_nam_dsp_sources
   ${NeuralAmpModelerCore_SOURCE_DIR}/NAM/wavenet.cpp
 )
 
-# NAMGuitarFXCore contains API-agnostic shared code. NAMGuitarPlugin.cpp 
-# and NAMGuitarPlugin.h are NOT included here because they require format-
+# GuitarFXCore contains API-agnostic shared code. GuitarFXPlugin.cpp 
+# and GuitarFXPlugin.h are NOT included here because they require format-
 # specific API definitions (APP_API, VST3_API, etc.). Each format target
-# compiles NAMGuitarPlugin.cpp directly with its own API definition.
+# compiles GuitarFXPlugin.cpp directly with its own API definition.
 
-set(_namguitar_core_sources
+set(_guitarfx_core_sources
   # Existing DSP
   dsp/SimdFFT.h
   dsp/RealtimeConvolver.cpp
@@ -27,8 +27,8 @@ set(_namguitar_core_sources
   dsp/IRTypes.h
   dsp/IRManager.cpp
   dsp/IRManager.h
-  dsp/NAMDSPManager.cpp
-  dsp/NAMDSPManager.h
+  dsp/AmpModelManager.cpp
+  dsp/AmpModelManager.h
   dsp/NAMFactoryForce.cpp
   dsp/ParametricEQ.h
   dsp/DelayEffect.h
@@ -78,7 +78,7 @@ set(_namguitar_core_sources
   ${_nam_dsp_sources}
 )
 
-add_library(NAMGuitarFXCore STATIC ${_namguitar_core_sources})
+add_library(GuitarFXCore STATIC ${_guitarfx_core_sources})
 
 # Locate Eigen bundled with NeuralAmpModelerCore
 if(DEFINED NeuralAmpModelerCore_SOURCE_DIR)
@@ -90,7 +90,7 @@ else()
   set(_nam_eigen_dir "${CMAKE_BINARY_DIR}/_deps/neuralampmodelercore-src/Dependencies/eigen")
 endif()
 
-target_include_directories(NAMGuitarFXCore
+target_include_directories(GuitarFXCore
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/../config
@@ -105,17 +105,17 @@ target_include_directories(NAMGuitarFXCore
     ${_nam_eigen_dir}
 )
 
-target_link_libraries(NAMGuitarFXCore
+target_link_libraries(GuitarFXCore
   PUBLIC
     nlohmann_json::nlohmann_json
     httplib::httplib
 )
 
 if(TARGET nam)
-  target_link_libraries(NAMGuitarFXCore PUBLIC nam)
+  target_link_libraries(GuitarFXCore PUBLIC nam)
 endif()
 
-target_compile_definitions(NAMGuitarFXCore
+target_compile_definitions(GuitarFXCore
   PUBLIC
     IPLUG_EDITOR=1
     IPLUG_DSP=1
@@ -124,17 +124,17 @@ target_compile_definitions(NAMGuitarFXCore
     NOMINMAX
     # Note: APP_API is NOT defined here. Format-specific targets (standalone,
     # VST3, etc.) must define their own API macro. The core library compiles
-    # NAMGuitarPlugin.cpp as a static library without API-specific code.
+    # GuitarFXPlugin.cpp as a static library without API-specific code.
 )
 
 if(WIN32)
-  target_compile_definitions(NAMGuitarFXCore PUBLIC _WIN32 WIN32 _WINDOWS)
+  target_compile_definitions(GuitarFXCore PUBLIC _WIN32 WIN32 _WINDOWS)
 endif()
 
-set_target_properties(NAMGuitarFXCore PROPERTIES
+set_target_properties(GuitarFXCore PROPERTIES
   CXX_STANDARD 20
   CXX_STANDARD_REQUIRED ON
-  FOLDER "NAMGuitarFX"
+  FOLDER "GuitarFX"
 )
 
 add_subdirectory(platform)

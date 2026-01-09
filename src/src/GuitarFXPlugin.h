@@ -22,13 +22,13 @@
 #include "resources/ResourceLibrary.h"
 #include "util/FileSystem.h"
 
-namespace namguitar
+namespace guitarfx
 {
-  class NAMDSPManager;
-  class NAMGuitarPlugin final : public iplug::Plugin
+  class AmpModelManager;
+  class GuitarFXPlugin final : public iplug::Plugin
   {
   public:
-    explicit NAMGuitarPlugin(const iplug::InstanceInfo &info);
+    explicit GuitarFXPlugin(const iplug::InstanceInfo &info);
 
     void ProcessBlock(iplug::sample **inputs, iplug::sample **outputs, int nFrames) override;
     void OnReset() override;
@@ -124,8 +124,8 @@ namespace namguitar
     void HandleUpdateNodeResourceRequest(const nlohmann::json &payload);
     void HandleBrowseNodeResourceRequest(const nlohmann::json &payload);
     void BroadcastState();
-    void ApplyPreset(const namguitar::Preset &preset);
-    void ApplyNodeParameter(const namguitar::GraphNode& node, const std::string& paramKey, double value);
+    void ApplyPreset(const guitarfx::Preset &preset);
+    void ApplyNodeParameter(const guitarfx::GraphNode& node, const std::string& paramKey, double value);
     void ReportErrorToUI(std::string_view message, std::string_view detail = {});
     [[nodiscard]] std::optional<std::filesystem::path> ResolveResourceRef(const ResourceRef &ref) const;
     [[nodiscard]] static std::vector<std::uint8_t> DecodeBase64(const std::string &encoded);
@@ -150,7 +150,7 @@ namespace namguitar
       std::chrono::steady_clock::time_point startTime;
     };
 
-    std::unique_ptr<NAMDSPManager> mDSP;
+    std::unique_ptr<AmpModelManager> mDSP;
     ResourceLibrary mResourceLibrary;
     FileSystem mFileSystem;
     ModelHasher mHasher;
@@ -210,6 +210,6 @@ namespace namguitar
     // ProcessBlock (audio thread) and ApplyPreset/LoadModel/LoadIR (UI thread) share mDSP
     mutable std::mutex mDSPMutex;
   };
-} // namespace namguitar
+} // namespace guitarfx
 
-using NAMGuitarPlugin = namguitar::NAMGuitarPlugin;
+using GuitarFXPlugin = guitarfx::GuitarFXPlugin;

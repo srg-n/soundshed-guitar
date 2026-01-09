@@ -5,9 +5,9 @@
 #include <memory>
 #include <cstddef>
 
-namespace namguitar { class SimdFFT; }
+namespace guitarfx { class SimdFFT; }
 
-namespace namguitar
+namespace guitarfx
 {
   /**
    * Real-time convolver using Uniformly Partitioned Overlap-Save (UPOLS) algorithm.
@@ -94,4 +94,4 @@ namespace namguitar
     std::unique_ptr<SimdFFT> mFFT;
   };
 
-} // namespace namguitar
+} // namespace guitarfx

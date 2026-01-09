@@ -16,7 +16,7 @@
       "problemMatcher": "$tsc"
     },
     {
-      "label": "Build NAMGuitarFX Debug",
+      "label": "Build GuitarFX Debug",
       "type": "shell",
       "command": "cmake",
       "args": [
@@ -25,7 +25,7 @@
         "--config",
         "Debug",
         "--target",
-        "NAMGuitarFX_App"
+        "GuitarFX_App"
       ],
       "group": {
         "kind": "build",
@@ -34,7 +34,7 @@
       "problemMatcher": "$msCompile"
     },
     {
-      "label": "Build NAMGuitarFX App Release",
+      "label": "Build GuitarFX App Release",
       "dependsOn": [
         "Build TypeScript"
       ],
@@ -47,13 +47,13 @@
         "--config",
         "Release",
         "--target",
-        "NAMGuitarFX_App"
+        "GuitarFX_App"
       ],
       "group": "build",
       "problemMatcher": "$msCompile"
     },
     {
-      "label": "Build NAMGuitarFX App and VST Release",
+      "label": "Build GuitarFX App and VST Release",
       "dependsOn": [
         "Build TypeScript"
       ],
@@ -87,7 +87,7 @@
       "problemMatcher": []
     },
     {
-      "label": "Build NAMGuitarFX VST3 Debug",
+      "label": "Build GuitarFX VST3 Debug",
       "type": "shell",
       "command": "cmake",
       "args": [
@@ -96,7 +96,7 @@
         "--config",
         "Debug",
         "--target",
-        "NAMGuitarFX_VST3"
+        "GuitarFX_VST3"
       ],
       "group": "build",
       "problemMatcher": "$msCompile"
@@ -119,7 +119,7 @@
     {
       "label": "Build VST3 and DebugHost",
       "dependsOn": [
-        "Build NAMGuitarFX VST3 Debug",
+        "Build GuitarFX VST3 Debug",
         "Build VST3DebugHost"
       ],
       "dependsOrder": "sequence",

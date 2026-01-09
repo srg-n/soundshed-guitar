@@ -4,7 +4,7 @@
 #include <cmath>
 #include <algorithm>
 
-namespace namguitar
+namespace guitarfx
 {
   /**
    * Simple stereo delay effect with feedback and mix control.
@@ -102,4 +102,4 @@ namespace namguitar
     size_t mMaxDelaySamples = 0;
   };
 
-} // namespace namguitar
+} // namespace guitarfx

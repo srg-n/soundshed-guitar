@@ -7,7 +7,7 @@ if(NOT DEFINED iPlug2_SOURCE_DIR)
 endif()
 
 set(_nam_app_sources
-  ../../NAMGuitarPlugin.cpp
+  ../../GuitarFXPlugin.cpp
   ../../../resources/main.rc
   ${iPlug2_SOURCE_DIR}/IPlug/APP/IPlugAPP.cpp
   ${iPlug2_SOURCE_DIR}/IPlug/APP/IPlugAPP_dialog.cpp
@@ -32,9 +32,9 @@ set(_nam_app_sources
   ${iPlug2_SOURCE_DIR}/Dependencies/IPlug/RTMidi/RtMidi.cpp
 )
 
-add_executable(NAMGuitarFX_App WIN32 ${_nam_app_sources})
+add_executable(GuitarFX_App WIN32 ${_nam_app_sources})
 
-target_include_directories(NAMGuitarFX_App
+target_include_directories(GuitarFX_App
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../resources
     ${iPlug2_SOURCE_DIR}/Dependencies/IPlug/RTAudio
@@ -42,7 +42,7 @@ target_include_directories(NAMGuitarFX_App
     ${iPlug2_SOURCE_DIR}/Dependencies/IPlug/RTMidi
 )
 
-target_compile_definitions(NAMGuitarFX_App
+target_compile_definitions(GuitarFX_App
   PRIVATE
     APP_API
     __WINDOWS_DS__
@@ -53,9 +53,9 @@ target_compile_definitions(NAMGuitarFX_App
     NO_IGRAPHICS
 )
 
-target_link_libraries(NAMGuitarFX_App
+target_link_libraries(GuitarFX_App
   PRIVATE
-    NAMGuitarFXCore
+    GuitarFXCore
     WebView2::Loader
     wil::headers
     dsound
@@ -73,14 +73,14 @@ target_link_libraries(NAMGuitarFX_App
   wininet
 )
 
-set_target_properties(NAMGuitarFX_App PROPERTIES
-  OUTPUT_NAME NAMGuitarFX
-  FOLDER "NAMGuitarFX/Formats"
+set_target_properties(GuitarFX_App PROPERTIES
+  OUTPUT_NAME GuitarFX
+  FOLDER "GuitarFX/Formats"
 )
 
-add_custom_command(TARGET NAMGuitarFX_App POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:NAMGuitarFX_App>/resources"
+add_custom_command(TARGET GuitarFX_App POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:GuitarFX_App>/resources"
   COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_SOURCE_DIR}/resources"
-    "$<TARGET_FILE_DIR:NAMGuitarFX_App>/resources"
+    "$<TARGET_FILE_DIR:GuitarFX_App>/resources"
   COMMENT "Copying resource assets into the standalone bundle")

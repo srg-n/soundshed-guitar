@@ -1,10 +1,10 @@
-# Product Requirements Document: NeuronGuitar
+# Product Requirements Document: GuitarFX
 
 ## Document Information
 
 | Field | Value |
 |-------|-------|
-| Product Name | NeuronGuitar |
+| Product Name | GuitarFX |
 | Version | 1.0 |
 | Status | Draft |
 | Last Updated | 2026-01-09 |
@@ -31,7 +31,7 @@
 
 ## 1. Executive Summary
 
-NeuronGuitar is a cross-platform audio plugin that combines Neural Amp Modeling (NAM) technology with a modern, extensible effects processing chain. The product enables guitarists and audio engineers to achieve studio-quality amp tones and effects through machine learning-based amp captures, impulse response (IR) cabinet simulation, and traditional DSP effects—all within a unified, web-based user interface.
+GuitarFX is a cross-platform audio plugin that combines Neural Amp Modeling (NAM) technology with a modern, extensible effects processing chain. The product enables guitarists and audio engineers to achieve studio-quality amp tones and effects through machine learning-based amp captures, impulse response (IR) cabinet simulation, and traditional DSP effects—all within a unified, web-based user interface.
 
 **Key Differentiators:**
 - Neural network-based amp modeling for authentic tone reproduction
@@ -190,7 +190,7 @@ See: [Performance Requirements](./architecture/performance.md)
 
 ## 6. Architecture Overview
 
-NeuronGuitar follows a layered architecture with clear separation between audio processing, state management, and user interface layers.
+GuitarFX follows a layered architecture with clear separation between audio processing, state management, and user interface layers.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐

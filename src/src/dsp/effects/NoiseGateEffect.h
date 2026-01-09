@@ -4,7 +4,7 @@
 #include "dsp/EffectRegistry.h"
 #include <cmath>
 
-namespace namguitar
+namespace guitarfx
 {
   /**
    * Simple noise gate effect.
@@ -111,4 +111,4 @@ namespace namguitar
     });
   }
 
-} // namespace namguitar
+} // namespace guitarfx

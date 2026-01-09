@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document specifies performance requirements and guidelines for NeuronGuitar, ensuring responsive real-time audio processing and smooth user experience across target platforms.
+This document specifies performance requirements and guidelines for GuitarFX, ensuring responsive real-time audio processing and smooth user experience across target platforms.
 
 ## Performance Targets
 

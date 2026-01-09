@@ -6,7 +6,7 @@
 #include <vector>
 #include <array>
 
-namespace namguitar
+namespace guitarfx
 {
   /**
    * Simple algorithmic reverb effect using parallel comb filters and allpass filters.
@@ -222,4 +222,4 @@ namespace namguitar
     });
   }
 
-} // namespace namguitar
+} // namespace guitarfx

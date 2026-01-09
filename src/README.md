@@ -1,6 +1,6 @@
-# NAM Guitar FX
+# GuitarFX
 
-NAM Guitar FX is a cross-format audio plugin (VST3/AU/AAX) powered by iPlug2 and the Neural Amp Modeler (NAM) DSP core. It delivers a flexible guitar processing chain that combines Neural Amp models, cabinet impulse responses, and supporting FX in a web-based user interface.
+GuitarFX is a cross-format audio plugin (VST3/AU/AAX) powered by iPlug2 and the Neural Amp Modeler (NAM) DSP core. It delivers a flexible guitar processing chain that combines Neural Amp models, cabinet impulse responses, and supporting FX in a web-based user interface.
 
 ## Features
 
@@ -16,10 +16,10 @@ NAM Guitar FX is a cross-format audio plugin (VST3/AU/AAX) powered by iPlug2 and
 ```
 CMakeLists.txt
 cmake/FetchDependencies.cmake   # Dependency bootstrap (iPlug2, NAM Core, httplib, nlohmann::json)
-config/NAMGuitarConfig.h        # Plug-in metadata shared by all formats
+config/GuitarFXConfig.h        # Plug-in metadata shared by all formats
 resources/ui/                   # WebView UI bundle (HTML/JS/CSS)
 src/                            # Shared plug-in code
-  NAMGuitarPlugin.*             # Main iPlug2 plug-in implementation
+  GuitarFXPlugin.*              # Main iPlug2 plug-in implementation
   dsp/                          # Neural Amp + FX processing
   presets/                      # Preset management and storage
   network/                      # Remote preset service client
@@ -33,11 +33,11 @@ src/                            # Shared plug-in code
 > **Prerequisites**
 >
 > - CMake 3.22+
-> - A C++20 toolchain (MSVC 2022, Clang 15+, or GCC 11+)
+> - A C++20 toolchain (MSVC 2026, Clang 15+, or GCC 11+)
 > - Platform SDKs for the desired plug-in formats (VST3 SDK, macOS Audio Unit tools, Avid AAX SDK)
 > - Git (required by `FetchContent` to materialise dependencies)
 >
-> The Steinberg VST3 SDK must be downloaded separately (see https://www.steinberg.net/vst3sdk) and extracted. Point `VST3_SDK_ROOT` at the extracted folder or drop it into `[_deps/iplug2-src/Dependencies/IPlug/VST3_SDK](./_deps/iplug2-src/Dependencies/IPlug)` before configuring.
+> The Steinberg VST3 SDK must be downloaded separately (see https://www.steinberg.net/vst3sdk) and extracted. Point `VST3_SDK_ROOT` at the extracted folder or drop it into `[_deps/iplug2-src/Dependencies/IPlug/VST3_SDK](./_deps/iplug2-src/Dependencies/IPlug/VST3_SDK)` before configuring.
 >
 > iPlug2 and NeuralAmpModelerCore are fetched automatically the first time you configure the project. The build will also fetch `nlohmann::json` and `cpp-httplib` for preset management and HTTP support.
 
@@ -48,9 +48,9 @@ cmake -G "Visual Studio 18 2026" -A x64 ..
 cmake --build . --config Release
 ```
 
-Format targets are generated beneath `src/platform` and link against the common `NAMGuitarFX` static library. Additional SDK configuration (such as environment variables for the AAX SDK) may be required before building those wrappers successfully.
+Format targets are generated beneath `src/platform` and link against the common `GuitarFXCore` static library. Additional SDK configuration (such as environment variables for the AAX SDK) may be required before building those wrappers successfully.
 
-e.g. `cmake --build build --config Release --target NAMGuitarFX_App`
+e.g. `cmake --build build --config Release --target GuitarFX_App`
 ## Preset Workflow
 
 Presets are stored as JSON (`presets/local_presets.json`) and embed:
@@ -59,7 +59,7 @@ Presets are stored as JSON (`presets/local_presets.json`) and embed:
 - Parameter snapshots keyed by stable IDs (`input_trim`, `drive`, `tone`, etc.)
 - Optional attachment metadata for `.nam` models and impulse response files, hashed with 64-bit FNV-1a for cache lookups
 
-Remote presets can be searched via the HTTP client (`PresetServiceClient`). Configure the service endpoint by adjusting `mRemoteApiBaseUrl` inside `NAMGuitarPlugin.cpp` or by extending the preset manager to read from user preferences.
+Remote presets can be searched via the HTTP client (`PresetServiceClient`). Configure the service endpoint by adjusting `mRemoteApiBaseUrl` inside `GuitarFXPlugin.cpp` or by extending the preset manager to read from user preferences.
 
 ## Web UI Messaging
 

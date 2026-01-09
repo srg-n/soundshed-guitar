@@ -4,37 +4,37 @@
 
 
     {
-      "name": "Debug NAMGuitarFX App",
+      "name": "Debug GuitarFX App",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/src/build/src/platform/app/Debug/NAMGuitarFX.exe",
+      "program": "${workspaceFolder}/src/build/src/platform/app/Debug/GuitarFX.exe",
       "args": [],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}/src/build/src/platform/app/Debug",
       "environment": [],
       "console": "integratedTerminal",
-      "preLaunchTask": "Build NAMGuitarFX Debug"
+      "preLaunchTask": "Build GuitarFX Debug"
     },
         {
-      "name": "Run NAMGuitarFX App Release",
+      "name": "Run GuitarFX App Release",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/src/build/src/platform/app/Release/NAMGuitarFX.exe",
+      "program": "${workspaceFolder}/src/build/src/platform/app/Release/GuitarFX.exe",
       "args": [],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}/src/build/src/platform/app/Release",
       "environment": [],
       "console": "integratedTerminal",
-      "preLaunchTask": "Build NAMGuitarFX App Release"
+      "preLaunchTask": "Build GuitarFX App Release"
     },
      {
-      "name": "Debug NAMGuitarFX VST Host",
+      "name": "Debug GuitarFX VST Host",
       "type": "cppvsdbg",
       "request": "launch",
       "program": "${workspaceFolder}/src/build/tools/VST3DebugHost.exe",
       "args": [
        // "-w",
-        "${workspaceFolder}/src/build/NAMGuitarFX.vst3/Contents/x86_64-win/NAMGuitarFX.vst3"
+        "${workspaceFolder}/src/build/GuitarFX.vst3/Contents/x86_64-win/GuitarFX.vst3"
       ],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}/src/build",
@@ -46,21 +46,21 @@
       "name": "Debug SampleRateBufferTests",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/src/build/tests/Debug/NAMGuitarFX_SampleRateBufferTests.exe",
+      "program": "${workspaceFolder}/src/build/tests/Debug/GuitarFX_SampleRateBufferTests.exe",
       "args": [],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}/src/build/tools",
       "environment": [],
       "console": "integratedTerminal",
-      "preLaunchTask": "Build NAMGuitarFX Debug"
+      "preLaunchTask": "Build GuitarFX Debug"
       /*
-      cmake --build . --config Debug --target NAMGuitarFX_SampleRateBufferTests*/
+      cmake --build . --config Debug --target GuitarFX_SampleRateBufferTests*/
     },
     {
-      "name": "Launch NAMGuitarFX App (Release)",
+      "name": "Launch GuitarFX App (Release)",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/src/build/src/platform/app/Release/NAMGuitarFX.exe",
+      "program": "${workspaceFolder}/src/build/src/platform/app/Release/GuitarFX.exe",
       "args": [],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}/src/build/src/platform/app/Release",

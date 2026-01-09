@@ -3,7 +3,7 @@
 #include <cmath>
 #include <numbers>
 
-namespace namguitar
+namespace guitarfx
 {
   // Simple, high-performance cabinet simulation using cascaded biquad filters.
   // Emulates the frequency response of a typical guitar speaker cabinet:
@@ -169,4 +169,4 @@ namespace namguitar
     double mPeakState1 = 0.0, mPeakState2 = 0.0;
   };
 
-} // namespace namguitar
+} // namespace guitarfx

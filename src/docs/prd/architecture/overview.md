@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This document provides a high-level overview of the NeuronGuitar system architecture. NeuronGuitar is designed as a modular, layered system that separates concerns between audio processing, state management, user interface, and platform integration.
+This document provides a high-level overview of the GuitarFX system architecture. GuitarFX is designed as a modular, layered system that separates concerns between audio processing, state management, user interface, and platform integration.
 
 ## Design Principles
 

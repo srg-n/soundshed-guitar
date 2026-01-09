@@ -2,7 +2,7 @@
 
 #include <cstdlib>
 
-namespace namguitar
+namespace guitarfx
 {
 
 std::filesystem::path FileSystem::ResolvePresetDirectory() const
@@ -22,13 +22,13 @@ std::filesystem::path FileSystem::ResolveSettingsDirectory() const
   const char* appData = std::getenv("APPDATA");
   if (appData)
   {
-    return std::filesystem::path{appData} / "NAMGuitarFX";
+    return std::filesystem::path{appData} / "GuitarFX";
   }
 #else
   const char* home = std::getenv("HOME");
   if (home)
   {
-    return std::filesystem::path{home} / ".config" / "NAMGuitarFX";
+    return std::filesystem::path{home} / ".config" / "GuitarFX";
   }
 #endif
   return std::filesystem::path{"settings"};
@@ -50,4 +50,4 @@ std::optional<std::filesystem::path> FileSystem::EnsureDirectory(const std::file
   return std::nullopt;
 }
 
-} // namespace namguitar
+} // namespace guitarfx

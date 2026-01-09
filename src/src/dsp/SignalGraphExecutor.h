@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace namguitar
+namespace guitarfx
 {
   class EffectProcessor;
   class ResourceLibrary;
@@ -77,4 +77,4 @@ namespace namguitar
     std::vector<float> mTempRightBuffer;
   };
 
-} // namespace namguitar
+} // namespace guitarfx

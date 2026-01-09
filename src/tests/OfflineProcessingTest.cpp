@@ -19,7 +19,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "dsp/NAMDSPManager.h"
+#include "dsp/AmpModelManager.h"
 #include "presets/PresetManager.h"
 #include "IPlugConstants.h"
 
@@ -248,7 +248,7 @@ nlohmann::json LoadJson(const fs::path& path)
 
 int main(int argc, char* argv[])
 {
-  std::cout << "NAMGuitarFX Offline Processing Test\n";
+  std::cout << "GuitarFX Offline Processing Test\n";
   std::cout << "====================================\n\n";
 
   try
@@ -258,7 +258,7 @@ int main(int argc, char* argv[])
     std::string outputFile = "guitar-riff-02-processed.wav";
     std::string modelPath = "";
     std::string irPath = "";
-    std::string resourcesDir = NAMGUITAR_TEST_RESOURCES_DIR;
+    std::string resourcesDir = GUITARFX_TEST_RESOURCES_DIR;
 
     if (argc >= 2)
       inputFile = argv[1];
@@ -297,7 +297,7 @@ int main(int argc, char* argv[])
     }
 
     // Create DSP manager
-    auto dspManager = std::make_unique<namguitar::NAMDSPManager>();
+    auto dspManager = std::make_unique<guitarfx::AmpModelManager>();
     constexpr int kBlockSize = 512;
     dspManager->Prepare(sampleRate, kBlockSize);
 

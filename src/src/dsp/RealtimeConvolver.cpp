@@ -5,7 +5,7 @@
 #include <cmath>
 #include <cstring>
 
-namespace namguitar
+namespace guitarfx
 {
   namespace
   {
@@ -266,4 +266,4 @@ namespace namguitar
     mOutputBufferReadPos = mPartitionSize;
   }
 
-} // namespace namguitar
+} // namespace guitarfx

@@ -11,7 +11,7 @@
 #include "dsp/EffectRegistry.h"
 #include <array>
 
-namespace namguitar
+namespace guitarfx
 {
   /**
    * 4-band parametric EQ effect.
@@ -274,4 +274,4 @@ namespace namguitar
     });
   }
 
-} // namespace namguitar
+} // namespace guitarfx

@@ -5,7 +5,7 @@
 #include <iostream>
 #include <sstream>
 
-namespace namguitar
+namespace guitarfx
 {
   namespace
   {
@@ -407,4 +407,4 @@ namespace namguitar
     }
   }
 
-} // namespace namguitar
+} // namespace guitarfx

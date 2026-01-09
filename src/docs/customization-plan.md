@@ -27,6 +27,6 @@
    - Document build and dependency setup in README.
 
 ## Next Steps
-- Flesh out plugin parameter map and UI wiring in `NAMGuitarPlugin`.
+- Flesh out plugin parameter map and UI wiring in `GuitarFXPlugin`.
 - Implement the DSP and preset subsystems per breakdown above.
 - Finalize platform-specific entry points and test build configuration.

@@ -42,12 +42,12 @@ std::string Describe(const fs::path& path)
 
 int main()
 {
-#ifndef NAMGUITAR_TEST_RESOURCES_DIR
-#error "NAMGUITAR_TEST_RESOURCES_DIR must be defined"
+#ifndef GUITARFX_TEST_RESOURCES_DIR
+#error "GUITARFX_TEST_RESOURCES_DIR must be defined"
 #endif
   try
   {
-    const fs::path resourcesDir = fs::path(NAMGUITAR_TEST_RESOURCES_DIR);
+    const fs::path resourcesDir = fs::path(GUITARFX_TEST_RESOURCES_DIR);
     const fs::path dataDir = resourcesDir / "ui" / "data";
 
     std::vector<std::string> errors;

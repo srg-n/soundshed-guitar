@@ -20,7 +20,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "dsp/NAMDSPManager.h"
+#include "dsp/AmpModelManager.h"
 #include "IPlugConstants.h"
 #include "NAM/dsp.h"
 #include "NAM/get_dsp.h"
@@ -152,7 +152,7 @@ bool TestSampleRates(const fs::path& modelPath)
 
     std::cout << "--- Sample Rate: " << static_cast<int>(sampleRate) << " Hz ---\n";
 
-    namguitar::NAMDSPManager dsp;
+    guitarfx::AmpModelManager dsp;
     dsp.Prepare(sampleRate, blockSize);
 
     if (!dsp.LoadModel(modelPath))
@@ -238,7 +238,7 @@ bool TestBufferSizes(const fs::path& modelPath)
 
     std::cout << "--- Buffer Size: " << blockSize << " samples ---\n";
 
-    namguitar::NAMDSPManager dsp;
+    guitarfx::AmpModelManager dsp;
     dsp.Prepare(sampleRate, blockSize);
 
     if (!dsp.LoadModel(modelPath))
@@ -321,7 +321,7 @@ bool TestDynamicBufferChanges(const fs::path& modelPath)
   const double sampleRate = 48000.0;
   bool allPassed = true;
 
-  namguitar::NAMDSPManager dsp;
+  guitarfx::AmpModelManager dsp;
   
   // Start with one buffer size
   int currentBlockSize = 512;
@@ -415,7 +415,7 @@ bool TestSampleRateMismatch(const fs::path& modelPath)
   {
     std::cout << "--- Scenario: Prepared at 48kHz, signal generated for 44.1kHz ---\n";
     
-    namguitar::NAMDSPManager dsp;
+    guitarfx::AmpModelManager dsp;
     dsp.Prepare(48000.0, 512);  // Prepare at 48kHz
 
     if (!dsp.LoadModel(modelPath))
@@ -462,7 +462,7 @@ bool TestSampleRateMismatch(const fs::path& modelPath)
   {
     std::cout << "\n--- Scenario: Process without Prepare() ---\n";
     
-    namguitar::NAMDSPManager dsp;
+    guitarfx::AmpModelManager dsp;
     // NOT calling Prepare()!
 
     if (!dsp.LoadModel(modelPath))
@@ -510,7 +510,7 @@ bool TestSampleRateMismatch(const fs::path& modelPath)
   {
     std::cout << "\n--- Scenario: Very high sample rate (192kHz) ---\n";
     
-    namguitar::NAMDSPManager dsp;
+    guitarfx::AmpModelManager dsp;
     dsp.Prepare(192000.0, 512);
 
     if (!dsp.LoadModel(modelPath))
@@ -569,7 +569,7 @@ bool TestEdgeCases(const fs::path& modelPath)
   {
     std::cout << "--- Edge Case: Buffer size = 1 ---\n";
     
-    namguitar::NAMDSPManager dsp;
+    guitarfx::AmpModelManager dsp;
     dsp.Prepare(48000.0, 1);
 
     if (!dsp.LoadModel(modelPath))
@@ -623,7 +623,7 @@ bool TestEdgeCases(const fs::path& modelPath)
   {
     std::cout << "\n--- Edge Case: Process more samples than Prepare() size ---\n";
     
-    namguitar::NAMDSPManager dsp;
+    guitarfx::AmpModelManager dsp;
     dsp.Prepare(48000.0, 256);  // Prepare for 256
 
     if (!dsp.LoadModel(modelPath))
@@ -677,7 +677,7 @@ bool TestEdgeCases(const fs::path& modelPath)
   {
     std::cout << "\n--- Edge Case: Zero-length buffer ---\n";
     
-    namguitar::NAMDSPManager dsp;
+    guitarfx::AmpModelManager dsp;
     dsp.Prepare(48000.0, 512);
 
     if (dsp.LoadModel(modelPath))
@@ -704,7 +704,7 @@ bool TestEdgeCases(const fs::path& modelPath)
   {
     std::cout << "\n--- Edge Case: Extreme input values ---\n";
     
-    namguitar::NAMDSPManager dsp;
+    guitarfx::AmpModelManager dsp;
     dsp.Prepare(48000.0, 512);
 
     if (!dsp.LoadModel(modelPath))
@@ -773,13 +773,13 @@ bool TestEdgeCases(const fs::path& modelPath)
 
 int main(int argc, char* argv[])
 {
-#ifndef NAMGUITAR_TEST_RESOURCES_DIR
-#error "NAMGUITAR_TEST_RESOURCES_DIR must be defined"
+#ifndef GUITARFX_TEST_RESOURCES_DIR
+#error "GUITARFX_TEST_RESOURCES_DIR must be defined"
 #endif
 
   try
   {
-    const fs::path resourcesDir = fs::path(NAMGUITAR_TEST_RESOURCES_DIR);
+    const fs::path resourcesDir = fs::path(GUITARFX_TEST_RESOURCES_DIR);
     const fs::path dataDir = resourcesDir / "ui" / "data";
 
     std::cout << "Sample Rate and Buffer Size Tests\n";

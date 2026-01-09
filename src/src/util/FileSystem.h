@@ -4,7 +4,7 @@
 #include <optional>
 #include <string>
 
-namespace namguitar
+namespace guitarfx
 {
 class FileSystem
 {
@@ -15,4 +15,4 @@ public:
   [[nodiscard]] std::filesystem::path ResolveSettingsFile() const;
   [[nodiscard]] std::optional<std::filesystem::path> EnsureDirectory(const std::filesystem::path& dir) const;
 };
-} // namespace namguitar
+} // namespace guitarfx

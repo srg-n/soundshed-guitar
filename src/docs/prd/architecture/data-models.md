@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document defines the core data structures used throughout NeuronGuitar. Data models are technology-agnostic, specifying structure and semantics without implementation details.
+This document defines the core data structures used throughout GuitarFX. Data models are technology-agnostic, specifying structure and semantics without implementation details.
 
 ## Naming Conventions
 

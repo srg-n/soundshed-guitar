@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace namguitar
+namespace guitarfx
 {
   class EffectProcessor;
 
@@ -94,4 +94,4 @@ namespace namguitar
       } g##TypeClass##Registrar; \
     }
 
-} // namespace namguitar
+} // namespace guitarfx

@@ -4,7 +4,7 @@
 #include "dsp/EffectRegistry.h"
 #include <cmath>
 
-namespace namguitar
+namespace guitarfx
 {
   /**
    * Simple gain stage effect.
@@ -78,4 +78,4 @@ namespace namguitar
     });
   }
 
-} // namespace namguitar
+} // namespace guitarfx

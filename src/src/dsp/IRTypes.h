@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-namespace namguitar
+namespace guitarfx
 {
   /**
    * IR quality modes control the tradeoff between CPU usage and audio fidelity.
@@ -87,4 +87,4 @@ namespace namguitar
     }
   }
 
-} // namespace namguitar
+} // namespace guitarfx

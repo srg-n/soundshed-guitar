@@ -8,7 +8,7 @@
 #include <memory>
 #include <filesystem>
 
-namespace namguitar
+namespace guitarfx
 {
   /**
    * DSP Manager for v2 presets using the new signal graph architecture.
@@ -285,4 +285,4 @@ namespace namguitar
     std::vector<float> mOutputBufferR;
   };
 
-} // namespace namguitar
+} // namespace guitarfx

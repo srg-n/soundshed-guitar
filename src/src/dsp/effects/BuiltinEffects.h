@@ -11,7 +11,7 @@
 #include "dsp/effects/IRCabEffect.h"
 #include "dsp/effects/SimpleCabEffect.h"
 
-namespace namguitar
+namespace guitarfx
 {
   /**
    * Registers all built-in effects with the EffectRegistry.
@@ -41,4 +41,4 @@ namespace namguitar
     RegisterReverbEffect();
   }
 
-} // namespace namguitar
+} // namespace guitarfx

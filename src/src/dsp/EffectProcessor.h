@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 
-namespace namguitar
+namespace guitarfx
 {
   /**
    * Base interface for all effect processors.
@@ -87,4 +87,4 @@ namespace namguitar
     [[nodiscard]] std::string GetCategory() const override { return "utility"; }
   };
 
-} // namespace namguitar
+} // namespace guitarfx

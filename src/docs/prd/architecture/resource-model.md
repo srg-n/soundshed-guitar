@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Resource Model defines how NeuronGuitar manages external resources such as Neural Amp Models (NAM) and Impulse Responses (IR). It provides a unified abstraction for resource storage, referencing, and resolution.
+The Resource Model defines how GuitarFX manages external resources such as Neural Amp Models (NAM) and Impulse Responses (IR). It provides a unified abstraction for resource storage, referencing, and resolution.
 
 ## Design Goals
 
@@ -227,7 +227,7 @@ interface ResourceLibrary:
 ### Storage Layout
 
 ```
-~/.neuronguitar/
+~/.guitarfx/
 └── library/
     ├── index.json           # Library index
     ├── nam/
@@ -252,7 +252,7 @@ The cache stores:
 ### Cache Structure
 
 ```
-~/.neuronguitar/
+~/.guitarfx/
 └── cache/
     └── resources/
         └── sha256/

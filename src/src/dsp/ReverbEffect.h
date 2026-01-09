@@ -5,7 +5,7 @@
 #include <cmath>
 #include <algorithm>
 
-namespace namguitar
+namespace guitarfx
 {
   /**
    * Simple algorithmic reverb using a network of allpass and comb filters.
@@ -200,4 +200,4 @@ namespace namguitar
     std::array<size_t, kNumAllpasses> mAllpassIndices{};
   };
 
-} // namespace namguitar
+} // namespace guitarfx

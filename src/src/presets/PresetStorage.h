@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace namguitar
+namespace guitarfx
 {
   /**
    * Serialization and storage for presets.
@@ -26,4 +26,4 @@ namespace namguitar
     static void SaveAllToDirectory(const std::vector<Preset>& presets, const std::filesystem::path& directory);
   };
 
-} // namespace namguitar
+} // namespace guitarfx
