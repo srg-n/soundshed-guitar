@@ -65,6 +65,8 @@ namespace guitarfx
         mThresholdDb = value;
       else if (key == "attack" || key == "attackMs")
         mAttackMs = std::max(0.1, value);
+      else if (key == "hold" || key == "holdMs")
+        mHoldMs = std::max(0.0, value);
       else if (key == "release" || key == "releaseMs")
         mReleaseMs = std::max(1.0, value);
     }
@@ -77,17 +79,20 @@ namespace guitarfx
         return mThresholdDb;
       if (key == "attack" || key == "attackMs")
         return mAttackMs;
+      if (key == "hold" || key == "holdMs")
+        return mHoldMs;
       if (key == "release" || key == "releaseMs")
         return mReleaseMs;
       return 0.0;
     }
 
-    [[nodiscard]] std::string GetType() const override { return "gate_noise"; }
+    [[nodiscard]] std::string GetType() const override { return "dynamics_gate"; }
     [[nodiscard]] std::string GetCategory() const override { return "dynamics"; }
 
   private:
     double mThresholdDb = -60.0;
     double mAttackMs = 1.0;
+    double mHoldMs = 50.0;
     double mReleaseMs = 50.0;
     float mEnvelope = 0.0f;
   };
@@ -95,7 +100,7 @@ namespace guitarfx
   inline void RegisterNoiseGateEffect()
   {
     EffectTypeInfo info;
-    info.type = "gate_noise";
+    info.type = "dynamics_gate";  // Changed from "gate_noise" to match preset JSON
     info.displayName = "Noise Gate";
     info.category = "dynamics";
     info.description = "Simple noise gate";
@@ -106,7 +111,7 @@ namespace guitarfx
       {"releaseMs", "Release", 50.0, 1.0, 500.0, "ms"}
     };
 
-    EffectRegistry::Instance().Register("gate_noise", info, []() {
+    EffectRegistry::Instance().Register("dynamics_gate", info, []() {
       return std::make_unique<NoiseGateEffect>();
     });
   }

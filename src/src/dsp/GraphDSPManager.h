@@ -1,9 +1,11 @@
 #pragma once
 
+#include "IPlugConstants.h"
 #include "presets/PresetTypes.h"
 #include "dsp/SignalGraphExecutor.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/effects/BuiltinEffects.h"
+#include "dsp/IRTypes.h"
 #include "resources/ResourceLibrary.h"
 #include <memory>
 #include <filesystem>
@@ -38,11 +40,17 @@ namespace guitarfx
       mSampleRate = sampleRate;
       mMaxBlockSize = maxBlockSize;
 
-      // Resize float buffers
-      mInputBufferL.resize(static_cast<size_t>(maxBlockSize));
-      mInputBufferR.resize(static_cast<size_t>(maxBlockSize));
-      mOutputBufferL.resize(static_cast<size_t>(maxBlockSize));
-      mOutputBufferR.resize(static_cast<size_t>(maxBlockSize));
+      // Resize and zero-initialize float buffers
+      mInputBufferL.resize(static_cast<size_t>(maxBlockSize), 0.0f);
+      mInputBufferR.resize(static_cast<size_t>(maxBlockSize), 0.0f);
+      mOutputBufferL.resize(static_cast<size_t>(maxBlockSize), 0.0f);
+      mOutputBufferR.resize(static_cast<size_t>(maxBlockSize), 0.0f);
+      
+      // Clear buffers to ensure no garbage data
+      std::fill(mInputBufferL.begin(), mInputBufferL.end(), 0.0f);
+      std::fill(mInputBufferR.begin(), mInputBufferR.end(), 0.0f);
+      std::fill(mOutputBufferL.begin(), mOutputBufferL.end(), 0.0f);
+      std::fill(mOutputBufferR.begin(), mOutputBufferR.end(), 0.0f);
 
       if (mExecutor)
       {
@@ -70,18 +78,25 @@ namespace guitarfx
     {
       mCurrentPreset = preset;
 
-      // Create a new executor for the signal graph
-      mExecutor = std::make_unique<SignalGraphExecutor>();
-      mExecutor->SetGraph(preset.graph);
-      mExecutor->SetResourceLibrary(mResourceLibrary.get());
-
-      // Apply global settings
+      // Apply global settings first
       mInputTrim = preset.global.inputTrim;
       mOutputTrim = preset.global.outputTrim;
       mOutputVolume = preset.global.outputVolume;
 
-      // Resolve resources for all nodes
-      ResolveResources(preset);
+      // Create a new executor for the signal graph
+      mExecutor = std::make_unique<SignalGraphExecutor>();
+      
+      // CRITICAL: Set resource library BEFORE setting graph, so resources can load during node creation
+      mExecutor->SetResourceLibrary(mResourceLibrary.get());
+      
+      // Apply trim settings to executor
+      mExecutor->SetInputTrim(mInputTrim);
+      mExecutor->SetOutputTrim(mOutputTrim);
+      
+      mExecutor->SetGraph(preset.graph);
+
+      // ResolveResources is not needed - SetGraph already loads resources during node creation
+      // ResolveResources(preset);
 
       // Prepare the executor
       if (mSampleRate > 0 && mMaxBlockSize > 0)
@@ -98,7 +113,7 @@ namespace guitarfx
      * @param outputs Output buffer array [L, R]
      * @param numSamples Number of samples to process
      */
-    void Process(double** inputs, double** outputs, int numSamples)
+    void Process(iplug::sample** inputs, iplug::sample** outputs, int numSamples)
     {
       if (!mExecutor)
       {
@@ -110,12 +125,11 @@ namespace guitarfx
         return;
       }
 
-      // Apply input trim
-      double inputGain = std::pow(10.0, mInputTrim / 20.0);
+      // Convert double to float (SignalGraphExecutor handles trim internally)
       for (int i = 0; i < numSamples; ++i)
       {
-        mInputBufferL[i] = inputs[0] ? static_cast<float>(inputs[0][i] * inputGain) : 0.0f;
-        mInputBufferR[i] = inputs[1] ? static_cast<float>(inputs[1][i] * inputGain) : 0.0f;
+        mInputBufferL[i] = inputs[0] ? static_cast<float>(inputs[0][i]) : 0.0f;
+        mInputBufferR[i] = inputs[1] ? static_cast<float>(inputs[1][i]) : 0.0f;
       }
 
       float* floatInputs[2] = { mInputBufferL.data(), mInputBufferR.data() };
@@ -124,14 +138,13 @@ namespace guitarfx
       // Process through the graph
       mExecutor->Process(floatInputs, floatOutputs, numSamples);
 
-      // Apply output trim and output volume
-      double outputGain = std::pow(10.0, mOutputTrim / 20.0) * mOutputVolume;
+      // Apply output volume only (SignalGraphExecutor handles output trim)
       for (int i = 0; i < numSamples; ++i)
       {
         if (outputs[0])
-          outputs[0][i] = static_cast<double>(mOutputBufferL[i]) * outputGain;
+          outputs[0][i] = static_cast<iplug::sample>(static_cast<double>(mOutputBufferL[i]) * mOutputVolume);
         if (outputs[1])
-          outputs[1][i] = static_cast<double>(mOutputBufferR[i]) * outputGain;
+          outputs[1][i] = static_cast<iplug::sample>(static_cast<double>(mOutputBufferR[i]) * mOutputVolume);
       }
     }
 
@@ -221,7 +234,445 @@ namespace guitarfx
      */
     [[nodiscard]] bool HasPreset() const { return mExecutor != nullptr; }
 
+    // ======================================================================
+    // Parameter wrapper methods for backward compatibility
+    // These methods map plugin parameters to specific graph nodes
+    // ======================================================================
+
+    /** Set drive parameter on the first NAM amp node found */
+    void SetDrive(double value)
+    {
+      auto nodeId = FindFirstNodeOfType("amp_nam");
+      if (!nodeId.empty())
+      {
+        SetNodeParam(nodeId, "drive", value);
+      }
+    }
+
+    /** Set tone parameter on the first NAM amp node found */
+    void SetTone(double value)
+    {
+      auto nodeId = FindFirstNodeOfType("amp_nam");
+      if (!nodeId.empty())
+      {
+        SetNodeParam(nodeId, "tone", value);
+      }
+    }
+
+    /** Enable/disable the first noise gate node found */
+    void SetGateEnabled(bool enabled)
+    {
+      auto nodeId = FindFirstNodeOfType("noise_gate");
+      if (nodeId.empty())
+        nodeId = FindFirstNodeOfType("dynamics_gate");
+      if (!nodeId.empty())
+      {
+        SetNodeEnabled(nodeId, enabled);
+      }
+    }
+
+    /** Set threshold on the first noise gate node found */
+    void SetGateThreshold(double value)
+    {
+      auto nodeId = FindFirstNodeOfType("noise_gate");
+      if (nodeId.empty())
+        nodeId = FindFirstNodeOfType("dynamics_gate");
+      if (!nodeId.empty())
+      {
+        SetNodeParam(nodeId, "threshold", value);
+      }
+    }
+
+    /** Set mix parameter on the first node that supports it */
+    void SetMix(double value)
+    {
+      // Mix is typically on delay/reverb effects
+      auto nodeId = FindFirstNodeOfType("delay");
+      if (nodeId.empty())
+        nodeId = FindFirstNodeOfType("reverb");
+      if (!nodeId.empty())
+      {
+        SetNodeParam(nodeId, "mix", value);
+      }
+    }
+
+    /** Enable/disable doubler effect */
+    void SetDoublerEnabled(bool enabled)
+    {
+      auto nodeId = FindFirstNodeOfType("doubler");
+      if (!nodeId.empty())
+      {
+        SetNodeEnabled(nodeId, enabled);
+      }
+    }
+
+    /** Set doubler delay time */
+    void SetDoublerDelay(double value)
+    {
+      auto nodeId = FindFirstNodeOfType("doubler");
+      if (!nodeId.empty())
+      {
+        SetNodeParam(nodeId, "delay", value);
+      }
+    }
+
+    /** Set transpose parameter */
+    void SetTranspose(int semitones)
+    {
+      auto nodeId = FindFirstNodeOfType("pitch_shifter");
+      if (!nodeId.empty())
+      {
+        SetNodeParam(nodeId, "semitones", static_cast<double>(semitones));
+      }
+    }
+
+    /** Enable/disable simple cab simulation */
+    void SetSimpleCabEnabled(bool enabled)
+    {
+      auto nodeId = FindFirstNodeOfType("cab_simple");
+      if (!nodeId.empty())
+      {
+        SetNodeEnabled(nodeId, enabled);
+      }
+    }
+
+    /** Set simple cab bass parameter */
+    void SetSimpleCabBass(double value)
+    {
+      auto nodeId = FindFirstNodeOfType("cab_simple");
+      if (!nodeId.empty())
+      {
+        SetNodeParam(nodeId, "bass", value);
+      }
+    }
+
+    /** Set simple cab presence parameter */
+    void SetSimpleCabPresence(double value)
+    {
+      auto nodeId = FindFirstNodeOfType("cab_simple");
+      if (!nodeId.empty())
+      {
+        SetNodeParam(nodeId, "presence", value);
+      }
+    }
+
+    /** Set simple cab brightness parameter */
+    void SetSimpleCabBrightness(double value)
+    {
+      auto nodeId = FindFirstNodeOfType("cab_simple");
+      if (!nodeId.empty())
+      {
+        SetNodeParam(nodeId, "brightness", value);
+      }
+    }
+
+    /** Set IR quality setting */
+    void SetIRQuality(IRQuality quality)
+    {
+      auto nodeId = FindFirstNodeOfType("cab_ir");
+      if (nodeId.empty())
+        nodeId = FindFirstNodeOfType("ir_cab");
+      if (!nodeId.empty())
+      {
+        // Map IRQuality enum to a parameter value
+        int qualityValue = static_cast<int>(quality);
+        SetNodeParam(nodeId, "quality", static_cast<double>(qualityValue));
+      }
+    }
+
+    /** Enable/disable the first EQ node found */
+    void SetEQEnabled(bool enabled)
+    {
+      auto nodeId = FindFirstNodeOfType("eq_parametric");
+      if (nodeId.empty())
+        nodeId = FindFirstNodeOfType("eq");
+      if (!nodeId.empty())
+      {
+        SetNodeEnabled(nodeId, enabled);
+      }
+    }
+
+    /** Set EQ band gain (band 0-3) */
+    void SetEQBandGain(int band, double value)
+    {
+      auto nodeId = FindFirstNodeOfType("eq_parametric");
+      if (nodeId.empty())
+        nodeId = FindFirstNodeOfType("eq");
+      if (!nodeId.empty())
+      {
+        const char* paramNames[] = {"lowGain", "lowMidGain", "highMidGain", "highGain"};
+        if (band >= 0 && band < 4)
+        {
+          SetNodeParam(nodeId, paramNames[band], value);
+        }
+      }
+    }
+
+    /** Set EQ band frequency (band 0-3) */
+    void SetEQBandFrequency(int band, double value)
+    {
+      auto nodeId = FindFirstNodeOfType("eq_parametric");
+      if (nodeId.empty())
+        nodeId = FindFirstNodeOfType("eq");
+      if (!nodeId.empty())
+      {
+        const char* paramNames[] = {"lowFreq", "lowMidFreq", "highMidFreq", "highFreq"};
+        if (band >= 0 && band < 4)
+        {
+          SetNodeParam(nodeId, paramNames[band], value);
+        }
+      }
+    }
+
+    /** Set EQ band Q (band 1-2 only, for parametric bands) */
+    void SetEQBandQ(int band, double value)
+    {
+      auto nodeId = FindFirstNodeOfType("eq_parametric");
+      if (nodeId.empty())
+        nodeId = FindFirstNodeOfType("eq");
+      if (!nodeId.empty())
+      {
+        const char* paramNames[] = {"", "lowMidQ", "highMidQ", ""};
+        if (band >= 1 && band <= 2)
+        {
+          SetNodeParam(nodeId, paramNames[band], value);
+        }
+      }
+    }
+
+    /** Enable/disable the first delay node found */
+    void SetDelayEnabled(bool enabled)
+    {
+      auto nodeId = FindFirstNodeOfType("delay");
+      if (!nodeId.empty())
+      {
+        SetNodeEnabled(nodeId, enabled);
+      }
+    }
+
+    /** Set delay time */
+    void SetDelayTime(double value)
+    {
+      auto nodeId = FindFirstNodeOfType("delay");
+      if (!nodeId.empty())
+      {
+        SetNodeParam(nodeId, "time", value);
+      }
+    }
+
+    /** Set delay feedback */
+    void SetDelayFeedback(double value)
+    {
+      auto nodeId = FindFirstNodeOfType("delay");
+      if (!nodeId.empty())
+      {
+        SetNodeParam(nodeId, "feedback", value);
+      }
+    }
+
+    /** Set delay mix */
+    void SetDelayMix(double value)
+    {
+      auto nodeId = FindFirstNodeOfType("delay");
+      if (!nodeId.empty())
+      {
+        SetNodeParam(nodeId, "mix", value);
+      }
+    }
+
+    /** Enable/disable the first reverb node found */
+    void SetReverbEnabled(bool enabled)
+    {
+      auto nodeId = FindFirstNodeOfType("reverb");
+      if (!nodeId.empty())
+      {
+        SetNodeEnabled(nodeId, enabled);
+      }
+    }
+
+    /** Set reverb decay */
+    void SetReverbDecay(double value)
+    {
+      auto nodeId = FindFirstNodeOfType("reverb");
+      if (!nodeId.empty())
+      {
+        SetNodeParam(nodeId, "decay", value);
+      }
+    }
+
+    /** Set reverb damping */
+    void SetReverbDamping(double value)
+    {
+      auto nodeId = FindFirstNodeOfType("reverb");
+      if (!nodeId.empty())
+      {
+        SetNodeParam(nodeId, "damping", value);
+      }
+    }
+
+    /** Set reverb mix */
+    void SetReverbMix(double value)
+    {
+      auto nodeId = FindFirstNodeOfType("reverb");
+      if (!nodeId.empty())
+      {
+        SetNodeParam(nodeId, "mix", value);
+      }
+    }
+
+    // ======================================================================
+    // Legacy AmpModelManager compatibility methods
+    // These provide backward compatibility for code that directly loads
+    // models/IRs or uses amp/cab enable/disable functionality
+    // ======================================================================
+
+    /** Load a NAM model file directly */
+    bool LoadModel(const std::filesystem::path& path)
+    {
+      // In V2 architecture, models are loaded via presets/resources
+      // This method is kept for backward compatibility but delegates to resource system
+      // For now, return false to indicate the V1 approach is no longer supported
+      std::cout << "[GraphDSPManager] LoadModel called - V1 method deprecated, use LoadPreset" << std::endl;
+      return false;
+    }
+
+    /** Load an IR file directly */
+    bool LoadImpulseResponse(const std::filesystem::path& path)
+    {
+      // Similar to LoadModel, IR loading is now done via presets
+      std::cout << "[GraphDSPManager] LoadImpulseResponse called - V1 method deprecated, use LoadPreset" << std::endl;
+      return false;
+    }
+
+    /** Enable/disable the first amp node */
+    void SetAmpEnabled(bool enabled)
+    {
+      auto nodeId = FindFirstNodeOfType("amp_nam");
+      if (nodeId.empty())
+        nodeId = FindFirstNodeOfType("nam_amp");
+      if (!nodeId.empty())
+      {
+        SetNodeEnabled(nodeId, enabled);
+      }
+    }
+
+    /** Check if first amp node is enabled */
+    bool IsAmpEnabled() const
+    {
+      auto nodeId = FindFirstNodeOfType("amp_nam");
+      if (nodeId.empty())
+        nodeId = FindFirstNodeOfType("nam_amp");
+      
+      if (!nodeId.empty())
+      {
+        for (const auto& node : mCurrentPreset.graph.nodes)
+        {
+          if (node.id == nodeId)
+          {
+            return node.enabled;
+          }
+        }
+      }
+      return false;
+    }
+
+    /** Enable/disable the first cab node */
+    void SetCabEnabled(bool enabled)
+    {
+      auto nodeId = FindFirstNodeOfType("cab_ir");
+      if (nodeId.empty())
+        nodeId = FindFirstNodeOfType("ir_cab");
+      if (!nodeId.empty())
+      {
+        SetNodeEnabled(nodeId, enabled);
+      }
+    }
+
+    /** Check if first cab node is enabled */
+    bool IsCabEnabled() const
+    {
+      auto nodeId = FindFirstNodeOfType("cab_ir");
+      if (nodeId.empty())
+        nodeId = FindFirstNodeOfType("ir_cab");
+      
+      if (!nodeId.empty())
+      {
+        for (const auto& node : mCurrentPreset.graph.nodes)
+        {
+          if (node.id == nodeId)
+          {
+            return node.enabled;
+          }
+        }
+      }
+      return false;
+    }
+
+    /** Set mono/stereo processing mode */
+    void SetMonoMode(bool mono)
+    {
+      // Store for future use - not implemented in V2 yet
+      mMonoMode = mono;
+    }
+
+    /** Get mono/stereo mode */
+    bool IsMonoMode() const { return mMonoMode; }
+
+    /** Set input channel selection (0=L, 1=R) */
+    void SetInputChannel(int channel)
+    {
+      mInputChannel = channel;
+    }
+
+    /** Get input channel selection */
+    int GetInputChannel() const { return mInputChannel; }
+
+    /** Enable/disable live tuner mode */
+    void SetLiveTunerMode(bool enabled)
+    {
+      mLiveTunerMode = enabled;
+    }
+
+    /** Check if live tuner mode is active */
+    bool IsLiveTunerMode() const { return mLiveTunerMode; }
+
+    /** Set tuner enabled state */
+    void SetTunerEnabled(bool enabled)
+    {
+      mTunerEnabled = enabled;
+    }
+
+    /** Set tuner reference frequency */
+    void SetTunerReferenceFrequency(double freq)
+    {
+      mTunerReferenceFreq = freq;
+    }
+
+    /** Get tuner reference frequency */
+    double GetTunerReferenceFrequency() const { return mTunerReferenceFreq; }
+
+    /** Set tuner callback (legacy - not used in V2) */
+    template<typename TCallback>
+    void SetTunerCallback(TCallback&& callback)
+    {
+      // Tuner functionality not implemented in V2 graph architecture yet
+      // This is a no-op for now
+    }
+
   private:
+    /** Helper to find the first node of a given type in the current preset */
+    std::string FindFirstNodeOfType(const std::string& type) const
+    {
+      for (const auto& node : mCurrentPreset.graph.nodes)
+      {
+        if (node.type == type)
+        {
+          return node.id;
+        }
+      }
+      return "";
+    }
+
     void ResolveResources(const Preset& preset)
     {
       for (const auto& node : preset.graph.nodes)
@@ -283,6 +734,13 @@ namespace guitarfx
     std::vector<float> mInputBufferR;
     std::vector<float> mOutputBufferL;
     std::vector<float> mOutputBufferR;
+
+    // Legacy settings for backward compatibility
+    bool mMonoMode = false;
+    int mInputChannel = 0;
+    bool mLiveTunerMode = false;
+    bool mTunerEnabled = false;
+    double mTunerReferenceFreq = 440.0;
   };
 
 } // namespace guitarfx

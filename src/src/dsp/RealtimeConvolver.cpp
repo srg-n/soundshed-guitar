@@ -192,7 +192,21 @@ namespace guitarfx
     for (size_t i = 0; i < mPartitionSize; ++i)
     {
       // Keep only the SECOND half of the IFFT output (valid linear convolution)
-      mOutputBuffer[i] = mFFTInputBuffer[mPartitionSize + i].real() * scale;
+      double sample = mFFTInputBuffer[mPartitionSize + i].real() * scale;
+      
+      // Safety: clamp to reasonable audio range to prevent numeric instability
+      // This protects against FFT/accumulator overflow in edge cases
+      if (std::isnan(sample) || std::isinf(sample))
+      {
+        sample = 0.0;
+      }
+      else
+      {
+        // Clamp to ±100.0 (extremely loud but still within double precision range)
+        sample = std::clamp(sample, -100.0, 100.0);
+      }
+      
+      mOutputBuffer[i] = sample;
     }
     
     mOutputBufferReadPos = 0;
@@ -226,10 +240,13 @@ namespace guitarfx
       }
       
       // Output available samples
+      // Key insight: We SYNCHRONIZE input/output buffer positions
+      // When we read sample N from output, we write sample N to input for next block
       while (mOutputBufferReadPos < mPartitionSize && i < numSamples)
       {
-        output[i] = mOutputBuffer[mOutputBufferReadPos];
-        mInputBuffer[mOutputBufferReadPos] = input[i];
+        const size_t bufferPos = mOutputBufferReadPos;
+        output[i] = mOutputBuffer[bufferPos];
+        mInputBuffer[bufferPos] = input[i];
         ++mOutputBufferReadPos;
         ++i;
       }

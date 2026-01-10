@@ -31,7 +31,7 @@
 #include "IPlugPaths.h"
 #include "wdlstring.h"
 
-#include "dsp/AmpModelManager.h"
+#include "dsp/GraphDSPManager.h"
 #include "presets/PresetStorage.h"
 
 #ifdef _WIN32
@@ -519,7 +519,7 @@ namespace guitarfx
   } // namespace
 
   GuitarFXPlugin::GuitarFXPlugin(const iplug::InstanceInfo &info)
-      : iplug::Plugin(info, iplug::MakeConfig(kParamCount, kNumPrograms)), mDSP(std::make_unique<AmpModelManager>())
+      : iplug::Plugin(info, iplug::MakeConfig(kParamCount, kNumPrograms)), mDSP(std::make_unique<GraphDSPManager>())
   {
     // Write to a log file to verify execution
     FILE* logFile = fopen("c:\\temp\\plugin_log.txt", "a");
@@ -892,10 +892,11 @@ namespace guitarfx
     
     // Check and log DPI information (Windows only)
 #ifdef _WIN32
-    if (mView) // mView is the window handle from WebViewEditorDelegate
-    {
-      SetWebViewDPIScale(mView);
-    }
+    // TODO: Fix mView access - it's a private member
+    // if (mView) // mView is the window handle from WebViewEditorDelegate
+    // {
+    //   SetWebViewDPIScale(mView);
+    // }
 #endif
     
     // Build path to index.html in resources
@@ -1418,226 +1419,61 @@ namespace guitarfx
     // Lock DSP mutex to prevent ProcessBlock from accessing DSP during modification
     std::lock_guard<std::mutex> lock(mDSPMutex);
 
-    // Reset DSP state before applying new preset to avoid artifacts
-    mDSP->Reset();
-    
-    // Clear current model and IR - preset should fully replace current state
-    mDSP->ClearModel();
-    mDSP->ClearImpulseResponse();
+    // Load the preset into the GraphDSPManager
+    // This will:
+    // - Create a new signal graph executor
+    // - Resolve and load all resources (NAM models, IRs)
+    // - Set up all effect nodes with their parameters
+    // - Prepare the DSP chain for processing
+    if (!mDSP->LoadPreset(preset))
+    {
+      std::cout << "[Plugin] Failed to load preset into GraphDSPManager" << std::endl;
+      ReportErrorToUI("Failed to load preset", "Could not initialize signal graph");
+      return;
+    }
+
+    std::cout << "[Plugin] Successfully loaded preset: " << preset.name << std::endl;
+
+    // Update active paths for UI display
     mActiveModelPath.clear();
     mActiveIRPath.clear();
 
-    // Apply global settings from the preset
+    // Find and store NAM model and IR paths for UI display
+    for (const auto &node : preset.graph.nodes)
+    {
+      if ((node.type == "amp_nam" || node.type == "nam_amp" || node.type == "nam") && node.resource)
+      {
+        if (auto resolvedPath = ResolveResourceRef(*node.resource))
+        {
+          mActiveModelPath = resolvedPath->generic_string();
+        }
+      }
+      else if ((node.type == "cab_ir" || node.type == "ir_cab" || node.type == "ir") && node.resource)
+      {
+        if (auto resolvedPath = ResolveResourceRef(*node.resource))
+        {
+          mActiveIRPath = resolvedPath->generic_string();
+        }
+      }
+    }
+
+    // Sync plugin parameters with preset globals
     auto *inputTrimParam = GetParam(kParamInputTrim);
     if (inputTrimParam)
     {
       inputTrimParam->Set(preset.global.inputTrim);
-      OnParamChange(kParamInputTrim);
     }
 
     auto *outputTrimParam = GetParam(kParamOutputTrim);
     if (outputTrimParam)
     {
       outputTrimParam->Set(preset.global.outputTrim);
-      OnParamChange(kParamOutputTrim);
     }
 
     auto *transposeParam = GetParam(kParamTranspose);
     if (transposeParam)
     {
       transposeParam->Set(static_cast<double>(preset.global.transpose));
-      OnParamChange(kParamTranspose);
-    }
-
-    // Process each node in the signal graph
-    for (const auto &node : preset.graph.nodes)
-    {
-      // Apply node parameters to plugin parameters based on node type
-      if (node.type == "amp_nam" || node.type == "nam_amp" || node.type == "nam")
-      {
-        // Load NAM model if resource is specified
-        if (node.resource && node.resource->IsValid())
-        {
-          auto resolvedPath = ResolveResourceRef(*node.resource);
-          if (resolvedPath && mDSP->LoadModel(*resolvedPath))
-          {
-            mActiveModelPath = resolvedPath->generic_string();
-          }
-        }
-
-        // Apply node parameters
-        for (const auto &[key, value] : node.params)
-        {
-          if (key == "drive")
-          {
-            auto *driveParam = GetParam(kParamDrive);
-            if (driveParam)
-            {
-              driveParam->Set(value);
-              OnParamChange(kParamDrive);
-            }
-          }
-          else if (key == "tone")
-          {
-            auto *toneParam = GetParam(kParamTone);
-            if (toneParam)
-            {
-              toneParam->Set(value);
-              OnParamChange(kParamTone);
-            }
-          }
-        }
-      }
-      else if (node.type == "cab_ir" || node.type == "ir_cab" || node.type == "ir")
-      {
-        // Load IR if resource is specified
-        if (node.resource && node.resource->IsValid())
-        {
-          auto resolvedPath = ResolveResourceRef(*node.resource);
-          if (resolvedPath && mDSP->LoadImpulseResponse(*resolvedPath))
-          {
-            mActiveIRPath = resolvedPath->generic_string();
-          }
-        }
-      }
-      else if (node.type == "dynamics_gate" || node.type == "noise_gate" || node.type == "gate")
-      {
-        auto *gateEnabledParam = GetParam(kParamGateEnabled);
-        if (gateEnabledParam)
-        {
-          gateEnabledParam->Set(node.enabled ? 1.0 : 0.0);
-          OnParamChange(kParamGateEnabled);
-        }
-
-        for (const auto &[key, value] : node.params)
-        {
-          if (key == "threshold")
-          {
-            auto *thresholdParam = GetParam(kParamGateThreshold);
-            if (thresholdParam)
-            {
-              thresholdParam->Set(value);
-              OnParamChange(kParamGateThreshold);
-            }
-          }
-        }
-      }
-      else if (node.type == "eq_parametric" || node.type == "eq")
-      {
-        auto *eqEnabledParam = GetParam(kParamEQEnabled);
-        if (eqEnabledParam)
-        {
-          eqEnabledParam->Set(node.enabled ? 1.0 : 0.0);
-          OnParamChange(kParamEQEnabled);
-        }
-
-        // Map EQ node parameters to plugin EQ parameters
-        for (const auto &[key, value] : node.params)
-        {
-          std::optional<ParameterId> paramId;
-          if (key == "lowGain") paramId = kParamEQLowGain;
-          else if (key == "lowFreq") paramId = kParamEQLowFreq;
-          else if (key == "lowMidGain") paramId = kParamEQLowMidGain;
-          else if (key == "lowMidFreq") paramId = kParamEQLowMidFreq;
-          else if (key == "lowMidQ") paramId = kParamEQLowMidQ;
-          else if (key == "highMidGain") paramId = kParamEQHighMidGain;
-          else if (key == "highMidFreq") paramId = kParamEQHighMidFreq;
-          else if (key == "highMidQ") paramId = kParamEQHighMidQ;
-          else if (key == "highGain") paramId = kParamEQHighGain;
-          else if (key == "highFreq") paramId = kParamEQHighFreq;
-
-          if (paramId)
-          {
-            auto *param = GetParam(static_cast<int>(*paramId));
-            if (param)
-            {
-              param->Set(value);
-              OnParamChange(static_cast<int>(*paramId));
-            }
-          }
-        }
-      }
-      else if (node.type == "delay")
-      {
-        auto *delayEnabledParam = GetParam(kParamDelayEnabled);
-        if (delayEnabledParam)
-        {
-          delayEnabledParam->Set(node.enabled ? 1.0 : 0.0);
-          OnParamChange(kParamDelayEnabled);
-        }
-
-        for (const auto &[key, value] : node.params)
-        {
-          std::optional<ParameterId> paramId;
-          if (key == "time") paramId = kParamDelayTime;
-          else if (key == "feedback") paramId = kParamDelayFeedback;
-          else if (key == "mix") paramId = kParamDelayMix;
-
-          if (paramId)
-          {
-            auto *param = GetParam(static_cast<int>(*paramId));
-            if (param)
-            {
-              param->Set(value);
-              OnParamChange(static_cast<int>(*paramId));
-            }
-          }
-        }
-      }
-      else if (node.type == "reverb")
-      {
-        auto *reverbEnabledParam = GetParam(kParamReverbEnabled);
-        if (reverbEnabledParam)
-        {
-          reverbEnabledParam->Set(node.enabled ? 1.0 : 0.0);
-          OnParamChange(kParamReverbEnabled);
-        }
-
-        for (const auto &[key, value] : node.params)
-        {
-          std::optional<ParameterId> paramId;
-          if (key == "decay") paramId = kParamReverbDecay;
-          else if (key == "damping") paramId = kParamReverbDamping;
-          else if (key == "mix") paramId = kParamReverbMix;
-
-          if (paramId)
-          {
-            auto *param = GetParam(static_cast<int>(*paramId));
-            if (param)
-            {
-              param->Set(value);
-              OnParamChange(static_cast<int>(*paramId));
-            }
-          }
-        }
-      }
-      else if (node.type == "simple_cab")
-      {
-        auto *simpleCabEnabledParam = GetParam(kParamSimpleCabEnabled);
-        if (simpleCabEnabledParam)
-        {
-          simpleCabEnabledParam->Set(node.enabled ? 1.0 : 0.0);
-          OnParamChange(kParamSimpleCabEnabled);
-        }
-
-        for (const auto &[key, value] : node.params)
-        {
-          std::optional<ParameterId> paramId;
-          if (key == "bass") paramId = kParamSimpleCabBass;
-          else if (key == "presence") paramId = kParamSimpleCabPresence;
-          else if (key == "brightness") paramId = kParamSimpleCabBrightness;
-
-          if (paramId)
-          {
-            auto *param = GetParam(static_cast<int>(*paramId));
-            if (param)
-            {
-              param->Set(value);
-              OnParamChange(static_cast<int>(*paramId));
-            }
-          }
-        }
-      }
     }
   }
 
@@ -2091,84 +1927,22 @@ namespace guitarfx
 
   void GuitarFXPlugin::HandleTunerRequest(const nlohmann::json &payload)
   {
-    if (!mDSP)
-    {
-      return;
-    }
-
+    // Tuner functionality is not yet implemented in GraphDSPManager (V2 architecture)
+    // This is a placeholder for future implementation
+    
     const std::string action = payload.value("action", "");
     
     if (action == "start")
     {
-      // Set up the tuner callback
-      mDSP->SetTunerCallback([this](const AmpModelManager::TunerResult& result) {
-        std::lock_guard<std::mutex> lock(mTunerMutex);
-        mPendingTunerData.noteName = result.noteName;
-        mPendingTunerData.octave = result.octave;
-        mPendingTunerData.frequency = result.frequency;
-        mPendingTunerData.centOffset = result.centOffset;
-        mPendingTunerData.confidence = result.confidence;
-        mPendingTunerData.detected = result.detected;
-        mPendingTunerData.debugRms = result.debugRms;
-        mPendingTunerData.debugRawFreq = result.debugRawFreq;
-        mTunerDataPending.store(true, std::memory_order_release);
-      });
+      std::cout << "[Plugin] Tuner requested but not implemented in V2 architecture" << std::endl;
       
-      // Set reference frequency if provided
-      if (payload.contains("referenceFrequency"))
-      {
-        const double refFreq = payload.value("referenceFrequency", 440.0);
-        mDSP->SetTunerReferenceFrequency(refFreq);
-      }
-      
-      mTunerActive.store(true, std::memory_order_release);
-      mDSP->SetTunerEnabled(true);
-      
-      // Acknowledge tuner started
-      {
-        nlohmann::json message;
-        message["type"] = "tunerStarted";
-        message["referenceFrequency"] = mDSP->GetTunerReferenceFrequency();
-        SendMessageToUI(message.dump());
-      }
+      // Send message back to UI indicating tuner is not available
+      nlohmann::json message;
+      message["type"] = "tunerError";
+      message["error"] = "Tuner not yet implemented in this version";
+      SendMessageToUI(message.dump());
     }
-    else if (action == "stop")
-    {
-      mDSP->SetTunerEnabled(false);
-      mDSP->SetTunerCallback(nullptr);
-      mTunerActive.store(false, std::memory_order_release);
-      
-      // Acknowledge tuner stopped
-      {
-        nlohmann::json message;
-        message["type"] = "tunerStopped";
-        SendMessageToUI(message.dump());
-      }
-    }
-    else if (action == "setReference")
-    {
-      const double refFreq = payload.value("referenceFrequency", 440.0);
-      mDSP->SetTunerReferenceFrequency(refFreq);
-      
-      {
-        nlohmann::json message;
-        message["type"] = "tunerReferenceChanged";
-        message["referenceFrequency"] = mDSP->GetTunerReferenceFrequency();
-        SendMessageToUI(message.dump());
-      }
-    }
-    else if (action == "setLiveMode")
-    {
-      const bool liveMode = payload.value("liveMode", true);
-      mDSP->SetLiveTunerMode(liveMode);
-      
-      {
-        nlohmann::json message;
-        message["type"] = "tunerLiveModeChanged";
-        message["liveMode"] = mDSP->IsLiveTunerMode();
-        SendMessageToUI(message.dump());
-      }
-    }
+    // For other actions, just silently ignore for now
   }
 
   void GuitarFXPlugin::HandleSetInputModeRequest(const nlohmann::json &payload)

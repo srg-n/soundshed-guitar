@@ -8,7 +8,10 @@
 
 #include <nlohmann/json.hpp>
 
-#include "dsp/AmpModelManager.h"
+#include "dsp/GraphDSPManager.h"
+#include "presets/PresetStorage.h"
+#include "presets/PresetTypes.h"
+#include "resources/ResourceLibrary.h"
 
 // Force factory registration by referencing factory functions directly.
 // This ensures the translation units with static factory::Helper registrations
@@ -143,11 +146,31 @@ int main()
       const std::string presetId = preset.value("id", "<unnamed>");
       const std::string presetName = preset.value("name", presetId);
 
-      // Extract resource IDs from graph nodes
+      ++presetsTested;
+
+      bool presetValid = true;
+
+      // Parse the preset JSON to a Preset struct
+      guitarfx::Preset presetStruct;
+      try
+      {
+        auto presetOpt = guitarfx::PresetStorage::DeserializeFromJson(preset.dump());
+        if (!presetOpt)
+        {
+          recordError("Preset '" + presetName + "': failed to parse JSON");
+          continue;
+        }
+        presetStruct = std::move(*presetOpt);
+      }
+      catch (const std::exception& ex)
+      {
+        recordError("Preset '" + presetName + "': failed to parse JSON - " + std::string(ex.what()));
+        continue;
+      }
+
+      // Extract resource IDs from graph nodes for validation
       auto modelIds = extractResourceIds(preset, "amp_nam", "nam");
       auto irIds = extractResourceIds(preset, "cab_ir", "ir");
-
-      ++presetsTested;
 
       if (modelIds.empty())
       {
@@ -160,13 +183,7 @@ int main()
         continue;
       }
 
-      bool presetValid = true;
-
-      // Create a fresh DSP manager for each preset
-      guitarfx::AmpModelManager dsp;
-      dsp.Prepare(kTestSampleRate, kTestBlockSize);
-
-      // Test loading all NAM models in the preset
+      // Validate that all referenced resources exist
       for (const auto& modelId : modelIds)
       {
         if (!modelLibrary.contains(modelId))
@@ -177,30 +194,14 @@ int main()
         }
 
         const fs::path modelPath = modelLibrary.at(modelId).filePath;
-
         if (!fs::exists(modelPath))
         {
           recordError("Preset '" + presetName + "': model file does not exist: " + Describe(modelPath));
           presetValid = false;
           continue;
         }
-
-        if (!dsp.LoadModel(modelPath))
-        {
-          recordError("Preset '" + presetName + "': failed to load model from " + Describe(modelPath));
-          presetValid = false;
-          continue;
-        }
-
-        if (!dsp.HasModel())
-        {
-          recordError("Preset '" + presetName + "': model loaded but HasModel() returns false");
-          presetValid = false;
-          continue;
-        }
       }
 
-      // Test loading all IRs in the preset
       for (const auto& irId : irIds)
       {
         if (!irLibrary.contains(irId))
@@ -211,34 +212,62 @@ int main()
         }
 
         const fs::path irPath = irLibrary.at(irId).filePath;
-
         if (!fs::exists(irPath))
         {
           recordError("Preset '" + presetName + "': IR file does not exist: " + Describe(irPath));
           presetValid = false;
           continue;
         }
-
-        if (!dsp.LoadImpulseResponse(irPath))
-        {
-          recordError("Preset '" + presetName + "': failed to load IR from " + Describe(irPath));
-          presetValid = false;
-          continue;
-        }
-
-        if (!dsp.HasImpulseResponse())
-        {
-          recordError("Preset '" + presetName + "': IR loaded but HasImpulseResponse() returns false");
-          presetValid = false;
-          continue;
-        }
       }
 
-      if (presetValid)
+      if (!presetValid)
       {
-        ++presetsLoaded;
-        std::cout << "  [OK] " << presetName << std::endl;
+        continue;
       }
+
+      // Create a fresh GraphDSPManager for each preset
+      guitarfx::GraphDSPManager dsp;
+      
+      // Register resource library paths
+      auto& resourceLibrary = dsp.GetResourceLibrary();
+      for (const auto& [id, entry] : modelLibrary)
+      {
+        guitarfx::LibraryResource resource;
+        resource.type = "nam";
+        resource.id = id;
+        resource.name = entry.title;
+        resource.filePath = entry.filePath;
+        resourceLibrary.AddResource(resource);
+      }
+      for (const auto& [id, entry] : irLibrary)
+      {
+        guitarfx::LibraryResource resource;
+        resource.type = "ir";
+        resource.id = id;
+        resource.name = entry.title;
+        resource.filePath = entry.filePath;
+        resourceLibrary.AddResource(resource);
+      }
+
+      // Prepare DSP
+      dsp.Prepare(kTestSampleRate, kTestBlockSize);
+
+      // Load the preset through GraphDSPManager
+      if (!dsp.LoadPreset(presetStruct))
+      {
+        recordError("Preset '" + presetName + "': LoadPreset() failed");
+        continue;
+      }
+
+      // Verify preset was loaded
+      if (!dsp.HasPreset())
+      {
+        recordError("Preset '" + presetName + "': preset loaded but HasPreset() returns false");
+        continue;
+      }
+
+      ++presetsLoaded;
+      std::cout << "  [OK] " << presetName << std::endl;
     }
 
     std::cout << "\nDSP Loading Results: " << presetsLoaded << "/" << presetsTested << " presets loaded successfully.\n";

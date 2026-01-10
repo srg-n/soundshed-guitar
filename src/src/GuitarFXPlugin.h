@@ -24,7 +24,7 @@
 
 namespace guitarfx
 {
-  class AmpModelManager;
+  class GraphDSPManager;
   class GuitarFXPlugin final : public iplug::Plugin
   {
   public:
@@ -155,7 +155,7 @@ namespace guitarfx
       std::chrono::steady_clock::time_point startTime;
     };
 
-    std::unique_ptr<AmpModelManager> mDSP;
+    std::unique_ptr<GraphDSPManager> mDSP;
     ResourceLibrary mResourceLibrary;
     FileSystem mFileSystem;
     ModelHasher mHasher;

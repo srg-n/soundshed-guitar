@@ -779,6 +779,147 @@
       ]
     },
     "embeddedResources": []
+  },
+  {
+    "id": "preset-test-nam-only",
+    "formatVersion": 2,
+    "name": "Test NAM Only",
+    "category": "Debug",
+    "description": "NAM path only with cab bypassed (checks amp output)",
+    "author": "Factory",
+    "version": "1.0",
+    "createdAt": "2025-01-01T00:00:00.000Z",
+    "modifiedAt": "2025-01-01T00:00:00.000Z",
+    "globals": {
+      "inputTrim": 0,
+      "outputTrim": 0,
+      "outputVolume": 1.0,
+      "transpose": 0
+    },
+    "graph": {
+      "nodes": [
+        {
+          "id": "amp_1",
+          "type": "amp_nam",
+          "displayName": "NAM Only Amp",
+          "category": "amp",
+          "bypassed": false,
+          "params": { "inputGain": 0, "outputGain": 0 },
+          "config": {},
+          "resource": { "type": "nam", "id": "nam-fender-twin-clean" }
+        },
+        {
+          "id": "cab_1",
+          "type": "cab_ir",
+          "displayName": "Bypassed Cab",
+          "category": "cab",
+          "bypassed": true,
+          "params": { "mix": 1, "outputGain": 0 },
+          "config": {},
+          "resource": { "type": "ir", "id": "ir-devils-lab-112jensen" }
+        }
+      ],
+      "edges": [
+        { "from": "__input__", "to": "amp_1", "fromPort": 0, "toPort": 0, "gain": 1 },
+        { "from": "amp_1", "to": "cab_1", "fromPort": 0, "toPort": 0, "gain": 1 },
+        { "from": "cab_1", "to": "__output__", "fromPort": 0, "toPort": 0, "gain": 1 }
+      ]
+    },
+    "embeddedResources": []
+  },
+  {
+    "id": "preset-test-ir-only",
+    "formatVersion": 2,
+    "name": "Test IR Only",
+    "category": "Debug",
+    "description": "IR path only with amp bypassed (checks cab output)",
+    "author": "Factory",
+    "version": "1.0",
+    "createdAt": "2025-01-01T00:00:00.000Z",
+    "modifiedAt": "2025-01-01T00:00:00.000Z",
+    "globals": {
+      "inputTrim": 0,
+      "outputTrim": 0,
+      "outputVolume": 1.0,
+      "transpose": 0
+    },
+    "graph": {
+      "nodes": [
+        {
+          "id": "amp_1",
+          "type": "amp_nam",
+          "displayName": "Bypassed Amp",
+          "category": "amp",
+          "bypassed": true,
+          "params": { "inputGain": 0, "outputGain": 0 },
+          "config": {},
+          "resource": { "type": "nam", "id": "nam-fender-twin-clean" }
+        },
+        {
+          "id": "cab_1",
+          "type": "cab_ir",
+          "displayName": "Test IR",
+          "category": "cab",
+          "bypassed": false,
+          "params": { "mix": 1, "outputGain": 0 },
+          "config": {},
+          "resource": { "type": "ir", "id": "ir-devils-lab-112jensen" }
+        }
+      ],
+      "edges": [
+        { "from": "__input__", "to": "amp_1", "fromPort": 0, "toPort": 0, "gain": 1 },
+        { "from": "amp_1", "to": "cab_1", "fromPort": 0, "toPort": 0, "gain": 1 },
+        { "from": "cab_1", "to": "__output__", "fromPort": 0, "toPort": 0, "gain": 1 }
+      ]
+    },
+    "embeddedResources": []
+  },
+  {
+    "id": "preset-bypass-debug",
+    "formatVersion": 2,
+    "name": "Bypass Debug",
+    "category": "Debug",
+    "description": "Pass-through preset to verify input reaches output",
+    "author": "Factory",
+    "version": "1.0",
+    "createdAt": "2025-01-01T00:00:00.000Z",
+    "modifiedAt": "2025-01-01T00:00:00.000Z",
+    "globals": {
+      "inputTrim": 0,
+      "outputTrim": 0,
+      "outputVolume": 1.0,
+      "transpose": 0
+    },
+    "graph": {
+      "nodes": [
+        {
+          "id": "amp_1",
+          "type": "amp_nam",
+          "displayName": "Bypass Amp",
+          "category": "amp",
+          "bypassed": true,
+          "params": { "inputGain": 0, "outputGain": 0 },
+          "config": {},
+          "resource": { "type": "nam", "id": "nam-fender-twin-clean" }
+        },
+        {
+          "id": "cab_1",
+          "type": "cab_ir",
+          "displayName": "Bypass Cab",
+          "category": "cab",
+          "bypassed": true,
+          "params": { "mix": 1, "outputGain": 0 },
+          "config": {},
+          "resource": { "type": "ir", "id": "ir-devils-lab-112jensen" }
+        }
+      ],
+      "edges": [
+        { "from": "__input__", "to": "amp_1", "fromPort": 0, "toPort": 0, "gain": 1 },
+        { "from": "amp_1", "to": "cab_1", "fromPort": 0, "toPort": 0, "gain": 1 },
+        { "from": "cab_1", "to": "__output__", "fromPort": 0, "toPort": 0, "gain": 1 }
+      ]
+    },
+    "embeddedResources": []
   }
 ]
 

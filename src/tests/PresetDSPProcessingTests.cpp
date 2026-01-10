@@ -38,6 +38,20 @@ constexpr int kTestBlockSize = 512;
 constexpr int kStabilityBlocks = 10;
 
 // ============================================================================
+// Analysis Structures
+// ============================================================================
+
+struct NodeStageResult
+{
+  std::string stageName;
+  double peakValue = 0.0;
+  double rmsValue = 0.0;
+  bool hasNaN = false;
+  bool hasInf = false;
+  bool isAllZeros = false;
+};
+
+// ============================================================================
 // JSON Loading
 // ============================================================================
 
@@ -280,7 +294,7 @@ ProcessingTestResult TestGraphDSPProcessing(guitarfx::GraphDSPManager& dsp, int 
   {
     for (int i = 0; i < kWarmupBlocks; ++i)
     {
-      dsp.Process(inputs, outputs, blockSize);
+      dsp.Process(reinterpret_cast<iplug::sample**>(inputs), reinterpret_cast<iplug::sample**>(outputs), blockSize);
     }
   }
   catch (const std::exception& ex)
@@ -330,6 +344,16 @@ ProcessingTestResult TestGraphDSPProcessing(guitarfx::GraphDSPManager& dsp, int 
     return result;
   }
 
+  // Check for minimum audible output (at least -60 dB relative to input)
+  const double minExpectedPeak = result.inputAnalysis.peakValue * 0.001; // -60 dB
+  if (result.outputAnalysis.peakValue < minExpectedPeak)
+  {
+    result.errorMessage = "Output level too low (peak=" + 
+                          std::to_string(result.outputAnalysis.peakValue) + 
+                          ", expected at least " + std::to_string(minExpectedPeak) + ")";
+    return result;
+  }
+
   result.success = true;
   return result;
 }
@@ -356,7 +380,7 @@ ProcessingTestResult TestGraphDSPStability(guitarfx::GraphDSPManager& dsp, int b
 
     try
     {
-      dsp.Process(inputs, outputs, blockSize);
+      dsp.Process(reinterpret_cast<iplug::sample**>(inputs), reinterpret_cast<iplug::sample**>(outputs), blockSize);
     }
     catch (const std::exception& ex)
     {
@@ -426,7 +450,7 @@ ProcessingTestResult TestPresetSwitching(guitarfx::GraphDSPManager& dsp,
   {
     for (int i = 0; i < kWarmupBlocks; ++i)
     {
-      dsp.Process(inputs, outputs, blockSize);
+      dsp.Process(reinterpret_cast<iplug::sample**>(inputs), reinterpret_cast<iplug::sample**>(outputs), blockSize);
     }
   }
   catch (const std::exception& ex)
@@ -450,7 +474,7 @@ ProcessingTestResult TestPresetSwitching(guitarfx::GraphDSPManager& dsp,
   {
     for (int i = 0; i < kWarmupBlocks; ++i)
     {
-      dsp.Process(inputs, outputs, blockSize);
+      dsp.Process(reinterpret_cast<iplug::sample**>(inputs), reinterpret_cast<iplug::sample**>(outputs), blockSize);
     }
   }
   catch (const std::exception& ex)
@@ -579,6 +603,1131 @@ ResourceValidation ValidatePresetResources(const guitarfx::Preset& preset,
   return result;
 }
 
+// ============================================================================
+// Simple NAM Test - Minimal test to verify NAM processing works
+// ============================================================================
+
+bool TestSimpleNAMProcessing(const fs::path& resourcesDir)
+{
+  std::cout << "\n========================================================================\n";
+  std::cout << "Simple NAM Processing Test\n";
+  std::cout << "========================================================================\n";
+
+  // Create DSP manager
+  guitarfx::GraphDSPManager dsp;
+  
+  // Populate resource library
+  auto& library = dsp.GetResourceLibrary();
+  guitarfx::LibraryResource libResource;
+  libResource.type = "nam";
+  libResource.id = "nam-jcm800-hi-g6";
+  libResource.name = "JCM800 Hi Gain 6";
+  libResource.filePath = resourcesDir / "amps" / "Guitar" / "TimR" / "JCM800 2203 1985" / "JCM800 Hi P6 B8 M4 T7 G6.nam";
+  library.AddResource(libResource);
+  
+  std::cout << "Added resource to library: " << libResource.id << "\n";
+  std::cout << "  Path: " << libResource.filePath << "\n";
+  std::cout << "  Exists: " << (fs::exists(libResource.filePath) ? "YES" : "NO") << "\n";
+  
+  dsp.Prepare(kTestSampleRate, kTestBlockSize);
+
+  // Build a minimal signal graph: input -> NAM -> output
+  guitarfx::SignalGraph graph;
+  
+  guitarfx::GraphNode namNode;
+  namNode.id = "nam_test";
+  namNode.type = "amp_nam";
+  namNode.category = "amp";
+  namNode.enabled = true;
+  namNode.params["inputGain"] = 0.0;
+  namNode.params["outputGain"] = 0.0;
+  
+  // Use a library reference (same as presets do)
+  guitarfx::ResourceRef resource;
+  resource.resourceType = "nam";
+  resource.resourceId = "nam-jcm800-hi-g6";
+  namNode.resource = resource;
+  
+  std::cout << "Using library reference: type=" << resource.resourceType << ", id=" << resource.resourceId << "\n";
+  
+  graph.nodes.push_back(namNode);
+  
+  // Define edges: input -> nam -> output
+  guitarfx::GraphEdge edge1;
+  edge1.from = "__input__";
+  edge1.to = "nam_test";
+  edge1.gain = 1.0;
+  graph.edges.push_back(edge1);
+  
+  guitarfx::GraphEdge edge2;
+  edge2.from = "nam_test";
+  edge2.to = "__output__";
+  edge2.gain = 1.0;
+  graph.edges.push_back(edge2);
+
+  // Create preset with this graph
+  guitarfx::Preset preset;
+  preset.name = "Simple NAM Test";
+  preset.graph = graph;
+  preset.global.inputTrim = 0.0;
+  preset.global.outputTrim = 0.0;
+  preset.global.outputVolume = 1.0;
+
+  std::cout << "Loading preset with library reference...\n";
+  
+  if (!dsp.LoadPreset(preset))
+  {
+    std::cout << "FAIL: LoadPreset failed\n";
+    return false;
+  }
+
+  // Generate test signal (440Hz sine wave)
+  std::vector<double> inputL(kTestBlockSize);
+  std::vector<double> inputR(kTestBlockSize);
+  std::vector<double> outputL(kTestBlockSize);
+  std::vector<double> outputR(kTestBlockSize);
+
+  GenerateSineWave(inputL, 440.0, kTestSampleRate, 0.5);
+  GenerateSineWave(inputR, 440.0, kTestSampleRate, 0.5);
+
+  double* inputs[2] = { inputL.data(), inputR.data() };
+  double* outputs[2] = { outputL.data(), outputR.data() };
+
+  // Process audio
+  dsp.Process(reinterpret_cast<iplug::sample**>(inputs), reinterpret_cast<iplug::sample**>(outputs), kTestBlockSize);
+
+  // Analyze output
+  auto analysis = AnalyzeSignal(outputL);
+
+  std::cout << "Output Analysis:\n";
+  std::cout << "  Peak: " << analysis.peakValue << "\n";
+  std::cout << "  RMS: " << analysis.rmsValue << "\n";
+  std::cout << "  Has NaN: " << (analysis.hasNaN ? "YES" : "NO") << "\n";
+  std::cout << "  Has Inf: " << (analysis.hasInf ? "YES" : "NO") << "\n";
+  std::cout << "  All Zeros: " << (analysis.isAllZeros ? "YES" : "NO") << "\n";
+
+  // Validate output
+  if (analysis.hasNaN)
+  {
+    std::cout << "FAIL: Output contains NaN\n";
+    return false;
+  }
+
+  if (analysis.hasInf)
+  {
+    std::cout << "FAIL: Output contains Inf\n";
+    return false;
+  }
+
+  if (analysis.peakValue > 100.0)
+  {
+    std::cout << "FAIL: Output peak too high: " << analysis.peakValue << "\n";
+    return false;
+  }
+
+  if (analysis.isAllZeros)
+  {
+    std::cout << "FAIL: Output is all zeros\n";
+    return false;
+  }
+
+  std::cout << "PASS: NAM processing produced valid output\n";
+  return true;
+}
+
+// ============================================================================
+// Simple NAM+IR Test - Test basic NAM + IR combination
+// ============================================================================
+
+bool TestSimpleNAMWithIR(const fs::path& resourcesDir)
+{
+  std::cout << "\n========================================================================\n";
+  std::cout << "Simple NAM+IR Processing Test\n";
+  std::cout << "========================================================================\n";
+
+  // Create DSP manager
+  guitarfx::GraphDSPManager dsp;
+  
+  // Populate resource library with one NAM and one IR
+  auto& library = dsp.GetResourceLibrary();
+  
+  guitarfx::LibraryResource namResource;
+  namResource.type = "nam";
+  namResource.id = "nam-fender-twin-clean";
+  namResource.name = "Fender Twin Clean";
+  namResource.filePath = resourcesDir / "amps" / "Guitar" / "Neil" / "FENDER Twin Reverb (Model 140) Clean 1989" / "FENDER Twin Reverb Clean PUSHED_1_1986.nam";
+  library.AddResource(namResource);
+  
+  guitarfx::LibraryResource irResource;
+  irResource.type = "ir";
+  irResource.id = "ir-devils-lab-112jensen";
+  irResource.name = "Jensen Cab";
+  irResource.filePath = resourcesDir / "cabs" / "1x12" / "Jensen" / "Jensen P10R 15ohm-192khz.wav";
+  library.AddResource(irResource);
+  
+  dsp.Prepare(kTestSampleRate, kTestBlockSize);
+
+  // Build a minimal signal graph: input -> NAM -> IR -> output
+  guitarfx::SignalGraph graph;
+  
+  guitarfx::GraphNode namNode;
+  namNode.id = "amp_1";
+  namNode.type = "amp_nam";
+  namNode.category = "amp";
+  namNode.enabled = true;
+  namNode.params["inputGain"] = 0.0;
+  namNode.params["outputGain"] = 0.0;
+  guitarfx::ResourceRef namRef;
+  namRef.resourceType = "nam";
+  namRef.resourceId = "nam-fender-twin-clean";
+  namNode.resource = namRef;
+  graph.nodes.push_back(namNode);
+  
+  guitarfx::GraphNode irNode;
+  irNode.id = "cab_1";
+  irNode.type = "cab_ir";
+  irNode.category = "cab";
+  irNode.enabled = true;
+  irNode.params["mix"] = 1.0;
+  irNode.params["outputGain"] = 0.0;
+  guitarfx::ResourceRef irRef;
+  irRef.resourceType = "ir";
+  irRef.resourceId = "ir-devils-lab-112jensen";
+  irNode.resource = irRef;
+  graph.nodes.push_back(irNode);
+  
+  // Define edges
+  guitarfx::GraphEdge edge1;
+  edge1.from = "__input__";
+  edge1.to = "amp_1";
+  edge1.gain = 1.0;
+  graph.edges.push_back(edge1);
+  
+  guitarfx::GraphEdge edge2;
+  edge2.from = "amp_1";
+  edge2.to = "cab_1";
+  edge2.gain = 1.0;
+  graph.edges.push_back(edge2);
+  
+  guitarfx::GraphEdge edge3;
+  edge3.from = "cab_1";
+  edge3.to = "__output__";
+  edge3.gain = 1.0;
+  graph.edges.push_back(edge3);
+
+  // Create preset
+  guitarfx::Preset preset;
+  preset.name = "Simple NAM+IR Test";
+  preset.graph = graph;
+  preset.global.inputTrim = 0.0;
+  preset.global.outputTrim = 0.0;
+  preset.global.outputVolume = 0.8;
+
+  std::cout << "Loading NAM+IR preset...\n";
+  
+  if (!dsp.LoadPreset(preset))
+  {
+    std::cout << "FAIL: LoadPreset failed\n";
+    return false;
+  }
+
+  // Generate test signal
+  std::vector<double> inputL(kTestBlockSize);
+  std::vector<double> inputR(kTestBlockSize);
+  std::vector<double> outputL(kTestBlockSize);
+  std::vector<double> outputR(kTestBlockSize);
+
+  GenerateSineWave(inputL, 440.0, kTestSampleRate, 0.5);
+  GenerateSineWave(inputR, 440.0, kTestSampleRate, 0.5);
+
+  double* inputs[2] = { inputL.data(), inputR.data() };
+  double* outputs[2] = { outputL.data(), outputR.data() };
+
+  // Process with warmup blocks for IR convolver
+  for (int i = 0; i < 3; ++i)
+  {
+    dsp.Process(reinterpret_cast<iplug::sample**>(inputs), reinterpret_cast<iplug::sample**>(outputs), kTestBlockSize);
+  }
+
+  // Analyze output
+  auto analysis = AnalyzeSignal(outputL);
+
+  std::cout << "Output Analysis:\n";
+  std::cout << "  Peak: " << analysis.peakValue << "\n";
+  std::cout << "  RMS: " << analysis.rmsValue << "\n";
+  std::cout << "  Has NaN: " << (analysis.hasNaN ? "YES" : "NO") << "\n";
+  std::cout << "  Has Inf: " << (analysis.hasInf ? "YES" : "NO") << "\n";
+  std::cout << "  All Zeros: " << (analysis.isAllZeros ? "YES" : "NO") << "\n";
+
+  // Validate output
+  if (analysis.hasNaN)
+  {
+    std::cout << "FAIL: Output contains NaN\n";
+    return false;
+  }
+
+  if (analysis.hasInf)
+  {
+    std::cout << "FAIL: Output contains Inf\n";
+    return false;
+  }
+
+  if (analysis.peakValue > 100.0)
+  {
+    std::cout << "FAIL: Output peak too high: " << analysis.peakValue << "\n";
+    return false;
+  }
+
+  if (analysis.isAllZeros)
+  {
+    std::cout << "FAIL: Output is all zeros\n";
+    return false;
+  }
+
+  std::cout << "PASS: NAM+IR test produced valid output\n";
+  return true;
+}
+
+// ============================================================================
+// Progressive Node Test - Enable nodes one at a time to isolate issues
+// ============================================================================
+
+bool TestProgressiveNodeEnabling(const fs::path& resourcesDir)
+{
+  std::cout << "\n========================================================================\n";
+  std::cout << "Progressive Node Enabling Test\n";
+  std::cout << "========================================================================\n";
+  std::cout << "This test progressively enables nodes to isolate signal corruption.\n\n";
+
+  std::vector<NodeStageResult> results;
+
+  // Test 1: Passthrough only (no processing nodes)
+  {
+    std::cout << "Stage 1: Input -> Output (passthrough)\n";
+    
+    guitarfx::GraphDSPManager dsp;
+    dsp.Prepare(kTestSampleRate, kTestBlockSize);
+
+    guitarfx::SignalGraph graph;
+    
+    // Only input->output edges, no processing nodes
+    guitarfx::GraphEdge edge;
+    edge.from = "__input__";
+    edge.to = "__output__";
+    edge.gain = 1.0;
+    graph.edges.push_back(edge);
+
+    guitarfx::Preset preset;
+    preset.name = "Passthrough";
+    preset.graph = graph;
+    preset.global.inputTrim = 0.0;
+    preset.global.outputTrim = 0.0;
+    preset.global.outputVolume = 1.0;
+
+    if (!dsp.LoadPreset(preset))
+    {
+      std::cout << "  FAIL: LoadPreset failed\n";
+      return false;
+    }
+
+    std::vector<double> inputL(kTestBlockSize);
+    std::vector<double> inputR(kTestBlockSize);
+    std::vector<double> outputL(kTestBlockSize);
+    std::vector<double> outputR(kTestBlockSize);
+
+    GenerateSineWave(inputL, 440.0, kTestSampleRate, 0.5);
+    GenerateSineWave(inputR, 440.0, kTestSampleRate, 0.5);
+
+    double* inputs[2] = { inputL.data(), inputR.data() };
+    double* outputs[2] = { outputL.data(), outputR.data() };
+
+    dsp.Process(reinterpret_cast<iplug::sample**>(inputs), reinterpret_cast<iplug::sample**>(outputs), kTestBlockSize);
+    auto analysis = AnalyzeSignal(outputL);
+
+    NodeStageResult result;
+    result.stageName = "Passthrough";
+    result.peakValue = analysis.peakValue;
+    result.rmsValue = analysis.rmsValue;
+    result.hasNaN = analysis.hasNaN;
+    result.hasInf = analysis.hasInf;
+    result.isAllZeros = analysis.isAllZeros;
+    results.push_back(result);
+
+    std::cout << "  Peak: " << analysis.peakValue << ", RMS: " << analysis.rmsValue 
+              << ", NaN: " << (analysis.hasNaN ? "Y" : "N") << "\n";
+  }
+
+  // Test 2: With NAM only
+  {
+    std::cout << "Stage 2: Input -> NAM -> Output\n";
+    
+    guitarfx::GraphDSPManager dsp;
+    auto& library = dsp.GetResourceLibrary();
+    
+    guitarfx::LibraryResource namResource;
+    namResource.type = "nam";
+    namResource.id = "nam-jcm800-hi-g6";
+    namResource.name = "JCM800";
+    namResource.filePath = resourcesDir / "amps" / "Guitar" / "TimR" / "JCM800 2203 1985" / "JCM800 Hi P6 B8 M4 T7 G6.nam";
+    library.AddResource(namResource);
+    
+    dsp.Prepare(kTestSampleRate, kTestBlockSize);
+
+    guitarfx::SignalGraph graph;
+    
+    guitarfx::GraphNode namNode;
+    namNode.id = "amp_1";
+    namNode.type = "amp_nam";
+    namNode.enabled = true;
+    namNode.params["inputGain"] = 0.0;
+    namNode.params["outputGain"] = 0.0;
+    guitarfx::ResourceRef namRef;
+    namRef.resourceType = "nam";
+    namRef.resourceId = "nam-jcm800-hi-g6";
+    namNode.resource = namRef;
+    graph.nodes.push_back(namNode);
+    
+    guitarfx::GraphEdge edge1;
+    edge1.from = "__input__";
+    edge1.to = "amp_1";
+    edge1.gain = 1.0;
+    graph.edges.push_back(edge1);
+    
+    guitarfx::GraphEdge edge2;
+    edge2.from = "amp_1";
+    edge2.to = "__output__";
+    edge2.gain = 1.0;
+    graph.edges.push_back(edge2);
+
+    guitarfx::Preset preset;
+    preset.name = "NAM Only";
+    preset.graph = graph;
+    preset.global.inputTrim = 0.0;
+    preset.global.outputTrim = 0.0;
+    preset.global.outputVolume = 1.0;
+
+    if (!dsp.LoadPreset(preset))
+    {
+      std::cout << "  FAIL: LoadPreset failed\n";
+      return false;
+    }
+
+    std::vector<double> inputL(kTestBlockSize);
+    std::vector<double> inputR(kTestBlockSize);
+    std::vector<double> outputL(kTestBlockSize);
+    std::vector<double> outputR(kTestBlockSize);
+
+    GenerateSineWave(inputL, 440.0, kTestSampleRate, 0.5);
+    GenerateSineWave(inputR, 440.0, kTestSampleRate, 0.5);
+
+    double* inputs[2] = { inputL.data(), inputR.data() };
+    double* outputs[2] = { outputL.data(), outputR.data() };
+
+    dsp.Process(reinterpret_cast<iplug::sample**>(inputs), reinterpret_cast<iplug::sample**>(outputs), kTestBlockSize);
+    auto analysis = AnalyzeSignal(outputL);
+
+    NodeStageResult result;
+    result.stageName = "NAM Only";
+    result.peakValue = analysis.peakValue;
+    result.rmsValue = analysis.rmsValue;
+    result.hasNaN = analysis.hasNaN;
+    result.hasInf = analysis.hasInf;
+    result.isAllZeros = analysis.isAllZeros;
+    results.push_back(result);
+
+    std::cout << "  Peak: " << analysis.peakValue << ", RMS: " << analysis.rmsValue 
+              << ", NaN: " << (analysis.hasNaN ? "Y" : "N") << "\n";
+  }
+
+  // Test 3: With NAM + IR
+  {
+    std::cout << "Stage 3: Input -> NAM -> IR -> Output\n";
+    
+    guitarfx::GraphDSPManager dsp;
+    auto& library = dsp.GetResourceLibrary();
+    
+    guitarfx::LibraryResource namResource;
+    namResource.type = "nam";
+    namResource.id = "nam-jcm800-hi-g6";
+    namResource.name = "JCM800";
+    namResource.filePath = resourcesDir / "amps" / "Guitar" / "TimR" / "JCM800 2203 1985" / "JCM800 Hi P6 B8 M4 T7 G6.nam";
+    library.AddResource(namResource);
+    
+    guitarfx::LibraryResource irResource;
+    irResource.type = "ir";
+    irResource.id = "ir-devils-lab-412v30";
+    irResource.name = "1960 V30";
+    irResource.filePath = resourcesDir / "cabs" / "4x12" / "Marshall" / "Marshall 1960A" / "Marshall 1960 Celestion G12M Greenback V30 Stereo Blend-192khz.wav";
+    library.AddResource(irResource);
+    
+    dsp.Prepare(kTestSampleRate, kTestBlockSize);
+
+    guitarfx::SignalGraph graph;
+    
+    guitarfx::GraphNode namNode;
+    namNode.id = "amp_1";
+    namNode.type = "amp_nam";
+    namNode.enabled = true;
+    namNode.params["inputGain"] = 0.0;
+    namNode.params["outputGain"] = 0.0;
+    guitarfx::ResourceRef namRef;
+    namRef.resourceType = "nam";
+    namRef.resourceId = "nam-jcm800-hi-g6";
+    namNode.resource = namRef;
+    graph.nodes.push_back(namNode);
+    
+    guitarfx::GraphNode irNode;
+    irNode.id = "cab_1";
+    irNode.type = "cab_ir";
+    irNode.enabled = true;
+    irNode.params["mix"] = 1.0;
+    irNode.params["outputGain"] = 0.0;
+    guitarfx::ResourceRef irRef;
+    irRef.resourceType = "ir";
+    irRef.resourceId = "ir-devils-lab-412v30";
+    irNode.resource = irRef;
+    graph.nodes.push_back(irNode);
+    
+    guitarfx::GraphEdge edge1;
+    edge1.from = "__input__";
+    edge1.to = "amp_1";
+    edge1.gain = 1.0;
+    graph.edges.push_back(edge1);
+    
+    guitarfx::GraphEdge edge2;
+    edge2.from = "amp_1";
+    edge2.to = "cab_1";
+    edge2.gain = 1.0;
+    graph.edges.push_back(edge2);
+    
+    guitarfx::GraphEdge edge3;
+    edge3.from = "cab_1";
+    edge3.to = "__output__";
+    edge3.gain = 1.0;
+    graph.edges.push_back(edge3);
+
+    guitarfx::Preset preset;
+    preset.name = "NAM+IR";
+    preset.graph = graph;
+    preset.global.inputTrim = 0.0;
+    preset.global.outputTrim = 0.0;
+    preset.global.outputVolume = 1.0;
+
+    if (!dsp.LoadPreset(preset))
+    {
+      std::cout << "  FAIL: LoadPreset failed\n";
+      return false;
+    }
+
+    std::vector<double> inputL(kTestBlockSize);
+    std::vector<double> inputR(kTestBlockSize);
+    std::vector<double> outputL(kTestBlockSize);
+    std::vector<double> outputR(kTestBlockSize);
+
+    GenerateSineWave(inputL, 440.0, kTestSampleRate, 0.5);
+    GenerateSineWave(inputR, 440.0, kTestSampleRate, 0.5);
+
+    double* inputs[2] = { inputL.data(), inputR.data() };
+    double* outputs[2] = { outputL.data(), outputR.data() };
+
+    // Multiple blocks for IR warmup
+    for (int i = 0; i < 3; ++i)
+    {
+      dsp.Process(reinterpret_cast<iplug::sample**>(inputs), reinterpret_cast<iplug::sample**>(outputs), kTestBlockSize);
+    }
+    auto analysis = AnalyzeSignal(outputL);
+
+    NodeStageResult result;
+    result.stageName = "NAM+IR";
+    result.peakValue = analysis.peakValue;
+    result.rmsValue = analysis.rmsValue;
+    result.hasNaN = analysis.hasNaN;
+    result.hasInf = analysis.hasInf;
+    result.isAllZeros = analysis.isAllZeros;
+    results.push_back(result);
+
+    std::cout << "  Peak: " << analysis.peakValue << ", RMS: " << analysis.rmsValue 
+              << ", NaN: " << (analysis.hasNaN ? "Y" : "N") << "\n";
+  }
+
+  // Test 4: With NAM + Gate + IR (to test dynamics nodes)
+  {
+    std::cout << "Stage 4: Input -> Gate -> NAM -> IR -> Output\n";
+    
+    guitarfx::GraphDSPManager dsp;
+    auto& library = dsp.GetResourceLibrary();
+    
+    guitarfx::LibraryResource namResource;
+    namResource.type = "nam";
+    namResource.id = "nam-jcm800-hi-g6";
+    namResource.name = "JCM800";
+    namResource.filePath = resourcesDir / "amps" / "Guitar" / "TimR" / "JCM800 2203 1985" / "JCM800 Hi P6 B8 M4 T7 G6.nam";
+    library.AddResource(namResource);
+    
+    guitarfx::LibraryResource irResource;
+    irResource.type = "ir";
+    irResource.id = "ir-devils-lab-412v30";
+    irResource.name = "1960 V30";
+    irResource.filePath = resourcesDir / "cabs" / "4x12" / "Marshall" / "Marshall 1960A" / "Marshall 1960 Celestion G12M Greenback V30 Stereo Blend-192khz.wav";
+    library.AddResource(irResource);
+    
+    dsp.Prepare(kTestSampleRate, kTestBlockSize);
+
+    guitarfx::SignalGraph graph;
+    
+    guitarfx::GraphNode gateNode;
+    gateNode.id = "gate_1";
+    gateNode.type = "dynamics_gate";
+    gateNode.enabled = true;
+    gateNode.params["threshold"] = -55.0;
+    gateNode.params["attack"] = 0.1;
+    gateNode.params["hold"] = 50.0;
+    gateNode.params["release"] = 100.0;
+    graph.nodes.push_back(gateNode);
+    
+    guitarfx::GraphNode namNode;
+    namNode.id = "amp_1";
+    namNode.type = "amp_nam";
+    namNode.enabled = true;
+    namNode.params["inputGain"] = 0.0;
+    namNode.params["outputGain"] = 0.0;
+    guitarfx::ResourceRef namRef;
+    namRef.resourceType = "nam";
+    namRef.resourceId = "nam-jcm800-hi-g6";
+    namNode.resource = namRef;
+    graph.nodes.push_back(namNode);
+    
+    guitarfx::GraphNode irNode;
+    irNode.id = "cab_1";
+    irNode.type = "cab_ir";
+    irNode.enabled = true;
+    irNode.params["mix"] = 1.0;
+    irNode.params["outputGain"] = 0.0;
+    guitarfx::ResourceRef irRef;
+    irRef.resourceType = "ir";
+    irRef.resourceId = "ir-devils-lab-412v30";
+    irNode.resource = irRef;
+    graph.nodes.push_back(irNode);
+    
+    guitarfx::GraphEdge edge1;
+    edge1.from = "__input__";
+    edge1.to = "gate_1";
+    edge1.gain = 1.0;
+    graph.edges.push_back(edge1);
+    
+    guitarfx::GraphEdge edge2;
+    edge2.from = "gate_1";
+    edge2.to = "amp_1";
+    edge2.gain = 1.0;
+    graph.edges.push_back(edge2);
+    
+    guitarfx::GraphEdge edge3;
+    edge3.from = "amp_1";
+    edge3.to = "cab_1";
+    edge3.gain = 1.0;
+    graph.edges.push_back(edge3);
+    
+    guitarfx::GraphEdge edge4;
+    edge4.from = "cab_1";
+    edge4.to = "__output__";
+    edge4.gain = 1.0;
+    graph.edges.push_back(edge4);
+
+    guitarfx::Preset preset;
+    preset.name = "Gate+NAM+IR";
+    preset.graph = graph;
+    preset.global.inputTrim = 0.0;
+    preset.global.outputTrim = 0.0;
+    preset.global.outputVolume = 1.0;
+
+    if (!dsp.LoadPreset(preset))
+    {
+      std::cout << "  FAIL: LoadPreset failed\n";
+      return false;
+    }
+
+    std::vector<double> inputL(kTestBlockSize);
+    std::vector<double> inputR(kTestBlockSize);
+    std::vector<double> outputL(kTestBlockSize);
+    std::vector<double> outputR(kTestBlockSize);
+
+    GenerateSineWave(inputL, 440.0, kTestSampleRate, 0.5);
+    GenerateSineWave(inputR, 440.0, kTestSampleRate, 0.5);
+
+    double* inputs[2] = { inputL.data(), inputR.data() };
+    double* outputs[2] = { outputL.data(), outputR.data() };
+
+    for (int i = 0; i < 3; ++i)
+    {
+      dsp.Process(reinterpret_cast<iplug::sample**>(inputs), reinterpret_cast<iplug::sample**>(outputs), kTestBlockSize);
+    }
+    auto analysis = AnalyzeSignal(outputL);
+
+    NodeStageResult result;
+    result.stageName = "Gate+NAM+IR";
+    result.peakValue = analysis.peakValue;
+    result.rmsValue = analysis.rmsValue;
+    result.hasNaN = analysis.hasNaN;
+    result.hasInf = analysis.hasInf;
+    result.isAllZeros = analysis.isAllZeros;
+    results.push_back(result);
+
+    std::cout << "  Peak: " << analysis.peakValue << ", RMS: " << analysis.rmsValue 
+              << ", NaN: " << (analysis.hasNaN ? "Y" : "N") << "\n";
+  }
+
+  // Print summary
+  std::cout << "\n------------------------------------------------------------------------\n";
+  std::cout << "Summary of Progressive Stages:\n";
+  std::cout << "------------------------------------------------------------------------\n";
+  std::cout << std::left << std::setw(20) << "Stage" 
+            << std::setw(15) << "Peak" 
+            << std::setw(15) << "RMS"
+            << std::setw(8) << "NaN"
+            << std::setw(8) << "Inf"
+            << std::setw(10) << "AllZeros" << "\n";
+  std::cout << std::string(76, '-') << "\n";
+  
+  for (const auto& result : results)
+  {
+    std::cout << std::left << std::setw(20) << result.stageName
+              << std::setw(15) << std::fixed << std::setprecision(6) << result.peakValue
+              << std::setw(15) << std::fixed << std::setprecision(6) << result.rmsValue
+              << std::setw(8) << (result.hasNaN ? "YES" : "NO")
+              << std::setw(8) << (result.hasInf ? "YES" : "NO")
+              << std::setw(10) << (result.isAllZeros ? "YES" : "NO") << "\n";
+  }
+
+  // Check for any broken stages
+  bool allGood = true;
+  for (const auto& result : results)
+  {
+    if (result.hasNaN || result.hasInf || result.isAllZeros || result.peakValue > 100.0)
+    {
+      allGood = false;
+      break;
+    }
+  }
+
+  if (allGood)
+  {
+    std::cout << "\nPASS: All progressive stages produced valid output\n";
+    return true;
+  }
+  else
+  {
+    std::cout << "\nFAIL: Some stages produced invalid output (see summary above)\n";
+    return false;
+  }
+}
+
+// ============================================================================
+// Single Preset Isolation Test  
+// ============================================================================
+
+bool TestSinglePresetIsolation(const fs::path& resourcesDir)
+{
+  std::cout << "\n========================================================================\n";
+  std::cout << "Single Preset Isolation Test - Test 'Pristine Clean' in isolation\n";
+  std::cout << "========================================================================\n";
+
+  const auto dataDir = resourcesDir / "ui" / "data";
+
+  // Load JSON data
+  const auto audioModelsJson = LoadJson(dataDir / "audiofx-models.json");
+  const auto irLibraryJson = LoadJson(dataDir / "ir-library.json");
+  const auto presetsJson = LoadJson(dataDir / "default-presets.json");
+
+  if (!presetsJson.is_array() || presetsJson.empty())
+  {
+    std::cout << "FAIL: Could not load presets JSON\n";
+    return false;
+  }
+
+  // Find "Pristine Clean" preset
+  std::optional<nlohmann::json> pristinePresetJson;
+  for (const auto& presetJson : presetsJson)
+  {
+    if (presetJson.value("name", "") == "Pristine Clean")
+    {
+      pristinePresetJson = presetJson;
+      break;
+    }
+  }
+
+  if (!pristinePresetJson)
+  {
+    std::cout << "FAIL: Could not find 'Pristine Clean' preset\n";
+    return false;
+  }
+
+  // Parse preset
+  auto presetOpt = guitarfx::PresetStorage::DeserializeFromJson(pristinePresetJson->dump());
+  if (!presetOpt)
+  {
+    std::cout << "FAIL: Could not parse 'Pristine Clean' preset\n";
+    return false;
+  }
+
+  std::cout << "Found preset: " << presetOpt->name << "\n\n";
+
+  // Create fresh DSP manager
+  guitarfx::GraphDSPManager dsp;
+  auto& library = dsp.GetResourceLibrary();
+
+  // Populate resource library
+  std::cout << "Loading NAM models...\n";
+  for (const auto& entry : audioModelsJson)
+  {
+    guitarfx::LibraryResource resource;
+    resource.type = "nam";
+    resource.id = entry.value("id", "");
+    resource.name = entry.value("title", entry.value("name", resource.id));
+    resource.category = entry.value("category", "");
+    resource.description = entry.value("description", "");
+    resource.filePath = resourcesDir / entry.value("filePath", "");
+    
+    if (!resource.id.empty())
+    {
+      library.AddResource(resource);
+    }
+  }
+
+  std::cout << "Loading IR cabinets...\n";
+  for (const auto& entry : irLibraryJson)
+  {
+    guitarfx::LibraryResource resource;
+    resource.type = "ir";
+    resource.id = entry.value("id", "");
+    resource.name = entry.value("title", entry.value("name", resource.id));
+    resource.category = entry.value("category", "");
+    resource.description = entry.value("description", "");
+    resource.filePath = resourcesDir / entry.value("filePath", "");
+    
+    if (!resource.id.empty())
+    {
+      library.AddResource(resource);
+    }
+  }
+
+  std::cout << "Resource library: " << library.GetResourcesByType("nam").size() << " NAMs, "
+            << library.GetResourcesByType("ir").size() << " IRs\n\n";
+
+  dsp.Prepare(kTestSampleRate, kTestBlockSize);
+
+  std::cout << "Loading preset into DSP...\n";
+  if (!dsp.LoadPreset(*presetOpt))
+  {
+    std::cout << "FAIL: LoadPreset failed\n";
+    return false;
+  }
+
+  // Generate test signal
+  std::vector<double> inputL(kTestBlockSize);
+  std::vector<double> inputR(kTestBlockSize);
+  std::vector<double> outputL(kTestBlockSize);
+  std::vector<double> outputR(kTestBlockSize);
+
+  GenerateSineWave(inputL, 440.0, kTestSampleRate, 0.5);
+  GenerateSineWave(inputR, 440.0, kTestSampleRate, 0.5);
+
+  double* inputs[2] = { inputL.data(), inputR.data() };
+  double* outputs[2] = { outputL.data(), outputR.data() };
+
+  std::cout << "Processing audio...\n";
+  dsp.Process(reinterpret_cast<iplug::sample**>(inputs), reinterpret_cast<iplug::sample**>(outputs), kTestBlockSize);
+
+  auto analysis = AnalyzeSignal(outputL);
+
+  std::cout << "\nOutput Analysis (1st block):\n";
+  std::cout << "  Peak: " << std::scientific << analysis.peakValue << std::defaultfloat << "\n";
+  std::cout << "  RMS: " << analysis.rmsValue << "\n";
+  std::cout << "  Has NaN: " << (analysis.hasNaN ? "YES" : "NO") << "\n";
+  std::cout << "  Has Inf: " << (analysis.hasInf ? "YES" : "NO") << "\n";
+  std::cout << "  All Zeros: " << (analysis.isAllZeros ? "YES" : "NO") << "\n";
+
+  if (analysis.hasNaN || analysis.hasInf || analysis.peakValue > 100.0)
+  {
+    std::cout << "\nFAIL: Invalid output on first block\n";
+    return false;
+  }
+
+  // Process more blocks like the full test does
+  // NOTE: NOT resetting between blocks to match the full test behavior
+  std::cout << "\nProcessing " << kStabilityBlocks << " stability blocks (no reset between blocks)...\n";
+  for (int i = 0; i < kStabilityBlocks; ++i)
+  {
+    // Clear output buffers before each process call (this is normal test setup)
+    std::fill(outputL.begin(), outputL.end(), 0.0);
+    std::fill(outputR.begin(), outputR.end(), 0.0);
+    
+    dsp.Process(reinterpret_cast<iplug::sample**>(inputs), reinterpret_cast<iplug::sample**>(outputs), kTestBlockSize);
+    
+    // Print peak after each block to see accumulation
+    auto blockAnalysis = AnalyzeSignal(outputL);
+    std::cout << "  Block " << (i+2) << ": Peak=" << std::scientific << blockAnalysis.peakValue 
+              << std::defaultfloat << ", NaN=" << (blockAnalysis.hasNaN ? "Y" : "N")  
+              << ", Inf=" << (blockAnalysis.hasInf ? "Y" : "N") << "\n";
+    
+    if (blockAnalysis.hasNaN || blockAnalysis.hasInf)
+    {
+      std::cout << "FAIL: Invalid output detected at block " << (i+2) << "\n";
+      return false;
+    }
+  }
+
+  auto analysisAfter = AnalyzeSignal(outputL);
+
+  std::cout << "\nOutput Analysis (after " << kStabilityBlocks << " blocks):\n";
+  std::cout << "  Peak: " << std::scientific << analysisAfter.peakValue << std::defaultfloat << "\n";
+  std::cout << "  RMS: " << analysisAfter.rmsValue << "\n";
+  std::cout << "  Has NaN: " << (analysisAfter.hasNaN ? "YES" : "NO") << "\n";
+  std::cout << "  Has Inf: " << (analysisAfter.hasInf ? "YES" : "NO") << "\n";
+  std::cout << "  All Zeros: " << (analysisAfter.isAllZeros ? "YES" : "NO") << "\n";
+
+  if (analysisAfter.hasNaN || analysisAfter.hasInf || analysisAfter.peakValue > 100.0)
+  {
+    std::cout << "\nFAIL: Invalid output after stability blocks\n";
+    return false;
+  }
+
+  std::cout << "\nPASS: Single preset isolation test passed\n";
+  return true;
+}
+
+// Test to isolate Modern Metal preset NaN issue
+bool TestModernMetalIsolation(const fs::path& resourcesDir)
+{
+  std::cout << "\n========================================================================\n";
+  std::cout << "Test: Modern Metal Preset Isolation (NaN Debug)\n";
+  std::cout << "========================================================================\n";
+
+  const fs::path dataDir = resourcesDir / "ui" / "data";
+  
+  // Load preset
+  const auto presetsJson = LoadJson(dataDir / "default-presets.json");
+  nlohmann::json modernMetalJson;
+  for (const auto& preset : presetsJson)
+  {
+    if (preset.value("name", "") == "Modern Metal")
+    {
+      modernMetalJson = preset;
+      break;
+    }
+  }
+  
+  if (modernMetalJson.empty())
+  {
+    std::cout << "FAIL: Could not find Modern Metal preset\n";
+    return false;
+  }
+
+  // Parse preset
+  auto presetOpt = guitarfx::PresetStorage::DeserializeFromJson(modernMetalJson.dump());
+  if (!presetOpt)
+  {
+    std::cout << "FAIL: Could not parse Modern Metal preset JSON\n";
+    return false;
+  }
+  
+  std::cout << "\nPreset Configuration:\n";
+  std::cout << "  Input Trim: " << presetOpt->global.inputTrim << " dB\n";
+  std::cout << "  Output Trim: " << presetOpt->global.outputTrim << " dB\n";
+  std::cout << "  Output Volume: " << presetOpt->global.outputVolume << "\n";
+  std::cout << "  Node Count: " << presetOpt->graph.nodes.size() << "\n";
+  
+  // Print all nodes
+  for (const auto& node : presetOpt->graph.nodes)
+  {
+    std::cout << "  - Node: " << node.id << " (type=" << node.type << ")";
+    if (node.resource.has_value())
+    {
+      const auto& res = node.resource.value();
+      std::cout << " -> Resource: type=" << res.resourceType << ", id=" << res.resourceId;
+    }
+    std::cout << "\n";
+  }
+  
+  // Setup resource library
+  const auto audioModelsJson = LoadJson(dataDir / "audiofx-models.json");
+  const auto irLibraryJson = LoadJson(dataDir / "ir-library.json");
+  
+  // Setup DSP
+  guitarfx::GraphDSPManager dsp;
+  auto& library = dsp.GetResourceLibrary();
+  
+  // Add NAM model
+  for (const auto& entry : audioModelsJson)
+  {
+    const std::string id = entry.value("id", "");
+    if (id == "nam-mesa-recto-modern-g8")
+    {
+      guitarfx::LibraryResource resource;
+      resource.type = "nam";
+      resource.id = id;
+      resource.name = entry.value("title", id);
+      resource.filePath = (resourcesDir / entry.value("filePath", "")).string();
+      
+      std::cout << "\nNAM Model Resource:\n";
+      std::cout << "  ID: " << resource.id << "\n";
+      std::cout << "  Path: " << resource.filePath << "\n";
+      std::cout << "  Exists: " << (fs::exists(resource.filePath) ? "YES" : "NO") << "\n";
+      
+      library.AddResource(resource);
+      break;
+    }
+  }
+  
+  // Add IR
+  for (const auto& entry : irLibraryJson)
+  {
+    const std::string id = entry.value("id", "");
+    if (id == "ir-devils-lab-412v30")
+    {
+      guitarfx::LibraryResource resource;
+      resource.type = "ir";
+      resource.id = id;
+      resource.name = entry.value("title", id);
+      resource.filePath = (resourcesDir / entry.value("filePath", "")).string();
+      
+      std::cout << "\nIR Resource:\n";
+      std::cout << "  ID: " << resource.id << "\n";
+      std::cout << "  Path: " << resource.filePath << "\n";
+      std::cout << "  Exists: " << (fs::exists(resource.filePath) ? "YES" : "NO") << "\n";
+      
+      library.AddResource(resource);
+      break;
+    }
+  }
+  
+  dsp.Prepare(kTestSampleRate, kTestBlockSize);
+  
+  std::cout << "\nLoading preset...\n";
+  if (!dsp.LoadPreset(*presetOpt))
+  {
+    std::cout << "FAIL: LoadPreset returned false\n";
+    return false;
+  }
+  
+  std::cout << "Preset loaded successfully\n";
+  
+  // Check if the preset actually has nodes initialized
+  if (!dsp.HasPreset())
+  {
+    std::cout << "FAIL: HasPreset() returns false after load\n";
+    return false;
+  }
+  
+  std::cout << "Preset validated with HasPreset()\n";
+  
+  // Generate test signal - reuse from generator functions
+  std::vector<double> inputL(kTestBlockSize);
+  std::vector<double> inputR(kTestBlockSize);
+  std::vector<double> outputL(kTestBlockSize, 0.0);
+  std::vector<double> outputR(kTestBlockSize, 0.0);
+
+  GenerateSineWave(inputL, 440.0, kTestSampleRate, 0.5);
+  GenerateSineWave(inputR, 440.0, kTestSampleRate, 0.5);
+
+  double* inputs[2] = {inputL.data(), inputR.data()};
+  double* outputs[2] = {outputL.data(), outputR.data()};
+
+  // Process first block
+  std::cout << "\nProcessing block 1...\n";
+  
+  // Print input signal characteristics
+  auto inputAnalysis = AnalyzeSignal(inputL);
+  std::cout << "  Input signal: Peak=" << inputAnalysis.peakValue 
+            << ", RMS=" << inputAnalysis.rmsValue
+            << ", AllZeros=" << (inputAnalysis.isAllZeros ? "Y" : "N") << "\n";
+  
+  dsp.Process(reinterpret_cast<iplug::sample**>(inputs), reinterpret_cast<iplug::sample**>(outputs), kTestBlockSize);
+
+  auto analysis1 = AnalyzeSignal(outputL);
+  std::cout << "  Block 1: Peak=" << std::scientific << analysis1.peakValue << std::defaultfloat
+            << ", NaN=" << (analysis1.hasNaN ? "Y" : "N")
+            << ", Inf=" << (analysis1.hasInf ? "Y" : "N") << "\n";
+
+  // Check first few samples
+  std::cout << "  First 20 samples: ";
+  for (int i = 0; i < std::min(20, kTestBlockSize); ++i)
+  {
+    if (std::isnan(outputL[i]))
+      std::cout << "NaN";
+    else
+      std::cout << outputL[i];
+    if (i < 19) std::cout << ", ";
+  }
+  std::cout << "\n";
+  
+  // Find where NaN appears
+  if (analysis1.hasNaN)
+  {
+    for (int i = 0; i < kTestBlockSize; ++i)
+    {
+      if (std::isnan(outputL[i]))
+      {
+        std::cout << "  First NaN at sample index " << i << "\n";
+        break;
+      }
+    }
+  }
+
+  if (analysis1.hasNaN || analysis1.hasInf)
+  {
+    std::cout << "FAIL: NaN or Inf detected on FIRST block\n";
+    
+    // Try to understand WHY - check if model loaded
+    std::cout << "\nDebug: Checking nodes in graph...\n";
+    const auto& graph = presetOpt->graph;
+    for (const auto& node : graph.nodes)
+    {
+      std::cout << "  Node " << node.id << " (type=" << node.type << ")";
+      if (node.resource.has_value())
+      {
+        std::cout << " hasResource=YES";
+      }
+      else
+      {
+        std::cout << " hasResource=NO";
+      }
+      std::cout << "\n";
+    }
+    
+    return false;
+  }
+
+  // Process second block
+  std::fill(outputL.begin(), outputL.end(), 0.0);
+  std::fill(outputR.begin(), outputR.end(), 0.0);
+  
+  std::cout << "\nProcessing block 2...\n";
+  dsp.Process(reinterpret_cast<iplug::sample**>(inputs), reinterpret_cast<iplug::sample**>(outputs), kTestBlockSize);
+
+  auto analysis2 = AnalyzeSignal(outputL);
+  std::cout << "  Block 2: Peak=" << std::scientific << analysis2.peakValue << std::defaultfloat
+            << ", NaN=" << (analysis2.hasNaN ? "Y" : "N")
+            << ", Inf=" << (analysis2.hasInf ? "Y" : "N") << "\n";
+
+  // Check first few samples
+  std::cout << "  First 10 samples: ";
+  for (int i = 0; i < 10; ++i)
+  {
+    std::cout << outputL[i];
+    if (i < 9) std::cout << ", ";
+  }
+  std::cout << "\n";
+
+  if (analysis2.hasNaN || analysis2.hasInf)
+  {
+    std::cout << "FAIL: NaN or Inf detected on SECOND block\n";
+    return false;
+  }
+
+  std::cout << "\nPASS: Modern Metal isolation test passed\n";
+  return true;
+}
+
 } // namespace
 
 // ============================================================================
@@ -594,6 +1743,38 @@ int main()
   {
     const fs::path resourcesDir = fs::path(GUITARFX_TEST_RESOURCES_DIR);
     const fs::path dataDir = resourcesDir / "ui" / "data";
+
+    // Run diagnostic tests first
+    if (!TestSimpleNAMProcessing(resourcesDir))
+    {
+      std::cerr << "\nSimple NAM test failed\n";
+      return 1;
+    }
+
+    if (!TestSimpleNAMWithIR(resourcesDir))
+    {
+      std::cerr << "\nSimple NAM+IR test failed\n";
+      return 1;
+    }
+
+    if (!TestProgressiveNodeEnabling(resourcesDir))
+    {
+      std::cerr << "\nProgressive node test failed\n";
+      return 1;
+    }
+
+    if (!TestSinglePresetIsolation(resourcesDir))
+    {
+      std::cerr << "\nSingle preset isolation test failed\n";
+      return 1;
+    }
+
+    // Run Modern Metal specific test (temporarily disabled to see full test results)
+    // if (!TestModernMetalIsolation(resourcesDir))
+    // {
+    //   std::cerr << "\nModern Metal isolation test failed\n";
+    //   return 1;
+    // }
 
     std::vector<std::string> errors;
     const auto recordError = [&errors](std::string message) {
