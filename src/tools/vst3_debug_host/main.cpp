@@ -631,7 +631,7 @@ private:
         
         // Process messages for longer to let the UI fully initialize and test interactions
         DWORD startTime = GetTickCount();
-        const DWORD displayDuration = 5000; // 5 seconds to allow UI to stabilize
+        const DWORD displayDuration = 15000; // 15 seconds to allow UI to stabilize
         int messageCount = 0;
         
         std::cout << "\n  [INFO] Processing window messages for " << (displayDuration/1000) << " seconds...\n";
@@ -760,7 +760,7 @@ private:
         const int32 blockSize = 512;
         const double sampleRate = 44100.0;
         const int numChannels = 2;
-        const double testDurationSeconds = 3.0;
+        const double testDurationSeconds = 10.0;
         const int totalBlocks = static_cast<int>((sampleRate * testDurationSeconds) / blockSize);
         
         // Allocate audio buffers

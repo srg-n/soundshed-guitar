@@ -557,23 +557,8 @@ namespace guitarfx
     // The base class (WebViewEditorDelegate) provides LoadFile, EnableScroll, etc.
     mEditorInitFunc = [this]()
     {
-      std::cout << "[Plugin] mEditorInitFunc called" << std::endl;
-      
-      // Build path to index.html in resources
-      std::filesystem::path htmlPath = mResourceRoot / "ui" / "index.html";
-      std::cout << "[Plugin] Loading HTML from: " << htmlPath.generic_string() << std::endl;
-      
-      if (std::filesystem::exists(htmlPath))
-      {
-        // LoadFile is provided by WebViewEditorDelegate base class
-        LoadFile(htmlPath.string().c_str(), nullptr);
-        EnableScroll(false);
-        mPendingStateBroadcast = true;
-      }
-      else
-      {
-        std::cerr << "[Plugin] index.html not found at: " << htmlPath.generic_string() << std::endl;
-      }
+      std::cout << "[Plugin] mEditorInitFunc called - delegating to OnUIOpen" << std::endl;
+      OnUIOpen();
     };
 #endif
   }
@@ -885,6 +870,35 @@ namespace guitarfx
     if (mPendingStateBroadcast)
     {
       BroadcastState();
+    }
+  }
+
+  void GuitarFXPlugin::OnUIOpen()
+  {
+    std::cout << "[Plugin] OnUIOpen called - loading WebView content" << std::endl;
+    
+    // Prevent loading HTML multiple times
+    if (mUIContentLoaded)
+    {
+      std::cout << "[Plugin] UI content already loaded, skipping" << std::endl;
+      return;
+    }
+    
+    // Build path to index.html in resources
+    std::filesystem::path htmlPath = mResourceRoot / "ui" / "index.html";
+    std::cout << "[Plugin] Loading HTML from: " << htmlPath.generic_string() << std::endl;
+    
+    if (std::filesystem::exists(htmlPath))
+    {
+      // LoadFile is provided by WebViewEditorDelegate base class
+      LoadFile(htmlPath.string().c_str(), nullptr);
+      EnableScroll(false);
+      mUIContentLoaded = true;
+      mPendingStateBroadcast = true;
+    }
+    else
+    {
+      std::cerr << "[Plugin] index.html not found at: " << htmlPath.generic_string() << std::endl;
     }
   }
 

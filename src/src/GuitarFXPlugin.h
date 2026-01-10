@@ -33,6 +33,7 @@ namespace guitarfx
     void ProcessBlock(iplug::sample **inputs, iplug::sample **outputs, int nFrames) override;
     void OnReset() override;
     void OnIdle() override;
+    void OnUIOpen() override;
     bool SerializeState(iplug::IByteChunk &chunk) const override;
     int UnserializeState(const iplug::IByteChunk &chunk, int startPos) override;
     void OnParamChange(int paramIdx) override;
@@ -209,6 +210,9 @@ namespace guitarfx
     // Mutex to protect DSP state during model/IR loading
     // ProcessBlock (audio thread) and ApplyPreset/LoadModel/LoadIR (UI thread) share mDSP
     mutable std::mutex mDSPMutex;
+    
+    // Flag to prevent loading HTML multiple times
+    bool mUIContentLoaded = false;
   };
 } // namespace guitarfx
 
