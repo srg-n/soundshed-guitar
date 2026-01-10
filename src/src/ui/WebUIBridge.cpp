@@ -162,7 +162,7 @@ void WebUIBridge::Initialize(iplug::igraphics::IGraphics& graphics, const std::f
         }
       },
       true, // enable dev tools
-      false);
+      true);
 
     std::cout << "[WebUI] WebView control created, attaching to graphics" << std::endl;
     std::cout.flush();

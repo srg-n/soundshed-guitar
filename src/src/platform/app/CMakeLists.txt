@@ -9,6 +9,7 @@ endif()
 set(_nam_app_sources
   ../../GuitarFXPlugin.cpp
   ../../../resources/main.rc
+  ../../../resources/app.manifest
   ${iPlug2_SOURCE_DIR}/IPlug/APP/IPlugAPP.cpp
   ${iPlug2_SOURCE_DIR}/IPlug/APP/IPlugAPP_dialog.cpp
   ${iPlug2_SOURCE_DIR}/IPlug/APP/IPlugAPP_host.cpp

@@ -549,9 +549,12 @@ namespace guitarfx
     LoadLastSessionState();
 
 #if PLUG_HAS_UI
+    // Enable WebView developer tools for debugging
     SetEnableDevTools(true);
     
-    // WebViewEditorDelegate pattern: use mEditorInitFunc to load the HTML UI
+    // WebViewEditorDelegate pattern: mEditorInitFunc is called when the editor window is opened.
+    // This is the correct lifecycle point to load HTML content into the WebView.
+    // The base class (WebViewEditorDelegate) provides LoadFile, EnableScroll, etc.
     mEditorInitFunc = [this]()
     {
       std::cout << "[Plugin] mEditorInitFunc called" << std::endl;
@@ -562,6 +565,7 @@ namespace guitarfx
       
       if (std::filesystem::exists(htmlPath))
       {
+        // LoadFile is provided by WebViewEditorDelegate base class
         LoadFile(htmlPath.string().c_str(), nullptr);
         EnableScroll(false);
         mPendingStateBroadcast = true;
@@ -1130,11 +1134,12 @@ namespace guitarfx
   }
 
   // Send a JSON message to the WebView UI
+  // This method uses EvaluateJavaScript (provided by WebViewEditorDelegate) to send
+  // custom JSON messages to the UI. The UI should register window.IPlugReceiveData
+  // to receive these messages.
   void GuitarFXPlugin::SendMessageToUI(const std::string& jsonMessage)
   {
-    // Call the JavaScript handler function in the WebView
-    // The UI registers window.IPlugReceiveData to receive messages as a JSON string
-    // We need to escape the JSON string for JavaScript string literal
+    // Escape the JSON string for embedding in JavaScript code
     std::string escaped;
     escaped.reserve(jsonMessage.size() + 10);
     for (char c : jsonMessage) {
@@ -1147,6 +1152,7 @@ namespace guitarfx
         default: escaped += c; break;
       }
     }
+    // Execute JavaScript to deliver the message to the UI
     std::string jsCode = "if (window.IPlugReceiveData) { window.IPlugReceiveData(\"" + escaped + "\"); }";
     EvaluateJavaScript(jsCode.c_str());
   }
@@ -1181,15 +1187,23 @@ namespace guitarfx
       return;
     }
     
-    // Otherwise, let the base class handle iPlug2 internal messages (SPVFUI, BPCFUI, etc.)
-    iplug::WebViewEditorDelegate::OnMessageFromWebView(jsonStr);
+    // Otherwise, delegate to base class to handle standard iPlug2 protocol messages
+    // (e.g., SPVFUI for parameter changes, BPCFUI for begin/end param changes)
+    // Note: iplug::Plugin is a typedef for the API-specific base class (IPlugAPP, IPlugVST3, etc.)
+    // which inherits from WebViewEditorDelegate when WEBVIEW_EDITOR_DELEGATE is defined
+    iplug::Plugin::OnMessageFromWebView(jsonStr);
   }
 
-  // Handle messages from the WebView via OnMessage callback
-  // The WebViewEditorDelegate calls this for arbitrary messages (SAMFUI from JS)
+  // Handle arbitrary messages from the WebView via OnMessage callback.
+  // 
+  // This is called by WebViewEditorDelegate when JavaScript sends messages via
+  // the SAMFUI (Send Arbitrary Msg From UI) protocol. This is an alternative to
+  // OnMessageFromWebView for sending non-parameter data.
+  // 
+  // By convention, msgTag == -1 indicates a JSON message sent via SendArbitraryMsgFromUI.
   bool GuitarFXPlugin::OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData)
   {
-    // msgTag == -1 means this is a JSON message from SendArbitraryMsgFromUI
+    // Check if this is a JSON message from the UI
     if (msgTag == -1 && dataSize > 0 && pData != nullptr)
     {
       std::string message(reinterpret_cast<const char*>(pData), dataSize);

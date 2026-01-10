@@ -105,3 +105,8 @@ BEGIN
     "\0"
 END
 #endif
+
+// Application manifest for DPI awareness
+#ifndef RC_INVOKED
+1 RT_MANIFEST "app.manifest"
+#endif
