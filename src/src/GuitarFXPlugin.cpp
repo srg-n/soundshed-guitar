@@ -32,6 +32,10 @@
 #include "dsp/AmpModelManager.h"
 #include "presets/PresetStorage.h"
 
+#ifdef _WIN32
+#include "platform/WebViewDPIHelper_win.h"
+#endif
+
 namespace guitarfx
 {
   namespace
@@ -883,6 +887,14 @@ namespace guitarfx
       std::cout << "[Plugin] UI content already loaded, skipping" << std::endl;
       return;
     }
+    
+    // Check and log DPI information (Windows only)
+#ifdef _WIN32
+    if (mView) // mView is the window handle from WebViewEditorDelegate
+    {
+      SetWebViewDPIScale(mView);
+    }
+#endif
     
     // Build path to index.html in resources
     std::filesystem::path htmlPath = mResourceRoot / "ui" / "index.html";

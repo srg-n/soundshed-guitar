@@ -75,6 +75,10 @@ set(_guitarfx_core_sources
   util/FileSystem.cpp
   util/FileSystem.h
   
+  # Platform-specific helpers
+  $<$<PLATFORM_ID:Windows>:platform/WebViewDPIHelper_win.cpp>
+  $<$<PLATFORM_ID:Windows>:platform/WebViewDPIHelper_win.h>
+  
   ${_nam_dsp_sources}
 )
 
