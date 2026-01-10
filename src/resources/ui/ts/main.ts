@@ -12,6 +12,8 @@ import { handleIncomingMessage } from "./messages.js";
 import { requestSignalPathTest } from "./presets.js";
 import { initializeTuner } from "./tuner.js";
 import { initFxSelector } from "./fxSelector.js";
+import { themeSwitcher } from "./theme-switcher.js";
+import { initializeThemeSwitcherIcons } from "./theme-switcher-ui.js";
 
 const tabButtons = Array.from(document.querySelectorAll(".tab-button"));
 const tabPanels = Array.from(document.querySelectorAll(".tab-panel"));
@@ -70,6 +72,13 @@ async function bootstrap(): Promise<void> {
       }
     });
   });
+
+  // Initialize theme switcher
+  themeSwitcher; // Ensure singleton is created
+  console.log("[JS] Theme switcher initialized:", themeSwitcher.getCurrentTheme());
+  
+  // Add theme switcher UI to icon bar
+  initializeThemeSwitcherIcons();
 
   activateTab("details");
   initializeControls();

@@ -69,7 +69,7 @@
 }
 
 .fx-selector-search input:focus {
-  border-color: #e07848;
+  border-color: var(--color-primary);
 }
 
 .fx-selector-search input::placeholder {
@@ -121,7 +121,7 @@
 
 .fx-category.active {
   background: linear-gradient(90deg, rgba(224, 120, 72, 0.15) 0%, transparent 100%);
-  border-left-color: var(--category-color, #e07848);
+  border-left-color: var(--category-color, var(--color-primary));
 }
 
 .fx-category-icon {
@@ -133,7 +133,7 @@
   flex: 1;
   font-size: 11px;
   font-weight: 600;
-  color: #a0a0b0;
+  color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -153,7 +153,7 @@
 
 .fx-category.active .fx-category-count {
   background: rgba(224, 120, 72, 0.2);
-  color: #e07848;
+  color: var(--color-primary);
 }
 
 /* FX Item Card */
@@ -174,9 +174,9 @@
 
 .fx-item:hover {
   background: linear-gradient(180deg, #44444e 0%, #38384a 100%);
-  border-color: #5a5a68;
+  border-color: var(--text-secondary);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 12px var(--overlay-darker);
 }
 
 .fx-item:active {

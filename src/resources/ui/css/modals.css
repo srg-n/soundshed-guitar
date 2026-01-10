@@ -15,7 +15,7 @@
 }
 
 .modal-content {
-  background: linear-gradient(180deg, #e8ecf4 0%, #d0d4dc 100%);
+  background: linear-gradient(180deg, #e8ecf4 0%, var(--bg-secondary) 100%);
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   width: 400px;
@@ -36,7 +36,7 @@
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #3a3a40;
+  color: var(--text-primary);
 }
 
 .modal-close {
@@ -52,8 +52,8 @@
 }
 
 .modal-close:hover {
-  background: rgba(0, 0, 0, 0.1);
-  color: #3a3a40;
+  background: var(--overlay-dark);
+  color: var(--text-primary);
 }
 
 .modal-body {
@@ -65,8 +65,8 @@
   justify-content: flex-end;
   gap: 12px;
   padding: 16px 20px;
-  background: linear-gradient(180deg, #d8dce4 0%, #c8ccd4 100%);
-  border-top: 1px solid #b8bcc4;
+  background: linear-gradient(180deg, #d8dce4 0%, var(--bg-tertiary) 100%);
+  border-top: 1px solid var(--bg-tertiary);
 }
 
 /* Tuner Modal */
@@ -75,7 +75,7 @@
 }
 
 .tuner-modal .tuner-content {
-  background: #3a3a40;
+  background: var(--text-primary);
   border-radius: 12px;
   width: 520px;
   max-width: 95vw;
@@ -89,8 +89,8 @@
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  background: #2a2a30;
-  border-bottom: 1px solid #4a4a50;
+  background: var(--text-dark-primary);
+  border-bottom: 1px solid var(--text-primary);
 }
 
 .tuner-title {
@@ -122,7 +122,7 @@
 }
 
 .tuner-mute-btn.muted {
-  color: #e07848;
+  color: var(--color-primary);
 }
 
 .tuner-close-btn {
@@ -142,7 +142,7 @@
 
 .tuner-display {
   padding: 30px 20px;
-  background: #3a3a40;
+  background: var(--text-primary);
 }
 
 .tuner-cents-display {
@@ -160,7 +160,7 @@
 }
 
 .cents-indicator {
-  color: #e07848;
+  color: var(--color-primary);
   font-size: 18px;
   font-weight: bold;
   animation: pulse 1s ease-in-out infinite;
@@ -204,7 +204,7 @@
   height: 60px;
   border-radius: 50%;
   background: #e05040;
-  border: 3px solid #2a2a30;
+  border: 3px solid var(--text-dark-primary);
   left: 50%;
   transform: translateX(-50%);
   transition: left 0.15s ease-out, background-color 0.2s;
@@ -262,8 +262,8 @@
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  background: #2a2a30;
-  border-top: 1px solid #4a4a50;
+  background: var(--text-dark-primary);
+  border-top: 1px solid var(--text-primary);
 }
 
 .tuner-control-group {
@@ -292,9 +292,9 @@
 }
 
 .tuner-unit-btn.active {
-  background: #4a4a50;
+  background: var(--text-primary);
   color: #e8e8ec;
-  border-color: #4a4a50;
+  border-color: var(--text-primary);
 }
 
 .tuner-unit-btn:hover:not(.active) {
@@ -320,7 +320,7 @@
   padding: 6px 8px;
   border: 1px solid #5a5a60;
   border-radius: 6px 0 0 6px;
-  background: #3a3a40;
+  background: var(--text-primary);
   color: #e8e8ec;
   font-size: 14px;
   text-align: center;
@@ -329,7 +329,7 @@
 
 .tuner-ref-input:focus {
   outline: none;
-  border-color: #e07848;
+  border-color: var(--color-primary);
 }
 
 .tuner-ref-buttons {
@@ -341,7 +341,7 @@
   padding: 2px 8px;
   border: 1px solid #5a5a60;
   border-left: none;
-  background: #4a4a50;
+  background: var(--text-primary);
   color: #a8a8b0;
   font-size: 8px;
   cursor: pointer;
