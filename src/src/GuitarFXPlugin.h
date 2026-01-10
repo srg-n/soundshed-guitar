@@ -120,10 +120,14 @@ namespace guitarfx
     void HandleTunerRequest(const nlohmann::json &payload);
     void HandleSetInputModeRequest(const nlohmann::json &payload);
     void HandleSetAmpCabStateRequest(const nlohmann::json &payload);
-    void HandleUpdateNodeParamRequest(const nlohmann::json &payload);
-    void HandleUpdateNodeBypassRequest(const nlohmann::json &payload);
+    void HandleUpdateSignalPathNodeParamRequest(const nlohmann::json &payload);
+    void HandleUpdateSignalPathNodeBypassRequest(const nlohmann::json &payload);
     void HandleUpdateNodeResourceRequest(const nlohmann::json &payload);
     void HandleBrowseNodeResourceRequest(const nlohmann::json &payload);
+    void HandleAddSignalPathNodeRequest(const nlohmann::json &payload);
+    void HandleReplaceSignalPathNodeRequest(const nlohmann::json &payload);
+    void HandleReorderSignalPathNodeRequest(const nlohmann::json &payload);
+    void HandleDeleteSignalPathNodeRequest(const nlohmann::json &payload);
     void BroadcastState();
     void ApplyPreset(const guitarfx::Preset &preset);
     void ApplyNodeParameter(const guitarfx::GraphNode& node, const std::string& paramKey, double value);

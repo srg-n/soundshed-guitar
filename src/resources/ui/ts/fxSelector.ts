@@ -163,7 +163,7 @@ function renderFxItem(effect: EffectTypeInfo, categoryColor: string): string {
          data-effect-type="${effect.type}" 
          draggable="true"
          style="--category-color: ${categoryColor}">
-      <div class="fx-item-icEffectsListffectIcon(effect.type)}</div>
+      <div class="fx-item-icon">${getEffectIcon(effect.type)}</div>
       <div class="fx-item-info">
         <div class="fx-item-name">${effect.displayName}</div>
         <div class="fx-item-type">${effect.type}</div>
@@ -177,7 +177,7 @@ function renderFxItem(effect: EffectTypeInfo, categoryColor: string): string {
  * Bind drag event handlers to all FX items.
  */
 function bindFxItemDragHandlers(): void {
-  const fxItems = fxSelectorCategories?.querySelectorAll(".fx-item");
+  const fxItems = fxSelectorEffectsList?.querySelectorAll(".fx-item");
   if (!fxItems) return;
 
   fxItems.forEach((item) => {
@@ -257,11 +257,11 @@ function getEffectIcon(effectType: string): string {
 }
 
 /**
- * Send message to add a node at a specific position.
+ * Send message to add a signal path node at a specific position.
  */
-export function sendAddNode(effectType: string, insertAfter: string): void {
+export function sendAddSignalPathNode(effectType: string, insertAfter: string): void {
   postMessage({
-    type: "addNode",
+    type: "addSignalPathNode",
     effectType,
     insertAfter,
   });

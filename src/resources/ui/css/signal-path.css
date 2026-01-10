@@ -213,6 +213,9 @@
   border-radius: 2px;
   flex-shrink: 0;
   position: relative;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  padding: 8px 0; /* Increase drop zone area */
 }
 
 .signal-connector::after {
@@ -224,6 +227,17 @@
   border-left: 5px solid var(--text-secondary);
   border-top: 4px solid transparent;
   border-bottom: 4px solid transparent;
+}
+
+.signal-connector.drag-over {
+  height: 5px;
+  background: linear-gradient(90deg, #48e078, #78f0a8, #48e078);
+  box-shadow: 0 0 12px rgba(72, 224, 120, 0.6);
+}
+
+.signal-connector.drag-over::after {
+  border-left-color: #48e078;
+  filter: drop-shadow(0 0 4px rgba(72, 224, 120, 0.8));
 }
 
 .signal-graph-container {

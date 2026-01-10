@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -24,6 +25,7 @@
 
 #include "config.h"
 #include "dsp/IRTypes.h"
+#include "dsp/EffectRegistry.h"
 #include "resources/ResourceLibrary.h"
 #include "IPlug_include_in_plug_src.h"
 #include "IPlugPaths.h"
@@ -1321,13 +1323,13 @@ namespace guitarfx
     {
       HandleSetAmpCabStateRequest(payload);
     }
-    else if (type == "updateNodeParam")
+    else if (type == "updateSignalPathNodeParam")
     {
-      HandleUpdateNodeParamRequest(payload);
+      HandleUpdateSignalPathNodeParamRequest(payload);
     }
-    else if (type == "updateNodeBypass")
+    else if (type == "updateSignalPathNodeBypass")
     {
-      HandleUpdateNodeBypassRequest(payload);
+      HandleUpdateSignalPathNodeBypassRequest(payload);
     }
     else if (type == "updateNodeResource")
     {
@@ -1336,6 +1338,22 @@ namespace guitarfx
     else if (type == "browseNodeResource")
     {
       HandleBrowseNodeResourceRequest(payload);
+    }
+    else if (type == "addSignalPathNode")
+    {
+      HandleAddSignalPathNodeRequest(payload);
+    }
+    else if (type == "replaceSignalPathNode")
+    {
+      HandleReplaceSignalPathNodeRequest(payload);
+    }
+    else if (type == "reorderSignalPathNode")
+    {
+      HandleReorderSignalPathNodeRequest(payload);
+    }
+    else if (type == "deleteSignalPathNode")
+    {
+      HandleDeleteSignalPathNodeRequest(payload);
     }
   }
 
@@ -2215,7 +2233,7 @@ namespace guitarfx
     }
   }
 
-  void GuitarFXPlugin::HandleUpdateNodeParamRequest(const nlohmann::json &payload)
+  void GuitarFXPlugin::HandleUpdateSignalPathNodeParamRequest(const nlohmann::json &payload)
   {
     const std::string nodeId = payload.value("nodeId", "");
     const std::string paramKey = payload.value("paramKey", "");
@@ -2355,7 +2373,7 @@ namespace guitarfx
     }
   }
 
-  void GuitarFXPlugin::HandleUpdateNodeBypassRequest(const nlohmann::json &payload)
+  void GuitarFXPlugin::HandleUpdateSignalPathNodeBypassRequest(const nlohmann::json &payload)
   {
     const std::string nodeId = payload.value("nodeId", "");
     const bool bypassed = payload.value("bypassed", false);
@@ -3115,6 +3133,283 @@ namespace guitarfx
 
     mPendingStateBroadcast = true;
     std::cout << "[Plugin] Last session state restored" << std::endl;
+  }
+
+  void GuitarFXPlugin::HandleAddSignalPathNodeRequest(const nlohmann::json &payload)
+  {
+    const std::string effectType = payload.value("effectType", "");
+    const std::string insertAfter = payload.value("insertAfter", "");
+
+    if (effectType.empty() || insertAfter.empty())
+    {
+      ReportErrorToUI("Add node failed", "Missing effectType or insertAfter parameter");
+      return;
+    }
+
+    if (!mActivePreset)
+    {
+      ReportErrorToUI("Add node failed", "No active preset");
+      return;
+    }
+
+    // Create new node with default parameters
+    GraphNode newNode;
+    newNode.id = effectType + "_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
+    newNode.type = effectType;
+    newNode.enabled = true;
+
+    // Get effect info from registry to set category and display name
+    const auto effectInfoOpt = EffectRegistry::Instance().GetTypeInfo(effectType);
+    if (effectInfoOpt)
+    {
+      const auto& effectInfo = *effectInfoOpt;
+      newNode.category = effectInfo.category;
+      newNode.label = effectInfo.displayName;
+      
+      // Set default parameter values
+      for (const auto& paramDef : effectInfo.parameters)
+      {
+        newNode.params[paramDef.id] = paramDef.defaultValue;
+      }
+    }
+    else
+    {
+      newNode.category = "utility";
+      newNode.label = effectType;
+    }
+
+    // Find the edge to split
+    auto& edges = mActivePreset->graph.edges;
+    auto edgeIt = std::find_if(edges.begin(), edges.end(), 
+      [&insertAfter](const GraphEdge& e) { return e.from == insertAfter; });
+
+    if (edgeIt == edges.end())
+    {
+      ReportErrorToUI("Add node failed", "Could not find edge after node: " + insertAfter);
+      return;
+    }
+
+    std::string nextNodeId = edgeIt->to;
+
+    // Update existing edge to point to new node
+    edgeIt->to = newNode.id;
+
+    // Add new edge from new node to next node
+    GraphEdge newEdge;
+    newEdge.from = newNode.id;
+    newEdge.to = nextNodeId;
+    newEdge.fromPort = 0;
+    newEdge.toPort = 0;
+    newEdge.gain = 1.0;
+    edges.push_back(newEdge);
+
+    // Add the node
+    mActivePreset->graph.nodes.push_back(newNode);
+
+    // Re-serialize and broadcast
+    mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+    ApplyPreset(*mActivePreset);
+    BroadcastState();
+
+    std::cout << "[Plugin] Added node: " << newNode.id << " (" << effectType << ") after " << insertAfter << std::endl;
+  }
+
+  void GuitarFXPlugin::HandleReplaceSignalPathNodeRequest(const nlohmann::json &payload)
+  {
+    const std::string nodeId = payload.value("nodeId", "");
+    const std::string newEffectType = payload.value("newEffectType", "");
+
+    if (nodeId.empty() || newEffectType.empty())
+    {
+      ReportErrorToUI("Replace node failed", "Missing nodeId or newEffectType parameter");
+      return;
+    }
+
+    if (!mActivePreset)
+    {
+      ReportErrorToUI("Replace node failed", "No active preset");
+      return;
+    }
+
+    // Find the node
+    GraphNode* node = mActivePreset->graph.FindNode(nodeId);
+    if (!node)
+    {
+      ReportErrorToUI("Replace node failed", "Node not found: " + nodeId);
+      return;
+    }
+
+    // Get old and new effect info
+    const auto oldEffectInfoOpt = EffectRegistry::Instance().GetTypeInfo(node->type);
+    const auto newEffectInfoOpt = EffectRegistry::Instance().GetTypeInfo(newEffectType);
+
+    if (!newEffectInfoOpt)
+    {
+      ReportErrorToUI("Replace node failed", "Unknown effect type: " + newEffectType);
+      return;
+    }
+
+    const auto& newEffectInfo = *newEffectInfoOpt;
+
+    // Verify same category (safety check)
+    if (oldEffectInfoOpt && oldEffectInfoOpt->category != newEffectInfo.category)
+    {
+      ReportErrorToUI("Replace node failed", "Cannot replace effect with different category");
+      return;
+    }
+
+    // Replace the node's type and reset parameters
+    node->type = newEffectType;
+    node->label = newEffectInfo.displayName;
+    node->category = newEffectInfo.category;
+    node->params.clear();
+    node->resource.reset();
+
+    // Set default parameter values for new effect type
+    for (const auto& paramDef : newEffectInfo.parameters)
+    {
+      node->params[paramDef.id] = paramDef.defaultValue;
+    }
+
+    // Re-serialize and broadcast
+    mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+    ApplyPreset(*mActivePreset);
+    BroadcastState();
+
+    std::cout << "[Plugin] Replaced node: " << nodeId << " with " << newEffectType << std::endl;
+  }
+
+  void GuitarFXPlugin::HandleReorderSignalPathNodeRequest(const nlohmann::json &payload)
+  {
+    const std::string nodeId = payload.value("nodeId", "");
+    const std::string targetNodeId = payload.value("targetNodeId", "");
+
+    if (nodeId.empty() || targetNodeId.empty() || nodeId == targetNodeId)
+    {
+      return;
+    }
+
+    if (!mActivePreset)
+    {
+      ReportErrorToUI("Reorder node failed", "No active preset");
+      return;
+    }
+
+    // Find both nodes
+    const GraphNode* node = mActivePreset->graph.FindNode(nodeId);
+    const GraphNode* targetNode = mActivePreset->graph.FindNode(targetNodeId);
+
+    if (!node || !targetNode)
+    {
+      ReportErrorToUI("Reorder node failed", "Node not found");
+      return;
+    }
+
+    auto& edges = mActivePreset->graph.edges;
+
+    // Find edges connected to the moving node
+    auto incomingEdgeIt = std::find_if(edges.begin(), edges.end(),
+      [&nodeId](const GraphEdge& e) { return e.to == nodeId; });
+    auto outgoingEdgeIt = std::find_if(edges.begin(), edges.end(),
+      [&nodeId](const GraphEdge& e) { return e.from == nodeId; });
+
+    if (incomingEdgeIt == edges.end() || outgoingEdgeIt == edges.end())
+    {
+      ReportErrorToUI("Reorder node failed", "Missing edges");
+      return;
+    }
+
+    std::string prevNodeId = incomingEdgeIt->from;
+    std::string nextNodeId = outgoingEdgeIt->to;
+
+    // Reconnect around the moving node
+    incomingEdgeIt->to = nextNodeId;
+    edges.erase(outgoingEdgeIt);
+
+    // Find edge after target node
+    auto targetOutgoingIt = std::find_if(edges.begin(), edges.end(),
+      [&targetNodeId](const GraphEdge& e) { return e.from == targetNodeId; });
+
+    if (targetOutgoingIt == edges.end())
+    {
+      ReportErrorToUI("Reorder node failed", "Cannot find target position");
+      return;
+    }
+
+    std::string afterTargetNodeId = targetOutgoingIt->to;
+
+    // Insert node after target
+    targetOutgoingIt->to = nodeId;
+
+    GraphEdge newEdge;
+    newEdge.from = nodeId;
+    newEdge.to = afterTargetNodeId;
+    newEdge.fromPort = 0;
+    newEdge.toPort = 0;
+    newEdge.gain = 1.0;
+    edges.push_back(newEdge);
+
+    // Re-serialize and broadcast
+    mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+    ApplyPreset(*mActivePreset);
+    BroadcastState();
+
+    std::cout << "[Plugin] Reordered node: " << nodeId << " after " << targetNodeId << std::endl;
+  }
+
+  void GuitarFXPlugin::HandleDeleteSignalPathNodeRequest(const nlohmann::json &payload)
+  {
+    const std::string nodeId = payload.value("nodeId", "");
+
+    if (nodeId.empty())
+    {
+      return;
+    }
+
+    if (!mActivePreset)
+    {
+      ReportErrorToUI("Delete node failed", "No active preset");
+      return;
+    }
+
+    // Find the node
+    const GraphNode* node = mActivePreset->graph.FindNode(nodeId);
+    if (!node)
+    {
+      ReportErrorToUI("Delete node failed", "Node not found: " + nodeId);
+      return;
+    }
+
+    auto& edges = mActivePreset->graph.edges;
+    auto& nodes = mActivePreset->graph.nodes;
+
+    // Find incoming and outgoing edges
+    auto incomingEdgeIt = std::find_if(edges.begin(), edges.end(),
+      [&nodeId](const GraphEdge& e) { return e.to == nodeId; });
+    auto outgoingEdgeIt = std::find_if(edges.begin(), edges.end(),
+      [&nodeId](const GraphEdge& e) { return e.from == nodeId; });
+
+    if (incomingEdgeIt == edges.end() || outgoingEdgeIt == edges.end())
+    {
+      ReportErrorToUI("Delete node failed", "Missing edges");
+      return;
+    }
+
+    // Reconnect around deleted node
+    std::string nextNodeId = outgoingEdgeIt->to;
+    incomingEdgeIt->to = nextNodeId;
+
+    // Remove outgoing edge and node
+    edges.erase(outgoingEdgeIt);
+    nodes.erase(std::remove_if(nodes.begin(), nodes.end(),
+      [&nodeId](const GraphNode& n) { return n.id == nodeId; }), nodes.end());
+
+    // Re-serialize and broadcast
+    mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+    ApplyPreset(*mActivePreset);
+    BroadcastState();
+
+    std::cout << "[Plugin] Deleted node: " << nodeId << std::endl;
   }
 
 } // namespace guitarfx
