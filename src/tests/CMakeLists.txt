@@ -21,6 +21,25 @@ target_compile_definitions(GuitarFX_PresetTests
 
 add_test(NAME DefaultPresetIntegrityTests COMMAND GuitarFX_PresetTests)
 
+# Effect Processor Test - verifies that each effect processor can process audio
+add_executable(GuitarFX_EffectProcessorTests
+  EffectProcessorTests.cpp
+)
+
+target_include_directories(GuitarFX_EffectProcessorTests
+  PRIVATE
+    ${GUITARFX_PROJECT_ROOT}/src
+)
+
+target_link_libraries(GuitarFX_EffectProcessorTests
+  PRIVATE
+    GuitarFXCore
+)
+
+target_compile_features(GuitarFX_EffectProcessorTests PRIVATE cxx_std_20)
+
+add_test(NAME EffectProcessorTests COMMAND GuitarFX_EffectProcessorTests)
+
 # DSP Loading Test - verifies that each preset can load its model and IR into the DSP manager
 add_executable(GuitarFX_DSPLoadingTests
   PresetDSPLoadingTests.cpp
