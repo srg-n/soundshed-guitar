@@ -5,7 +5,10 @@
 #include "NAM/dsp.h"
 #include "NAM/get_dsp.h"
 #include <filesystem>
+#include <algorithm>
 #include <memory>
+#include <optional>
+#include <string>
 #include <vector>
 #include <cmath>
 
@@ -102,21 +105,39 @@ namespace guitarfx
     void SetParam(const std::string &key, double value) override
     {
       if (key == "inputGain")
-        mInputGain = std::pow(10.0, std::clamp(value, -24.0, 24.0) / 20.0);
+      {
+        mUserInputGain = std::pow(10.0, std::clamp(value, -24.0, 24.0) / 20.0);
+        UpdateEffectiveGains();
+      }
       else if (key == "outputGain")
-        mOutputGain = std::pow(10.0, std::clamp(value, -24.0, 24.0) / 20.0);
+      {
+        mUserOutputGain = std::pow(10.0, std::clamp(value, -24.0, 24.0) / 20.0);
+        UpdateEffectiveGains();
+      }
       else if (key == "enabled")
         mEnabled = value > 0.5;
     }
 
-    void SetConfig(const std::string &, const std::string &) override {}
+    void SetConfig(const std::string &key, const std::string &value) override
+    {
+      if (key == "autoLevelInput")
+      {
+        mAutoLevelInput = ParseBool(value);
+        RecalculateAutoGains();
+      }
+      else if (key == "autoLevelOutput")
+      {
+        mAutoLevelOutput = ParseBool(value);
+        RecalculateAutoGains();
+      }
+    }
 
     [[nodiscard]] double GetParam(const std::string &key) const override
     {
       if (key == "inputGain")
-        return 20.0 * std::log10(mInputGain);
+        return 20.0 * std::log10(mUserInputGain);
       if (key == "outputGain")
-        return 20.0 * std::log10(mOutputGain);
+        return 20.0 * std::log10(mUserOutputGain);
       if (key == "enabled")
         return mEnabled ? 1.0 : 0.0;
       return 0.0;
@@ -133,6 +154,14 @@ namespace guitarfx
         model->Reset(mSampleRate, mMaxBlockSize);
         mModel = std::move(model);
         mModelPath = resourcePath;
+
+        if (mModel)
+        {
+          mModelInputLevel = mModel->HasInputLevel() ? std::optional<double>(mModel->GetInputLevel()) : std::nullopt;
+          mModelOutputLevel = mModel->HasOutputLevel() ? std::optional<double>(mModel->GetOutputLevel()) : std::nullopt;
+          mModelLoudness = mModel->HasLoudness() ? std::optional<double>(mModel->GetLoudness()) : std::nullopt;
+          RecalculateAutoGains();
+        }
         return true;
       }
       catch (...)
@@ -154,9 +183,60 @@ namespace guitarfx
     std::vector<NAM_SAMPLE> mInputBuffer;
     std::vector<NAM_SAMPLE> mOutputBuffer;
 
+    double mUserInputGain = 1.0;
+    double mUserOutputGain = 1.0;
+    double mAutoInputGain = 1.0;
+    double mAutoOutputGain = 1.0;
     double mInputGain = 1.0;
     double mOutputGain = 1.0;
+    bool mAutoLevelInput = false;
+    bool mAutoLevelOutput = false;
+    std::optional<double> mModelInputLevel;
+    std::optional<double> mModelOutputLevel;
+    std::optional<double> mModelLoudness;
     bool mEnabled = true;
+
+    void UpdateEffectiveGains()
+    {
+      mInputGain = mUserInputGain * mAutoInputGain;
+      mOutputGain = mUserOutputGain * mAutoOutputGain;
+    }
+
+    void RecalculateAutoGains()
+    {
+      static constexpr double kTargetInputLeveldBu = -18.0;
+      static constexpr double kTargetOutputLeveldB = -18.0;
+
+      mAutoInputGain = 1.0;
+      mAutoOutputGain = 1.0;
+
+      if (mAutoLevelInput && mModelInputLevel.has_value())
+      {
+        const double deltaDb = std::clamp(kTargetInputLeveldBu - *mModelInputLevel, -24.0, 24.0);
+        mAutoInputGain = std::pow(10.0, deltaDb / 20.0);
+      }
+
+      if (mAutoLevelOutput)
+      {
+        if (mModelOutputLevel.has_value())
+        {
+          const double deltaDb = std::clamp(kTargetOutputLeveldB - *mModelOutputLevel, -24.0, 24.0);
+          mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
+        }
+        else if (mModelLoudness.has_value())
+        {
+          const double deltaDb = std::clamp(kTargetOutputLeveldB - *mModelLoudness, -24.0, 24.0);
+          mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
+        }
+      }
+
+      UpdateEffectiveGains();
+    }
+
+    static bool ParseBool(const std::string &value)
+    {
+      return value == "1" || value == "true" || value == "True" || value == "TRUE";
+    }
   };
 
   inline void RegisterNAMAmpEffect()

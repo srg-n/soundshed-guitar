@@ -1,6 +1,6 @@
 import { uiState, clonePreset } from "./state.js";
 import { renderActivePreset, applyPresetFromLibrary, populatePresetDropdown, updatePresetDropdownSelection, savePresetToLocalStorage, updatePresetActionButtons } from "./presets.js";
-import { syncControlsFromState, handleInputModeChanged, handleAmpCabStateChanged } from "./controls.js";
+import { syncControlsFromState, handleInputModeChanged, handleAmpCabStateChanged, syncAutoLevelControlsFromState } from "./controls.js";
 import { showNotification } from "./notifications.js";
 import { appendLog } from "./logging.js";
 import { previewSelectedDemoAudio } from "./demoAudio.js";
@@ -226,6 +226,27 @@ export function handleIncomingMessage(message: string): void {
         statePayload.cabEnabled ?? true
       );
       appendLog(`Amp: ${statePayload.ampEnabled ? "ON" : "OFF"}, Cab: ${statePayload.cabEnabled ? "ON" : "OFF"}`);
+      break;
+    }
+    case "autoLevelChanged": {
+      const autoPayload = payload as { autoInput?: boolean; autoOutput?: boolean };
+      const activeId = uiState.activePresetId ?? "";
+      const preset = uiState.presetCache.get(activeId) as any;
+      if (preset) {
+        const globals = preset.globals ?? preset.global ?? {};
+        const merged = {
+          inputTrim: globals.inputTrim ?? 0,
+          outputTrim: globals.outputTrim ?? 0,
+          masterVolume: globals.masterVolume ?? globals.outputVolume ?? 1,
+          autoLevelInput: autoPayload.autoInput ?? globals.autoLevelInput ?? false,
+          autoLevelOutput: autoPayload.autoOutput ?? globals.autoLevelOutput ?? false,
+          transpose: globals.transpose ?? 0,
+        };
+        preset.globals = merged;
+        preset.global = merged;
+        uiState.presetCache.set(activeId, preset);
+      }
+      syncAutoLevelControlsFromState();
       break;
     }
     default:

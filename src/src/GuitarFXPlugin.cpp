@@ -1636,6 +1636,10 @@ namespace guitarfx
     {
       HandleSetAmpCabStateRequest(payload);
     }
+    else if (type == "setAutoLevel")
+    {
+      HandleSetAutoLevelRequest(payload);
+    }
     else if (type == "updateSignalPathNodeParam")
     {
       HandleUpdateSignalPathNodeParamRequest(payload);
@@ -1915,6 +1919,10 @@ namespace guitarfx
       outputTrimParam->Set(preset.global.outputTrim);
     }
 
+    // Sync auto-level globals into DSP
+    mDSP->SetAutoLevelInput(preset.global.autoLevelInput);
+    mDSP->SetAutoLevelOutput(preset.global.autoLevelOutput);
+
     auto *transposeParam = GetParam(kParamTranspose);
     if (transposeParam)
     {
@@ -2110,6 +2118,11 @@ namespace guitarfx
     if (auto *param = GetParam(kParamInputTrim)) newPreset.global.inputTrim = param->Value();
     if (auto *param = GetParam(kParamOutputTrim)) newPreset.global.outputTrim = param->Value();
     if (auto *param = GetParam(kParamTranspose)) newPreset.global.transpose = static_cast<int>(param->Value());
+    if (mDSP)
+    {
+      newPreset.global.autoLevelInput = mDSP->GetAutoLevelInput();
+      newPreset.global.autoLevelOutput = mDSP->GetAutoLevelOutput();
+    }
 
     // Build the signal graph nodes
 
@@ -2430,6 +2443,32 @@ namespace guitarfx
       message["cabEnabled"] = mDSP->IsCabEnabled();
       SendMessageToUI(message.dump());
     }
+  }
+
+  void GuitarFXPlugin::HandleSetAutoLevelRequest(const nlohmann::json &payload)
+  {
+    if (!mDSP)
+    {
+      return;
+    }
+
+    const bool autoInput = payload.value("autoInput", mDSP->GetAutoLevelInput());
+    const bool autoOutput = payload.value("autoOutput", mDSP->GetAutoLevelOutput());
+
+    mDSP->SetAutoLevelInput(autoInput);
+    mDSP->SetAutoLevelOutput(autoOutput);
+
+    if (mActivePreset)
+    {
+      mActivePreset->global.autoLevelInput = autoInput;
+      mActivePreset->global.autoLevelOutput = autoOutput;
+    }
+
+    nlohmann::json message;
+    message["type"] = "autoLevelChanged";
+    message["autoInput"] = mDSP->GetAutoLevelInput();
+    message["autoOutput"] = mDSP->GetAutoLevelOutput();
+    SendMessageToUI(message.dump());
   }
 
   void GuitarFXPlugin::HandleUpdateSignalPathNodeParamRequest(const nlohmann::json &payload)

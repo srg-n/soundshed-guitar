@@ -1,5 +1,5 @@
 import { appendLog } from "./logging.js";
-import { setParameter } from "./bridge.js";
+import { postMessage, setParameter } from "./bridge.js";
 import { uiState } from "./state.js";
 
 interface KnobConfig {
@@ -320,6 +320,7 @@ export function initializeControls(): void {
 
   initializeDoublerControls();
   initializeInputOutputKnobs();
+  initializeAutoLevelControls();
   initializeGateControls();
   initializeSimpleCabControls();
   initializeIRQualityControls();
@@ -399,6 +400,7 @@ export function syncControlsFromState(): void {
 
   syncDoublerControlsFromState();
   syncGateControlsFromState();
+  syncAutoLevelControlsFromState();
   syncSimpleCabControlsFromState();
   syncIRQualityFromState();
   syncEQControlsFromState();
@@ -495,6 +497,9 @@ export function handleInputModeChanged(monoMode: boolean, inputChannel: number):
 // Amp and Cab power state
 let ampEnabled = true;
 let cabEnabled = true;
+
+let autoLevelInputEnabled = false;
+let autoLevelOutputEnabled = false;
 
 function sendAmpCabStateToPlugin(): void {
   const message = JSON.stringify({
@@ -1129,4 +1134,90 @@ export function syncReverbControlsFromState(): void {
       knobInstance.setValue(paramValues[knobId]);
     }
   });
+}
+
+function getActivePresetGlobals(): import("./types.js").GlobalSettings | null {
+  const activeId = uiState.activePresetId ?? "";
+  const activePreset = uiState.presetCache.get(activeId) as import("./types.js").Preset | undefined;
+  const globals = (activePreset as any)?.globals ?? (activePreset as any)?.global;
+  if (!globals) return null;
+  return {
+    inputTrim: globals.inputTrim ?? 0,
+    outputTrim: globals.outputTrim ?? 0,
+    masterVolume: globals.masterVolume ?? globals.outputVolume ?? 1,
+    autoLevelInput: globals.autoLevelInput ?? false,
+    autoLevelOutput: globals.autoLevelOutput ?? false,
+  };
+}
+
+function updateActivePresetGlobals(next: Partial<import("./types.js").GlobalSettings>): void {
+  const activeId = uiState.activePresetId ?? "";
+  const preset = uiState.presetCache.get(activeId) as any;
+  if (!preset) return;
+
+  const current = (preset.globals ?? preset.global ?? {}) as Record<string, unknown>;
+  const merged = {
+    inputTrim: current.inputTrim ?? 0,
+    outputTrim: current.outputTrim ?? (current.outputVolume ?? 0),
+    masterVolume: current.masterVolume ?? current.outputVolume ?? 1,
+    autoLevelInput: current.autoLevelInput ?? false,
+    autoLevelOutput: current.autoLevelOutput ?? false,
+    transpose: current.transpose ?? 0,
+    ...next,
+  };
+
+  preset.globals = merged;
+  preset.global = merged;
+  uiState.presetCache.set(activeId, preset);
+}
+
+function sendAutoLevelToPlugin(): void {
+  postMessage({
+    type: "setAutoLevel",
+    autoInput: autoLevelInputEnabled,
+    autoOutput: autoLevelOutputEnabled,
+  });
+  appendLog(`setAutoLevel → in:${autoLevelInputEnabled} out:${autoLevelOutputEnabled}`);
+}
+
+function initializeAutoLevelControls(): void {
+  const autoIn = document.getElementById("auto-level-input-toggle") as HTMLInputElement | null;
+  const autoOut = document.getElementById("auto-level-output-toggle") as HTMLInputElement | null;
+
+  const syncFromGlobals = (): void => {
+    const globals = getActivePresetGlobals();
+    autoLevelInputEnabled = globals?.autoLevelInput ?? false;
+    autoLevelOutputEnabled = globals?.autoLevelOutput ?? false;
+    if (autoIn) autoIn.checked = autoLevelInputEnabled;
+    if (autoOut) autoOut.checked = autoLevelOutputEnabled;
+  };
+
+  syncFromGlobals();
+
+  if (autoIn) {
+    autoIn.addEventListener("change", () => {
+      autoLevelInputEnabled = autoIn.checked;
+      updateActivePresetGlobals({ autoLevelInput: autoLevelInputEnabled });
+      sendAutoLevelToPlugin();
+    });
+  }
+
+  if (autoOut) {
+    autoOut.addEventListener("change", () => {
+      autoLevelOutputEnabled = autoOut.checked;
+      updateActivePresetGlobals({ autoLevelOutput: autoLevelOutputEnabled });
+      sendAutoLevelToPlugin();
+    });
+  }
+}
+
+export function syncAutoLevelControlsFromState(): void {
+  const globals = getActivePresetGlobals();
+  autoLevelInputEnabled = globals?.autoLevelInput ?? false;
+  autoLevelOutputEnabled = globals?.autoLevelOutput ?? false;
+
+  const autoIn = document.getElementById("auto-level-input-toggle") as HTMLInputElement | null;
+  const autoOut = document.getElementById("auto-level-output-toggle") as HTMLInputElement | null;
+  if (autoIn) autoIn.checked = autoLevelInputEnabled;
+  if (autoOut) autoOut.checked = autoLevelOutputEnabled;
 }

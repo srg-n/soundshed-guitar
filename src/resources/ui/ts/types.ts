@@ -73,6 +73,8 @@ export interface GlobalSettings {
   inputTrim: number;
   outputTrim: number;
   masterVolume: number;
+  autoLevelInput: boolean;
+  autoLevelOutput: boolean;
 }
 
 export interface ResourceRef {

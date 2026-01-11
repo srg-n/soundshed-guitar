@@ -200,7 +200,9 @@ export function createEmptyPresetV2(): Preset {
     globals: {
       inputTrim: 0,
       outputTrim: 0,
-      masterVolume: 1
+      masterVolume: 1,
+      autoLevelInput: false,
+      autoLevelOutput: false
     },
     graph: {
       nodes: [],

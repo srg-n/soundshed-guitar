@@ -82,6 +82,8 @@ namespace guitarfx
       mInputTrim = preset.global.inputTrim;
       mOutputTrim = preset.global.outputTrim;
       mOutputVolume = preset.global.outputVolume;
+      mAutoLevelInput = preset.global.autoLevelInput;
+      mAutoLevelOutput = preset.global.autoLevelOutput;
 
       // Create a new executor for the signal graph
       mExecutor = std::make_unique<SignalGraphExecutor>();
@@ -94,6 +96,8 @@ namespace guitarfx
       mExecutor->SetOutputTrim(mOutputTrim);
 
       mExecutor->SetGraph(preset.graph);
+
+      ApplyAutoLevelSettingsToAmpNodes();
 
       // ResolveResources is not needed - SetGraph already loads resources during node creation
       // ResolveResources(preset);
@@ -199,6 +203,10 @@ namespace guitarfx
     {
       mInputTrim = db;
       mCurrentPreset.global.inputTrim = db;
+      if (mExecutor)
+      {
+        mExecutor->SetInputTrim(db);
+      }
     }
 
     /**
@@ -208,6 +216,10 @@ namespace guitarfx
     {
       mOutputTrim = db;
       mCurrentPreset.global.outputTrim = db;
+      if (mExecutor)
+      {
+        mExecutor->SetOutputTrim(db);
+      }
     }
 
     /**
@@ -218,6 +230,25 @@ namespace guitarfx
       mOutputVolume = linear;
       mCurrentPreset.global.outputVolume = linear;
     }
+
+    /** Enable or disable model-aware input auto-leveling for amp nodes. */
+    void SetAutoLevelInput(bool enabled)
+    {
+      mAutoLevelInput = enabled;
+      mCurrentPreset.global.autoLevelInput = enabled;
+      ApplyAutoLevelSettingsToAmpNodes();
+    }
+
+    /** Enable or disable model-aware output auto-leveling for amp nodes. */
+    void SetAutoLevelOutput(bool enabled)
+    {
+      mAutoLevelOutput = enabled;
+      mCurrentPreset.global.autoLevelOutput = enabled;
+      ApplyAutoLevelSettingsToAmpNodes();
+    }
+
+    [[nodiscard]] bool GetAutoLevelInput() const { return mAutoLevelInput; }
+    [[nodiscard]] bool GetAutoLevelOutput() const { return mAutoLevelOutput; }
 
     /**
      * Get the current preset state.
@@ -649,6 +680,27 @@ namespace guitarfx
       return "";
     }
 
+    void ApplyAutoLevelSettingsToAmpNodes()
+    {
+      const std::string autoInput = mAutoLevelInput ? "1" : "0";
+      const std::string autoOutput = mAutoLevelOutput ? "1" : "0";
+
+      for (auto &node : mCurrentPreset.graph.nodes)
+      {
+        if (node.type == "amp_nam" || node.type == "nam_amp" || node.type == "nam")
+        {
+          node.config["autoLevelInput"] = autoInput;
+          node.config["autoLevelOutput"] = autoOutput;
+
+          if (mExecutor)
+          {
+            mExecutor->SetNodeConfig(node.id, "autoLevelInput", autoInput);
+            mExecutor->SetNodeConfig(node.id, "autoLevelOutput", autoOutput);
+          }
+        }
+      }
+    }
+
     void ResolveResources(const Preset &preset)
     {
       for (const auto &node : preset.graph.nodes)
@@ -704,6 +756,8 @@ namespace guitarfx
     double mInputTrim = 0.0;
     double mOutputTrim = 0.0;
     double mOutputVolume = 1.0;
+    bool mAutoLevelInput = false;
+    bool mAutoLevelOutput = false;
 
     // Float buffers for SignalGraphExecutor
     std::vector<float> mInputBufferL;

@@ -203,6 +203,8 @@ namespace guitarfx
     global["inputTrim"] = preset.global.inputTrim;
     global["outputTrim"] = preset.global.outputTrim;
     global["outputVolume"] = preset.global.outputVolume;
+    global["autoLevelInput"] = preset.global.autoLevelInput;
+    global["autoLevelOutput"] = preset.global.autoLevelOutput;
     global["transpose"] = preset.global.transpose;
     json["global"] = global;
 
@@ -292,6 +294,8 @@ namespace guitarfx
         preset.global.inputTrim = globalJson.value("inputTrim", 0.0);
         preset.global.outputTrim = globalJson.value("outputTrim", 0.0);
         preset.global.outputVolume = globalJson.value("outputVolume", 1.0);
+        preset.global.autoLevelInput = globalJson.value("autoLevelInput", false);
+        preset.global.autoLevelOutput = globalJson.value("autoLevelOutput", false);
         preset.global.transpose = globalJson.value("transpose", 0);
       }
 
