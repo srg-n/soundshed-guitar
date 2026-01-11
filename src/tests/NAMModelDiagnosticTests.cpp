@@ -12,6 +12,7 @@
  * Run with various test signals to diagnose garbled output issues.
  */
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -559,6 +560,122 @@ bool TestDirectVsManager(const fs::path& modelPath)
   return true;
 }
 
+// ============================================================================
+// Test: Different Models Produce Different Output
+// ============================================================================
+
+bool TestModelDifferentiation(const fs::path& resourcesDir, const nlohmann::json& audioModelsJson)
+{
+  std::cout << "\n=== Test: Different Models Produce Different Output ===\n";
+
+  if (!audioModelsJson.is_array() || audioModelsJson.size() < 2)
+  {
+    std::cerr << "ERROR: Need at least two models in audiofx-models.json\n";
+    return false;
+  }
+
+  // Pick first model, and then the first different model with a distinct file path
+  const auto& modelA = audioModelsJson.front();
+  const auto* modelBPtr = static_cast<const nlohmann::json*>(nullptr);
+  for (const auto& m : audioModelsJson)
+  {
+    if (m.value("filePath", std::string{}) != modelA.value("filePath", std::string{}))
+    {
+      modelBPtr = &m;
+      break;
+    }
+  }
+
+  if (!modelBPtr)
+  {
+    std::cerr << "ERROR: Could not find a second distinct model entry\n";
+    return false;
+  }
+
+  const auto& modelB = *modelBPtr;
+
+  const fs::path pathA = resourcesDir / modelA.value("filePath", "");
+  const fs::path pathB = resourcesDir / modelB.value("filePath", "");
+
+  if (!fs::exists(pathA) || !fs::exists(pathB))
+  {
+    std::cerr << "ERROR: Model files missing: " << pathA << " or " << pathB << "\n";
+    return false;
+  }
+
+  auto renderModel = [](const fs::path& modelPath) -> std::vector<double>
+  {
+    guitarfx::AmpModelManager dsp;
+    dsp.Prepare(kTestSampleRate, kTestBlockSize);
+    if (!dsp.LoadModel(modelPath))
+    {
+      return {};
+    }
+
+    dsp.SetInputTrim(0.0);
+    dsp.SetOutputTrim(0.0);
+    dsp.SetDrive(0.0);
+    dsp.SetTone(0.0);
+    dsp.SetMix(1.0);
+    dsp.SetGateEnabled(false);
+    dsp.SetDoublerEnabled(false);
+    dsp.SetTranspose(0);
+
+    std::vector<iplug::sample> inL(kTestBlockSize), inR(kTestBlockSize);
+    std::vector<iplug::sample> outL(kTestBlockSize), outR(kTestBlockSize);
+    GenerateSineWave(inL, 440.0, kTestSampleRate, 0.3);
+    GenerateSineWave(inR, 440.0, kTestSampleRate, 0.3);
+
+    iplug::sample* inputs[2] = {inL.data(), inR.data()};
+    iplug::sample* outputs[2] = {outL.data(), outR.data()};
+
+    // Process a couple of blocks to let the model settle
+    dsp.Process(inputs, outputs, kTestBlockSize);
+    dsp.Process(inputs, outputs, kTestBlockSize);
+
+    return std::vector<double>(outL.begin(), outL.end());
+  };
+
+  const auto outA = renderModel(pathA);
+  const auto outB = renderModel(pathB);
+
+  if (outA.empty() || outB.empty())
+  {
+    std::cerr << "ERROR: Failed to render one or both models\n";
+    return false;
+  }
+
+  auto statsA = AnalyzeBuffer(outA);
+  auto statsB = AnalyzeBuffer(outB);
+
+  if (statsA.isAllZeros || statsB.isAllZeros)
+  {
+    std::cerr << "ERROR: One of the model outputs is silent\n";
+    return false;
+  }
+
+  double sumSq = 0.0;
+  double maxDiff = 0.0;
+  for (std::size_t i = 0; i < std::min(outA.size(), outB.size()); ++i)
+  {
+    const double diff = std::abs(outA[i] - outB[i]);
+    sumSq += diff * diff;
+    maxDiff = std::max(maxDiff, diff);
+  }
+  const double rmsDiff = std::sqrt(sumSq / static_cast<double>(std::min(outA.size(), outB.size())));
+
+  std::cout << "Model A: " << modelA.value("title", "(unknown)") << "\n";
+  PrintSignalStats("Output", statsA);
+  std::cout << "Model B: " << modelB.value("title", "(unknown)") << "\n";
+  PrintSignalStats("Output", statsB);
+  std::cout << "RMS difference: " << rmsDiff << ", Max difference: " << maxDiff << "\n";
+
+  const bool different = rmsDiff > 1e-3;
+  std::cout << (different ? "Models produce distinct output\n" : "WARNING: Models produced nearly identical output\n");
+
+  return different;
+}
+
 } // namespace
 
 // ============================================================================
@@ -623,6 +740,7 @@ int main(int argc, char* argv[])
     allPassed &= TestDirectModelProcessing(modelPath);
     allPassed &= TestDSPManagerPipeline(modelPath, irPath);
     allPassed &= TestDirectVsManager(modelPath);
+    allPassed &= TestModelDifferentiation(resourcesDir, audioModelsJson);
 
     std::cout << "\n==========================\n";
     std::cout << "Diagnostic tests " << (allPassed ? "COMPLETED" : "HAD FAILURES") << "\n";

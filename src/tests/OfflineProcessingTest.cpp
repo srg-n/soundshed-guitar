@@ -20,7 +20,6 @@
 #include <nlohmann/json.hpp>
 
 #include "dsp/AmpModelManager.h"
-#include "presets/PresetManager.h"
 #include "IPlugConstants.h"
 
 // Force factory registration
@@ -254,11 +253,11 @@ int main(int argc, char* argv[])
   try
   {
     // Parse command line arguments
-    std::string inputFile = "guitar-riff-02.wav";
-    std::string outputFile = "guitar-riff-02-processed.wav";
+    std::string resourcesDir = GUITARFX_TEST_RESOURCES_DIR;
+    std::string inputFile = (fs::path(resourcesDir) / "ui" / "demo" / "guitar-riff-02.wav").string();
+    std::string outputFile = "offline-processed.wav";
     std::string modelPath = "";
     std::string irPath = "";
-    std::string resourcesDir = GUITARFX_TEST_RESOURCES_DIR;
 
     if (argc >= 2)
       inputFile = argv[1];

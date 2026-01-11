@@ -230,30 +230,30 @@ target_compile_features(GuitarFX_MultiPresetMixerTests PRIVATE cxx_std_20)
 
 add_test(NAME MultiPresetMixerTests COMMAND GuitarFX_MultiPresetMixerTests)
 
-# Offline Processing Test App - processes WAV files through complete DSP pipeline
-# Note: This is a utility app, not added as a CTest, and disabled due to missing PresetManager.h
-# add_executable(GuitarFX_OfflineProcessingTest
-#   OfflineProcessingTest.cpp
-# )
-# 
-# target_include_directories(GuitarFX_OfflineProcessingTest
-#   PRIVATE
-#     ${GUITARFX_PROJECT_ROOT}/src
-#     ${NeuralAmpModelerCore_SOURCE_DIR}
-# )
-# 
-# target_link_libraries(GuitarFX_OfflineProcessingTest
-#   PRIVATE
-#     GuitarFXCore
-#     nlohmann_json::nlohmann_json
-# )
-# 
-# target_compile_features(GuitarFX_OfflineProcessingTest PRIVATE cxx_std_20)
-# 
-# target_compile_definitions(GuitarFX_OfflineProcessingTest
-#   PRIVATE
-#     GUITARFX_TEST_RESOURCES_DIR="${GUITARFX_RESOURCES_DIR_NORMALIZED}"
-# )
+add_executable(GuitarFX_OfflineProcessingTest
+  OfflineProcessingTest.cpp
+)
+
+target_include_directories(GuitarFX_OfflineProcessingTest
+  PRIVATE
+    ${GUITARFX_PROJECT_ROOT}/src
+    ${NeuralAmpModelerCore_SOURCE_DIR}
+)
+
+target_link_libraries(GuitarFX_OfflineProcessingTest
+  PRIVATE
+    GuitarFXCore
+    nlohmann_json::nlohmann_json
+)
+
+target_compile_features(GuitarFX_OfflineProcessingTest PRIVATE cxx_std_20)
+
+target_compile_definitions(GuitarFX_OfflineProcessingTest
+  PRIVATE
+    GUITARFX_TEST_RESOURCES_DIR="${GUITARFX_RESOURCES_DIR_NORMALIZED}"
+)
+
+add_test(NAME OfflineProcessingTest COMMAND GuitarFX_OfflineProcessingTest)
 
 # Preset Storage Serialization Tests - verifies preset serialization/deserialization with attachments
 add_executable(GuitarFX_PresetStorageTests

@@ -2,21 +2,30 @@
  * @file IRConvolutionTests.cpp
  * @brief Unit tests for IR (Impulse Response) convolution algorithm
  *
- * Tests the AmpModelManager::ApplyImpulseResponse function with known inputs and expected outputs
- * to verify the convolution implementation is mathematically correct, and verifies realtime
- * audio processing with clean output and no latency.
+ * Tests the graph-based IRCabEffect convolution with known inputs and expected outputs to verify
+ * the convolution implementation is mathematically correct, and verifies realtime audio processing
+ * with clean output and no latency.
  */
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <stdexcept>
+#include <string>
+#include <system_error>
 #include <vector>
 
-#include "dsp/AmpModelManager.h"
+#include "dsp/SignalGraphExecutor.h"
+#include "dsp/EffectRegistry.h"
+#include "dsp/effects/BuiltinEffects.h"
+#include "resources/ResourceLibrary.h"
+#include "presets/PresetTypes.h"
 
 // Define M_PI if not available
 #ifndef M_PI
@@ -70,35 +79,227 @@ namespace
     return output;
   }
 
+  void RegisterEffectsOnce()
+  {
+    static bool registered = false;
+    if (!registered)
+    {
+      guitarfx::RegisterAllEffects();
+      registered = true;
+    }
+  }
+
+  std::filesystem::path WriteImpulseToWav(const std::vector<float>& impulse, double sampleRate)
+  {
+    auto tempDir = fs::temp_directory_path() / "guitarfx_ir_tests";
+    std::filesystem::create_directories(tempDir);
+
+    static std::atomic<int> counter{0};
+    const auto filename = "ir_" + std::to_string(counter++) + ".wav";
+    const auto path = tempDir / filename;
+
+    std::ofstream file(path, std::ios::binary);
+    if (!file)
+    {
+      throw std::runtime_error("Failed to create temp IR file");
+    }
+
+    const uint32_t dataSize = static_cast<uint32_t>(impulse.size() * sizeof(float));
+    const uint32_t riffSize = 36u + dataSize;
+    const uint16_t audioFormat = 3; // IEEE float
+    const uint16_t numChannels = 1;
+    const uint32_t sampleRateU32 = static_cast<uint32_t>(sampleRate);
+    const uint32_t byteRate = sampleRateU32 * numChannels * sizeof(float);
+    const uint16_t blockAlign = static_cast<uint16_t>(numChannels * sizeof(float));
+    const uint16_t bitsPerSample = 32;
+    const uint32_t fmtChunkSize = 16;
+
+    file.write("RIFF", 4);
+    file.write(reinterpret_cast<const char*>(&riffSize), 4);
+    file.write("WAVE", 4);
+    file.write("fmt ", 4);
+    file.write(reinterpret_cast<const char*>(&fmtChunkSize), 4);
+    file.write(reinterpret_cast<const char*>(&audioFormat), 2);
+    file.write(reinterpret_cast<const char*>(&numChannels), 2);
+    file.write(reinterpret_cast<const char*>(&sampleRateU32), 4);
+    file.write(reinterpret_cast<const char*>(&byteRate), 4);
+    file.write(reinterpret_cast<const char*>(&blockAlign), 2);
+    file.write(reinterpret_cast<const char*>(&bitsPerSample), 2);
+    file.write("data", 4);
+    file.write(reinterpret_cast<const char*>(&dataSize), 4);
+
+    if (!impulse.empty())
+    {
+      file.write(reinterpret_cast<const char*>(impulse.data()), dataSize);
+    }
+
+    return path;
+  }
+
   /**
-   * @brief Helper class to test AmpModelManager's IR convolution
+   * @brief Helper class to test IR convolution via SignalGraphExecutor + IRCabEffect
    */
   class IRConvolutionTester
   {
   public:
     IRConvolutionTester()
     {
-      mDSPManager = std::make_unique<guitarfx::AmpModelManager>();
-      mDSPManager->Prepare(kSampleRate, kBlockSize);
+      RegisterEffectsOnce();
+      BuildGraph();
+    }
+
+    ~IRConvolutionTester()
+    {
+      CleanupTempFiles();
     }
 
     void SetImpulse(const std::vector<float>& impulse)
     {
-      mDSPManager->SetImpulseResponseForTest(impulse);
+      if (impulse.empty())
+      {
+        mExecutor.SetNodeEnabled("cab", false);
+        mExecutor.Reset();
+        return;
+      }
+
+      const auto path = WriteImpulseToWav(impulse, kSampleRate);
+      mTempFiles.push_back(path);
+      LoadImpulse(path);
+    }
+
+    void SetImpulseFromFile(const fs::path& path)
+    {
+      if (!fs::exists(path))
+      {
+        throw std::runtime_error("IR file not found: " + path.string());
+      }
+
+      LoadImpulse(path);
     }
 
     void Convolve(std::vector<double>& samples, int channel = 0)
     {
-      mDSPManager->ApplyImpulseResponseForTest(samples, channel);
+      std::size_t offset = 0;
+      while (offset < samples.size())
+      {
+        const int currentBlock = static_cast<int>(std::min<std::size_t>(mMaxBlockSize, samples.size() - offset));
+        ResizeBuffers(currentBlock);
+
+        std::fill_n(mInputBufferL.data(), currentBlock, 0.0f);
+        std::fill_n(mInputBufferR.data(), currentBlock, 0.0f);
+
+        for (int i = 0; i < currentBlock; ++i)
+        {
+          const float sample = static_cast<float>(samples[offset + static_cast<std::size_t>(i)]);
+          if (channel == 0)
+          {
+            mInputBufferL[static_cast<std::size_t>(i)] = sample;
+          }
+          else
+          {
+            mInputBufferR[static_cast<std::size_t>(i)] = sample;
+          }
+        }
+
+        float* inputPtrs[2] = { mInputBufferL.data(), mInputBufferR.data() };
+        float* outputPtrs[2] = { mOutputBufferL.data(), mOutputBufferR.data() };
+
+        mExecutor.Process(inputPtrs, outputPtrs, currentBlock);
+
+        for (int i = 0; i < currentBlock; ++i)
+        {
+          const float value = channel == 0 ? mOutputBufferL[static_cast<std::size_t>(i)]
+                                           : mOutputBufferR[static_cast<std::size_t>(i)];
+          samples[offset + static_cast<std::size_t>(i)] = static_cast<double>(value);
+        }
+
+        offset += static_cast<std::size_t>(currentBlock);
+      }
     }
 
     void Reset()
     {
-      mDSPManager->Reset();
+      mExecutor.Reset();
     }
 
   private:
-    std::unique_ptr<guitarfx::AmpModelManager> mDSPManager;
+    void BuildGraph()
+    {
+      guitarfx::SignalGraph graph;
+
+      guitarfx::GraphNode input;
+      input.id = "input";
+      input.type = guitarfx::kNodeTypeInput;
+      input.category = "utility";
+      input.enabled = true;
+
+      guitarfx::GraphNode cab;
+      cab.id = "cab";
+      cab.type = "cab_ir";
+      cab.category = "cab";
+      cab.enabled = true;
+      cab.params["mix"] = 1.0;
+      cab.params["outputGain"] = 0.0;
+
+      guitarfx::GraphNode output;
+      output.id = "output";
+      output.type = guitarfx::kNodeTypeOutput;
+      output.category = "utility";
+      output.enabled = true;
+
+      graph.nodes = { input, cab, output };
+
+      guitarfx::GraphEdge edge1;
+      edge1.from = input.id;
+      edge1.to = cab.id;
+      edge1.gain = 1.0;
+
+      guitarfx::GraphEdge edge2;
+      edge2.from = cab.id;
+      edge2.to = output.id;
+      edge2.gain = 1.0;
+
+      graph.edges = { edge1, edge2 };
+
+      mExecutor.SetResourceLibrary(&mResourceLibrary);
+      mExecutor.SetGraph(graph);
+      mExecutor.Prepare(kSampleRate, mMaxBlockSize);
+    }
+
+    void LoadImpulse(const fs::path& path)
+    {
+      guitarfx::ResourceRef ref;
+      ref.filePath = path;
+      mExecutor.SetNodeEnabled("cab", true);
+      mExecutor.LoadNodeResource("cab", ref);
+      mExecutor.Reset();
+    }
+
+    void ResizeBuffers(int size)
+    {
+      mInputBufferL.resize(static_cast<std::size_t>(size));
+      mInputBufferR.resize(static_cast<std::size_t>(size));
+      mOutputBufferL.resize(static_cast<std::size_t>(size));
+      mOutputBufferR.resize(static_cast<std::size_t>(size));
+    }
+
+    void CleanupTempFiles()
+    {
+      for (const auto& path : mTempFiles)
+      {
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+      }
+    }
+
+    guitarfx::ResourceLibrary mResourceLibrary;
+    guitarfx::SignalGraphExecutor mExecutor;
+    std::vector<float> mInputBufferL;
+    std::vector<float> mInputBufferR;
+    std::vector<float> mOutputBufferL;
+    std::vector<float> mOutputBufferR;
+    std::vector<fs::path> mTempFiles;
+    const int mMaxBlockSize = kBlockSize;
   };
 
   // Test 1: Simple identity IR [1.0] should pass through unchanged
@@ -263,10 +464,10 @@ namespace
     return true;
   }
 
-  // Test 6: Compare AmpModelManager with reference implementation
+  // Test 6: Compare graph convolver with reference implementation
   bool TestAgainstReference()
   {
-    std::cout << "Test: AmpModelManager vs reference implementation... ";
+    std::cout << "Test: Graph convolver vs reference implementation... ";
 
     // Use a more complex IR and input
     std::vector<float> impulse = { 0.3f, 0.5f, 0.2f, -0.1f, 0.1f };
@@ -275,7 +476,7 @@ namespace
     // Get reference result
     std::vector<double> referenceOutput = ReferenceConvolve(input, impulse);
 
-    // Get AmpModelManager result
+    // Get graph result
     IRConvolutionTester tester;
     tester.SetImpulse(impulse);
     std::vector<double> dspOutput = input;
@@ -350,7 +551,7 @@ namespace
     // Get reference result
     std::vector<double> expected = ReferenceConvolve(input, impulse);
 
-    // Get AmpModelManager result
+    // Get graph result
     IRConvolutionTester tester;
     tester.SetImpulse(impulse);
     std::vector<double> result = input;
@@ -900,7 +1101,7 @@ namespace
       }
 
       IRConvolutionTester tester;
-      tester.SetImpulse(irSamples);
+      tester.SetImpulseFromFile(irPath);
 
       // Generate 1 second of test audio
       const int numSamples = static_cast<int>(kSampleRate);
@@ -967,7 +1168,7 @@ namespace
       // Long IRs use FFT convolution which has latency
       // The first output samples will be zeros (latency)
       IRConvolutionTester tester;
-      tester.SetImpulse(irSamples);
+      tester.SetImpulseFromFile(irPath);
 
       // Create an impulse input
       std::vector<double> impulseInput(1024, 0.0);
@@ -1045,7 +1246,7 @@ namespace
           continue;
 
         IRConvolutionTester tester;
-        tester.SetImpulse(irSamples);
+        tester.SetImpulseFromFile(irPath);
 
         // Generate test signal
         std::vector<double> testSignal(4096);
@@ -1110,7 +1311,7 @@ namespace
       }
 
       IRConvolutionTester tester;
-      tester.SetImpulse(irSamples);
+      tester.SetImpulseFromFile(irPath);
 
       // Process 10 seconds of audio in blocks
       const int totalSamples = static_cast<int>(kSampleRate * 10.0);
@@ -1159,8 +1360,8 @@ namespace
 
 int main()
 {
-  std::cout << "IR Convolution Tests (using AmpModelManager)\n";
-  std::cout << "===========================================\n\n";
+  std::cout << "IR Convolution Tests (SignalGraph + IRCabEffect)\n";
+  std::cout << "===============================================\n\n";
 
   int passed = 0;
   int failed = 0;
