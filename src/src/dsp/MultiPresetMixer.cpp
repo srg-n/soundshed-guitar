@@ -76,6 +76,297 @@ namespace guitarfx
     }
   }
 
+  void MultiPresetMixer::SetInputTrim(double dB)
+  {
+    for (auto& inst : mInstances)
+    {
+      inst.executor.SetInputTrim(dB);
+    }
+  }
+
+  void MultiPresetMixer::SetOutputTrim(double dB)
+  {
+    for (auto& inst : mInstances)
+    {
+      inst.executor.SetOutputTrim(dB);
+    }
+  }
+
+  void MultiPresetMixer::SetGateEnabled(bool enabled)
+  {
+    for (auto& inst : mInstances)
+    {
+      const auto nodeId = inst.executor.FindFirstNodeOfType("dynamics_gate");
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeEnabled(nodeId, enabled);
+      }
+    }
+  }
+
+  void MultiPresetMixer::SetGateThreshold(double value)
+  {
+    for (auto& inst : mInstances)
+    {
+      const auto nodeId = inst.executor.FindFirstNodeOfType("dynamics_gate");
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeParam(nodeId, "thresholdDb", value);
+      }
+    }
+  }
+
+  void MultiPresetMixer::SetAmpDrive(double value)
+  {
+    for (auto& inst : mInstances)
+    {
+      const auto nodeId = inst.executor.FindFirstNodeOfType("amp_nam");
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeParam(nodeId, "inputGain", value);
+      }
+    }
+  }
+
+  void MultiPresetMixer::SetSimpleCabEnabled(bool enabled)
+  {
+    for (auto& inst : mInstances)
+    {
+      const auto nodeId = inst.executor.FindFirstNodeOfType("cab_simple");
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeEnabled(nodeId, enabled);
+      }
+    }
+  }
+
+  void MultiPresetMixer::SetSimpleCabBass(double value)
+  {
+    for (auto& inst : mInstances)
+    {
+      const auto nodeId = inst.executor.FindFirstNodeOfType("cab_simple");
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeParam(nodeId, "bass", value);
+      }
+    }
+  }
+
+  void MultiPresetMixer::SetSimpleCabPresence(double value)
+  {
+    for (auto& inst : mInstances)
+    {
+      const auto nodeId = inst.executor.FindFirstNodeOfType("cab_simple");
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeParam(nodeId, "presence", value);
+      }
+    }
+  }
+
+  void MultiPresetMixer::SetSimpleCabBrightness(double value)
+  {
+    for (auto& inst : mInstances)
+    {
+      const auto nodeId = inst.executor.FindFirstNodeOfType("cab_simple");
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeParam(nodeId, "brightness", value);
+      }
+    }
+  }
+
+  void MultiPresetMixer::SetIRQuality(double value)
+  {
+    for (auto& inst : mInstances)
+    {
+      auto nodeId = inst.executor.FindFirstNodeOfType("cab_ir");
+      if (nodeId.empty())
+      {
+        nodeId = inst.executor.FindFirstNodeOfType("ir_cab");
+      }
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeParam(nodeId, "quality", value);
+      }
+    }
+  }
+
+  void MultiPresetMixer::SetEQEnabled(bool enabled)
+  {
+    for (auto& inst : mInstances)
+    {
+      auto nodeId = inst.executor.FindFirstNodeOfType("eq_parametric");
+      if (nodeId.empty())
+      {
+        nodeId = inst.executor.FindFirstNodeOfType("eq");
+      }
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeEnabled(nodeId, enabled);
+      }
+    }
+  }
+
+  void MultiPresetMixer::SetEQBandGain(int band, double value)
+  {
+    static const char* kParamNames[] = {"lowGain", "lowMidGain", "highMidGain", "highGain"};
+    if (band < 0 || band > 3)
+      return;
+
+    const std::string param = kParamNames[band];
+    for (auto& inst : mInstances)
+    {
+      auto nodeId = inst.executor.FindFirstNodeOfType("eq_parametric");
+      if (nodeId.empty())
+      {
+        nodeId = inst.executor.FindFirstNodeOfType("eq");
+      }
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeParam(nodeId, param, value);
+      }
+    }
+  }
+
+  void MultiPresetMixer::SetEQBandFrequency(int band, double value)
+  {
+    static const char* kParamNames[] = {"lowFreq", "lowMidFreq", "highMidFreq", "highFreq"};
+    if (band < 0 || band > 3)
+      return;
+
+    const std::string param = kParamNames[band];
+    for (auto& inst : mInstances)
+    {
+      auto nodeId = inst.executor.FindFirstNodeOfType("eq_parametric");
+      if (nodeId.empty())
+      {
+        nodeId = inst.executor.FindFirstNodeOfType("eq");
+      }
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeParam(nodeId, param, value);
+      }
+    }
+  }
+
+  void MultiPresetMixer::SetEQBandQ(int band, double value)
+  {
+    static const char* kParamNames[] = {"", "lowMidQ", "highMidQ", ""};
+    if (band < 1 || band > 2)
+      return;
+
+    const std::string param = kParamNames[band];
+    for (auto& inst : mInstances)
+    {
+      auto nodeId = inst.executor.FindFirstNodeOfType("eq_parametric");
+      if (nodeId.empty())
+      {
+        nodeId = inst.executor.FindFirstNodeOfType("eq");
+      }
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeParam(nodeId, param, value);
+      }
+    }
+  }
+
+  void MultiPresetMixer::SetDelayEnabled(bool enabled)
+  {
+    for (auto& inst : mInstances)
+    {
+      const auto nodeId = inst.executor.FindFirstNodeOfType("delay_digital");
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeEnabled(nodeId, enabled);
+      }
+    }
+  }
+
+  void MultiPresetMixer::SetDelayTime(double value)
+  {
+    for (auto& inst : mInstances)
+    {
+      const auto nodeId = inst.executor.FindFirstNodeOfType("delay_digital");
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeParam(nodeId, "timeMs", value);
+      }
+    }
+  }
+
+  void MultiPresetMixer::SetDelayFeedback(double value)
+  {
+    for (auto& inst : mInstances)
+    {
+      const auto nodeId = inst.executor.FindFirstNodeOfType("delay_digital");
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeParam(nodeId, "feedback", value);
+      }
+    }
+  }
+
+  void MultiPresetMixer::SetDelayMix(double value)
+  {
+    for (auto& inst : mInstances)
+    {
+      const auto nodeId = inst.executor.FindFirstNodeOfType("delay_digital");
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeParam(nodeId, "mix", value);
+      }
+    }
+  }
+
+  void MultiPresetMixer::SetReverbEnabled(bool enabled)
+  {
+    for (auto& inst : mInstances)
+    {
+      const auto nodeId = inst.executor.FindFirstNodeOfType("reverb_room");
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeEnabled(nodeId, enabled);
+      }
+    }
+  }
+
+  void MultiPresetMixer::SetReverbDecay(double value)
+  {
+    for (auto& inst : mInstances)
+    {
+      const auto nodeId = inst.executor.FindFirstNodeOfType("reverb_room");
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeParam(nodeId, "decay", value);
+      }
+    }
+  }
+
+  void MultiPresetMixer::SetReverbDamping(double value)
+  {
+    for (auto& inst : mInstances)
+    {
+      const auto nodeId = inst.executor.FindFirstNodeOfType("reverb_room");
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeParam(nodeId, "damping", value);
+      }
+    }
+  }
+
+  void MultiPresetMixer::SetReverbMix(double value)
+  {
+    for (auto& inst : mInstances)
+    {
+      const auto nodeId = inst.executor.FindFirstNodeOfType("reverb_room");
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeParam(nodeId, "mix", value);
+      }
+    }
+  }
+
   void MultiPresetMixer::Prepare(double sampleRate, int maxBlockSize)
   {
     mSampleRate = sampleRate;

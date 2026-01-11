@@ -45,6 +45,30 @@ namespace guitarfx
     void SetMasterGain(double value) { mMasterGain = value; }
     void SetLimiterEnabled(bool enabled) { mLimiterEnabled = enabled; }
 
+    // Global/parameter routing helpers
+    void SetInputTrim(double dB);
+    void SetOutputTrim(double dB);
+    void SetGateEnabled(bool enabled);
+    void SetGateThreshold(double value);
+    void SetAmpDrive(double value);
+    void SetSimpleCabEnabled(bool enabled);
+    void SetSimpleCabBass(double value);
+    void SetSimpleCabPresence(double value);
+    void SetSimpleCabBrightness(double value);
+    void SetIRQuality(double value);
+    void SetEQEnabled(bool enabled);
+    void SetEQBandGain(int band, double value);
+    void SetEQBandFrequency(int band, double value);
+    void SetEQBandQ(int band, double value);
+    void SetDelayEnabled(bool enabled);
+    void SetDelayTime(double value);
+    void SetDelayFeedback(double value);
+    void SetDelayMix(double value);
+    void SetReverbEnabled(bool enabled);
+    void SetReverbDecay(double value);
+    void SetReverbDamping(double value);
+    void SetReverbMix(double value);
+
     // Lifecycle
     void Prepare(double sampleRate, int maxBlockSize);
     void Reset();

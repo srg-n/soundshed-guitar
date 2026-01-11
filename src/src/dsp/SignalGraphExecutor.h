@@ -40,6 +40,9 @@ namespace guitarfx
     void SetNodeConfig(const std::string& nodeId, const std::string& key, const std::string& value);
     bool LoadNodeResource(const std::string& nodeId, const ResourceRef& ref);
 
+    // Queries
+    [[nodiscard]] std::string FindFirstNodeOfType(const std::string& type) const;
+
     // Global settings
     void SetInputTrim(double dB) { mInputTrim = dB; }
     void SetOutputTrim(double dB) { mOutputTrim = dB; }

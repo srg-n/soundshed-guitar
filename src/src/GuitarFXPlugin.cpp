@@ -1064,21 +1064,26 @@ namespace guitarfx
     {
     case kParamInputTrim:
       mDSP->SetInputTrim(param->Value());
+      mPresetMixer.SetInputTrim(param->Value());
       break;
     case kParamOutputTrim:
       mDSP->SetOutputTrim(param->Value());
+      mPresetMixer.SetOutputTrim(param->Value());
       break;
     case kParamDrive:
       mDSP->SetDrive(param->Value());
+      mPresetMixer.SetAmpDrive(param->Value());
       break;
     case kParamTone:
       mDSP->SetTone(param->Value() * 2.0 - 1.0);
       break;
     case kParamGateEnabled:
       mDSP->SetGateEnabled(param->Bool());
+      mPresetMixer.SetGateEnabled(param->Bool());
       break;
     case kParamGateThreshold:
       mDSP->SetGateThreshold(param->Value());
+      mPresetMixer.SetGateThreshold(param->Value());
       break;
     case kParamMix:
       mDSP->SetMix(param->Value());
@@ -1094,77 +1099,101 @@ namespace guitarfx
       break;
     case kParamSimpleCabEnabled:
       mDSP->SetSimpleCabEnabled(param->Bool());
+      mPresetMixer.SetSimpleCabEnabled(param->Bool());
       break;
     case kParamSimpleCabBass:
       mDSP->SetSimpleCabBass(param->Value());
+      mPresetMixer.SetSimpleCabBass(param->Value());
       break;
     case kParamSimpleCabPresence:
       mDSP->SetSimpleCabPresence(param->Value());
+      mPresetMixer.SetSimpleCabPresence(param->Value());
       break;
     case kParamSimpleCabBrightness:
       mDSP->SetSimpleCabBrightness(param->Value());
+      mPresetMixer.SetSimpleCabBrightness(param->Value());
       break;
     case kParamIRQuality:
       mDSP->SetIRQuality(guitarfx::GetIRQualityFromInt(static_cast<int>(param->Value())));
+      mPresetMixer.SetIRQuality(param->Value());
       break;
     case kParamEQEnabled:
       mDSP->SetEQEnabled(param->Bool());
+      mPresetMixer.SetEQEnabled(param->Bool());
       break;
     case kParamEQLowGain:
       mDSP->SetEQBandGain(0, param->Value());
+      mPresetMixer.SetEQBandGain(0, param->Value());
       break;
     case kParamEQLowFreq:
       mDSP->SetEQBandFrequency(0, param->Value());
+      mPresetMixer.SetEQBandFrequency(0, param->Value());
       break;
     case kParamEQLowMidGain:
       mDSP->SetEQBandGain(1, param->Value());
+      mPresetMixer.SetEQBandGain(1, param->Value());
       break;
     case kParamEQLowMidFreq:
       mDSP->SetEQBandFrequency(1, param->Value());
+      mPresetMixer.SetEQBandFrequency(1, param->Value());
       break;
     case kParamEQLowMidQ:
       mDSP->SetEQBandQ(1, param->Value());
+      mPresetMixer.SetEQBandQ(1, param->Value());
       break;
     case kParamEQHighMidGain:
       mDSP->SetEQBandGain(2, param->Value());
+      mPresetMixer.SetEQBandGain(2, param->Value());
       break;
     case kParamEQHighMidFreq:
       mDSP->SetEQBandFrequency(2, param->Value());
+      mPresetMixer.SetEQBandFrequency(2, param->Value());
       break;
     case kParamEQHighMidQ:
       mDSP->SetEQBandQ(2, param->Value());
+      mPresetMixer.SetEQBandQ(2, param->Value());
       break;
     case kParamEQHighGain:
       mDSP->SetEQBandGain(3, param->Value());
+      mPresetMixer.SetEQBandGain(3, param->Value());
       break;
     case kParamEQHighFreq:
       mDSP->SetEQBandFrequency(3, param->Value());
+      mPresetMixer.SetEQBandFrequency(3, param->Value());
       break;
     // Delay effect
     case kParamDelayEnabled:
       mDSP->SetDelayEnabled(param->Bool());
+      mPresetMixer.SetDelayEnabled(param->Bool());
       break;
     case kParamDelayTime:
       mDSP->SetDelayTime(param->Value());
+      mPresetMixer.SetDelayTime(param->Value());
       break;
     case kParamDelayFeedback:
       mDSP->SetDelayFeedback(param->Value() / 100.0);
+      mPresetMixer.SetDelayFeedback(param->Value() / 100.0);
       break;
     case kParamDelayMix:
       mDSP->SetDelayMix(param->Value() / 100.0);
+      mPresetMixer.SetDelayMix(param->Value() / 100.0);
       break;
     // Reverb effect
     case kParamReverbEnabled:
       mDSP->SetReverbEnabled(param->Bool());
+      mPresetMixer.SetReverbEnabled(param->Bool());
       break;
     case kParamReverbDecay:
       mDSP->SetReverbDecay(param->Value());
+      mPresetMixer.SetReverbDecay(param->Value());
       break;
     case kParamReverbDamping:
       mDSP->SetReverbDamping(param->Value());
+      mPresetMixer.SetReverbDamping(param->Value());
       break;
     case kParamReverbMix:
       mDSP->SetReverbMix(param->Value() / 100.0);
+      mPresetMixer.SetReverbMix(param->Value() / 100.0);
       break;
     default:
       break;
@@ -2813,6 +2842,22 @@ namespace guitarfx
       return;
     }
 
+    // Keep the UI-facing library and the DSP library in sync
+    mResourceLibrary.Clear();
+    if (mDSP)
+    {
+      mDSP->GetResourceLibrary().Clear();
+    }
+
+    auto addResource = [this](const LibraryResource& resource)
+    {
+      mResourceLibrary.AddResource(resource);
+      if (mDSP)
+      {
+        mDSP->GetResourceLibrary().AddResource(resource);
+      }
+    };
+
     const std::filesystem::path dataDir = mResourceRoot / "ui" / "data";
     
     // Load AudioFX models library
@@ -2856,7 +2901,7 @@ namespace guitarfx
               
               if (!resource.id.empty() && !resource.filePath.empty())
               {
-                mResourceLibrary.AddResource(resource);
+                addResource(resource);
               }
             }
           }
@@ -2915,7 +2960,7 @@ namespace guitarfx
               
               if (!resource.id.empty() && !resource.filePath.empty())
               {
-                mResourceLibrary.AddResource(resource);
+                addResource(resource);
               }
             }
           }

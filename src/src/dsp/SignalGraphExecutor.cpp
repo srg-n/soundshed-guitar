@@ -415,6 +415,18 @@ namespace guitarfx
     return false;
   }
 
+  std::string SignalGraphExecutor::FindFirstNodeOfType(const std::string& type) const
+  {
+    for (const auto& node : mGraph.nodes)
+    {
+      if (node.type == type)
+      {
+        return node.id;
+      }
+    }
+    return {};
+  }
+
   SignalGraphExecutor::NodeState* SignalGraphExecutor::FindNodeState(const std::string& id)
   {
     auto it = mNodeStates.find(id);
