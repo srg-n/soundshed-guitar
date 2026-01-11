@@ -544,6 +544,9 @@ namespace guitarfx
     // Load resource libraries (NAM models, IRs) from JSON files
     LoadResourceLibraries();
 
+    // Share the DSP's resource library with the multi-preset mixer
+    mPresetMixer.SetResourceLibrary(&mDSP->GetResourceLibrary());
+
     InitializeParameters();
 
     for (int paramIdx = 0; paramIdx < kParamCount; ++paramIdx)
@@ -753,7 +756,15 @@ namespace guitarfx
       return;
     }
 
-    mDSP->Process(inputs, outputs, nFrames);
+    // If multi-preset mixer has active presets, use it; otherwise use single DSP path
+    if (mPresetMixer.GetPresetCount() > 0)
+    {
+      mPresetMixer.Process(inputs, outputs, nFrames);
+    }
+    else
+    {
+      mDSP->Process(inputs, outputs, nFrames);
+    }
   }
 
   void GuitarFXPlugin::OnReset()
@@ -767,11 +778,56 @@ namespace guitarfx
     std::lock_guard<std::mutex> lock(mDSPMutex);
 
     mDSP->Prepare(GetSampleRate(), GetBlockSize());
+    mPresetMixer.Prepare(GetSampleRate(), GetBlockSize());
 
     mPreviewBuffer.store(nullptr, std::memory_order_release);
     mPreviewStartedBuffer.store(nullptr, std::memory_order_release);
     mPreviewCompletedBuffer.store(nullptr, std::memory_order_release);
     mPreviewCursor.store(0, std::memory_order_release);
+  }
+  // ============================
+  // MultiPresetMixer controller
+  // ============================
+  bool GuitarFXPlugin::AddActivePreset(const Preset& preset, const std::string& presetId, const std::string& name)
+  {
+    std::lock_guard<std::mutex> lock(mDSPMutex);
+    return mPresetMixer.AddActivePreset(preset, presetId, name);
+  }
+
+  void GuitarFXPlugin::RemoveActivePreset(const std::string& presetId)
+  {
+    std::lock_guard<std::mutex> lock(mDSPMutex);
+    mPresetMixer.RemoveActivePreset(presetId);
+  }
+
+  void GuitarFXPlugin::SetActivePresetMix(const std::string& presetId, double value)
+  {
+    mPresetMixer.SetPresetMix(presetId, value);
+  }
+
+  void GuitarFXPlugin::SetActivePresetPan(const std::string& presetId, double pan)
+  {
+    mPresetMixer.SetPresetPan(presetId, pan);
+  }
+
+  void GuitarFXPlugin::SetActivePresetMute(const std::string& presetId, bool mute)
+  {
+    mPresetMixer.SetPresetMute(presetId, mute);
+  }
+
+  void GuitarFXPlugin::SetActivePresetSolo(const std::string& presetId, bool solo)
+  {
+    mPresetMixer.SetPresetSolo(presetId, solo);
+  }
+
+  void GuitarFXPlugin::SetMasterMixGain(double value)
+  {
+    mPresetMixer.SetMasterGain(value);
+  }
+
+  void GuitarFXPlugin::SetMixLimiterEnabled(bool enabled)
+  {
+    mPresetMixer.SetLimiterEnabled(enabled);
   }
 
   void GuitarFXPlugin::OnIdle()
@@ -1356,6 +1412,59 @@ namespace guitarfx
     {
       HandleDeleteSignalPathNodeRequest(payload);
     }
+    else if (type == "addActivePreset")
+    {
+      const auto pIt = payload.find("preset");
+      const std::string presetId = payload.value("presetId", "");
+      const std::string name = payload.value("name", "");
+      if (pIt != payload.end() && pIt->is_object())
+      {
+        if (auto p = PresetStorage::DeserializeFromJson(pIt->dump()))
+        {
+          const std::string id = !presetId.empty() ? presetId : (!p->id.empty() ? p->id : "preset");
+          AddActivePreset(*p, id, !name.empty() ? name : p->name);
+        }
+      }
+    }
+    else if (type == "removeActivePreset")
+    {
+      const std::string presetId = payload.value("presetId", "");
+      if (!presetId.empty())
+        RemoveActivePreset(presetId);
+    }
+    else if (type == "setPresetMix")
+    {
+      const std::string presetId = payload.value("presetId", "");
+      const double value = payload.value("value", 1.0);
+      if (!presetId.empty())
+        SetActivePresetMix(presetId, value);
+    }
+    else if (type == "setPresetPan")
+    {
+      const std::string presetId = payload.value("presetId", "");
+      const double pan = payload.value("pan", 0.0);
+      if (!presetId.empty())
+        SetActivePresetPan(presetId, pan);
+    }
+    else if (type == "setPresetMute")
+    {
+      const std::string presetId = payload.value("presetId", "");
+      const bool mute = payload.value("mute", false);
+      if (!presetId.empty())
+        SetActivePresetMute(presetId, mute);
+    }
+    else if (type == "setPresetSolo")
+    {
+      const std::string presetId = payload.value("presetId", "");
+      const bool solo = payload.value("solo", false);
+      if (!presetId.empty())
+        SetActivePresetSolo(presetId, solo);
+    }
+    else if (type == "setMasterGain")
+    {
+      const double gain = payload.value("value", 1.0);
+      SetMasterMixGain(gain);
+    }
   }
 
   void GuitarFXPlugin::BroadcastState()
@@ -1411,28 +1520,17 @@ namespace guitarfx
 
   void GuitarFXPlugin::ApplyPreset(const Preset &preset)
   {
-    if (!mDSP)
-    {
-      return;
-    }
-
     // Lock DSP mutex to prevent ProcessBlock from accessing DSP during modification
     std::lock_guard<std::mutex> lock(mDSPMutex);
 
-    // Load the preset into the GraphDSPManager
-    // This will:
-    // - Create a new signal graph executor
-    // - Resolve and load all resources (NAM models, IRs)
-    // - Set up all effect nodes with their parameters
-    // - Prepare the DSP chain for processing
-    if (!mDSP->LoadPreset(preset))
-    {
-      std::cout << "[Plugin] Failed to load preset into GraphDSPManager" << std::endl;
-      ReportErrorToUI("Failed to load preset", "Could not initialize signal graph");
-      return;
-    }
+    // Initialize multi-preset mixer with a single active preset by default
+    mPresetMixer = MultiPresetMixer();
+    mPresetMixer.SetResourceLibrary(&mDSP->GetResourceLibrary());
+    mPresetMixer.Prepare(GetSampleRate(), GetBlockSize());
+    const std::string presetId = !preset.id.empty() ? preset.id : "preset";
+    mPresetMixer.AddActivePreset(preset, presetId, preset.name);
 
-    std::cout << "[Plugin] Successfully loaded preset: " << preset.name << std::endl;
+    std::cout << "[Plugin] Loaded preset into MultiPresetMixer: " << preset.name << std::endl;
 
     // Update active paths for UI display
     mActiveModelPath.clear();
@@ -1514,6 +1612,8 @@ namespace guitarfx
         parameters["modelPath"] = mActiveModelPath;
         parameters["irPath"] = mActiveIRPath;
         message["parameters"] = std::move(parameters);
+        // Include active mixer preset ids
+        message["activePresetIds"] = mPresetMixer.GetActivePresetIds();
         
         SendMessageToUI(message.dump());
       }

@@ -52,6 +52,7 @@ The audio engine processes all audio in real-time with minimal latency.
 
 **Components:**
 - **Signal Graph Executor**: Routes audio through configured effect chain
+- **Multi-Preset Mixer**: Runs multiple presets in parallel and mixes outputs
 - **NAM DSP Manager**: Loads and runs neural amp models
 - **IR Manager**: Handles impulse response convolution
 - **Effect Processors**: Individual DSP effect implementations
@@ -200,6 +201,7 @@ Host Audio Buffer
 
 - [Audio Engine Specification](./audio-engine.md)
 - [Signal Graph Model](./signal-graph-model.md)
+- [Multi-Preset Mixer](./multi-preset-mixer.md)
 - [Preset System Specification](./preset-system.md)
 - [User Interface Specification](./user-interface.md)
 - [Plugin Format Specification](./plugin-formats.md)

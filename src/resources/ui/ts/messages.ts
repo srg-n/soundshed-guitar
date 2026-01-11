@@ -56,6 +56,16 @@ export function handleIncomingMessage(message: string): void {
         uiState.presetCache.set(preset.id, preset);
         updatePresetDropdownSelection();
       }
+      const activePresetIds = (payload as { activePresetIds?: string[] }).activePresetIds;
+      if (Array.isArray(activePresetIds)) {
+        uiState.mixer = uiState.mixer ?? { activePresetIds: [], presets: {}, masterGain: 1.0, limiterEnabled: false };
+        uiState.mixer.activePresetIds = activePresetIds.slice();
+        activePresetIds.forEach((id) => {
+          if (!uiState.mixer!.presets[id]) {
+            uiState.mixer!.presets[id] = { id, mix: 1.0, pan: 0.0, mute: false, solo: false };
+          }
+        });
+      }
       const parameters = (payload as { parameters?: Record<string, unknown> }).parameters;
       if (parameters) {
         uiState.parameters = {
@@ -227,5 +237,34 @@ export function handleIncomingMessage(message: string): void {
     }
     default:
       console.warn("Unknown message type", payload.type);
+  }
+}
+
+// Optional: handle full mixer state sync from plugin
+export function handleMixerStateMessage(message: Record<string, unknown>): void {
+  const mixer = message as { activePresetIds?: string[]; presets?: Record<string, unknown>; masterGain?: number; limiterEnabled?: boolean };
+  uiState.mixer = uiState.mixer ?? { activePresetIds: [], presets: {}, masterGain: 1.0, limiterEnabled: false };
+  if (Array.isArray(mixer.activePresetIds)) {
+    uiState.mixer.activePresetIds = mixer.activePresetIds.slice();
+  }
+  if (typeof mixer.masterGain === "number") {
+    uiState.mixer.masterGain = mixer.masterGain as number;
+  }
+  if (typeof mixer.limiterEnabled === "boolean") {
+    uiState.mixer.limiterEnabled = mixer.limiterEnabled as boolean;
+  }
+  // Merge per-preset states if provided
+  if (mixer.presets && typeof mixer.presets === "object") {
+    for (const [pid, st] of Object.entries(mixer.presets)) {
+      const ps = st as { mix?: number; pan?: number; mute?: boolean; solo?: boolean };
+      const cur = uiState.mixer.presets[pid] || { id: pid, mix: 1.0, pan: 0.0, mute: false, solo: false };
+      uiState.mixer.presets[pid] = {
+        id: pid,
+        mix: typeof ps.mix === "number" ? ps.mix : cur.mix,
+        pan: typeof ps.pan === "number" ? ps.pan : cur.pan,
+        mute: typeof ps.mute === "boolean" ? ps.mute : cur.mute,
+        solo: typeof ps.solo === "boolean" ? ps.solo : cur.solo,
+      };
+    }
   }
 }

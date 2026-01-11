@@ -1,6 +1,6 @@
 import { appendLog } from "./logging.js";
 import { clearNotification, showNotification } from "./notifications.js";
-import { renderPresetDetails, renderPresetList } from "./views.js";
+import { renderPresetDetails, renderPresetList, renderMixerPanel } from "./views.js";
 import { clonePreset, uiState } from "./state.js";
 import { buildAttachments, buildAttachmentsFromPreset, getDefaultPresets, initializeDataLibraries, REMOTE_BASE_URL } from "./dataLibraries.js";
 import { arrayBufferToBase64, isRemoteUrl, resolveAttachmentUrl } from "./utils.js";
@@ -80,6 +80,7 @@ function renderPresetUI(preset: Preset | null): void {
 export function renderActivePreset(): void {
   const active = uiState.presetCache.get(uiState.activePresetId ?? "") ?? null;
   renderPresetUI(active);
+  renderMixerPanel();
 }
 
 export function filterPresets(query: string): void {

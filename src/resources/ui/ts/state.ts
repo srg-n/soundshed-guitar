@@ -32,6 +32,12 @@ export const uiState: UiState = {
   demoAudioRepeat: false,
   logs: [],
   resourceLibrary: {},
+  mixer: {
+    activePresetIds: [],
+    presets: {},
+    masterGain: 1.0,
+    limiterEnabled: false,
+  },
 };
 
 export function clonePreset<T extends Preset | null>(preset: T): T {

@@ -211,6 +211,25 @@ target_compile_features(GuitarFX_RealAudioProcessingTests PRIVATE cxx_std_20)
 
 add_test(NAME RealAudioProcessingTests COMMAND GuitarFX_RealAudioProcessingTests)
 
+# Multi-Preset Mixer Pan/Mix Tests
+add_executable(GuitarFX_MultiPresetMixerTests
+  MultiPresetMixerTests.cpp
+)
+
+target_include_directories(GuitarFX_MultiPresetMixerTests
+  PRIVATE
+    ${GUITARFX_PROJECT_ROOT}/src
+)
+
+target_link_libraries(GuitarFX_MultiPresetMixerTests
+  PRIVATE
+    GuitarFXCore
+)
+
+target_compile_features(GuitarFX_MultiPresetMixerTests PRIVATE cxx_std_20)
+
+add_test(NAME MultiPresetMixerTests COMMAND GuitarFX_MultiPresetMixerTests)
+
 # Offline Processing Test App - processes WAV files through complete DSP pipeline
 # Note: This is a utility app, not added as a CTest, and disabled due to missing PresetManager.h
 # add_executable(GuitarFX_OfflineProcessingTest

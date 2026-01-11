@@ -20,6 +20,11 @@ namespace guitarfx
     SignalGraphExecutor();
     ~SignalGraphExecutor();
 
+    SignalGraphExecutor(const SignalGraphExecutor&) = delete;
+    SignalGraphExecutor& operator=(const SignalGraphExecutor&) = delete;
+    SignalGraphExecutor(SignalGraphExecutor&&) noexcept = default;
+    SignalGraphExecutor& operator=(SignalGraphExecutor&&) noexcept = default;
+
     // Setup
     void SetGraph(const SignalGraph& graph);
     void SetResourceLibrary(ResourceLibrary* library) { mResourceLibrary = library; }

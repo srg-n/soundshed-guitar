@@ -20,6 +20,7 @@
 #include "presets/PresetTypes.h"
 #include "presets/PresetStorage.h"
 #include "resources/ResourceLibrary.h"
+#include "dsp/MultiPresetMixer.h"
 #include "util/FileSystem.h"
 
 namespace guitarfx
@@ -60,6 +61,16 @@ namespace guitarfx
     };
 
     [[nodiscard]] bool StartSignalPathTest(double frequencyHz = 440.0, double durationSeconds = 1.0);
+
+    // Multi-preset mixer controls (controller API)
+    bool AddActivePreset(const Preset& preset, const std::string& presetId, const std::string& name);
+    void RemoveActivePreset(const std::string& presetId);
+    void SetActivePresetMix(const std::string& presetId, double value);
+    void SetActivePresetPan(const std::string& presetId, double pan);
+    void SetActivePresetMute(const std::string& presetId, bool mute);
+    void SetActivePresetSolo(const std::string& presetId, bool solo);
+    void SetMasterMixGain(double value);
+    void SetMixLimiterEnabled(bool enabled);
 
     enum ParameterId
     {
@@ -156,6 +167,7 @@ namespace guitarfx
     };
 
     std::unique_ptr<GraphDSPManager> mDSP;
+    MultiPresetMixer mPresetMixer;
     ResourceLibrary mResourceLibrary;
     FileSystem mFileSystem;
     ModelHasher mHasher;

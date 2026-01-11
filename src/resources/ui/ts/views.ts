@@ -1,5 +1,6 @@
 import { renderDemoAudioControls, bindDemoAudioControls } from "./demoAudio.js";
 import { uiState } from "./state.js";
+import { addActivePreset, setPresetMix, setPresetPan, setPresetMute, setPresetSolo, setMasterGain, setLimiterEnabled } from "./bridge.js";
 import { escapeHtml } from "./utils.js";
 import type { Preset } from "./types.js";
 
@@ -155,6 +156,119 @@ function renderParameterSection(): string {
   `;
 }
 
+function buildMixerMarkup(): string {
+  const mixer = uiState.mixer;
+  if (!mixer || !mixer.activePresetIds.length) {
+    return `
+      <div class="mixer-panel-empty">
+        <p>No active presets in the mixer.</p>
+        <p>Add a preset from the Preset details view.</p>
+      </div>
+    `;
+  }
+
+  const rows = mixer.activePresetIds.map((id) => {
+    const presetName = uiState.presetCache.get(id)?.name ?? id;
+    const ps = mixer.presets[id] ?? { id, mix: 1.0, pan: 0.0, mute: false, solo: false };
+    return `
+      <div class="mixer-row" data-preset-id="${escapeHtml(id)}">
+        <div class="mixer-row-header">
+          <span class="mixer-row-name">${escapeHtml(presetName)}</span>
+          <label class="toggle mini-toggle"><input type="checkbox" class="mixer-solo" ${ps.solo ? "checked" : ""}/> Solo</label>
+          <label class="toggle mini-toggle"><input type="checkbox" class="mixer-mute" ${ps.mute ? "checked" : ""}/> Mute</label>
+        </div>
+        <div class="mixer-controls">
+          <label class="mixer-control">
+            <span>Mix</span>
+            <input type="range" class="mixer-mix" min="0" max="1" step="0.01" value="${ps.mix}"/>
+          </label>
+          <label class="mixer-control">
+            <span>Pan</span>
+            <input type="range" class="mixer-pan" min="-1" max="1" step="0.01" value="${ps.pan}"/>
+          </label>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="mixer-panel">
+      <div class="mixer-master">
+        <label class="mixer-control">
+          <span>Master Gain</span>
+          <input type="range" id="mixer-master-gain" min="0" max="2" step="0.01" value="${mixer.masterGain}"/>
+        </label>
+        <label class="toggle mini-toggle">
+          <input type="checkbox" id="mixer-limiter" ${mixer.limiterEnabled ? "checked" : ""}/> Limiter
+        </label>
+      </div>
+      <div class="mixer-rows">
+        ${rows}
+      </div>
+    </div>
+  `;
+}
+
+function bindMixerControls(container: HTMLElement): void {
+  const masterGainSlider = container.querySelector<HTMLInputElement>("#mixer-master-gain");
+  if (masterGainSlider) {
+    masterGainSlider.addEventListener("input", () => {
+      const val = parseFloat(masterGainSlider.value);
+      setMasterGain(isFinite(val) ? val : 1.0);
+    });
+  }
+
+  const limiterCheckbox = container.querySelector<HTMLInputElement>("#mixer-limiter");
+  if (limiterCheckbox) {
+    limiterCheckbox.addEventListener("change", () => {
+      setLimiterEnabled(Boolean(limiterCheckbox.checked));
+    });
+  }
+
+  container.querySelectorAll<HTMLElement>(".mixer-row").forEach((row) => {
+    const pid = row.dataset.presetId || "";
+    const mixEl = row.querySelector<HTMLInputElement>(".mixer-mix");
+    const panEl = row.querySelector<HTMLInputElement>(".mixer-pan");
+    const muteEl = row.querySelector<HTMLInputElement>(".mixer-mute");
+    const soloEl = row.querySelector<HTMLInputElement>(".mixer-solo");
+    if (mixEl) {
+      mixEl.addEventListener("input", () => {
+        const v = parseFloat(mixEl.value);
+        setPresetMix(pid, isFinite(v) ? v : 1.0);
+        if (uiState.mixer?.presets[pid]) uiState.mixer.presets[pid].mix = isFinite(v) ? v : 1.0;
+      });
+    }
+    if (panEl) {
+      panEl.addEventListener("input", () => {
+        const v = parseFloat(panEl.value);
+        setPresetPan(pid, isFinite(v) ? v : 0.0);
+        if (uiState.mixer?.presets[pid]) uiState.mixer.presets[pid].pan = isFinite(v) ? v : 0.0;
+      });
+    }
+    if (muteEl) {
+      muteEl.addEventListener("change", () => {
+        const v = Boolean(muteEl.checked);
+        setPresetMute(pid, v);
+        if (uiState.mixer?.presets[pid]) uiState.mixer.presets[pid].mute = v;
+      });
+    }
+    if (soloEl) {
+      soloEl.addEventListener("change", () => {
+        const v = Boolean(soloEl.checked);
+        setPresetSolo(pid, v);
+        if (uiState.mixer?.presets[pid]) uiState.mixer.presets[pid].solo = v;
+      });
+    }
+  });
+}
+
+export function renderMixerPanel(): void {
+  const panel = document.getElementById("mixer-panel");
+  if (!panel) return;
+  panel.innerHTML = buildMixerMarkup();
+  bindMixerControls(panel);
+}
+
 export function renderPresetList(
   presets: Preset[],
   activePresetId: string | null,
@@ -256,6 +370,58 @@ export function renderPresetDetails(
 
   const fxChainContent = fxChainNodes || '<span class="fx-empty">No effects in chain</span>';
 
+  function renderMixerSection(): string {
+    const mixer = uiState.mixer;
+    if (!mixer || !mixer.activePresetIds.length) {
+      return "";
+    }
+
+    const rows = mixer.activePresetIds.map((id) => {
+      const presetName = uiState.presetCache.get(id)?.name ?? id;
+      const ps = mixer.presets[id] ?? { id, mix: 1.0, pan: 0.0, mute: false, solo: false };
+      return `
+        <div class="mixer-row" data-preset-id="${escapeHtml(id)}">
+          <div class="mixer-row-header">
+            <span class="mixer-row-name">${escapeHtml(presetName)}</span>
+            <label class="toggle"><input type="checkbox" class="mixer-solo" ${ps.solo ? "checked" : ""}/> Solo</label>
+            <label class="toggle"><input type="checkbox" class="mixer-mute" ${ps.mute ? "checked" : ""}/> Mute</label>
+          </div>
+          <div class="mixer-controls">
+            <label class="mixer-control">
+              <span>Mix</span>
+              <input type="range" class="mixer-mix" min="0" max="1" step="0.01" value="${ps.mix}"/>
+            </label>
+            <label class="mixer-control">
+              <span>Pan</span>
+              <input type="range" class="mixer-pan" min="-1" max="1" step="0.01" value="${ps.pan}"/>
+            </label>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <div class="signal-chain-section">
+        <h3 class="section-title">
+          <span class="section-icon">🎛️</span>
+          Mixer
+        </h3>
+        <div class="mixer-master">
+          <label class="mixer-control">
+            <span>Master Gain</span>
+            <input type="range" id="mixer-master-gain" min="0" max="2" step="0.01" value="${mixer.masterGain}"/>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="mixer-limiter" ${mixer.limiterEnabled ? "checked" : ""}/> Limiter
+          </label>
+        </div>
+        <div class="mixer-rows">
+          ${rows}
+        </div>
+      </div>
+    `;
+  }
+
   presetDetailsElement.innerHTML = `
     <div class="signal-chain-container">
       <div class="signal-chain-header">
@@ -263,7 +429,10 @@ export function renderPresetDetails(
           <h2 class="preset-title">${escapeHtml(preset.name)}</h2>
           <p class="preset-description">${escapeHtml(preset.description ?? "")}</p>
         </div>
-        <button id="apply-preset" class="apply-btn">Apply Preset</button>
+        <div class="preset-actions">
+          <button id="apply-preset" class="apply-btn">Apply Preset</button>
+          <button id="add-preset-to-mixer" class="apply-btn" title="Add this preset to the active mixer">Add to Mixer</button>
+        </div>
       </div>
 
       <div class="signal-chain-section">
@@ -297,6 +466,7 @@ export function renderPresetDetails(
 
       ${renderDemoAudioControls()}
       ${renderParameterSection()}
+      <div class="mixer-panel-host">${buildMixerMarkup()}</div>
     </div>
   `;
 
@@ -307,10 +477,22 @@ export function renderPresetDetails(
     });
   }
 
+  const addToMixerButton = document.getElementById("add-preset-to-mixer");
+  if (addToMixerButton) {
+    addToMixerButton.addEventListener("click", () => {
+      addActivePreset(preset.id);
+    });
+  }
+
   const signalTestButton = document.getElementById("run-signal-test");
   if (signalTestButton) {
     signalTestButton.addEventListener("click", hooks.onRequestSignalTest);
   }
   bindDemoAudioControls();
   hooks.onBindLoadButtons();
+
+  const mixerHost = presetDetailsElement.querySelector(".mixer-panel-host") as HTMLElement | null;
+  if (mixerHost) {
+    bindMixerControls(mixerHost);
+  }
 }

@@ -142,6 +142,21 @@ export interface ResourceLibrary {
   [key: string]: LibraryResource[] | undefined;
 }
 
+export interface MixerPresetState {
+  id: string;
+  mix: number; // 0..1
+  pan: number; // -1..1 (L..R)
+  mute: boolean;
+  solo: boolean;
+}
+
+export interface MixerState {
+  activePresetIds: string[];
+  presets: Record<string, MixerPresetState>;
+  masterGain: number; // linear
+  limiterEnabled: boolean;
+}
+
 export interface UiState {
   presets: Preset[];
   filteredPresets: Preset[];
@@ -153,6 +168,7 @@ export interface UiState {
   demoAudioRepeat: boolean;
   logs: LogEntry[];
   resourceLibrary: ResourceLibrary;
+  mixer?: MixerState;
 }
 
 declare global {

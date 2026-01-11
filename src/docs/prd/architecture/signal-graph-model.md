@@ -294,9 +294,9 @@ Node parameters stored as key-value pairs:
 
 ### Parameter Addressing
 
-Global parameter ID format: `{nodeId}_{paramId}`
-
-Example: `amp1_drive`, `cab1_mix`, `delay1_time`
+Global parameter ID format:
+- Single preset: `{nodeId}_{paramId}` (e.g., `amp1_drive`)
+- Multi-preset: `{presetId}_{nodeId}_{paramId}` (e.g., `p1_amp1_drive`)
 
 ## Resource References
 
