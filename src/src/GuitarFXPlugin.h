@@ -26,6 +26,7 @@
 namespace guitarfx
 {
   class GraphDSPManager;
+  class GlobalFXChain;
   class GuitarFXPlugin final : public iplug::Plugin
   {
   public:
@@ -139,6 +140,7 @@ namespace guitarfx
     void HandleReplaceSignalPathNodeRequest(const nlohmann::json &payload);
     void HandleReorderSignalPathNodeRequest(const nlohmann::json &payload);
     void HandleDeleteSignalPathNodeRequest(const nlohmann::json &payload);
+    void ProcessThroughGlobalChain(iplug::sample **inputs, iplug::sample **outputs, int nFrames);
     void BroadcastState();
     void ApplyPreset(const guitarfx::Preset &preset);
     void ApplyNodeParameter(const guitarfx::GraphNode& node, const std::string& paramKey, double value);
@@ -188,6 +190,7 @@ namespace guitarfx
     std::atomic<bool> mSignalTestActive{false};
     std::atomic<bool> mSignalTestResultPending{false};
 
+    std::unique_ptr<GlobalFXChain> mGlobalFX;
     struct PreviewPlaybackBuffer
     {
       std::string id;

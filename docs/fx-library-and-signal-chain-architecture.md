@@ -59,6 +59,11 @@ The FX Library and Signal Chain Editor system provides a drag-and-drop interface
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### Global Signal Flow
+- Input → Global Noise Gate → Global Transpose → Preset Graph / Multi-Preset Mixer → Global Doubler → Output
+- The global processors run for both single-preset and multi-preset modes, guaranteeing consistent latency/order regardless of preset contents.
+- Plugin parameters `Gate`, `Gate Threshold`, `Transpose`, and `Doubler` drive these global stages; per-node gate/pitch/doubler blocks inside a preset remain independent.
+
 ## Frontend Components
 
 ### 1. FX Library (`src/resources/ui/ts/fxSelector.ts`)

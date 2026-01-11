@@ -26,6 +26,7 @@
 #include "config.h"
 #include "dsp/IRTypes.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/effects/NoiseGateEffect.h"
 #include "resources/ResourceLibrary.h"
 #include "IPlug_include_in_plug_src.h"
 #include "IPlugPaths.h"
@@ -40,6 +41,211 @@
 
 namespace guitarfx
 {
+  class GlobalFXChain
+  {
+  public:
+    void Prepare(double sampleRate, int maxBlockSize)
+    {
+      mSampleRate = sampleRate;
+      mMaxBlockSize = maxBlockSize;
+      const std::size_t pitchSize = static_cast<std::size_t>(maxBlockSize) * 4;
+      mPitchBufferL.assign(pitchSize, 0.0f);
+      mPitchBufferR.assign(pitchSize, 0.0f);
+      mPitchShiftedL.assign(static_cast<std::size_t>(maxBlockSize), 0.0f);
+      mPitchShiftedR.assign(static_cast<std::size_t>(maxBlockSize), 0.0f);
+      mGateInputL.assign(static_cast<std::size_t>(maxBlockSize), 0.0f);
+      mGateInputR.assign(static_cast<std::size_t>(maxBlockSize), 0.0f);
+      mGateOutputL.assign(static_cast<std::size_t>(maxBlockSize), 0.0f);
+      mGateOutputR.assign(static_cast<std::size_t>(maxBlockSize), 0.0f);
+      ResizeDoublerBuffers();
+    }
+
+    void Reset()
+    {
+      mPitchReadIndex = 0;
+      mPitchWriteIndex = 0;
+      mPitchPhase = 0.0;
+      mDoublerWriteIndex = 0;
+      std::fill(mDoublerBuffer.begin(), mDoublerBuffer.end(), 0.0f);
+      mGateEffect.Reset();
+    }
+
+    void SetGateEnabled(bool enabled) { mGateEnabled = enabled; }
+    void SetGateThreshold(double value) { mGateEffect.SetParam("thresholdDb", value); }
+    void SetTranspose(int semitones)
+    {
+      mSemitoneShift = std::clamp(semitones, -12, 12);
+      mPitchRatio = std::pow(2.0, static_cast<double>(mSemitoneShift) / 12.0);
+    }
+    void SetDoublerEnabled(bool enabled) { mDoublerEnabled = enabled; }
+    void SetDoublerDelay(double milliseconds)
+    {
+      mDoublerDelayMs = std::clamp(milliseconds, 0.5, 50.0);
+      mDoublerDelaySamples = static_cast<int>(mDoublerDelayMs * mSampleRate / 1000.0);
+      ResizeDoublerBuffers();
+    }
+
+    void ProcessPre(iplug::sample** inputs, int frames)
+    {
+      if (!inputs)
+        return;
+
+      float* gateIn[2] = { mGateInputL.data(), mGateInputR.data() };
+      float* gateOut[2] = { mGateOutputL.data(), mGateOutputR.data() };
+
+      if (mGateEnabled)
+      {
+        CopyToFloat(inputs, gateIn, frames);
+        mGateEffect.Prepare(mSampleRate, mMaxBlockSize);
+        mGateEffect.Process(gateIn, gateOut, frames);
+        CopyToDouble(gateOut, inputs, frames);
+      }
+
+      if (mSemitoneShift != 0 && mPitchRatio != 1.0)
+      {
+        ApplyPitchShift(inputs, frames);
+      }
+    }
+
+    void ProcessPost(iplug::sample** buffers, int frames)
+    {
+      if (!buffers)
+        return;
+
+      if (!mDoublerEnabled || mDoublerDelaySamples <= 0)
+      {
+        return;
+      }
+
+      EnsureDoublerFrames(frames);
+
+      for (int i = 0; i < frames; ++i)
+      {
+        const float left = buffers[0] ? static_cast<float>(buffers[0][i]) : 0.0f;
+        const float right = buffers[1] ? static_cast<float>(buffers[1][i]) : left;
+        const float mono = (left + right) * 0.5f;
+
+        mDoublerBuffer[mDoublerWriteIndex] = mono;
+
+        std::size_t readIndex = mDoublerWriteIndex >= static_cast<std::size_t>(mDoublerDelaySamples)
+          ? mDoublerWriteIndex - static_cast<std::size_t>(mDoublerDelaySamples)
+          : mDoublerBuffer.size() - (static_cast<std::size_t>(mDoublerDelaySamples) - mDoublerWriteIndex);
+
+        if (buffers[0]) buffers[0][i] = mono;
+        if (buffers[1]) buffers[1][i] = mDoublerBuffer[readIndex];
+
+        mDoublerWriteIndex = (mDoublerWriteIndex + 1) % mDoublerBuffer.size();
+      }
+    }
+
+  private:
+    void CopyToFloat(iplug::sample** in, float** out, int frames)
+    {
+      for (int i = 0; i < frames; ++i)
+      {
+        out[0][i] = in[0] ? static_cast<float>(in[0][i]) : 0.0f;
+        out[1][i] = in[1] ? static_cast<float>(in[1][i]) : out[0][i];
+      }
+    }
+
+    void CopyToDouble(float** in, iplug::sample** out, int frames)
+    {
+      for (int i = 0; i < frames; ++i)
+      {
+        if (out[0]) out[0][i] = static_cast<iplug::sample>(in[0][i]);
+        if (out[1]) out[1][i] = static_cast<iplug::sample>(in[1][i]);
+      }
+    }
+
+    void ApplyPitchShift(iplug::sample** buffers, int frames)
+    {
+      if (!buffers[0] && !buffers[1])
+      {
+        return;
+      }
+
+      const std::size_t pitchSize = mPitchBufferL.size();
+      if (pitchSize == 0)
+      {
+        return;
+      }
+
+      for (int frame = 0; frame < frames; ++frame)
+      {
+        const float inL = buffers[0] ? static_cast<float>(buffers[0][frame]) : 0.0f;
+        const float inR = buffers[1] ? static_cast<float>(buffers[1][frame]) : inL;
+
+        mPitchBufferL[mPitchWriteIndex] = inL;
+        mPitchBufferR[mPitchWriteIndex] = inR;
+        mPitchWriteIndex = (mPitchWriteIndex + 1) % pitchSize;
+
+        const double readPos = mPitchPhase;
+        const std::size_t readIndex0 = static_cast<std::size_t>(readPos) % pitchSize;
+        const std::size_t readIndex1 = (readIndex0 + 1) % pitchSize;
+        const double frac = readPos - std::floor(readPos);
+
+        mPitchShiftedL[static_cast<std::size_t>(frame)] = mPitchBufferL[readIndex0] * static_cast<float>(1.0 - frac) + mPitchBufferL[readIndex1] * static_cast<float>(frac);
+        mPitchShiftedR[static_cast<std::size_t>(frame)] = mPitchBufferR[readIndex0] * static_cast<float>(1.0 - frac) + mPitchBufferR[readIndex1] * static_cast<float>(frac);
+
+        mPitchPhase += mPitchRatio;
+        if (mPitchPhase >= static_cast<double>(pitchSize))
+        {
+          mPitchPhase -= static_cast<double>(pitchSize);
+        }
+      }
+
+      for (int i = 0; i < frames; ++i)
+      {
+        if (buffers[0]) buffers[0][i] = static_cast<iplug::sample>(mPitchShiftedL[static_cast<std::size_t>(i)]);
+        if (buffers[1]) buffers[1][i] = static_cast<iplug::sample>(mPitchShiftedR[static_cast<std::size_t>(i)]);
+      }
+    }
+
+    void ResizeDoublerBuffers()
+    {
+      const std::size_t required = static_cast<std::size_t>(mDoublerDelaySamples + mMaxBlockSize + 1);
+      if (mDoublerBuffer.size() < required)
+      {
+        mDoublerBuffer.assign(required, 0.0f);
+        mDoublerWriteIndex = 0;
+      }
+    }
+
+    void EnsureDoublerFrames(int frames)
+    {
+      if (mDoublerBuffer.size() < static_cast<std::size_t>(mDoublerDelaySamples + frames + 1))
+      {
+        mDoublerBuffer.resize(static_cast<std::size_t>(mDoublerDelaySamples + frames + 1), 0.0f);
+      }
+    }
+
+    double mSampleRate = 44100.0;
+    int mMaxBlockSize = 512;
+
+    bool mGateEnabled = false;
+    NoiseGateEffect mGateEffect;
+    std::vector<float> mGateInputL;
+    std::vector<float> mGateInputR;
+    std::vector<float> mGateOutputL;
+    std::vector<float> mGateOutputR;
+
+    int mSemitoneShift = 0;
+    double mPitchRatio = 1.0;
+    std::vector<float> mPitchBufferL;
+    std::vector<float> mPitchBufferR;
+    std::vector<float> mPitchShiftedL;
+    std::vector<float> mPitchShiftedR;
+    std::size_t mPitchReadIndex = 0;
+    std::size_t mPitchWriteIndex = 0;
+    double mPitchPhase = 0.0;
+
+    bool mDoublerEnabled = false;
+    double mDoublerDelayMs = 6.0;
+    int mDoublerDelaySamples = 0;
+    std::vector<float> mDoublerBuffer;
+    std::size_t mDoublerWriteIndex = 0;
+  };
+
   namespace
   {
     constexpr int kNumPrograms = 0;
@@ -518,8 +724,8 @@ namespace guitarfx
 
   } // namespace
 
-  GuitarFXPlugin::GuitarFXPlugin(const iplug::InstanceInfo &info)
-      : iplug::Plugin(info, iplug::MakeConfig(kParamCount, kNumPrograms)), mDSP(std::make_unique<GraphDSPManager>())
+    GuitarFXPlugin::GuitarFXPlugin(const iplug::InstanceInfo &info)
+      : iplug::Plugin(info, iplug::MakeConfig(kParamCount, kNumPrograms)), mDSP(std::make_unique<GraphDSPManager>()), mGlobalFX(std::make_unique<GlobalFXChain>())
   {
     // Write to a log file to verify execution
     FILE* logFile = fopen("c:\\temp\\plugin_log.txt", "a");
@@ -657,7 +863,7 @@ namespace guitarfx
 
       iplug::sample *previewInputs[2] = {mPreviewInputLeft.data(), mPreviewInputRight.data()};
       iplug::sample *previewOutputs[2] = {mPreviewOutputLeft.data(), mPreviewOutputRight.data()};
-      mDSP->Process(previewInputs, previewOutputs, nFrames);
+      ProcessThroughGlobalChain(previewInputs, previewOutputs, nFrames);
 
       for (int frame = 0; frame < nFrames; ++frame)
       {
@@ -718,7 +924,7 @@ namespace guitarfx
 
       iplug::sample *testInputs[channels] = {mSignalTestInputLeft.data(), mSignalTestInputRight.data()};
       iplug::sample *testOutputs[channels] = {mSignalTestOutputLeft.data(), mSignalTestOutputRight.data()};
-      mDSP->Process(testInputs, testOutputs, nFrames);
+      ProcessThroughGlobalChain(testInputs, testOutputs, nFrames);
 
       for (int frame = 0; frame < framesToProcess; ++frame)
       {
@@ -756,7 +962,16 @@ namespace guitarfx
       return;
     }
 
-    // If multi-preset mixer has active presets, use it; otherwise use single DSP path
+    ProcessThroughGlobalChain(inputs, outputs, nFrames);
+  }
+
+  void GuitarFXPlugin::ProcessThroughGlobalChain(iplug::sample **inputs, iplug::sample **outputs, int nFrames)
+  {
+    if (mGlobalFX)
+    {
+      mGlobalFX->ProcessPre(inputs, nFrames);
+    }
+
     if (mPresetMixer.GetPresetCount() > 0)
     {
       mPresetMixer.Process(inputs, outputs, nFrames);
@@ -764,6 +979,11 @@ namespace guitarfx
     else
     {
       mDSP->Process(inputs, outputs, nFrames);
+    }
+
+    if (mGlobalFX)
+    {
+      mGlobalFX->ProcessPost(outputs, nFrames);
     }
   }
 
@@ -779,6 +999,11 @@ namespace guitarfx
 
     mDSP->Prepare(GetSampleRate(), GetBlockSize());
     mPresetMixer.Prepare(GetSampleRate(), GetBlockSize());
+    if (mGlobalFX)
+    {
+      mGlobalFX->Prepare(GetSampleRate(), GetBlockSize());
+      mGlobalFX->Reset();
+    }
 
     mPreviewBuffer.store(nullptr, std::memory_order_release);
     mPreviewStartedBuffer.store(nullptr, std::memory_order_release);
@@ -1080,22 +1305,42 @@ namespace guitarfx
     case kParamGateEnabled:
       mDSP->SetGateEnabled(param->Bool());
       mPresetMixer.SetGateEnabled(param->Bool());
+      if (mGlobalFX)
+      {
+        mGlobalFX->SetGateEnabled(param->Bool());
+      }
       break;
     case kParamGateThreshold:
       mDSP->SetGateThreshold(param->Value());
       mPresetMixer.SetGateThreshold(param->Value());
+      if (mGlobalFX)
+      {
+        mGlobalFX->SetGateThreshold(param->Value());
+      }
       break;
     case kParamMix:
       mDSP->SetMix(param->Value());
       break;
     case kParamDoublerEnabled:
       mDSP->SetDoublerEnabled(param->Bool());
+      if (mGlobalFX)
+      {
+        mGlobalFX->SetDoublerEnabled(param->Bool());
+      }
       break;
     case kParamDoublerDelay:
       mDSP->SetDoublerDelay(param->Value());
+      if (mGlobalFX)
+      {
+        mGlobalFX->SetDoublerDelay(param->Value());
+      }
       break;
     case kParamTranspose:
       mDSP->SetTranspose(static_cast<int>(std::round(param->Value())));
+      if (mGlobalFX)
+      {
+        mGlobalFX->SetTranspose(static_cast<int>(std::round(param->Value())));
+      }
       break;
     case kParamSimpleCabEnabled:
       mDSP->SetSimpleCabEnabled(param->Bool());
