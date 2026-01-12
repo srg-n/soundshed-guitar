@@ -19,18 +19,12 @@ set(_nam_dsp_sources
 # compiles GuitarFXPlugin.cpp directly with its own API definition.
 
 set(_guitarfx_core_sources
-  # Existing DSP
+  # Core DSP utilities
   dsp/SimdFFT.h
   dsp/RealtimeConvolver.cpp
   dsp/RealtimeConvolver.h
-  dsp/SimpleCabSim.h
   dsp/IRTypes.h
-  dsp/IRManager.cpp
-  dsp/IRManager.h
   dsp/NAMFactoryForce.cpp
-  dsp/ParametricEQ.h
-  dsp/DelayEffect.h
-  dsp/ReverbEffect.h
   
   # V2 Signal Graph DSP
   dsp/EffectProcessor.h
