@@ -5,8 +5,8 @@
  * processing is working correctly. It tests:
  * 
  * 1. Model loading and initialization
- * 2. Direct model processing (bypassing GraphDSPManager)
- * 3. GraphDSPManager processing pipeline
+ * 2. Direct model processing (bypassing SignalGraphExecutor)
+ * 3. SignalGraphExecutor processing pipeline
  * 4. Signal integrity through each stage
  * 
  * Run with various test signals to diagnose garbled output issues.
@@ -30,8 +30,11 @@
 
 #include <nlohmann/json.hpp>
 
-#include "dsp/GraphDSPManager.h"
+#include "dsp/SignalGraphExecutor.h"
+#include "dsp/EffectRegistry.h"
+#include "dsp/effects/BuiltinEffects.h"
 #include "presets/PresetTypes.h"
+#include "resources/ResourceLibrary.h"
 #include "IPlugConstants.h"
 #include "NAM/dsp.h"
 #include "NAM/get_dsp.h"
@@ -78,12 +81,13 @@ void GenerateSineWaveT(std::vector<T>& buffer, double frequency, double sampleRa
 }
 
 // Overloads for specific types to avoid ambiguity
+// Note: NAM_SAMPLE is double, so we only need NAM_SAMPLE and float overloads
 void GenerateSineWave(std::vector<NAM_SAMPLE>& buffer, double frequency, double sampleRate, double amplitude = 0.5)
 {
   GenerateSineWaveT(buffer, frequency, sampleRate, amplitude);
 }
 
-void GenerateSineWave(std::vector<iplug::sample>& buffer, double frequency, double sampleRate, double amplitude = 0.5)
+void GenerateSineWave(std::vector<float>& buffer, double frequency, double sampleRate, double amplitude = 0.5)
 {
   GenerateSineWaveT(buffer, frequency, sampleRate, amplitude);
 }
@@ -268,34 +272,39 @@ guitarfx::Preset MakeNamGraphPreset(const fs::path& modelPath, const fs::path& i
 class GraphHarness
 {
 public:
-  GraphHarness(const fs::path& modelPath,
+  GraphHarness(const fs::path& resourcesDir,
+               const fs::path& modelPath,
                const fs::path& irPath,
                double sampleRate,
                int blockSize)
   {
-    mDSP = std::make_unique<guitarfx::GraphDSPManager>();
-    mDSP->Prepare(sampleRate, blockSize);
+    guitarfx::RegisterAllEffects();
+    mResourceLibrary = std::make_unique<guitarfx::ResourceLibrary>();
+    mResourceLibrary->LoadFromDirectory(resourcesDir);
+    mExecutor = std::make_unique<guitarfx::SignalGraphExecutor>();
+    mExecutor->SetResourceLibrary(mResourceLibrary.get());
     mPreset = MakeNamGraphPreset(modelPath, irPath);
-    mDSP->LoadPreset(mPreset);
+    mExecutor->SetInputTrim(mPreset.global.inputTrim);
+    mExecutor->SetOutputTrim(mPreset.global.outputTrim);
+    mExecutor->SetGraph(mPreset.graph);
+    mExecutor->Prepare(sampleRate, blockSize);
   }
 
-  void Process(iplug::sample** inputs, iplug::sample** outputs, int numSamples)
+  void Process(float** inputs, float** outputs, int numSamples)
   {
-    mDSP->Process(inputs, outputs, numSamples);
+    mExecutor->Process(inputs, outputs, numSamples);
   }
 
-  void SetInputTrim(double db) { mDSP->SetInputTrim(db); }
-  void SetOutputTrim(double db) { mDSP->SetOutputTrim(db); }
-  void SetDrive(double value) { mDSP->SetDrive(value); }
-  void SetTone(double value) { mDSP->SetTone(value); }
-  void SetMix(double value) { mDSP->SetNodeParam("cab", "mix", value); }
-  void SetGateEnabled(bool enabled) { mDSP->SetGateEnabled(enabled); }
-  void SetDoublerEnabled(bool enabled) { mDSP->SetDoublerEnabled(enabled); }
-  void SetTranspose(int semitones) { mDSP->SetTranspose(semitones); }
+  void SetInputTrim(double db) { mExecutor->SetInputTrim(db); }
+  void SetOutputTrim(double db) { mExecutor->SetOutputTrim(db); }
+  void SetDrive(double value) { mExecutor->SetNodeParam("amp", "drive", value); }
+  void SetTone(double value) { mExecutor->SetNodeParam("amp", "tone", value); }
+  void SetMix(double value) { mExecutor->SetNodeParam("cab", "mix", value); }
 
 private:
   guitarfx::Preset mPreset;
-  std::unique_ptr<guitarfx::GraphDSPManager> mDSP;
+  std::unique_ptr<guitarfx::ResourceLibrary> mResourceLibrary;
+  std::unique_ptr<guitarfx::SignalGraphExecutor> mExecutor;
 };
 
 // ============================================================================
@@ -426,16 +435,16 @@ bool TestDirectModelProcessing(const fs::path& modelPath)
 }
 
 // ============================================================================
-// Test: GraphDSPManager Processing Pipeline
+// Test: SignalGraphExecutor Processing Pipeline
 // ============================================================================
 
-bool TestDSPManagerPipeline(const fs::path& modelPath, const fs::path& irPath)
+bool TestDSPManagerPipeline(const fs::path& resourcesDir, const fs::path& modelPath, const fs::path& irPath)
 {
-  std::cout << "\n=== Test: GraphDSPManager Processing Pipeline ===\n";
+  std::cout << "\n=== Test: SignalGraphExecutor Processing Pipeline ===\n";
   std::cout << "Model: " << modelPath.filename().string() << "\n";
   std::cout << "IR: " << (irPath.empty() ? "(none)" : irPath.filename().string()) << "\n\n";
 
-  GraphHarness dsp(modelPath, irPath, kTestSampleRate, kTestBlockSize);
+  GraphHarness dsp(resourcesDir, modelPath, irPath, kTestSampleRate, kTestBlockSize);
   std::cout << "Graph DSP prepared at " << kTestSampleRate << " Hz\n";
 
   // Set neutral DSP parameters
@@ -444,19 +453,16 @@ bool TestDSPManagerPipeline(const fs::path& modelPath, const fs::path& irPath)
   dsp.SetDrive(0.5);
   dsp.SetTone(0.0);
   dsp.SetMix(1.0);
-  dsp.SetGateEnabled(false);
-  dsp.SetDoublerEnabled(false);
-  dsp.SetTranspose(0);
   std::cout << "DSP parameters set to neutral values\n";
 
   // Create stereo buffers
-  std::vector<iplug::sample> inputL(kTestBlockSize);
-  std::vector<iplug::sample> inputR(kTestBlockSize);
-  std::vector<iplug::sample> outputL(kTestBlockSize);
-  std::vector<iplug::sample> outputR(kTestBlockSize);
+  std::vector<float> inputL(kTestBlockSize);
+  std::vector<float> inputR(kTestBlockSize);
+  std::vector<float> outputL(kTestBlockSize);
+  std::vector<float> outputR(kTestBlockSize);
 
-  iplug::sample* inputs[2] = {inputL.data(), inputR.data()};
-  iplug::sample* outputs[2] = {outputL.data(), outputR.data()};
+  float* inputs[2] = {inputL.data(), inputR.data()};
+  float* outputs[2] = {outputL.data(), outputR.data()};
 
   // Test 1: Sine wave
   std::cout << "\n--- Test 1: 440 Hz Sine Wave through DSP Manager ---\n";
@@ -494,7 +500,7 @@ bool TestDSPManagerPipeline(const fs::path& modelPath, const fs::path& irPath)
     for (std::size_t i = 0; i < inputL.size(); ++i)
     {
       const double phase = 2.0 * kPi * 440.0 * (block * kTestBlockSize + i) / kTestSampleRate;
-      inputL[i] = inputR[i] = static_cast<iplug::sample>(0.3 * std::sin(phase));
+      inputL[i] = inputR[i] = static_cast<float>(0.3 * std::sin(phase));
     }
 
     dsp.Process(inputs, outputs, kTestBlockSize);
@@ -542,10 +548,10 @@ bool TestDSPManagerPipeline(const fs::path& modelPath, const fs::path& irPath)
 // Test: Compare Direct vs Manager Processing
 // ============================================================================
 
-bool TestDirectVsManager(const fs::path& modelPath)
+bool TestDirectVsManager(const fs::path& resourcesDir, const fs::path& modelPath)
 {
   std::cout << "\n=== Test: Direct Model vs DSP Manager Comparison ===\n";
-  std::cout << "This test compares NAM model output when called directly vs through GraphDSPManager\n\n";
+  std::cout << "This test compares NAM model output when called directly vs through SignalGraphExecutor\n\n";
 
   // Load model directly
   auto directModel = nam::get_dsp(modelPath);
@@ -557,7 +563,7 @@ bool TestDirectVsManager(const fs::path& modelPath)
   directModel->ResetAndPrewarm(kTestSampleRate, kTestBlockSize);
 
   // Set up graph-based DSP manager
-  GraphHarness dsp(modelPath, {}, kTestSampleRate, kTestBlockSize);
+  GraphHarness dsp(resourcesDir, modelPath, {}, kTestSampleRate, kTestBlockSize);
 
   // Neutral settings for DSP manager (to minimize processing changes)
   dsp.SetInputTrim(0.0);
@@ -565,18 +571,15 @@ bool TestDirectVsManager(const fs::path& modelPath)
   dsp.SetDrive(0.0);  // No drive
   dsp.SetTone(0.0);
   dsp.SetMix(1.0);
-  dsp.SetGateEnabled(false);
-  dsp.SetDoublerEnabled(false);
-  dsp.SetTranspose(0);
 
   // Generate identical test signal
   std::vector<NAM_SAMPLE> directInput(kTestBlockSize);
   std::vector<NAM_SAMPLE> directOutput(kTestBlockSize);
   
-  std::vector<iplug::sample> managerInputL(kTestBlockSize);
-  std::vector<iplug::sample> managerInputR(kTestBlockSize);
-  std::vector<iplug::sample> managerOutputL(kTestBlockSize);
-  std::vector<iplug::sample> managerOutputR(kTestBlockSize);
+  std::vector<float> managerInputL(kTestBlockSize);
+  std::vector<float> managerInputR(kTestBlockSize);
+  std::vector<float> managerOutputL(kTestBlockSize);
+  std::vector<float> managerOutputR(kTestBlockSize);
 
   GenerateSineWave(directInput, 440.0, kTestSampleRate, 0.3);
   GenerateSineWave(managerInputL, 440.0, kTestSampleRate, 0.3);
@@ -586,8 +589,8 @@ bool TestDirectVsManager(const fs::path& modelPath)
   directModel->process(directInput.data(), directOutput.data(), kTestBlockSize);
 
   // Process through manager
-  iplug::sample* inputs[2] = {managerInputL.data(), managerInputR.data()};
-  iplug::sample* outputs[2] = {managerOutputL.data(), managerOutputR.data()};
+  float* inputs[2] = {managerInputL.data(), managerInputR.data()};
+  float* outputs[2] = {managerOutputL.data(), managerOutputR.data()};
   dsp.Process(inputs, outputs, kTestBlockSize);
 
   // Compare results
@@ -677,26 +680,23 @@ bool TestModelDifferentiation(const fs::path& resourcesDir, const nlohmann::json
     return false;
   }
 
-  auto renderModel = [](const fs::path& modelPath) -> std::vector<double>
+  auto renderModel = [&resourcesDir](const fs::path& modelPath) -> std::vector<double>
   {
-    GraphHarness dsp(modelPath, {}, kTestSampleRate, kTestBlockSize);
+    GraphHarness dsp(resourcesDir, modelPath, {}, kTestSampleRate, kTestBlockSize);
 
     dsp.SetInputTrim(0.0);
     dsp.SetOutputTrim(0.0);
     dsp.SetDrive(0.0);
     dsp.SetTone(0.0);
     dsp.SetMix(1.0);
-    dsp.SetGateEnabled(false);
-    dsp.SetDoublerEnabled(false);
-    dsp.SetTranspose(0);
 
-    std::vector<iplug::sample> inL(kTestBlockSize), inR(kTestBlockSize);
-    std::vector<iplug::sample> outL(kTestBlockSize), outR(kTestBlockSize);
+    std::vector<float> inL(kTestBlockSize), inR(kTestBlockSize);
+    std::vector<float> outL(kTestBlockSize), outR(kTestBlockSize);
     GenerateSineWave(inL, 440.0, kTestSampleRate, 0.3);
     GenerateSineWave(inR, 440.0, kTestSampleRate, 0.3);
 
-    iplug::sample* inputs[2] = {inL.data(), inR.data()};
-    iplug::sample* outputs[2] = {outL.data(), outR.data()};
+    float* inputs[2] = {inL.data(), inR.data()};
+    float* outputs[2] = {outL.data(), outR.data()};
 
     // Process a couple of blocks to let the model settle
     dsp.Process(inputs, outputs, kTestBlockSize);
@@ -807,8 +807,8 @@ int main(int argc, char* argv[])
     bool allPassed = true;
 
     allPassed &= TestDirectModelProcessing(modelPath);
-    allPassed &= TestDSPManagerPipeline(modelPath, irPath);
-    allPassed &= TestDirectVsManager(modelPath);
+    allPassed &= TestDSPManagerPipeline(resourcesDir, modelPath, irPath);
+    allPassed &= TestDirectVsManager(resourcesDir, modelPath);
     allPassed &= TestModelDifferentiation(resourcesDir, audioModelsJson);
 
     std::cout << "\n==========================\n";

@@ -3,7 +3,7 @@
 #include "presets/PresetTypes.h"
 #include "dsp/EffectProcessor.h"
 #include "dsp/SignalGraphExecutor.h"
-#include "resources/ResourceLibrary.h"
+#include "dsp/effects/NoiseGateEffect.h"
 
 #include <algorithm>
 #include <optional>
@@ -12,9 +12,12 @@
 
 namespace guitarfx
 {
+  class ResourceLibrary;
+
   /**
-   * Runs multiple presets in parallel and mixes their outputs.
-   * Supports per-preset mix level, mute/solo, and stereo panning.
+   * Central DSP manager that runs multiple presets in parallel and mixes their outputs.
+   * Supports per-preset mix level, mute/solo, stereo panning, and per-preset global FX.
+   * Also handles global input settings like auto-level and mono/stereo mode.
    */
   class MultiPresetMixer
   {
@@ -27,30 +30,57 @@ namespace guitarfx
       bool mute = false;
       bool solo = false;
       double pan = 0.0; // [-1.0, 1.0] equal-power pan
+
+      // Per-preset global FX settings
+      bool gateEnabled = false;
+      double gateThresholdDb = -40.0;
+      int transposeSemitones = 0;
+      bool doublerEnabled = false;
+      double doublerDelayMs = 6.0;
     };
 
     MultiPresetMixer() = default;
 
     void SetResourceLibrary(ResourceLibrary *library) { mResourceLibrary = library; }
+    [[nodiscard]] ResourceLibrary* GetResourceLibrary() const { return mResourceLibrary; }
 
     // Add/Remove instances
     bool AddActivePreset(const Preset &preset, const std::string &presetId, const std::string &name);
     void RemoveActivePreset(const std::string &presetId);
 
-    // Controls
+    // Per-preset mixing controls
     void SetPresetMix(const std::string &presetId, double value);
     void SetPresetPan(const std::string &presetId, double pan);
     void SetPresetMute(const std::string &presetId, bool mute);
     void SetPresetSolo(const std::string &presetId, bool solo);
+
+    // Per-preset global FX controls
+    void SetPresetGateEnabled(const std::string &presetId, bool enabled);
+    void SetPresetGateThreshold(const std::string &presetId, double thresholdDb);
+    void SetPresetTranspose(const std::string &presetId, int semitones);
+    void SetPresetDoublerEnabled(const std::string &presetId, bool enabled);
+    void SetPresetDoublerDelay(const std::string &presetId, double delayMs);
+
+    // Master/global controls
     void SetMasterGain(double value) { mMasterGain = value; }
     void SetLimiterEnabled(bool enabled) { mLimiterEnabled = enabled; }
 
-    // Global/parameter routing helpers
+    // Global input/output settings
+    void SetAutoLevelInput(bool enabled) { mAutoLevelInput = enabled; }
+    void SetAutoLevelOutput(bool enabled) { mAutoLevelOutput = enabled; }
+    [[nodiscard]] bool GetAutoLevelInput() const { return mAutoLevelInput; }
+    [[nodiscard]] bool GetAutoLevelOutput() const { return mAutoLevelOutput; }
+
+    void SetMonoMode(bool mono) { mMonoMode = mono; }
+    void SetInputChannel(int channel) { mInputChannel = std::clamp(channel, 0, 1); }
+    [[nodiscard]] bool IsMonoMode() const { return mMonoMode; }
+    [[nodiscard]] int GetInputChannel() const { return mInputChannel; }
+
+    // Signal chain parameter routing (apply to all presets)
     void SetInputTrim(double dB);
     void SetOutputTrim(double dB);
-    void SetGateEnabled(bool enabled);
-    void SetGateThreshold(double value);
     void SetAmpDrive(double value);
+    void SetAmpTone(double value);
     void SetSimpleCabEnabled(bool enabled);
     void SetSimpleCabBass(double value);
     void SetSimpleCabPresence(double value);
@@ -68,6 +98,16 @@ namespace guitarfx
     void SetReverbDecay(double value);
     void SetReverbDamping(double value);
     void SetReverbMix(double value);
+    void SetGateEnabled(bool enabled);
+    void SetGateThreshold(double thresholdDb);
+    void SetDoublerEnabled(bool enabled);
+    void SetDoublerDelay(double delayMs);
+    void SetTranspose(int semitones);
+
+    // Node-level control (for signal chain editing)
+    void SetNodeEnabled(const std::string &presetId, const std::string &nodeId, bool enabled);
+    void SetNodeParam(const std::string &presetId, const std::string &nodeId, const std::string &key, double value);
+    bool LoadNodeResource(const std::string &presetId, const std::string &nodeId, const ResourceRef &ref);
 
     // Lifecycle
     void Prepare(double sampleRate, int maxBlockSize);
@@ -90,6 +130,18 @@ namespace guitarfx
       std::vector<float> outL;
       std::vector<float> outR;
 
+      // Per-preset global FX state
+      NoiseGateEffect gate;
+      std::vector<float> gateInL, gateInR, gateOutL, gateOutR;
+      double pitchRatio = 1.0;
+      std::vector<float> pitchBufferL, pitchBufferR;
+      std::vector<float> pitchShiftedL, pitchShiftedR;
+      std::size_t pitchWriteIndex = 0;
+      double pitchReadPhase = 0.0;
+      std::vector<float> doublerBuffer;
+      std::size_t doublerWriteIndex = 0;
+      int doublerDelaySamples = 0;
+
       PresetInstance() = default;
       PresetInstance(PresetInstance &&) noexcept = default;
       PresetInstance &operator=(PresetInstance &&) noexcept = default;
@@ -100,7 +152,13 @@ namespace guitarfx
     [[nodiscard]] PresetInstance *FindInstance(const std::string &id);
     [[nodiscard]] const PresetInstance *FindInstance(const std::string &id) const;
     void AllocateBuffers(int maxBlockSize);
+    void AllocateInstanceBuffers(PresetInstance &inst, int maxBlockSize);
     static void ComputePanGains(double pan, float &gL, float &gR);
+
+    // Per-preset global FX processing
+    void ProcessPresetGate(PresetInstance &inst, float *inL, float *inR, int numSamples);
+    void ProcessPresetPitchShift(PresetInstance &inst, float *bufL, float *bufR, int numSamples);
+    void ProcessPresetDoubler(PresetInstance &inst, float *outL, float *outR, int numSamples);
 
     ResourceLibrary *mResourceLibrary = nullptr;
     std::vector<PresetInstance> mInstances;
@@ -108,8 +166,21 @@ namespace guitarfx
     double mSampleRate = 44100.0;
     int mMaxBlockSize = 512;
     bool mPrepared = false;
-    double mMasterGain = 1.0; // applied post-sum
+    double mMasterGain = 1.0;
     bool mLimiterEnabled = false;
+
+    // Global settings
+    bool mAutoLevelInput = false;
+    bool mAutoLevelOutput = false;
+    bool mMonoMode = false;
+    int mInputChannel = 0; // 0=left, 1=right (for mono mode)
+
+    // Auto-level gain state
+    float mInputAutoLevelGain = 1.0f;
+    float mOutputAutoLevelGain = 1.0f;
+
+    // Temporary buffers for input processing
+    std::vector<float> mTempInL, mTempInR;
   };
 
 } // namespace guitarfx

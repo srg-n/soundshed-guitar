@@ -26,14 +26,13 @@
 #include "config.h"
 #include "dsp/IRTypes.h"
 #include "dsp/EffectRegistry.h"
-#include "dsp/effects/NoiseGateEffect.h"
 #include "resources/ResourceLibrary.h"
 #include "IPlug_include_in_plug_src.h"
 #include "IPlugPaths.h"
 #include "wdlstring.h"
 
-#include "dsp/GraphDSPManager.h"
 #include "presets/PresetStorage.h"
+#include "dsp/effects/BuiltinEffects.h"
 
 #ifdef _WIN32
 #include "platform/WebViewDPIHelper_win.h"
@@ -41,211 +40,6 @@
 
 namespace guitarfx
 {
-  class GlobalFXChain
-  {
-  public:
-    void Prepare(double sampleRate, int maxBlockSize)
-    {
-      mSampleRate = sampleRate;
-      mMaxBlockSize = maxBlockSize;
-      const std::size_t pitchSize = static_cast<std::size_t>(maxBlockSize) * 4;
-      mPitchBufferL.assign(pitchSize, 0.0f);
-      mPitchBufferR.assign(pitchSize, 0.0f);
-      mPitchShiftedL.assign(static_cast<std::size_t>(maxBlockSize), 0.0f);
-      mPitchShiftedR.assign(static_cast<std::size_t>(maxBlockSize), 0.0f);
-      mGateInputL.assign(static_cast<std::size_t>(maxBlockSize), 0.0f);
-      mGateInputR.assign(static_cast<std::size_t>(maxBlockSize), 0.0f);
-      mGateOutputL.assign(static_cast<std::size_t>(maxBlockSize), 0.0f);
-      mGateOutputR.assign(static_cast<std::size_t>(maxBlockSize), 0.0f);
-      ResizeDoublerBuffers();
-    }
-
-    void Reset()
-    {
-      mPitchReadIndex = 0;
-      mPitchWriteIndex = 0;
-      mPitchPhase = 0.0;
-      mDoublerWriteIndex = 0;
-      std::fill(mDoublerBuffer.begin(), mDoublerBuffer.end(), 0.0f);
-      mGateEffect.Reset();
-    }
-
-    void SetGateEnabled(bool enabled) { mGateEnabled = enabled; }
-    void SetGateThreshold(double value) { mGateEffect.SetParam("thresholdDb", value); }
-    void SetTranspose(int semitones)
-    {
-      mSemitoneShift = std::clamp(semitones, -12, 12);
-      mPitchRatio = std::pow(2.0, static_cast<double>(mSemitoneShift) / 12.0);
-    }
-    void SetDoublerEnabled(bool enabled) { mDoublerEnabled = enabled; }
-    void SetDoublerDelay(double milliseconds)
-    {
-      mDoublerDelayMs = std::clamp(milliseconds, 0.5, 50.0);
-      mDoublerDelaySamples = static_cast<int>(mDoublerDelayMs * mSampleRate / 1000.0);
-      ResizeDoublerBuffers();
-    }
-
-    void ProcessPre(iplug::sample** inputs, int frames)
-    {
-      if (!inputs)
-        return;
-
-      float* gateIn[2] = { mGateInputL.data(), mGateInputR.data() };
-      float* gateOut[2] = { mGateOutputL.data(), mGateOutputR.data() };
-
-      if (mGateEnabled)
-      {
-        CopyToFloat(inputs, gateIn, frames);
-        mGateEffect.Prepare(mSampleRate, mMaxBlockSize);
-        mGateEffect.Process(gateIn, gateOut, frames);
-        CopyToDouble(gateOut, inputs, frames);
-      }
-
-      if (mSemitoneShift != 0 && mPitchRatio != 1.0)
-      {
-        ApplyPitchShift(inputs, frames);
-      }
-    }
-
-    void ProcessPost(iplug::sample** buffers, int frames)
-    {
-      if (!buffers)
-        return;
-
-      if (!mDoublerEnabled || mDoublerDelaySamples <= 0)
-      {
-        return;
-      }
-
-      EnsureDoublerFrames(frames);
-
-      for (int i = 0; i < frames; ++i)
-      {
-        const float left = buffers[0] ? static_cast<float>(buffers[0][i]) : 0.0f;
-        const float right = buffers[1] ? static_cast<float>(buffers[1][i]) : left;
-        const float mono = (left + right) * 0.5f;
-
-        mDoublerBuffer[mDoublerWriteIndex] = mono;
-
-        std::size_t readIndex = mDoublerWriteIndex >= static_cast<std::size_t>(mDoublerDelaySamples)
-          ? mDoublerWriteIndex - static_cast<std::size_t>(mDoublerDelaySamples)
-          : mDoublerBuffer.size() - (static_cast<std::size_t>(mDoublerDelaySamples) - mDoublerWriteIndex);
-
-        if (buffers[0]) buffers[0][i] = mono;
-        if (buffers[1]) buffers[1][i] = mDoublerBuffer[readIndex];
-
-        mDoublerWriteIndex = (mDoublerWriteIndex + 1) % mDoublerBuffer.size();
-      }
-    }
-
-  private:
-    void CopyToFloat(iplug::sample** in, float** out, int frames)
-    {
-      for (int i = 0; i < frames; ++i)
-      {
-        out[0][i] = in[0] ? static_cast<float>(in[0][i]) : 0.0f;
-        out[1][i] = in[1] ? static_cast<float>(in[1][i]) : out[0][i];
-      }
-    }
-
-    void CopyToDouble(float** in, iplug::sample** out, int frames)
-    {
-      for (int i = 0; i < frames; ++i)
-      {
-        if (out[0]) out[0][i] = static_cast<iplug::sample>(in[0][i]);
-        if (out[1]) out[1][i] = static_cast<iplug::sample>(in[1][i]);
-      }
-    }
-
-    void ApplyPitchShift(iplug::sample** buffers, int frames)
-    {
-      if (!buffers[0] && !buffers[1])
-      {
-        return;
-      }
-
-      const std::size_t pitchSize = mPitchBufferL.size();
-      if (pitchSize == 0)
-      {
-        return;
-      }
-
-      for (int frame = 0; frame < frames; ++frame)
-      {
-        const float inL = buffers[0] ? static_cast<float>(buffers[0][frame]) : 0.0f;
-        const float inR = buffers[1] ? static_cast<float>(buffers[1][frame]) : inL;
-
-        mPitchBufferL[mPitchWriteIndex] = inL;
-        mPitchBufferR[mPitchWriteIndex] = inR;
-        mPitchWriteIndex = (mPitchWriteIndex + 1) % pitchSize;
-
-        const double readPos = mPitchPhase;
-        const std::size_t readIndex0 = static_cast<std::size_t>(readPos) % pitchSize;
-        const std::size_t readIndex1 = (readIndex0 + 1) % pitchSize;
-        const double frac = readPos - std::floor(readPos);
-
-        mPitchShiftedL[static_cast<std::size_t>(frame)] = mPitchBufferL[readIndex0] * static_cast<float>(1.0 - frac) + mPitchBufferL[readIndex1] * static_cast<float>(frac);
-        mPitchShiftedR[static_cast<std::size_t>(frame)] = mPitchBufferR[readIndex0] * static_cast<float>(1.0 - frac) + mPitchBufferR[readIndex1] * static_cast<float>(frac);
-
-        mPitchPhase += mPitchRatio;
-        if (mPitchPhase >= static_cast<double>(pitchSize))
-        {
-          mPitchPhase -= static_cast<double>(pitchSize);
-        }
-      }
-
-      for (int i = 0; i < frames; ++i)
-      {
-        if (buffers[0]) buffers[0][i] = static_cast<iplug::sample>(mPitchShiftedL[static_cast<std::size_t>(i)]);
-        if (buffers[1]) buffers[1][i] = static_cast<iplug::sample>(mPitchShiftedR[static_cast<std::size_t>(i)]);
-      }
-    }
-
-    void ResizeDoublerBuffers()
-    {
-      const std::size_t required = static_cast<std::size_t>(mDoublerDelaySamples + mMaxBlockSize + 1);
-      if (mDoublerBuffer.size() < required)
-      {
-        mDoublerBuffer.assign(required, 0.0f);
-        mDoublerWriteIndex = 0;
-      }
-    }
-
-    void EnsureDoublerFrames(int frames)
-    {
-      if (mDoublerBuffer.size() < static_cast<std::size_t>(mDoublerDelaySamples + frames + 1))
-      {
-        mDoublerBuffer.resize(static_cast<std::size_t>(mDoublerDelaySamples + frames + 1), 0.0f);
-      }
-    }
-
-    double mSampleRate = 44100.0;
-    int mMaxBlockSize = 512;
-
-    bool mGateEnabled = false;
-    NoiseGateEffect mGateEffect;
-    std::vector<float> mGateInputL;
-    std::vector<float> mGateInputR;
-    std::vector<float> mGateOutputL;
-    std::vector<float> mGateOutputR;
-
-    int mSemitoneShift = 0;
-    double mPitchRatio = 1.0;
-    std::vector<float> mPitchBufferL;
-    std::vector<float> mPitchBufferR;
-    std::vector<float> mPitchShiftedL;
-    std::vector<float> mPitchShiftedR;
-    std::size_t mPitchReadIndex = 0;
-    std::size_t mPitchWriteIndex = 0;
-    double mPitchPhase = 0.0;
-
-    bool mDoublerEnabled = false;
-    double mDoublerDelayMs = 6.0;
-    int mDoublerDelaySamples = 0;
-    std::vector<float> mDoublerBuffer;
-    std::size_t mDoublerWriteIndex = 0;
-  };
-
   namespace
   {
     bool IsEqNode(const GraphNode& node)
@@ -858,8 +652,12 @@ namespace guitarfx
   } // namespace
 
     GuitarFXPlugin::GuitarFXPlugin(const iplug::InstanceInfo &info)
-      : iplug::Plugin(info, iplug::MakeConfig(kParamCount, kNumPrograms)), mDSP(std::make_unique<GraphDSPManager>()), mGlobalFX(std::make_unique<GlobalFXChain>())
+      : iplug::Plugin(info, iplug::MakeConfig(kParamCount, kNumPrograms))
   {
+    // Register all built-in effects and force NAM factory registration
+    // This must be called before loading any presets
+    RegisterAllEffects();
+
     // Write to a log file to verify execution
     FILE* logFile = fopen("c:\\temp\\plugin_log.txt", "a");
     if (logFile) {
@@ -883,8 +681,8 @@ namespace guitarfx
     // Load resource libraries (NAM models, IRs) from JSON files
     LoadResourceLibraries();
 
-    // Share the DSP's resource library with the multi-preset mixer
-    mPresetMixer.SetResourceLibrary(&mDSP->GetResourceLibrary());
+    // Share the plugin's resource library with the multi-preset mixer
+    mPresetMixer.SetResourceLibrary(&mResourceLibrary);
 
     InitializeParameters();
 
@@ -922,10 +720,6 @@ namespace guitarfx
   void GuitarFXPlugin::ProcessBlock(iplug::sample **inputs, iplug::sample **outputs, int nFrames)
   {
     // std::cout << "[CPP] ProcessBlock called with " << nFrames << " frames" << std::endl;
-    if (!mDSP)
-    {
-      return;
-    }
 
     // Try to acquire the DSP mutex. If we can't (e.g., model/IR is being loaded),
     // output silence to avoid crashes. This prevents blocking the audio thread.
@@ -1101,43 +895,17 @@ namespace guitarfx
 
   void GuitarFXPlugin::ProcessThroughGlobalChain(iplug::sample **inputs, iplug::sample **outputs, int nFrames)
   {
-    if (mGlobalFX)
-    {
-      mGlobalFX->ProcessPre(inputs, nFrames);
-    }
-
-    if (mPresetMixer.GetPresetCount() > 0)
-    {
-      mPresetMixer.Process(inputs, outputs, nFrames);
-    }
-    else
-    {
-      mDSP->Process(inputs, outputs, nFrames);
-    }
-
-    if (mGlobalFX)
-    {
-      mGlobalFX->ProcessPost(outputs, nFrames);
-    }
+    // All audio processing now goes through MultiPresetMixer exclusively
+    // Per-preset FX (gate, transpose, doubler) are handled inside the mixer
+    mPresetMixer.Process(inputs, outputs, nFrames);
   }
 
   void GuitarFXPlugin::OnReset()
   {
-    if (!mDSP)
-    {
-      return;
-    }
-
     // Lock DSP mutex during prepare/reset
     std::lock_guard<std::mutex> lock(mDSPMutex);
 
-    mDSP->Prepare(GetSampleRate(), GetBlockSize());
     mPresetMixer.Prepare(GetSampleRate(), GetBlockSize());
-    if (mGlobalFX)
-    {
-      mGlobalFX->Prepare(GetSampleRate(), GetBlockSize());
-      mGlobalFX->Reset();
-    }
 
     mPreviewBuffer.store(nullptr, std::memory_order_release);
     mPreviewStartedBuffer.store(nullptr, std::memory_order_release);
@@ -1299,17 +1067,8 @@ namespace guitarfx
     {
       mDSPPerformanceUpdateCounter = 0;
       
-      SignalGraphExecutor::DSPPerformanceStats stats;
-      if (mPresetMixer.GetPresetCount() > 0)
-      {
-        // Get aggregated stats from MultiPresetMixer when it has active presets
-        stats = mPresetMixer.GetPerformanceStats();
-      }
-      else if (mDSP)
-      {
-        // Fall back to single DSP manager stats
-        stats = mDSP->GetPerformanceStats();
-      }
+      // Get aggregated stats from MultiPresetMixer
+      SignalGraphExecutor::DSPPerformanceStats stats = mPresetMixer.GetPerformanceStats();
       
       nlohmann::json message = {
         {"type", "dspPerformance"},
@@ -1423,11 +1182,6 @@ namespace guitarfx
 
   void GuitarFXPlugin::OnParamChange(int paramIdx)
   {
-    if (!mDSP)
-    {
-      return;
-    }
-
     const auto *param = GetParam(paramIdx);
     if (!param)
     {
@@ -1437,82 +1191,51 @@ namespace guitarfx
     switch (static_cast<ParameterId>(paramIdx))
     {
     case kParamInputTrim:
-      mDSP->SetInputTrim(param->Value());
       mPresetMixer.SetInputTrim(param->Value());
       break;
     case kParamOutputTrim:
-      mDSP->SetOutputTrim(param->Value());
       mPresetMixer.SetOutputTrim(param->Value());
       break;
     case kParamDrive:
-      mDSP->SetDrive(param->Value());
       mPresetMixer.SetAmpDrive(param->Value());
       break;
     case kParamTone:
-      mDSP->SetTone(param->Value() * 2.0 - 1.0);
+      mPresetMixer.SetAmpTone(param->Value() * 2.0 - 1.0);
       break;
     case kParamGateEnabled:
-      mDSP->SetGateEnabled(param->Bool());
       mPresetMixer.SetGateEnabled(param->Bool());
-      if (mGlobalFX)
-      {
-        mGlobalFX->SetGateEnabled(param->Bool());
-      }
       break;
     case kParamGateThreshold:
-      mDSP->SetGateThreshold(param->Value());
       mPresetMixer.SetGateThreshold(param->Value());
-      if (mGlobalFX)
-      {
-        mGlobalFX->SetGateThreshold(param->Value());
-      }
       break;
     case kParamMix:
-      mDSP->SetMix(param->Value());
+      // Mix is now per-preset, handled by SetPresetMix
       break;
     case kParamDoublerEnabled:
-      mDSP->SetDoublerEnabled(param->Bool());
-      if (mGlobalFX)
-      {
-        mGlobalFX->SetDoublerEnabled(param->Bool());
-      }
+      mPresetMixer.SetDoublerEnabled(param->Bool());
       break;
     case kParamDoublerDelay:
-      mDSP->SetDoublerDelay(param->Value());
-      if (mGlobalFX)
-      {
-        mGlobalFX->SetDoublerDelay(param->Value());
-      }
+      mPresetMixer.SetDoublerDelay(param->Value());
       break;
     case kParamTranspose:
-      mDSP->SetTranspose(static_cast<int>(std::round(param->Value())));
-      if (mGlobalFX)
-      {
-        mGlobalFX->SetTranspose(static_cast<int>(std::round(param->Value())));
-      }
+      mPresetMixer.SetTranspose(static_cast<int>(std::round(param->Value())));
       break;
     case kParamSimpleCabEnabled:
-      mDSP->SetSimpleCabEnabled(param->Bool());
       mPresetMixer.SetSimpleCabEnabled(param->Bool());
       break;
     case kParamSimpleCabBass:
-      mDSP->SetSimpleCabBass(param->Value());
       mPresetMixer.SetSimpleCabBass(param->Value());
       break;
     case kParamSimpleCabPresence:
-      mDSP->SetSimpleCabPresence(param->Value());
       mPresetMixer.SetSimpleCabPresence(param->Value());
       break;
     case kParamSimpleCabBrightness:
-      mDSP->SetSimpleCabBrightness(param->Value());
       mPresetMixer.SetSimpleCabBrightness(param->Value());
       break;
     case kParamIRQuality:
-      mDSP->SetIRQuality(guitarfx::GetIRQualityFromInt(static_cast<int>(param->Value())));
       mPresetMixer.SetIRQuality(param->Value());
       break;
     case kParamEQEnabled:
-      mDSP->SetEQEnabled(param->Bool());
       mPresetMixer.SetEQEnabled(param->Bool());
       if (mActivePreset)
       {
@@ -1524,7 +1247,6 @@ namespace guitarfx
       }
       break;
     case kParamEQLowGain:
-      mDSP->SetEQBandGain(0, param->Value());
       mPresetMixer.SetEQBandGain(0, param->Value());
       if (mActivePreset)
       {
@@ -1535,7 +1257,6 @@ namespace guitarfx
       }
       break;
     case kParamEQLowFreq:
-      mDSP->SetEQBandFrequency(0, param->Value());
       mPresetMixer.SetEQBandFrequency(0, param->Value());
       if (mActivePreset)
       {
@@ -1546,7 +1267,6 @@ namespace guitarfx
       }
       break;
     case kParamEQLowMidGain:
-      mDSP->SetEQBandGain(1, param->Value());
       mPresetMixer.SetEQBandGain(1, param->Value());
       if (mActivePreset)
       {
@@ -1557,7 +1277,6 @@ namespace guitarfx
       }
       break;
     case kParamEQLowMidFreq:
-      mDSP->SetEQBandFrequency(1, param->Value());
       mPresetMixer.SetEQBandFrequency(1, param->Value());
       if (mActivePreset)
       {
@@ -1568,7 +1287,6 @@ namespace guitarfx
       }
       break;
     case kParamEQLowMidQ:
-      mDSP->SetEQBandQ(1, param->Value());
       mPresetMixer.SetEQBandQ(1, param->Value());
       if (mActivePreset)
       {
@@ -1579,7 +1297,6 @@ namespace guitarfx
       }
       break;
     case kParamEQHighMidGain:
-      mDSP->SetEQBandGain(2, param->Value());
       mPresetMixer.SetEQBandGain(2, param->Value());
       if (mActivePreset)
       {
@@ -1590,7 +1307,6 @@ namespace guitarfx
       }
       break;
     case kParamEQHighMidFreq:
-      mDSP->SetEQBandFrequency(2, param->Value());
       mPresetMixer.SetEQBandFrequency(2, param->Value());
       if (mActivePreset)
       {
@@ -1601,7 +1317,6 @@ namespace guitarfx
       }
       break;
     case kParamEQHighMidQ:
-      mDSP->SetEQBandQ(2, param->Value());
       mPresetMixer.SetEQBandQ(2, param->Value());
       if (mActivePreset)
       {
@@ -1612,7 +1327,6 @@ namespace guitarfx
       }
       break;
     case kParamEQHighGain:
-      mDSP->SetEQBandGain(3, param->Value());
       mPresetMixer.SetEQBandGain(3, param->Value());
       if (mActivePreset)
       {
@@ -1623,7 +1337,6 @@ namespace guitarfx
       }
       break;
     case kParamEQHighFreq:
-      mDSP->SetEQBandFrequency(3, param->Value());
       mPresetMixer.SetEQBandFrequency(3, param->Value());
       if (mActivePreset)
       {
@@ -1635,36 +1348,29 @@ namespace guitarfx
       break;
     // Delay effect
     case kParamDelayEnabled:
-      mDSP->SetDelayEnabled(param->Bool());
       mPresetMixer.SetDelayEnabled(param->Bool());
       break;
     case kParamDelayTime:
-      mDSP->SetDelayTime(param->Value());
       mPresetMixer.SetDelayTime(param->Value());
       break;
     case kParamDelayFeedback:
-      mDSP->SetDelayFeedback(param->Value() / 100.0);
       mPresetMixer.SetDelayFeedback(param->Value() / 100.0);
       break;
     case kParamDelayMix:
-      mDSP->SetDelayMix(param->Value() / 100.0);
       mPresetMixer.SetDelayMix(param->Value() / 100.0);
       break;
     // Reverb effect
     case kParamReverbEnabled:
-      mDSP->SetReverbEnabled(param->Bool());
       mPresetMixer.SetReverbEnabled(param->Bool());
       break;
     case kParamReverbDecay:
-      mDSP->SetReverbDecay(param->Value());
       mPresetMixer.SetReverbDecay(param->Value());
       break;
     case kParamReverbDamping:
-      mDSP->SetReverbDamping(param->Value());
       mPresetMixer.SetReverbDamping(param->Value());
       break;
     case kParamReverbMix:
-      mDSP->SetReverbMix(param->Value() / 100.0);
+      mPresetMixer.SetReverbMix(param->Value() / 100.0);
       mPresetMixer.SetReverbMix(param->Value() / 100.0);
       break;
     default:
@@ -2055,9 +1761,8 @@ namespace guitarfx
     mPendingStateBroadcast = false;
 
     // Send a test DSP performance message to verify UI communication
-    if (mDSP)
     {
-      auto stats = mDSP->GetPerformanceStats();
+      auto stats = mPresetMixer.GetPerformanceStats();
       nlohmann::json perfMessage = {
         {"type", "dspPerformance"},
         {"stats", {
@@ -2200,7 +1905,7 @@ namespace guitarfx
 
     // Initialize multi-preset mixer with a single active preset by default
     mPresetMixer = MultiPresetMixer();
-    mPresetMixer.SetResourceLibrary(&mDSP->GetResourceLibrary());
+    mPresetMixer.SetResourceLibrary(&mResourceLibrary);
     mPresetMixer.Prepare(GetSampleRate(), GetBlockSize());
     const std::string presetId = !preset.id.empty() ? preset.id : "preset";
     mPresetMixer.AddActivePreset(presetWithEQ, presetId, preset.name);
@@ -2220,9 +1925,9 @@ namespace guitarfx
       outputTrimParam->Set(preset.global.outputTrim);
     }
 
-    // Sync auto-level globals into DSP
-    mDSP->SetAutoLevelInput(preset.global.autoLevelInput);
-    mDSP->SetAutoLevelOutput(preset.global.autoLevelOutput);
+    // Sync auto-level globals into the preset mixer
+    mPresetMixer.SetAutoLevelInput(preset.global.autoLevelInput);
+    mPresetMixer.SetAutoLevelOutput(preset.global.autoLevelOutput);
 
     auto *transposeParam = GetParam(kParamTranspose);
     if (transposeParam)
@@ -2359,12 +2064,6 @@ namespace guitarfx
 
   void GuitarFXPlugin::HandleLoadModelRequest(const nlohmann::json &payload)
   {
-    if (!mDSP)
-    {
-      ReportErrorToUI("Cannot load model", "DSP not initialized");
-      return;
-    }
-
     const std::string filePath = payload.value("filePath", "");
     if (filePath.empty())
     {
@@ -2395,12 +2094,6 @@ namespace guitarfx
 
   void GuitarFXPlugin::HandleLoadIRRequest(const nlohmann::json &payload)
   {
-    if (!mDSP)
-    {
-      ReportErrorToUI("Cannot load IR", "DSP not initialized");
-      return;
-    }
-
     const std::string filePath = payload.value("filePath", "");
     if (filePath.empty())
     {
@@ -2460,11 +2153,8 @@ namespace guitarfx
     if (auto *param = GetParam(kParamInputTrim)) newPreset.global.inputTrim = param->Value();
     if (auto *param = GetParam(kParamOutputTrim)) newPreset.global.outputTrim = param->Value();
     if (auto *param = GetParam(kParamTranspose)) newPreset.global.transpose = static_cast<int>(param->Value());
-    if (mDSP)
-    {
-      newPreset.global.autoLevelInput = mDSP->GetAutoLevelInput();
-      newPreset.global.autoLevelOutput = mDSP->GetAutoLevelOutput();
-    }
+    newPreset.global.autoLevelInput = mPresetMixer.GetAutoLevelInput();
+    newPreset.global.autoLevelOutput = mPresetMixer.GetAutoLevelOutput();
 
     // Build the signal graph nodes
 
@@ -2707,7 +2397,7 @@ namespace guitarfx
 
   void GuitarFXPlugin::HandleTunerRequest(const nlohmann::json &payload)
   {
-    // Tuner functionality is not yet implemented in GraphDSPManager (V2 architecture)
+    // Tuner functionality is not yet implemented in the V2 architecture
     // This is a placeholder for future implementation
     
     const std::string action = payload.value("action", "");
@@ -2727,78 +2417,65 @@ namespace guitarfx
 
   void GuitarFXPlugin::HandleSetInputModeRequest(const nlohmann::json &payload)
   {
-    if (!mDSP)
-    {
-      return;
-    }
-
     // Set mono/stereo mode
     if (payload.contains("monoMode"))
     {
       const bool mono = payload.value("monoMode", true);
-      mDSP->SetMonoMode(mono);
+      mPresetMixer.SetMonoMode(mono);
     }
 
     // Set input channel (0 = input 1, 1 = input 2)
     if (payload.contains("inputChannel"))
     {
       const int channel = payload.value("inputChannel", 1);
-      mDSP->SetInputChannel(channel);
+      mPresetMixer.SetInputChannel(channel);
     }
 
     // Acknowledge the change
     {
       nlohmann::json message;
       message["type"] = "inputModeChanged";
-      message["monoMode"] = mDSP->IsMonoMode();
-      message["inputChannel"] = mDSP->GetInputChannel();
+      message["monoMode"] = mPresetMixer.IsMonoMode();
+      message["inputChannel"] = mPresetMixer.GetInputChannel();
       SendMessageToUI(message.dump());
     }
   }
 
   void GuitarFXPlugin::HandleSetAmpCabStateRequest(const nlohmann::json &payload)
   {
-    if (!mDSP)
-    {
-      return;
-    }
-
     // Set amp (NAM model) enabled state
     if (payload.contains("ampEnabled"))
     {
       const bool enabled = payload.value("ampEnabled", true);
-      mDSP->SetAmpEnabled(enabled);
+      // TODO: Add SetAmpEnabled to MultiPresetMixer or route to preset node
+      // mPresetMixer.SetAmpEnabled(enabled);
     }
 
     // Set cab (IR) enabled state
     if (payload.contains("cabEnabled"))
     {
       const bool enabled = payload.value("cabEnabled", true);
-      mDSP->SetCabEnabled(enabled);
+      // TODO: Add SetCabEnabled to MultiPresetMixer or route to preset node
+      // mPresetMixer.SetCabEnabled(enabled);
     }
 
-    // Acknowledge the change
+    // Acknowledge the change - using placeholder values until methods are added
     {
       nlohmann::json message;
       message["type"] = "ampCabStateChanged";
-      message["ampEnabled"] = mDSP->IsAmpEnabled();
-      message["cabEnabled"] = mDSP->IsCabEnabled();
+      message["ampEnabled"] = true; // TODO: mPresetMixer.IsAmpEnabled()
+      message["cabEnabled"] = true; // TODO: mPresetMixer.IsCabEnabled()
       SendMessageToUI(message.dump());
     }
   }
 
   void GuitarFXPlugin::HandleSetAutoLevelRequest(const nlohmann::json &payload)
   {
-    if (!mDSP)
-    {
-      return;
-    }
+    const bool autoInput = payload.value("autoInput", mPresetMixer.GetAutoLevelInput());
+    const bool autoOutput = payload.value("autoOutput", mPresetMixer.GetAutoLevelOutput());
 
-    const bool autoInput = payload.value("autoInput", mDSP->GetAutoLevelInput());
-    const bool autoOutput = payload.value("autoOutput", mDSP->GetAutoLevelOutput());
-
-    mDSP->SetAutoLevelInput(autoInput);
-    mDSP->SetAutoLevelOutput(autoOutput);
+    mPresetMixer.SetAutoLevelInput(autoInput);
+    mPresetMixer.SetAutoLevelOutput(autoOutput);
 
     if (mActivePreset)
     {
@@ -2808,8 +2485,8 @@ namespace guitarfx
 
     nlohmann::json message;
     message["type"] = "autoLevelChanged";
-    message["autoInput"] = mDSP->GetAutoLevelInput();
-    message["autoOutput"] = mDSP->GetAutoLevelOutput();
+    message["autoInput"] = mPresetMixer.GetAutoLevelInput();
+    message["autoOutput"] = mPresetMixer.GetAutoLevelOutput();
     SendMessageToUI(message.dump());
   }
 
@@ -3069,11 +2746,6 @@ namespace guitarfx
 
   void GuitarFXPlugin::HandlePreviewDemoRequest(const nlohmann::json &payload)
   {
-    if (!mDSP)
-    {
-      return;
-    }
-
     if (mSignalTestActive.load(std::memory_order_acquire))
     {
       ReportErrorToUI("Demo preview unavailable", "Signal path test is currently running");
@@ -3131,7 +2803,7 @@ namespace guitarfx
     previewBuffer->channels = static_cast<int>(resampled.size());
     previewBuffer->channelSamples = std::move(resampled);
 
-    mDSP->Reset();
+    mPresetMixer.Reset();
 
     mPreviewCursor.store(0, std::memory_order_release);
     mPreviewBuffer.store(previewBuffer, std::memory_order_release);
@@ -3319,11 +2991,6 @@ namespace guitarfx
 
   bool GuitarFXPlugin::StartSignalPathTest(double frequencyHz, double durationSeconds)
   {
-    if (!mDSP)
-    {
-      return false;
-    }
-
     const double sampleRate = GetSampleRate();
     if (sampleRate <= 0.0)
     {
@@ -3367,7 +3034,7 @@ namespace guitarfx
     mSignalTestResult.durationSeconds = static_cast<double>(totalSamples) / sampleRate;
 
     // Reset DSP state for clean test signal processing (same as demo audio preview)
-    mDSP->Reset();
+    mPresetMixer.Reset();
 
     mSignalTestResultPending.store(false, std::memory_order_release);
     mSignalTestActive.store(true, std::memory_order_release);
@@ -3522,20 +3189,12 @@ namespace guitarfx
       return;
     }
 
-    // Keep the UI-facing library and the DSP library in sync
+    // Clear the library before reloading
     mResourceLibrary.Clear();
-    if (mDSP)
-    {
-      mDSP->GetResourceLibrary().Clear();
-    }
 
     auto addResource = [this](const LibraryResource& resource)
     {
       mResourceLibrary.AddResource(resource);
-      if (mDSP)
-      {
-        mDSP->GetResourceLibrary().AddResource(resource);
-      }
     };
 
     const std::filesystem::path dataDir = mResourceRoot / "ui" / "data";
@@ -3661,11 +3320,6 @@ namespace guitarfx
 
   void GuitarFXPlugin::LoadLastSessionState()
   {
-    if (!mDSP)
-    {
-      return;
-    }
-
     LoadAppSettings();
 
     // Apply loaded parameters to DSP

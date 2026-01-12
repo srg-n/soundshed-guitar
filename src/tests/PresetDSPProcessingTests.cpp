@@ -21,7 +21,9 @@
 #include <nlohmann/json.hpp>
 
 #include "IPlugConstants.h"
-#include "dsp/GraphDSPManager.h"
+#include "dsp/SignalGraphExecutor.h"
+#include "dsp/EffectRegistry.h"
+#include "dsp/effects/BuiltinEffects.h"
 #include "presets/PresetStorage.h"
 #include "resources/ResourceLibrary.h"
 
@@ -147,16 +149,16 @@ struct PresetRunResult
   double peak = 0.0;
 };
 
-PresetRunResult RunPreset(guitarfx::GraphDSPManager& dsp, const guitarfx::Preset& preset)
+PresetRunResult RunPreset(guitarfx::SignalGraphExecutor& executor, guitarfx::ResourceLibrary& library, const guitarfx::Preset& preset)
 {
   PresetRunResult result;
 
-  dsp.Reset();
-  if (!dsp.LoadPreset(preset))
-  {
-    result.error = "LoadPreset failed";
-    return result;
-  }
+  executor.Reset();
+  executor.SetResourceLibrary(&library);
+  executor.SetInputTrim(preset.global.inputTrim);
+  executor.SetOutputTrim(preset.global.outputTrim);
+  executor.SetGraph(preset.graph);
+  executor.Prepare(kSampleRate, kBlockSize);
 
   std::vector<Sample> inL(static_cast<std::size_t>(kBlockSize));
   std::vector<Sample> inR(static_cast<std::size_t>(kBlockSize));
@@ -166,17 +168,33 @@ PresetRunResult RunPreset(guitarfx::GraphDSPManager& dsp, const guitarfx::Preset
   GenerateSine(inL, 440.0, kSampleRate, 0.5);
   GenerateSine(inR, 440.0, kSampleRate, 0.5);
 
-  Sample* inputs[2] = {inL.data(), inR.data()};
-  Sample* outputs[2] = {outL.data(), outR.data()};
+  float* fInL = new float[kBlockSize];
+  float* fInR = new float[kBlockSize];
+  float* fOutL = new float[kBlockSize];
+  float* fOutR = new float[kBlockSize];
+  float* fInputs[2] = {fInL, fInR};
+  float* fOutputs[2] = {fOutL, fOutR};
 
   try
   {
     for (int i = 0; i < kWarmupBlocks; ++i)
     {
-      std::fill(outL.begin(), outL.end(), 0.0);
-      std::fill(outR.begin(), outR.end(), 0.0);
-      dsp.Process(inputs, outputs, kBlockSize);
+      for (int j = 0; j < kBlockSize; ++j)
+      {
+        fInL[j] = static_cast<float>(inL[j]);
+        fInR[j] = static_cast<float>(inR[j]);
+      }
+      executor.Process(fInputs, fOutputs, kBlockSize);
+      for (int j = 0; j < kBlockSize; ++j)
+      {
+        outL[j] = fOutL[j];
+        outR[j] = fOutR[j];
+      }
     }
+    delete[] fInL;
+    delete[] fInR;
+    delete[] fOutL;
+    delete[] fOutR;
   }
   catch (const std::exception& ex)
   {
@@ -266,16 +284,19 @@ int main()
       }
     }
 
-    guitarfx::GraphDSPManager dsp;
-    LoadLibraryResources(dsp.GetResourceLibrary(), modelsJson, irJson, resourcesDir);
-    dsp.Prepare(kSampleRate, kBlockSize);
+    guitarfx::RegisterAllEffects();
+    
+    guitarfx::ResourceLibrary library;
+    LoadLibraryResources(library, modelsJson, irJson, resourcesDir);
+    
+    guitarfx::SignalGraphExecutor executor;
 
     std::vector<double> peaks;
     peaks.reserve(presets.size());
 
     for (const auto& preset : presets)
     {
-      auto run = RunPreset(dsp, preset);
+      auto run = RunPreset(executor, library, preset);
       if (!run.success)
       {
         std::cerr << "Preset '" << preset.name << "' failed: " << run.error << std::endl;

@@ -8,7 +8,9 @@
 
 #include <nlohmann/json.hpp>
 
-#include "dsp/GraphDSPManager.h"
+#include "dsp/SignalGraphExecutor.h"
+#include "dsp/EffectRegistry.h"
+#include "dsp/effects/BuiltinEffects.h"
 #include "presets/PresetStorage.h"
 #include "presets/PresetTypes.h"
 #include "resources/ResourceLibrary.h"
@@ -225,11 +227,18 @@ int main()
         continue;
       }
 
-      // Create a fresh GraphDSPManager for each preset
-      guitarfx::GraphDSPManager dsp;
+      // Register effects once
+      static bool effectsRegistered = false;
+      if (!effectsRegistered)
+      {
+        guitarfx::RegisterAllEffects();
+        effectsRegistered = true;
+      }
+
+      // Create ResourceLibrary and SignalGraphExecutor
+      auto resourceLibrary = std::make_unique<guitarfx::ResourceLibrary>();
       
       // Register resource library paths
-      auto& resourceLibrary = dsp.GetResourceLibrary();
       for (const auto& [id, entry] : modelLibrary)
       {
         guitarfx::LibraryResource resource;
@@ -237,7 +246,7 @@ int main()
         resource.id = id;
         resource.name = entry.title;
         resource.filePath = entry.filePath;
-        resourceLibrary.AddResource(resource);
+        resourceLibrary->AddResource(resource);
       }
       for (const auto& [id, entry] : irLibrary)
       {
@@ -246,23 +255,21 @@ int main()
         resource.id = id;
         resource.name = entry.title;
         resource.filePath = entry.filePath;
-        resourceLibrary.AddResource(resource);
+        resourceLibrary->AddResource(resource);
       }
+
+      // Create executor and load graph
+      guitarfx::SignalGraphExecutor executor;
+      executor.SetResourceLibrary(resourceLibrary.get());
+      executor.SetGraph(presetStruct.graph);
 
       // Prepare DSP
-      dsp.Prepare(kTestSampleRate, kTestBlockSize);
+      executor.Prepare(kTestSampleRate, kTestBlockSize);
 
-      // Load the preset through GraphDSPManager
-      if (!dsp.LoadPreset(presetStruct))
+      // Verify graph was loaded
+      if (!executor.IsValid())
       {
-        recordError("Preset '" + presetName + "': LoadPreset() failed");
-        continue;
-      }
-
-      // Verify preset was loaded
-      if (!dsp.HasPreset())
-      {
-        recordError("Preset '" + presetName + "': preset loaded but HasPreset() returns false");
+        recordError("Preset '" + presetName + "': graph is not valid");
         continue;
       }
 

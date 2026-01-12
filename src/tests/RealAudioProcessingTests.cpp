@@ -2,7 +2,7 @@
  * @file RealAudioProcessingTests.cpp
  * @brief Tests for real audio processing through the graph-based DSP pipeline
  *
- * These tests exercise audio processing via GraphDSPManager/SignalGraphExecutor with
+ * These tests exercise audio processing via SignalGraphExecutor with
  * a small test preset (input -> gain -> simple cab -> output). The goals are
  * correctness (no NaN/Inf/clipping) and basic block-processing stability.
  */
@@ -18,7 +18,9 @@
 #include <memory>
 #include <vector>
 
-#include "dsp/GraphDSPManager.h"
+#include "dsp/SignalGraphExecutor.h"
+#include "dsp/EffectRegistry.h"
+#include "dsp/effects/BuiltinEffects.h"
 #include "presets/PresetTypes.h"
 #include "IPlugConstants.h"
 
@@ -196,9 +198,13 @@ class GraphDSPHarness
 public:
   GraphDSPHarness(double inputTrimDb, double outputTrimDb, double gainDb, bool enableCab)
   {
-    mDSP = std::make_unique<guitarfx::GraphDSPManager>();
-    mDSP->Prepare(kSampleRate, kBlockSize);
-    mDSP->LoadPreset(MakeTestPreset(inputTrimDb, outputTrimDb, gainDb, enableCab));
+    guitarfx::RegisterAllEffects();
+    mExecutor = std::make_unique<guitarfx::SignalGraphExecutor>();
+    auto preset = MakeTestPreset(inputTrimDb, outputTrimDb, gainDb, enableCab);
+    mExecutor->SetInputTrim(preset.global.inputTrim);
+    mExecutor->SetOutputTrim(preset.global.outputTrim);
+    mExecutor->SetGraph(preset.graph);
+    mExecutor->Prepare(kSampleRate, kBlockSize);
   }
 
   std::vector<double> Process(const std::vector<double>& input)
@@ -211,19 +217,21 @@ public:
       const int startIdx = block * kBlockSize;
       const int numSamples = std::min(kBlockSize, static_cast<int>(input.size()) - startIdx);
 
-      iplug::sample inBuf[2][kBlockSize] = {};
-      iplug::sample outBuf[2][kBlockSize] = {};
+      float inBufL[kBlockSize] = {};
+      float inBufR[kBlockSize] = {};
+      float outBufL[kBlockSize] = {};
+      float outBufR[kBlockSize] = {};
 
       for (int i = 0; i < numSamples; ++i)
       {
-        inBuf[0][i] = input[startIdx + i];
-        inBuf[1][i] = input[startIdx + i];
+        inBufL[i] = static_cast<float>(input[startIdx + i]);
+        inBufR[i] = static_cast<float>(input[startIdx + i]);
       }
 
-      iplug::sample* inputs[] = { inBuf[0], inBuf[1] };
-      iplug::sample* outputs[] = { outBuf[0], outBuf[1] };
+      float* inputs[] = { inBufL, inBufR };
+      float* outputs[] = { outBufL, outBufR };
 
-      mDSP->Process(inputs, outputs, numSamples);
+      mExecutor->Process(inputs, outputs, numSamples);
 
       for (int i = 0; i < numSamples; ++i)
       {
@@ -235,7 +243,7 @@ public:
   }
 
 private:
-  std::unique_ptr<guitarfx::GraphDSPManager> mDSP;
+  std::unique_ptr<guitarfx::SignalGraphExecutor> mExecutor;
 };
 
 /**
@@ -456,8 +464,8 @@ bool TestCabinetIRProcessing()
 
 int main()
 {
-  std::cout << "Real Audio Processing Tests (GraphDSPManager)\n";
-  std::cout << "============================================\n\n";
+  std::cout << "Real Audio Processing Tests (SignalGraphExecutor)\n";
+  std::cout << "=================================================\n\n";
 
   int passed = 0;
   int failed = 0;

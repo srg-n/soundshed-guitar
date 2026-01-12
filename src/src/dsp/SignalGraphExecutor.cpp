@@ -239,6 +239,14 @@ namespace guitarfx
 
     if (!mIsValid || !mPrepared || !inputs || !outputs)
     {
+      // Output silence if not ready
+      if (outputs)
+      {
+        if (outputs[0])
+          std::fill(outputs[0], outputs[0] + numSamples, 0.0f);
+        if (outputs[1])
+          std::fill(outputs[1], outputs[1] + numSamples, 0.0f);
+      }
       return;
     }
 

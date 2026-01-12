@@ -40,7 +40,6 @@ set(_guitarfx_core_sources
   dsp/SignalGraphExecutor.cpp
   dsp/MultiPresetMixer.h
   dsp/MultiPresetMixer.cpp
-  dsp/GraphDSPManager.h
   
   # Effect implementations
   dsp/effects/BuiltinEffects.h

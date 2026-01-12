@@ -17,7 +17,9 @@
 #include <string>
 #include <vector>
 
-#include "dsp/GraphDSPManager.h"
+#include "dsp/SignalGraphExecutor.h"
+#include "dsp/EffectRegistry.h"
+#include "dsp/effects/BuiltinEffects.h"
 #include "presets/PresetTypes.h"
 #include "IPlugConstants.h"
 
@@ -361,11 +363,14 @@ int main(int argc, char* argv[])
     std::cout << (irFile.empty() ? "No IR specified, cab disabled" : "IR path: " + irFile.string()) << "\n";
 
     constexpr int kBlockSize = 512;
-    guitarfx::GraphDSPManager dsp;
-    dsp.Prepare(sampleRate, kBlockSize);
-
+    guitarfx::RegisterAllEffects();
+    guitarfx::SignalGraphExecutor dsp;
+    
     auto preset = MakeOfflinePreset(modelFile, irFile, 0.0, 0.0, 0.1, 0.5);
-    dsp.LoadPreset(preset);
+    dsp.SetInputTrim(preset.global.inputTrim);
+    dsp.SetOutputTrim(preset.global.outputTrim);
+    dsp.SetGraph(preset.graph);
+    dsp.Prepare(sampleRate, kBlockSize);
 
     std::cout << "\nProcessing audio...\n";
 
@@ -383,19 +388,19 @@ int main(int argc, char* argv[])
       int remainingSamples = numSamples - processedSamples;
       int currentBlockSize = std::min(kBlockSize, remainingSamples);
 
-      // Prepare iPlug buffers
-      iplug::sample inputBuffer[2][kBlockSize];
-      iplug::sample outputBuffer[2][kBlockSize];
+      // Prepare float buffers
+      float inputBuffer[2][kBlockSize];
+      float outputBuffer[2][kBlockSize];
 
       for (int i = 0; i < currentBlockSize; ++i)
       {
-        inputBuffer[0][i] = inputChannels[0][processedSamples + i];
-        inputBuffer[1][i] = inputChannels[1][processedSamples + i];
+        inputBuffer[0][i] = static_cast<float>(inputChannels[0][processedSamples + i]);
+        inputBuffer[1][i] = static_cast<float>(inputChannels[1][processedSamples + i]);
       }
 
       // Process through DSP
-      iplug::sample* inputs[] = { inputBuffer[0], inputBuffer[1] };
-      iplug::sample* outputs[] = { outputBuffer[0], outputBuffer[1] };
+      float* inputs[] = { inputBuffer[0], inputBuffer[1] };
+      float* outputs[] = { outputBuffer[0], outputBuffer[1] };
       dsp.Process(inputs, outputs, currentBlockSize);
 
       // Copy to output

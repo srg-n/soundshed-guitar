@@ -1,4 +1,5 @@
 #include "dsp/MultiPresetMixer.h"
+#include "resources/ResourceLibrary.h"
 
 #include <cmath>
 
@@ -23,6 +24,7 @@ namespace guitarfx
     if (mPrepared)
     {
       inst.executor.Prepare(mSampleRate, mMaxBlockSize);
+      AllocateInstanceBuffers(inst, mMaxBlockSize);
     }
 
     inst.outL.resize(static_cast<size_t>(mMaxBlockSize), 0.0f);
@@ -92,27 +94,104 @@ namespace guitarfx
     }
   }
 
-  void MultiPresetMixer::SetGateEnabled(bool enabled)
+  // Per-preset global FX control methods
+  void MultiPresetMixer::SetPresetGateEnabled(const std::string &presetId, bool enabled)
   {
-    for (auto &inst : mInstances)
+    if (auto *inst = FindInstance(presetId))
     {
-      const auto nodeId = inst.executor.FindFirstNodeOfType("dynamics_gate");
-      if (!nodeId.empty())
+      inst->cfg.gateEnabled = enabled;
+    }
+  }
+
+  void MultiPresetMixer::SetPresetGateThreshold(const std::string &presetId, double thresholdDb)
+  {
+    if (auto *inst = FindInstance(presetId))
+    {
+      inst->cfg.gateThresholdDb = thresholdDb;
+      inst->gate.SetParam("thresholdDb", thresholdDb);
+    }
+  }
+
+  void MultiPresetMixer::SetPresetTranspose(const std::string &presetId, int semitones)
+  {
+    if (auto *inst = FindInstance(presetId))
+    {
+      inst->cfg.transposeSemitones = std::clamp(semitones, -12, 12);
+      inst->pitchRatio = std::pow(2.0, static_cast<double>(inst->cfg.transposeSemitones) / 12.0);
+    }
+  }
+
+  void MultiPresetMixer::SetPresetDoublerEnabled(const std::string &presetId, bool enabled)
+  {
+    if (auto *inst = FindInstance(presetId))
+    {
+      inst->cfg.doublerEnabled = enabled;
+    }
+  }
+
+  void MultiPresetMixer::SetPresetDoublerDelay(const std::string &presetId, double delayMs)
+  {
+    if (auto *inst = FindInstance(presetId))
+    {
+      inst->cfg.doublerDelayMs = std::clamp(delayMs, 0.5, 50.0);
+      inst->doublerDelaySamples = static_cast<int>(inst->cfg.doublerDelayMs * mSampleRate / 1000.0);
+      // Resize doubler buffer if needed
+      const std::size_t required = static_cast<std::size_t>(inst->doublerDelaySamples + mMaxBlockSize + 1);
+      if (inst->doublerBuffer.size() < required)
       {
-        inst.executor.SetNodeEnabled(nodeId, enabled);
+        inst->doublerBuffer.assign(required, 0.0f);
+        inst->doublerWriteIndex = 0;
       }
     }
   }
 
-  void MultiPresetMixer::SetGateThreshold(double value)
+  // Global gate control (applies to all presets)
+  void MultiPresetMixer::SetGateEnabled(bool enabled)
   {
     for (auto &inst : mInstances)
     {
-      const auto nodeId = inst.executor.FindFirstNodeOfType("dynamics_gate");
-      if (!nodeId.empty())
+      inst.cfg.gateEnabled = enabled;
+    }
+  }
+
+  void MultiPresetMixer::SetGateThreshold(double thresholdDb)
+  {
+    for (auto &inst : mInstances)
+    {
+      inst.cfg.gateThresholdDb = thresholdDb;
+      inst.gate.SetParam("thresholdDb", thresholdDb);
+    }
+  }
+
+  void MultiPresetMixer::SetDoublerEnabled(bool enabled)
+  {
+    for (auto &inst : mInstances)
+    {
+      inst.cfg.doublerEnabled = enabled;
+    }
+  }
+
+  void MultiPresetMixer::SetDoublerDelay(double delayMs)
+  {
+    for (auto &inst : mInstances)
+    {
+      inst.cfg.doublerDelayMs = std::clamp(delayMs, 0.5, 50.0);
+      inst.doublerDelaySamples = static_cast<int>(inst.cfg.doublerDelayMs * mSampleRate / 1000.0);
+      const std::size_t required = static_cast<std::size_t>(inst.doublerDelaySamples + mMaxBlockSize + 1);
+      if (inst.doublerBuffer.size() < required)
       {
-        inst.executor.SetNodeParam(nodeId, "thresholdDb", value);
+        inst.doublerBuffer.assign(required, 0.0f);
+        inst.doublerWriteIndex = 0;
       }
+    }
+  }
+
+  void MultiPresetMixer::SetTranspose(int semitones)
+  {
+    for (auto &inst : mInstances)
+    {
+      inst.cfg.transposeSemitones = std::clamp(semitones, -12, 12);
+      inst.pitchRatio = std::pow(2.0, static_cast<double>(inst.cfg.transposeSemitones) / 12.0);
     }
   }
 
@@ -367,17 +446,60 @@ namespace guitarfx
     }
   }
 
+  void MultiPresetMixer::SetAmpTone(double value)
+  {
+    for (auto &inst : mInstances)
+    {
+      const auto nodeId = inst.executor.FindFirstNodeOfType("amp_nam");
+      if (!nodeId.empty())
+      {
+        inst.executor.SetNodeParam(nodeId, "tone", value);
+      }
+    }
+  }
+
+  // Node-level control methods
+  void MultiPresetMixer::SetNodeEnabled(const std::string &presetId, const std::string &nodeId, bool enabled)
+  {
+    if (auto *inst = FindInstance(presetId))
+    {
+      inst->executor.SetNodeEnabled(nodeId, enabled);
+    }
+  }
+
+  void MultiPresetMixer::SetNodeParam(const std::string &presetId, const std::string &nodeId, const std::string &key, double value)
+  {
+    if (auto *inst = FindInstance(presetId))
+    {
+      inst->executor.SetNodeParam(nodeId, key, value);
+    }
+  }
+
+  bool MultiPresetMixer::LoadNodeResource(const std::string &presetId, const std::string &nodeId, const ResourceRef &ref)
+  {
+    if (auto *inst = FindInstance(presetId))
+    {
+      return inst->executor.LoadNodeResource(nodeId, ref);
+    }
+    return false;
+  }
+
   void MultiPresetMixer::Prepare(double sampleRate, int maxBlockSize)
   {
     mSampleRate = sampleRate;
     mMaxBlockSize = maxBlockSize;
     mPrepared = true;
 
+    // Allocate global temp buffers
+    mTempInL.resize(static_cast<size_t>(maxBlockSize), 0.0f);
+    mTempInR.resize(static_cast<size_t>(maxBlockSize), 0.0f);
+
     AllocateBuffers(maxBlockSize);
 
     for (auto &inst : mInstances)
     {
       inst.executor.Prepare(sampleRate, maxBlockSize);
+      AllocateInstanceBuffers(inst, maxBlockSize);
     }
   }
 
@@ -393,6 +515,74 @@ namespace guitarfx
   {
     if (!outputs || numSamples <= 0)
       return;
+
+    // Safety check: ensure we're prepared before processing
+    if (!mPrepared || mInstances.empty())
+    {
+      // Output silence if not ready
+      if (outputs[0])
+        std::fill(outputs[0], outputs[0] + numSamples, 0.0f);
+      if (outputs[1])
+        std::fill(outputs[1], outputs[1] + numSamples, 0.0f);
+      return;
+    }
+
+    // Prepare input based on global mono/stereo settings
+    float *processInL = inputs ? inputs[0] : nullptr;
+    float *processInR = inputs ? inputs[1] : nullptr;
+
+    if (mMonoMode && processInL && processInR)
+    {
+      // Apply mono mode: select input channel or sum to mono
+      for (int i = 0; i < numSamples; ++i)
+      {
+        float monoSample;
+        if (mInputChannel == 0)
+        {
+          monoSample = processInL[i]; // Left only
+        }
+        else if (mInputChannel == 1)
+        {
+          monoSample = processInR[i]; // Right only
+        }
+        else
+        {
+          monoSample = (processInL[i] + processInR[i]) * 0.5f; // Sum
+        }
+        mTempInL[static_cast<std::size_t>(i)] = monoSample;
+        mTempInR[static_cast<std::size_t>(i)] = monoSample;
+      }
+      processInL = mTempInL.data();
+      processInR = mTempInR.data();
+    }
+
+    // Apply auto-level input gain (simple peak detection and normalization)
+    if (mAutoLevelInput && processInL && processInR)
+    {
+      // Find peak
+      float peak = 0.0f;
+      for (int i = 0; i < numSamples; ++i)
+      {
+        peak = std::max(peak, std::abs(processInL[i]));
+        peak = std::max(peak, std::abs(processInR[i]));
+      }
+
+      // Apply auto-level with smoothing
+      if (peak > 0.001f)
+      {
+        const float targetGain = 0.7f / peak;
+        const float limitedGain = std::min(targetGain, 4.0f); // Max 4x gain
+        mInputAutoLevelGain = mInputAutoLevelGain * 0.99f + limitedGain * 0.01f;
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+          mTempInL[static_cast<std::size_t>(i)] = processInL[i] * mInputAutoLevelGain;
+          mTempInR[static_cast<std::size_t>(i)] = processInR[i] * mInputAutoLevelGain;
+        }
+        processInL = mTempInL.data();
+        processInR = mTempInR.data();
+      }
+    }
 
     // Detect solo mode
     bool anySolo = false;
@@ -416,15 +606,36 @@ namespace guitarfx
     }
 
     // Process each preset and mix
+    float *inputPtrs[2] = {processInL, processInR};
     for (auto &inst : mInstances)
     {
       const bool include = (!inst.cfg.mute) && (!anySolo || inst.cfg.solo);
       if (!include)
         continue;
 
-      // Process into per-instance buffers
-      float *presetOutPtrs[2] = {inst.outL.data(), inst.outR.data()};
-      inst.executor.Process(inputs, presetOutPtrs, numSamples);
+      // Apply per-preset gate (pre-processing)
+      // Note: Gate is applied to shared input - copy first if needed for parallel processing
+      if (inst.cfg.gateEnabled)
+      {
+        std::copy(processInL, processInL + numSamples, inst.gateInL.begin());
+        std::copy(processInR, processInR + numSamples, inst.gateInR.begin());
+        ProcessPresetGate(inst, inst.gateInL.data(), inst.gateInR.data(), numSamples);
+        float *gatedInputs[2] = {inst.gateInL.data(), inst.gateInR.data()};
+        float *presetOutPtrs[2] = {inst.outL.data(), inst.outR.data()};
+        inst.executor.Process(gatedInputs, presetOutPtrs, numSamples);
+      }
+      else
+      {
+        // Process into per-instance buffers directly
+        float *presetOutPtrs[2] = {inst.outL.data(), inst.outR.data()};
+        inst.executor.Process(inputPtrs, presetOutPtrs, numSamples);
+      }
+
+      // Apply per-preset pitch shift (post-processing)
+      ProcessPresetPitchShift(inst, inst.outL.data(), inst.outR.data(), numSamples);
+
+      // Apply per-preset doubler (post-processing)
+      ProcessPresetDoubler(inst, inst.outL.data(), inst.outR.data(), numSamples);
 
       // Apply per-preset pan (equal-power) and mix gain
       float gL = 1.0f, gR = 1.0f;
@@ -457,6 +668,42 @@ namespace guitarfx
       {
         for (int i = 0; i < numSamples; ++i)
           outputs[1][i] *= master;
+      }
+    }
+
+    // Apply auto-level output (simple peak limiting)
+    if (mAutoLevelOutput)
+    {
+      float peak = 0.0f;
+      for (int i = 0; i < numSamples; ++i)
+      {
+        if (outputs[0])
+          peak = std::max(peak, std::abs(outputs[0][i]));
+        if (outputs[1])
+          peak = std::max(peak, std::abs(outputs[1][i]));
+      }
+
+      if (peak > 0.95f)
+      {
+        const float attenuation = 0.95f / peak;
+        mOutputAutoLevelGain = std::min(mOutputAutoLevelGain, attenuation);
+        mOutputAutoLevelGain = mOutputAutoLevelGain * 0.99f + attenuation * 0.01f;
+
+        if (outputs[0])
+        {
+          for (int i = 0; i < numSamples; ++i)
+            outputs[0][i] *= mOutputAutoLevelGain;
+        }
+        if (outputs[1])
+        {
+          for (int i = 0; i < numSamples; ++i)
+            outputs[1][i] *= mOutputAutoLevelGain;
+        }
+      }
+      else
+      {
+        // Slowly release gain reduction
+        mOutputAutoLevelGain = std::min(1.0f, mOutputAutoLevelGain * 1.0001f);
       }
     }
 
@@ -519,6 +766,34 @@ namespace guitarfx
     {
       inst.outL.resize(static_cast<size_t>(maxBlockSize), 0.0f);
       inst.outR.resize(static_cast<size_t>(maxBlockSize), 0.0f);
+      AllocateInstanceBuffers(inst, maxBlockSize);
+    }
+  }
+
+  void MultiPresetMixer::AllocateInstanceBuffers(PresetInstance &inst, int maxBlockSize)
+  {
+    const std::size_t blockSize = static_cast<std::size_t>(maxBlockSize);
+
+    // Gate buffers and preparation
+    inst.gateInL.resize(blockSize, 0.0f);
+    inst.gateInR.resize(blockSize, 0.0f);
+    inst.gateOutL.resize(blockSize, 0.0f);
+    inst.gateOutR.resize(blockSize, 0.0f);
+    inst.gate.Prepare(mSampleRate, maxBlockSize);
+
+    // Pitch shift buffers
+    const std::size_t pitchSize = blockSize * 4;
+    inst.pitchBufferL.resize(pitchSize, 0.0f);
+    inst.pitchBufferR.resize(pitchSize, 0.0f);
+    inst.pitchShiftedL.resize(blockSize, 0.0f);
+    inst.pitchShiftedR.resize(blockSize, 0.0f);
+
+    // Doubler buffer
+    inst.doublerDelaySamples = static_cast<int>(inst.cfg.doublerDelayMs * mSampleRate / 1000.0);
+    const std::size_t doublerRequired = static_cast<std::size_t>(inst.doublerDelaySamples + maxBlockSize + 1);
+    if (inst.doublerBuffer.size() < doublerRequired)
+    {
+      inst.doublerBuffer.assign(doublerRequired, 0.0f);
     }
   }
 
@@ -530,6 +805,98 @@ namespace guitarfx
     const double theta = (pan + 1.0) * (kPi * 0.25); // (-1)->0, 0->pi/4, 1->pi/2
     gL = static_cast<float>(std::cos(theta));
     gR = static_cast<float>(std::sin(theta));
+  }
+
+  // Per-preset global FX processing methods
+  void MultiPresetMixer::ProcessPresetGate(PresetInstance &inst, float *inL, float *inR, int numSamples)
+  {
+    if (!inst.cfg.gateEnabled)
+      return;
+
+    // Copy input to gate buffers
+    std::copy(inL, inL + numSamples, inst.gateInL.begin());
+    std::copy(inR, inR + numSamples, inst.gateInR.begin());
+
+    // Process gate
+    float *gateInPtrs[2] = {inst.gateInL.data(), inst.gateInR.data()};
+    float *gateOutPtrs[2] = {inst.gateOutL.data(), inst.gateOutR.data()};
+    inst.gate.Process(gateInPtrs, gateOutPtrs, numSamples);
+
+    // Copy back to input
+    std::copy(inst.gateOutL.begin(), inst.gateOutL.begin() + numSamples, inL);
+    std::copy(inst.gateOutR.begin(), inst.gateOutR.begin() + numSamples, inR);
+  }
+
+  void MultiPresetMixer::ProcessPresetPitchShift(PresetInstance &inst, float *inL, float *inR, int numSamples)
+  {
+    if (inst.cfg.transposeSemitones == 0)
+      return;
+
+    // Simple pitch shifting using linear interpolation on a circular buffer
+    const std::size_t bufSize = inst.pitchBufferL.size();
+
+    // Write input to circular buffer
+    for (int i = 0; i < numSamples; ++i)
+    {
+      inst.pitchBufferL[inst.pitchWriteIndex] = inL[i];
+      inst.pitchBufferR[inst.pitchWriteIndex] = inR[i];
+      inst.pitchWriteIndex = (inst.pitchWriteIndex + 1) % bufSize;
+    }
+
+    // Read at shifted rate
+    for (int i = 0; i < numSamples; ++i)
+    {
+      // Calculate read position with fractional interpolation
+      const double readIdx = std::fmod(inst.pitchReadPhase, static_cast<double>(bufSize));
+      const std::size_t idx0 = static_cast<std::size_t>(readIdx);
+      const std::size_t idx1 = (idx0 + 1) % bufSize;
+      const double frac = readIdx - static_cast<double>(idx0);
+
+      // Linear interpolation
+      inst.pitchShiftedL[static_cast<std::size_t>(i)] = static_cast<float>(
+          inst.pitchBufferL[idx0] * (1.0 - frac) + inst.pitchBufferL[idx1] * frac);
+      inst.pitchShiftedR[static_cast<std::size_t>(i)] = static_cast<float>(
+          inst.pitchBufferR[idx0] * (1.0 - frac) + inst.pitchBufferR[idx1] * frac);
+
+      // Advance read phase at pitch-shifted rate
+      inst.pitchReadPhase = std::fmod(inst.pitchReadPhase + inst.pitchRatio, static_cast<double>(bufSize));
+    }
+
+    // Copy shifted audio back to input buffers
+    std::copy(inst.pitchShiftedL.begin(), inst.pitchShiftedL.begin() + numSamples, inL);
+    std::copy(inst.pitchShiftedR.begin(), inst.pitchShiftedR.begin() + numSamples, inR);
+  }
+
+  void MultiPresetMixer::ProcessPresetDoubler(PresetInstance &inst, float *outL, float *outR, int numSamples)
+  {
+    if (!inst.cfg.doublerEnabled || inst.doublerDelaySamples <= 0)
+      return;
+
+    const std::size_t bufSize = inst.doublerBuffer.size();
+    if (bufSize == 0)
+      return;
+
+    // Add delayed copy to create doubling effect
+    // The doubler mixes a slightly delayed version to create width
+    for (int i = 0; i < numSamples; ++i)
+    {
+      // Write mono sum to delay buffer
+      const float monoIn = (outL[i] + outR[i]) * 0.5f;
+      inst.doublerBuffer[inst.doublerWriteIndex] = monoIn;
+
+      // Read delayed sample
+      const int readIdx = static_cast<int>(inst.doublerWriteIndex) - inst.doublerDelaySamples;
+      const std::size_t safeReadIdx = static_cast<std::size_t>((readIdx + static_cast<int>(bufSize)) % static_cast<int>(bufSize));
+      const float delayed = inst.doublerBuffer[safeReadIdx];
+
+      // Mix: original + inverted delay on opposite channel for width
+      constexpr float kDoublerMix = 0.3f;
+      outL[i] = outL[i] + delayed * kDoublerMix;
+      outR[i] = outR[i] - delayed * kDoublerMix; // Inverted for stereo width
+
+      // Advance write index
+      inst.doublerWriteIndex = (inst.doublerWriteIndex + 1) % bufSize;
+    }
   }
 
   SignalGraphExecutor::DSPPerformanceStats MultiPresetMixer::GetPerformanceStats() const

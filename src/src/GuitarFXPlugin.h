@@ -25,8 +25,6 @@
 
 namespace guitarfx
 {
-  class GraphDSPManager;
-  class GlobalFXChain;
   class GuitarFXPlugin final : public iplug::Plugin
   {
   public:
@@ -177,7 +175,6 @@ namespace guitarfx
       std::chrono::steady_clock::time_point startTime;
     };
 
-    std::unique_ptr<GraphDSPManager> mDSP;
     MultiPresetMixer mPresetMixer;
     ResourceLibrary mResourceLibrary;
     FileSystem mFileSystem;
@@ -196,8 +193,6 @@ namespace guitarfx
     SignalPathTestResult mSignalTestResult;
     std::atomic<bool> mSignalTestActive{false};
     std::atomic<bool> mSignalTestResultPending{false};
-
-    std::unique_ptr<GlobalFXChain> mGlobalFX;
 
     // UI settings persistence
     double mUiZoom = 1.0;
