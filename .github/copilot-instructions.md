@@ -11,21 +11,25 @@
 - C++ core: src/src/ (DSP, presets, plugin entry)
 - UI: src/resources/ui/ts/ (WebView TypeScript)
 - Build: CMake + FetchContent; targets for App, VST3, tests
+- Docs: docs/ (architecture, data models, UI, API)
 
 ## DSP Graph Essentials
 - Graph runner: SignalGraphExecutor with nodes of type amp_nam, ir_cab, eq_parametric, delay, reverb, noise_gate, etc.
 - Effects live in src/src/dsp/effects/; new effects implement EffectProcessor and register via REGISTER_EFFECT.
 - Validate parameter ranges and resource presence; fail fast with clear errors instead of silent defaults.
+- Full spec: docs/signal-chain.md, docs/fx-library.md
 
 ## UI ↔ Plugin Messaging
 - Messaging via OnMessageFromWebView / SendMessageToUI.
-- Common payloads: state, presetLoaded, loadPreset, setParameter, browseModel.
+- Common payloads: state, presetLoaded, loadPreset, setParameter, browseModel, addSignalPathNode, removeSignalPathNode.
 - UI handler: src/resources/ui/ts/messages.ts; plugin handler: HandleUIMessage in src/src/GuitarFXPlugin.cpp.
 - Keep messages backward compatible; guard against missing fields and unknown message types.
+- Full spec: docs/user-interface.md
 
 ## Resource References
 - ResourceRef supports library refs (resourceType + resourceId), filePath for user files, embeddedId for portable presets.
 - When loading, prefer library refs; fall back to file/embedded only when provided. Validate existence and log meaningful errors.
+- Full spec: docs/fx-library.md, docs/data-models.md
 
 ## Build Quickstart
 - Configure (once, from src/):
@@ -56,6 +60,16 @@
 - Graph executor: src/src/dsp/SignalGraphExecutor.h
 - Config/branding: src/config/GuitarFXConfig.h
 - UI entry: src/resources/ui/ts/main.ts
+
+## Documentation
+- Architecture: docs/architecture-overview.md
+- Signal chain: docs/signal-chain.md
+- Effects/resources: docs/fx-library.md
+- Presets/storage: docs/data-models.md
+- UI/messaging: docs/user-interface.md
+- Network/API: docs/network-api.md
+- Theming: docs/theme-system.md
+- PRD: docs/prd/PRD.md
 
 ## Change Checklist
 - Assumptions stated and confirmed where needed.

@@ -2,7 +2,9 @@
 
 ## Overview
 
-This document captures user stories for GuitarFX, organized by persona and feature area. Each story follows the format: "As a [persona], I want to [action], so that [benefit]."
+User stories for GuitarFX organized by persona. Each story follows: "As a [persona], I want to [action], so that [benefit]."
+
+---
 
 ## Home Recordist Stories
 
@@ -118,39 +120,6 @@ This document captures user stories for GuitarFX, organized by persona and featu
 
 ---
 
-## Acceptance Criteria Template
-
-Each user story should have acceptance criteria defined before implementation:
-
-```
-Story: [Story ID and description]
-
-Given: [Initial state/context]
-When: [Action taken]
-Then: [Expected outcome]
-
-Additional criteria:
-- [Specific requirement 1]
-- [Specific requirement 2]
-```
-
-### Example
-
-```
-Story: HR-01 - Browse presets by category
-
-Given: The user has opened the preset browser
-When: The user selects the "Crunch" category
-Then: Only presets categorized as "Crunch" are displayed
-
-Additional criteria:
-- Categories should be listed alphabetically
-- The count of presets in each category should be shown
-- Selecting "All" should show all presets
-```
-
----
-
 ## Priority Definitions
 
 | Priority | Definition | Target Release |
@@ -159,7 +128,7 @@ Additional criteria:
 | P1 | Should have - Important features | 1.0 or 1.1 |
 | P2 | Nice to have - Enhanced experience | 1.x |
 
-## Related Documents
+---
 
-- [Product Requirements Document](./PRD.md)
-- [Functional Requirements](./PRD.md#4-functional-requirements)
+## See Also
+- [PRD](PRD.md) — Product requirements document
