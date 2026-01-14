@@ -278,6 +278,16 @@ export function handleIncomingMessage(message: string): void {
       }
       break;
     }
+    case "globalSignalChainChanged": {
+      const chainPayload = payload as { globalSignalChain?: import("./types.js").GlobalSignalChainConfig };
+      if (chainPayload.globalSignalChain) {
+        uiState.globalSignalChain = chainPayload.globalSignalChain;
+        appendLog("Global signal chain configuration updated");
+        // Sync any UI controls that show global chain state
+        syncControlsFromState();
+      }
+      break;
+    }
     default:
       console.warn("Unknown message type", payload.type);
   }
@@ -310,4 +320,26 @@ export function handleMixerStateMessage(message: Record<string, unknown>): void 
       };
     }
   }
+}
+
+/**
+ * Send a global signal chain parameter change to the plugin.
+ * @param paramPath - Dot-notation path to the parameter (e.g., "preChain.gateEnabled", "postChain.eqLowGain")
+ * @param value - The new value for the parameter
+ */
+export function sendGlobalChainParam(paramPath: string, value: number | boolean): void {
+  window.NAMBridge?.postMessage({
+    type: "setGlobalChainParam",
+    paramPath,
+    value,
+  });
+}
+
+/**
+ * Request the current global signal chain configuration from the plugin.
+ */
+export function requestGlobalChainState(): void {
+  window.NAMBridge?.postMessage({
+    type: "getGlobalChain",
+  });
 }

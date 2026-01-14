@@ -1,4 +1,4 @@
-import type { DemoSample, Preset, UiState } from "./types.js";
+import type { DemoSample, GlobalSignalChainConfig, Preset, UiState } from "./types.js";
 
 export const LOG_ENTRY_LIMIT = 200;
 
@@ -14,6 +14,46 @@ export const DEMO_AUDIO_SAMPLES: DemoSample[] = [
     path: "demo/guitar-riff-02.wav",
   },
 ];
+
+/**
+ * Default global signal chain configuration.
+ * Signal flow: Input → [Tuner tap] → Gate → Transpose → [Presets] → EQ → Doubler → Output
+ */
+export const DEFAULT_GLOBAL_SIGNAL_CHAIN: GlobalSignalChainConfig = {
+  inputGain: 0.0,
+  monoMode: false,
+  inputChannel: 0,
+  autoLevelInput: false,
+  outputGain: 0.0,
+  autoLevelOutput: false,
+  limiterEnabled: false,
+  preChain: {
+    gateEnabled: false,
+    gateThreshold: -40.0,
+    gateAttack: 0.5,
+    gateHold: 50.0,
+    gateRelease: 100.0,
+    transposeEnabled: false,
+    transposeSemitones: 0,
+  },
+  postChain: {
+    eqEnabled: false,
+    eqLowGain: 0.0,
+    eqLowFreq: 100.0,
+    eqLowMidGain: 0.0,
+    eqLowMidFreq: 400.0,
+    eqLowMidQ: 1.0,
+    eqHighMidGain: 0.0,
+    eqHighMidFreq: 2000.0,
+    eqHighMidQ: 1.0,
+    eqHighGain: 0.0,
+    eqHighFreq: 8000.0,
+    doublerEnabled: false,
+    doublerDelay: 20.0,
+    doublerMix: 0.5,
+    doublerDetune: 5.0,
+  },
+};
 
 export const uiState: UiState = {
   presets: [],
@@ -37,6 +77,7 @@ export const uiState: UiState = {
   uiSettings: { zoom: 1 },
   dspPerformance: undefined,
   dspPerformanceHistory: [],
+  globalSignalChain: { ...DEFAULT_GLOBAL_SIGNAL_CHAIN },
 };
 
 export function clonePreset<T extends Preset | null>(preset: T): T {

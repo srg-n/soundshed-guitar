@@ -59,6 +59,7 @@ set(_guitarfx_core_sources
   presets/PresetStorage.cpp
   presets/PresetStorage.h
   presets/PresetTypes.h
+  presets/PresetTypes.cpp
   
   # Resources
   resources/ResourceLibrary.h

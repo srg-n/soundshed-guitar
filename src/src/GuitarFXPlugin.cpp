@@ -32,6 +32,7 @@
 #include "wdlstring.h"
 
 #include "presets/PresetStorage.h"
+#include "presets/PresetTypesJson.h"  // For GlobalSignalChainConfig JSON serialization
 #include "dsp/effects/BuiltinEffects.h"
 
 #ifdef _WIN32
@@ -2630,11 +2631,8 @@ namespace guitarfx
     mPresetMixer.SetAutoLevelInput(autoInput);
     mPresetMixer.SetAutoLevelOutput(autoOutput);
 
-    if (mActivePreset)
-    {
-      mActivePreset->global.autoLevelInput = autoInput;
-      mActivePreset->global.autoLevelOutput = autoOutput;
-    }
+    // Persist the change for next launch
+    SaveAppSettings();
 
     nlohmann::json message;
     message["type"] = "autoLevelChanged";
@@ -3222,6 +3220,15 @@ namespace guitarfx
       }
       settings["uiSettings"] = std::move(uiSettings);
 
+      // Audio settings
+      nlohmann::json audioSettings;
+      audioSettings["autoLevelInput"] = mPresetMixer.GetAutoLevelInput();
+      audioSettings["autoLevelOutput"] = mPresetMixer.GetAutoLevelOutput();
+      settings["audioSettings"] = std::move(audioSettings);
+
+      // Global signal chain configuration
+      settings["globalSignalChain"] = mPresetMixer.GetGlobalChainConfig();
+
       // Save all current parameter values
       nlohmann::json parameters = nlohmann::json::array();
       for (int paramIdx = 0; paramIdx < kParamCount; ++paramIdx)
@@ -3304,6 +3311,22 @@ namespace guitarfx
           mWindowBounds.width = b.value("width", mWindowBounds.width);
           mWindowBounds.height = b.value("height", mWindowBounds.height);
         }
+      }
+
+      // Restore audio settings
+      if (settings.contains("audioSettings") && settings["audioSettings"].is_object())
+      {
+        const auto &audioSettings = settings["audioSettings"];
+        mPresetMixer.SetAutoLevelInput(audioSettings.value("autoLevelInput", mPresetMixer.GetAutoLevelInput()));
+        mPresetMixer.SetAutoLevelOutput(audioSettings.value("autoLevelOutput", mPresetMixer.GetAutoLevelOutput()));
+      }
+
+      // Restore global signal chain configuration
+      if (settings.contains("globalSignalChain") && settings["globalSignalChain"].is_object())
+      {
+        auto globalChain = settings["globalSignalChain"].get<GlobalSignalChainConfig>();
+        mPresetMixer.SetGlobalChainConfig(globalChain);
+        std::cout << "[Plugin] Restored global signal chain configuration" << std::endl;
       }
 
       // Restore parameters

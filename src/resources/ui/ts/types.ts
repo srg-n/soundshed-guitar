@@ -158,6 +158,47 @@ export interface MixerPresetState {
   solo: boolean;
 }
 
+// Global Signal Chain Configuration
+export interface GlobalPreChainConfig {
+  gateEnabled: boolean;
+  gateThreshold: number;  // dB
+  gateAttack: number;     // ms
+  gateHold: number;       // ms
+  gateRelease: number;    // ms
+  transposeEnabled: boolean;
+  transposeSemitones: number;  // -24 to +24
+}
+
+export interface GlobalPostChainConfig {
+  eqEnabled: boolean;
+  eqLowGain: number;      // dB
+  eqLowFreq: number;      // Hz
+  eqLowMidGain: number;   // dB
+  eqLowMidFreq: number;   // Hz
+  eqLowMidQ: number;
+  eqHighMidGain: number;  // dB
+  eqHighMidFreq: number;  // Hz
+  eqHighMidQ: number;
+  eqHighGain: number;     // dB
+  eqHighFreq: number;     // Hz
+  doublerEnabled: boolean;
+  doublerDelay: number;   // ms
+  doublerMix: number;     // 0-1
+  doublerDetune: number;  // cents
+}
+
+export interface GlobalSignalChainConfig {
+  inputGain: number;      // dB
+  monoMode: boolean;
+  inputChannel: number;   // 0=left, 1=right
+  autoLevelInput: boolean;
+  outputGain: number;     // dB (master volume)
+  autoLevelOutput: boolean;
+  limiterEnabled: boolean;
+  preChain: GlobalPreChainConfig;
+  postChain: GlobalPostChainConfig;
+}
+
 export interface MixerState {
   activePresetIds: string[];
   presets: Record<string, MixerPresetState>;
@@ -187,6 +228,7 @@ export interface UiState {
   uiSettings?: UiSettings;
   dspPerformance?: DSPPerformanceStats;
   dspPerformanceHistory: DSPPerformanceStats[];
+  globalSignalChain?: GlobalSignalChainConfig;
 }
 
 declare global {

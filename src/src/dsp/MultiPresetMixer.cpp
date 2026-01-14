@@ -105,67 +105,191 @@ namespace guitarfx
     }
   }
 
-  // Global gate control (routes to dynamics_gate nodes in signal chain)
+  // ==========================================================================
+  // Global Signal Chain Configuration
+  // ==========================================================================
+
+  void MultiPresetMixer::SetGlobalChainConfig(const GlobalSignalChainConfig& config)
+  {
+    mGlobalChainConfig = config;
+    mGlobalChainNeedsRebuild = true;
+
+    // Apply input/output settings
+    mAutoLevelInput = config.autoLevelInput;
+    mAutoLevelOutput = config.autoLevelOutput;
+    mMonoMode = config.monoMode;
+    mInputChannel = config.inputChannel;
+    mLimiterEnabled = config.limiterEnabled;
+
+    // Rebuild will happen in Process() or Prepare()
+  }
+
+  void MultiPresetMixer::SetGlobalGateEnabled(bool enabled)
+  {
+    mGlobalChainConfig.preChain.gateEnabled = enabled;
+    mPreChainExecutor.SetNodeEnabled("global_gate", enabled);
+  }
+
+  void MultiPresetMixer::SetGlobalGateThreshold(double thresholdDb)
+  {
+    mGlobalChainConfig.preChain.gateThreshold = thresholdDb;
+    mPreChainExecutor.SetNodeParam("global_gate", "threshold", thresholdDb);
+  }
+
+  void MultiPresetMixer::SetGlobalGateAttack(double attackMs)
+  {
+    mGlobalChainConfig.preChain.gateAttack = attackMs;
+    mPreChainExecutor.SetNodeParam("global_gate", "attack", attackMs);
+  }
+
+  void MultiPresetMixer::SetGlobalGateHold(double holdMs)
+  {
+    mGlobalChainConfig.preChain.gateHold = holdMs;
+    mPreChainExecutor.SetNodeParam("global_gate", "hold", holdMs);
+  }
+
+  void MultiPresetMixer::SetGlobalGateRelease(double releaseMs)
+  {
+    mGlobalChainConfig.preChain.gateRelease = releaseMs;
+    mPreChainExecutor.SetNodeParam("global_gate", "release", releaseMs);
+  }
+
+  void MultiPresetMixer::SetGlobalTransposeEnabled(bool enabled)
+  {
+    mGlobalChainConfig.preChain.transposeEnabled = enabled;
+    mPreChainExecutor.SetNodeEnabled("global_transpose", enabled);
+  }
+
+  void MultiPresetMixer::SetGlobalTranspose(int semitones)
+  {
+    mGlobalChainConfig.preChain.transposeSemitones = std::clamp(semitones, -24, 24);
+    mPreChainExecutor.SetNodeParam("global_transpose", "semitones", static_cast<double>(mGlobalChainConfig.preChain.transposeSemitones));
+  }
+
+  void MultiPresetMixer::SetGlobalEQEnabled(bool enabled)
+  {
+    mGlobalChainConfig.postChain.eqEnabled = enabled;
+    mPostChainExecutor.SetNodeEnabled("global_eq", enabled);
+  }
+
+  void MultiPresetMixer::SetGlobalEQBandGain(int band, double dB)
+  {
+    static const char* kParamNames[] = {"lowGain", "lowMidGain", "highMidGain", "highGain"};
+    if (band < 0 || band > 3) return;
+    
+    switch (band)
+    {
+      case 0: mGlobalChainConfig.postChain.eqLowGain = dB; break;
+      case 1: mGlobalChainConfig.postChain.eqLowMidGain = dB; break;
+      case 2: mGlobalChainConfig.postChain.eqHighMidGain = dB; break;
+      case 3: mGlobalChainConfig.postChain.eqHighGain = dB; break;
+    }
+    mPostChainExecutor.SetNodeParam("global_eq", kParamNames[band], dB);
+  }
+
+  void MultiPresetMixer::SetGlobalEQBandFrequency(int band, double freq)
+  {
+    static const char* kParamNames[] = {"lowFreq", "lowMidFreq", "highMidFreq", "highFreq"};
+    if (band < 0 || band > 3) return;
+
+    switch (band)
+    {
+      case 0: mGlobalChainConfig.postChain.eqLowFreq = freq; break;
+      case 1: mGlobalChainConfig.postChain.eqLowMidFreq = freq; break;
+      case 2: mGlobalChainConfig.postChain.eqHighMidFreq = freq; break;
+      case 3: mGlobalChainConfig.postChain.eqHighFreq = freq; break;
+    }
+    mPostChainExecutor.SetNodeParam("global_eq", kParamNames[band], freq);
+  }
+
+  void MultiPresetMixer::SetGlobalEQBandQ(int band, double q)
+  {
+    static const char* kParamNames[] = {"", "lowMidQ", "highMidQ", ""};
+    if (band < 1 || band > 2) return;
+
+    switch (band)
+    {
+      case 1: mGlobalChainConfig.postChain.eqLowMidQ = q; break;
+      case 2: mGlobalChainConfig.postChain.eqHighMidQ = q; break;
+    }
+    mPostChainExecutor.SetNodeParam("global_eq", kParamNames[band], q);
+  }
+
+  void MultiPresetMixer::SetGlobalDoublerEnabled(bool enabled)
+  {
+    mGlobalChainConfig.postChain.doublerEnabled = enabled;
+    mPostChainExecutor.SetNodeEnabled("global_doubler", enabled);
+  }
+
+  void MultiPresetMixer::SetGlobalDoublerDelay(double delayMs)
+  {
+    mGlobalChainConfig.postChain.doublerDelay = std::clamp(delayMs, 0.5, 100.0);
+    mPostChainExecutor.SetNodeParam("global_doubler", "time", mGlobalChainConfig.postChain.doublerDelay);
+  }
+
+  void MultiPresetMixer::SetGlobalDoublerMix(double mix)
+  {
+    mGlobalChainConfig.postChain.doublerMix = std::clamp(mix, 0.0, 1.0);
+    mPostChainExecutor.SetNodeParam("global_doubler", "mix", mGlobalChainConfig.postChain.doublerMix);
+  }
+
+  void MultiPresetMixer::SetGlobalDoublerDetune(double cents)
+  {
+    mGlobalChainConfig.postChain.doublerDetune = cents;
+    mPostChainExecutor.SetNodeParam("global_doubler", "detune", cents);
+  }
+
+  void MultiPresetMixer::SetGlobalInputGain(double dB)
+  {
+    mGlobalChainConfig.inputGain = dB;
+    // Input gain applied via pre-chain input trim
+    mPreChainExecutor.SetInputTrim(dB);
+  }
+
+  void MultiPresetMixer::SetGlobalOutputGain(double dB)
+  {
+    mGlobalChainConfig.outputGain = dB;
+    // Convert dB to linear for master gain
+    mMasterGain = std::pow(10.0, dB / 20.0);
+  }
+
+  // ==========================================================================
+  // Legacy global FX routing (deprecated - routes to per-preset nodes)
+  // These are kept for backward compatibility but should migrate to global chain
+  // ==========================================================================
+
+  // Global gate control (legacy - routes to dynamics_gate nodes in signal chain)
   void MultiPresetMixer::SetGateEnabled(bool enabled)
   {
-    for (auto &inst : mInstances)
-    {
-      const auto nodeId = inst.executor.FindFirstNodeOfType("dynamics_gate");
-      if (!nodeId.empty())
-      {
-        inst.executor.SetNodeEnabled(nodeId, enabled);
-      }
-    }
+    // Route to global chain instead
+    SetGlobalGateEnabled(enabled);
   }
 
   void MultiPresetMixer::SetGateThreshold(double thresholdDb)
   {
-    for (auto &inst : mInstances)
-    {
-      const auto nodeId = inst.executor.FindFirstNodeOfType("dynamics_gate");
-      if (!nodeId.empty())
-      {
-        inst.executor.SetNodeParam(nodeId, "threshold", thresholdDb);
-      }
-    }
+    // Route to global chain instead
+    SetGlobalGateThreshold(thresholdDb);
   }
 
-  // Global doubler control (routes to delay_doubler nodes in signal chain)
+  // Global doubler control (legacy - routes to delay_doubler nodes in signal chain)
   void MultiPresetMixer::SetDoublerEnabled(bool enabled)
   {
-    for (auto &inst : mInstances)
-    {
-      const auto nodeId = inst.executor.FindFirstNodeOfType("delay_doubler");
-      if (!nodeId.empty())
-      {
-        inst.executor.SetNodeEnabled(nodeId, enabled);
-      }
-    }
+    // Route to global chain instead
+    SetGlobalDoublerEnabled(enabled);
   }
 
   void MultiPresetMixer::SetDoublerDelay(double delayMs)
   {
-    for (auto &inst : mInstances)
-    {
-      const auto nodeId = inst.executor.FindFirstNodeOfType("delay_doubler");
-      if (!nodeId.empty())
-      {
-        inst.executor.SetNodeParam(nodeId, "time", std::clamp(delayMs, 0.5, 100.0));
-      }
-    }
+    // Route to global chain instead
+    SetGlobalDoublerDelay(delayMs);
   }
 
-  // Global transpose control (routes to pitch_shift nodes in signal chain)
+  // Global transpose control (legacy - routes to pitch_shift nodes in signal chain)
   void MultiPresetMixer::SetTranspose(int semitones)
   {
-    for (auto &inst : mInstances)
-    {
-      const auto nodeId = inst.executor.FindFirstNodeOfType("pitch_shift");
-      if (!nodeId.empty())
-      {
-        inst.executor.SetNodeParam(nodeId, "semitones", static_cast<double>(std::clamp(semitones, -24, 24)));
-      }
-    }
+    // Route to global chain instead
+    SetGlobalTransposeEnabled(semitones != 0);
+    SetGlobalTranspose(semitones);
   }
 
   void MultiPresetMixer::SetAmpDrive(double value)
@@ -244,36 +368,25 @@ namespace guitarfx
     }
   }
 
+  // EQ methods now route to global post-chain (legacy compatibility)
   void MultiPresetMixer::SetEQEnabled(bool enabled)
   {
-    mGlobalEQEnabled = enabled;
+    SetGlobalEQEnabled(enabled);
   }
 
   void MultiPresetMixer::SetEQBandGain(int band, double value)
   {
-    static const char *kParamNames[] = {"lowGain", "lowMidGain", "highMidGain", "highGain"};
-    if (band < 0 || band > 3)
-      return;
-
-    mGlobalEQ.SetParam(kParamNames[band], value);
+    SetGlobalEQBandGain(band, value);
   }
 
   void MultiPresetMixer::SetEQBandFrequency(int band, double value)
   {
-    static const char *kParamNames[] = {"lowFreq", "lowMidFreq", "highMidFreq", "highFreq"};
-    if (band < 0 || band > 3)
-      return;
-
-    mGlobalEQ.SetParam(kParamNames[band], value);
+    SetGlobalEQBandFrequency(band, value);
   }
 
   void MultiPresetMixer::SetEQBandQ(int band, double value)
   {
-    static const char *kParamNames[] = {"", "lowMidQ", "highMidQ", ""};
-    if (band < 1 || band > 2)
-      return;
-
-    mGlobalEQ.SetParam(kParamNames[band], value);
+    SetGlobalEQBandQ(band, value);
   }
 
   void MultiPresetMixer::SetDelayEnabled(bool enabled)
@@ -419,9 +532,22 @@ namespace guitarfx
     // Allocate global temp buffers
     mTempInL.resize(static_cast<size_t>(maxBlockSize), 0.0f);
     mTempInR.resize(static_cast<size_t>(maxBlockSize), 0.0f);
+    mPreChainOutL.resize(static_cast<size_t>(maxBlockSize), 0.0f);
+    mPreChainOutR.resize(static_cast<size_t>(maxBlockSize), 0.0f);
+    mPostChainOutL.resize(static_cast<size_t>(maxBlockSize), 0.0f);
+    mPostChainOutR.resize(static_cast<size_t>(maxBlockSize), 0.0f);
 
-    // Prepare global post-mix EQ
-    mGlobalEQ.Prepare(sampleRate, maxBlockSize);
+    // Build and prepare global signal chains
+    mPreChainExecutor.SetResourceLibrary(mResourceLibrary);
+    mPreChainExecutor.SetGraph(mGlobalChainConfig.BuildPreChainGraph());
+    mPreChainExecutor.SetInputTrim(mGlobalChainConfig.inputGain);
+    mPreChainExecutor.Prepare(sampleRate, maxBlockSize);
+
+    mPostChainExecutor.SetResourceLibrary(mResourceLibrary);
+    mPostChainExecutor.SetGraph(mGlobalChainConfig.BuildPostChainGraph());
+    mPostChainExecutor.Prepare(sampleRate, maxBlockSize);
+
+    mGlobalChainNeedsRebuild = false;
 
     AllocateBuffers(maxBlockSize);
 
@@ -434,7 +560,8 @@ namespace guitarfx
 
   void MultiPresetMixer::Reset()
   {
-    mGlobalEQ.Reset();
+    mPreChainExecutor.Reset();
+    mPostChainExecutor.Reset();
     for (auto &inst : mInstances)
     {
       inst.executor.Reset();
@@ -514,7 +641,7 @@ namespace guitarfx
       }
     }
 
-    // Process tuner (sits at the start of signal chain, uses raw input for pitch detection)
+    // Process tuner FIRST (before any processing, uses raw input for accurate pitch detection)
     if (mTunerEnabled)
     {
       float *tunerInputs[2] = {processInL, processInR};
@@ -531,6 +658,17 @@ namespace guitarfx
       }
     }
 
+    // ==========================================================================
+    // GLOBAL PRE-CHAIN: Input → Noise Gate → Transpose
+    // ==========================================================================
+    float *preChainInputs[2] = {processInL, processInR};
+    float *preChainOutputs[2] = {mPreChainOutL.data(), mPreChainOutR.data()};
+    mPreChainExecutor.Process(preChainInputs, preChainOutputs, numSamples);
+
+    // ==========================================================================
+    // PRESET PROCESSING: Process each active preset and mix
+    // ==========================================================================
+    
     // Detect solo mode
     bool anySolo = false;
     for (const auto &inst : mInstances)
@@ -542,27 +680,22 @@ namespace guitarfx
       }
     }
 
-    // Clear output
+    // Clear preset mix accumulator (use outputs as accumulator)
     if (outputs[0])
-    {
       std::fill(outputs[0], outputs[0] + numSamples, 0.0f);
-    }
     if (outputs[1])
-    {
       std::fill(outputs[1], outputs[1] + numSamples, 0.0f);
-    }
 
-    // Process each preset and mix
-    float *inputPtrs[2] = {processInL, processInR};
+    // Process each preset and mix (fed from pre-chain output)
     for (auto &inst : mInstances)
     {
       const bool include = (!inst.cfg.mute) && (!anySolo || inst.cfg.solo);
       if (!include)
         continue;
 
-      // Process through signal chain (gate/pitch/doubler are now nodes in the graph)
+      // Process through preset's signal chain
       float *presetOutPtrs[2] = {inst.outL.data(), inst.outR.data()};
-      inst.executor.Process(inputPtrs, presetOutPtrs, numSamples);
+      inst.executor.Process(preChainOutputs, presetOutPtrs, numSamples);
 
       // Apply per-preset pan (equal-power) and mix gain
       float gL = 1.0f, gR = 1.0f;
@@ -572,22 +705,28 @@ namespace guitarfx
       for (int i = 0; i < numSamples; ++i)
       {
         if (outputs[0])
-        {
           outputs[0][i] += inst.outL[static_cast<size_t>(i)] * mixGain * gL;
-        }
         if (outputs[1])
-        {
           outputs[1][i] += inst.outR[static_cast<size_t>(i)] * mixGain * gR;
-        }
       }
     }
 
-    // Apply global post-mix EQ (after preset mixing, before pitch/doubler)
-    if (mGlobalEQEnabled && outputs[0] && outputs[1])
-    {
-      mGlobalEQ.Process(outputs, outputs, numSamples);
-    }
+    // ==========================================================================
+    // GLOBAL POST-CHAIN: EQ → Doubler
+    // ==========================================================================
+    float *postChainOutputs[2] = {mPostChainOutL.data(), mPostChainOutR.data()};
+    mPostChainExecutor.Process(outputs, postChainOutputs, numSamples);
 
+    // Copy post-chain output back to main outputs
+    if (outputs[0])
+      std::copy(mPostChainOutL.begin(), mPostChainOutL.begin() + numSamples, outputs[0]);
+    if (outputs[1])
+      std::copy(mPostChainOutR.begin(), mPostChainOutR.begin() + numSamples, outputs[1]);
+
+    // ==========================================================================
+    // FINAL OUTPUT STAGE: Master gain, auto-level, limiter
+    // ==========================================================================
+    
     // Apply master gain
     const float master = static_cast<float>(mMasterGain);
     if (master != 1.0f)

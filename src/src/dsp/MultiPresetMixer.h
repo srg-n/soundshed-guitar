@@ -101,13 +101,39 @@ namespace guitarfx
     void SetReverbDamping(double value);
     void SetReverbMix(double value);
 
-    // Global FX control (routes to first signal chain node of matching type)
+    // Global signal chain configuration
+    void SetGlobalChainConfig(const GlobalSignalChainConfig& config);
+    [[nodiscard]] const GlobalSignalChainConfig& GetGlobalChainConfig() const { return mGlobalChainConfig; }
+
+    // Global pre-chain controls (noise gate, transpose)
+    void SetGlobalGateEnabled(bool enabled);
+    void SetGlobalGateThreshold(double thresholdDb);
+    void SetGlobalGateAttack(double attackMs);
+    void SetGlobalGateHold(double holdMs);
+    void SetGlobalGateRelease(double releaseMs);
+    void SetGlobalTransposeEnabled(bool enabled);
+    void SetGlobalTranspose(int semitones);
+
+    // Global post-chain controls (EQ, doubler)
+    void SetGlobalEQEnabled(bool enabled);
+    void SetGlobalEQBandGain(int band, double dB);
+    void SetGlobalEQBandFrequency(int band, double freq);
+    void SetGlobalEQBandQ(int band, double q);
+    void SetGlobalDoublerEnabled(bool enabled);
+    void SetGlobalDoublerDelay(double delayMs);
+    void SetGlobalDoublerMix(double mix);
+    void SetGlobalDoublerDetune(double cents);
+
+    // Global input/output gain
+    void SetGlobalInputGain(double dB);
+    void SetGlobalOutputGain(double dB);
+
+    // Legacy global FX methods (route to global chain for backward compatibility)
     void SetGateEnabled(bool enabled);
     void SetGateThreshold(double thresholdDb);
     void SetDoublerEnabled(bool enabled);
     void SetDoublerDelay(double delayMs);
     void SetTranspose(int semitones);
-
     // Node-level control (for signal chain editing)
     void SetNodeEnabled(const std::string &presetId, const std::string &nodeId, bool enabled);
     void SetNodeParam(const std::string &presetId, const std::string &nodeId, const std::string &key, double value);
@@ -182,10 +208,14 @@ namespace guitarfx
 
     // Temporary buffers for input processing
     std::vector<float> mTempInL, mTempInR;
+    std::vector<float> mPreChainOutL, mPreChainOutR;
+    std::vector<float> mPostChainOutL, mPostChainOutR;
 
-    // Global post-mix EQ (applied after preset mixing, before pitch/doubler)
-    ParametricEQEffect mGlobalEQ;
-    bool mGlobalEQEnabled = false;
+    // Global signal chain configuration and executors
+    GlobalSignalChainConfig mGlobalChainConfig;
+    SignalGraphExecutor mPreChainExecutor;   // input → gate → transpose
+    SignalGraphExecutor mPostChainExecutor;  // eq → doubler → output
+    bool mGlobalChainNeedsRebuild = true;
 
     // Tuner state
     bool mTunerEnabled = false;

@@ -144,4 +144,82 @@ namespace guitarfx
   constexpr const char* kNodeTypeSplitter = "splitter";
   constexpr const char* kNodeTypeMixer = "mixer";
 
+  /**
+   * Global signal chain configuration.
+   * Developer-only: defines global effects applied before and after preset processing.
+   * 
+   * Signal flow:
+   *   Input → [Pre-chain: Tuner tap → Noise Gate → Transpose] → 
+   *   [Preset Mixer] → [Post-chain: EQ → Doubler] → Output
+   */
+  struct GlobalSignalChainConfig
+  {
+    // Pre-chain settings (applied before preset processing)
+    struct PreChain
+    {
+      // Noise Gate (dynamics_gate)
+      bool gateEnabled = false;
+      double gateThreshold = -40.0;  // dB
+      double gateAttack = 0.5;       // ms
+      double gateHold = 50.0;        // ms
+      double gateRelease = 100.0;    // ms
+
+      // Transpose (pitch_shift)
+      bool transposeEnabled = false;
+      int transposeSemitones = 0;    // -24 to +24
+    };
+
+    // Post-chain settings (applied after preset mixing)
+    struct PostChain
+    {
+      // Parametric EQ (eq_parametric)
+      bool eqEnabled = false;
+      double eqLowGain = 0.0;        // dB
+      double eqLowFreq = 100.0;      // Hz
+      double eqLowMidGain = 0.0;     // dB
+      double eqLowMidFreq = 400.0;   // Hz
+      double eqLowMidQ = 1.0;
+      double eqHighMidGain = 0.0;    // dB
+      double eqHighMidFreq = 2000.0; // Hz
+      double eqHighMidQ = 1.0;
+      double eqHighGain = 0.0;       // dB
+      double eqHighFreq = 8000.0;    // Hz
+
+      // Doubler (delay_doubler)
+      bool doublerEnabled = false;
+      double doublerDelay = 20.0;    // ms
+      double doublerMix = 0.5;       // 0-1
+      double doublerDetune = 5.0;    // cents
+    };
+
+    // Input stage settings
+    double inputGain = 0.0;          // dB
+    bool monoMode = false;
+    int inputChannel = 0;            // 0=left, 1=right (when mono)
+    bool autoLevelInput = false;
+
+    // Output stage settings
+    double outputGain = 0.0;         // dB (master volume)
+    bool autoLevelOutput = false;
+    bool limiterEnabled = false;
+
+    PreChain preChain;
+    PostChain postChain;
+
+    /**
+     * Build a SignalGraph for the pre-chain (input → gate → transpose → output).
+     */
+    [[nodiscard]] SignalGraph BuildPreChainGraph() const;
+
+    /**
+     * Build a SignalGraph for the post-chain (input → eq → doubler → output).
+     */
+    [[nodiscard]] SignalGraph BuildPostChainGraph() const;
+
+    /**
+     * Create default global chain configuration.
+     */
+    [[nodiscard]] static GlobalSignalChainConfig CreateDefault();
+  };
+
 } // namespace guitarfx
