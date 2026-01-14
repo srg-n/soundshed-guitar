@@ -10,14 +10,18 @@ import { updateDSPPerformancePlot } from "./views.js";
 import type { Preset, UiSettings } from "./types.js";
 
 export function handleIncomingMessage(message: string): void {
-  console.log("[JS] handleIncomingMessage received:", message.substring(0, 200));
   const payload = JSON.parse(message) as Record<string, unknown>;
-  console.log("[JS] Parsed message type:", payload.type);
+  const type = typeof payload.type === "string" ? payload.type : "";
+  // dspPerformance messages arrive frequently; avoid spamming console.
+  if (type !== "dspPerformance") {
+    console.log("[JS] handleIncomingMessage received:", message.substring(0, 200));
+    console.log("[JS] Parsed message type:", type);
+  }
 
   /*if (payload.type === "dspPerformance") {
     console.log("[JS] DSP Performance message received:", payload);
   }*/
-  switch (payload.type) {
+  switch (type) {
     case "state": {
       uiState.activePresetId = (payload as { activePresetId?: string }).activePresetId ?? null;
       const parameters = (payload as { parameters?: Record<string, unknown> }).parameters;
