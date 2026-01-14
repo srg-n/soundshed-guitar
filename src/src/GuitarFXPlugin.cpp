@@ -1858,7 +1858,7 @@ namespace guitarfx
           {"nodeProcessingTimesUs", stats.nodeProcessingTimesUs}
         }}
       };
-      std::cout << "[CPP] Sending test DSP performance message: " << stats.dspLoadPercent << "% load" << std::endl;
+      
       SendMessageToUI(perfMessage.dump());
     }
   }

@@ -2,9 +2,11 @@ import { appendLog } from "./logging.js";
 
 const NAMBridge = {
   postMessage(message: unknown): void {
-    if (window.IPlugSendMsg) {
-      window.IPlugSendMsg(message);
-    }
+    if (!window.IPlugSendMsg) return;
+
+    // WebView bridge expects a JSON string; stringify objects defensively.
+    const payload = typeof message === "string" ? message : JSON.stringify(message);
+    window.IPlugSendMsg(payload);
   },
 };
 

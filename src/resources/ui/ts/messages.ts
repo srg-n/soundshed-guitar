@@ -14,9 +14,9 @@ export function handleIncomingMessage(message: string): void {
   const payload = JSON.parse(message) as Record<string, unknown>;
   console.log("[JS] Parsed message type:", payload.type);
 
-  if (payload.type === "dspPerformance") {
+  /*if (payload.type === "dspPerformance") {
     console.log("[JS] DSP Performance message received:", payload);
-  }
+  }*/
   switch (payload.type) {
     case "state": {
       uiState.activePresetId = (payload as { activePresetId?: string }).activePresetId ?? null;
@@ -272,7 +272,7 @@ export function handleIncomingMessage(message: string): void {
         if (uiState.dspPerformanceHistory.length > 100) {
           uiState.dspPerformanceHistory.shift();
         }
-        console.log("DSP Performance:", stats.stats.dspLoadPercent.toFixed(1) + "% load", stats.stats.nodeProcessingTimesUs);
+       
         // Update plot if panel is visible
         updateDSPPerformancePlot();
       }

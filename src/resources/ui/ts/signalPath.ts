@@ -447,7 +447,7 @@ function bindNodeClickHandlers(preset: Preset): void {
       const nodeId = el.dataset.nodeId;
       
       // Check if dragging from FX library
-      const fxEffectType = e.dataTransfer?.types.includes("application/x-fx-effect");
+      const fxEffectType = Array.from(e.dataTransfer?.types ?? []).includes("application/x-fx-effect");
       
       if (nodeId && (nodeId !== draggedNodeId || fxEffectType)) {
         dragOverNodeId = nodeId;
@@ -530,7 +530,7 @@ function bindConnectorDropHandlers(preset: Preset): void {
       e.preventDefault();
       
       // Only accept drops from FX library
-      const fxEffectType = e.dataTransfer?.types.includes("application/x-fx-effect");
+      const fxEffectType = Array.from(e.dataTransfer?.types ?? []).includes("application/x-fx-effect");
       
       if (fxEffectType) {
         el.classList.add("drag-over");
