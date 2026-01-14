@@ -13,6 +13,78 @@ function getSelectedDemoAudio(): DemoSample | null {
   return DEMO_AUDIO_SAMPLES.find((sample) => sample.id === selectedId) ?? DEMO_AUDIO_SAMPLES[0];
 }
 
+/**
+ * Renders compact demo audio controls for the footer bar.
+ * Returns an HTML string with select, play, and repeat controls.
+ */
+export function renderFooterDemoAudioControls(): string {
+  if (!DEMO_AUDIO_SAMPLES.length) {
+    return "";
+  }
+
+  const options = DEMO_AUDIO_SAMPLES
+    .map((sample) => {
+      const selected = sample.id === (uiState.demoAudioSelectedId ?? DEMO_AUDIO_SAMPLES[0].id);
+      return `<option value="${sample.id}"${selected ? " selected" : ""}>${sample.title}</option>`;
+    })
+    .join("");
+
+  return `
+    <div class="footer-demo-controls">
+      <select id="footer-demo-audio-select" class="footer-demo-select" title="Select demo audio">
+        ${options}
+      </select>
+      <button id="footer-play-demo-audio" class="footer-play-btn" title="Play demo audio">
+        <span class="play-icon">▶</span>
+      </button>
+      <label class="footer-repeat-toggle" title="Repeat demo audio">
+        <input type="checkbox" id="footer-demo-audio-repeat" />
+        <span class="footer-repeat-icon">🔁</span>
+      </label>
+    </div>
+  `;
+}
+
+/**
+ * Binds event listeners for the footer demo audio controls.
+ * Should be called after the footer HTML is rendered.
+ */
+export function bindFooterDemoAudioControls(): void {
+  const selectElement = document.getElementById("footer-demo-audio-select") as HTMLSelectElement | null;
+  if (selectElement) {
+    selectElement.value = uiState.demoAudioSelectedId ?? selectElement.value;
+    selectElement.addEventListener("change", (event) => {
+      const value = (event.target as HTMLSelectElement).value;
+      uiState.demoAudioSelectedId = value;
+      // Sync with main demo audio select if present
+      const mainSelect = document.getElementById("demo-audio-select") as HTMLSelectElement | null;
+      if (mainSelect) {
+        mainSelect.value = value;
+      }
+    });
+  }
+
+  const playButton = document.getElementById("footer-play-demo-audio");
+  if (playButton) {
+    playButton.addEventListener("click", async () => {
+      await previewSelectedDemoAudio();
+    });
+  }
+
+  const repeatCheckbox = document.getElementById("footer-demo-audio-repeat") as HTMLInputElement | null;
+  if (repeatCheckbox) {
+    repeatCheckbox.checked = uiState.demoAudioRepeat;
+    repeatCheckbox.addEventListener("change", (event) => {
+      uiState.demoAudioRepeat = (event.target as HTMLInputElement).checked;
+      // Sync with main demo audio repeat if present
+      const mainRepeat = document.getElementById("demo-audio-repeat-checkbox") as HTMLInputElement | null;
+      if (mainRepeat) {
+        mainRepeat.checked = uiState.demoAudioRepeat;
+      }
+    });
+  }
+}
+
 export function renderDemoAudioControls(): string {
   if (!DEMO_AUDIO_SAMPLES.length) {
     return "";
@@ -58,6 +130,11 @@ export function bindDemoAudioControls(): void {
     selectElement.addEventListener("change", (event) => {
       const value = (event.target as HTMLSelectElement).value;
       uiState.demoAudioSelectedId = value;
+      // Sync with footer demo audio select if present
+      const footerSelect = document.getElementById("footer-demo-audio-select") as HTMLSelectElement | null;
+      if (footerSelect) {
+        footerSelect.value = value;
+      }
     });
   }
 
@@ -73,6 +150,11 @@ export function bindDemoAudioControls(): void {
     repeatCheckbox.checked = uiState.demoAudioRepeat;
     repeatCheckbox.addEventListener("change", (event) => {
       uiState.demoAudioRepeat = (event.target as HTMLInputElement).checked;
+      // Sync with footer repeat checkbox if present
+      const footerRepeat = document.getElementById("footer-demo-audio-repeat") as HTMLInputElement | null;
+      if (footerRepeat) {
+        footerRepeat.checked = uiState.demoAudioRepeat;
+      }
     });
   }
 }

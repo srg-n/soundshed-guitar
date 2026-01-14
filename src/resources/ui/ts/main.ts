@@ -16,6 +16,7 @@ import { initFxSelector } from "./fxSelector.js";
 import { themeSwitcher } from "./theme-switcher.js";
 import { initializeThemeSwitcherIcons } from "./theme-switcher-ui.js";
 import { startUiSettingsTracking } from "./windowSettings.js";
+import { renderFooterDemoAudioControls, bindFooterDemoAudioControls } from "./demoAudio.js";
 
 const tabButtons = Array.from(document.querySelectorAll(".tab-button"));
 const tabPanels = Array.from(document.querySelectorAll(".tab-panel"));
@@ -99,6 +100,13 @@ async function bootstrap(): Promise<void> {
   initializeTuner();
   initFxSelector();
   startUiSettingsTracking();
+
+  // Initialize footer demo audio controls
+  const footerDemoContainer = document.getElementById("footer-demo-audio-container");
+  if (footerDemoContainer) {
+    footerDemoContainer.innerHTML = renderFooterDemoAudioControls();
+    bindFooterDemoAudioControls();
+  }
 
   renderActivePreset();
   await initializePresets();
