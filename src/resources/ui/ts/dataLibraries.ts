@@ -71,8 +71,18 @@ function extractResourceIdsFromGraph(
   if (!preset.graph?.nodes) return ids;
 
   for (const node of preset.graph.nodes as GraphNode[]) {
-    if (node.type === nodeType && node.resource?.type === resourceType && node.resource?.id) {
+    if (node.type !== nodeType) {
+      continue;
+    }
+    if (node.resource?.type === resourceType && node.resource?.id) {
       ids.push(node.resource.id);
+    }
+    if (Array.isArray(node.resources)) {
+      node.resources.forEach((res) => {
+        if (res.type === resourceType && res.id) {
+          ids.push(res.id);
+        }
+      });
     }
   }
   return ids;

@@ -22,6 +22,8 @@ namespace guitarfx
     std::string resourceId;   // Library ID (e.g., "plexi-bright")
     std::filesystem::path filePath; // Direct file path
     std::string embeddedId;   // References EmbeddedResource.id
+    std::string parameterId;  // Mapped parameter identifier (e.g., "gain", "warp")
+    std::optional<double> parameterValue; // Captured parameter value for blending
 
     [[nodiscard]] bool IsLibraryRef() const { return !resourceType.empty() && !resourceId.empty(); }
     [[nodiscard]] bool IsFilePath() const { return !filePath.empty(); }
@@ -57,7 +59,8 @@ namespace guitarfx
     std::map<std::string, double> params;      // Numeric parameters
     std::map<std::string, std::string> config; // String config
 
-    std::optional<ResourceRef> resource; // For effects needing external files
+    std::optional<ResourceRef> resource;      // For effects needing a single external file
+    std::vector<ResourceRef> resources;       // For effects needing multiple external files
   };
 
   /**

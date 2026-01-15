@@ -11,6 +11,7 @@
 #include "dsp/effects/CompressorEffect.h"
 #include "dsp/effects/NAMAmpEffect.h"
 #include "dsp/effects/OptimizedNAMAmpEffect.h"
+#include "dsp/effects/MultiModelNAMAmpEffect.h"
 #include "dsp/effects/IRCabEffect.h"
 #include "dsp/effects/SimpleCabEffect.h"
 
@@ -35,6 +36,7 @@ namespace guitarfx
     // Amp models
     RegisterNAMAmpEffect();
     RegisterOptimizedNAMAmpEffect();  // SIMD-optimized version
+    RegisterMultiModelNAMAmpEffect();  // Multi-model blend
 
     // Cabinet simulation
     RegisterIRCabEffect();

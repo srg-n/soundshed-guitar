@@ -90,6 +90,8 @@ export interface ResourceRef {
   id: string;
   filePath?: string;
   embeddedId?: string;
+  parameterId?: string;
+  parameterValue?: number;
 }
 
 export interface GraphNode {
@@ -101,6 +103,7 @@ export interface GraphNode {
   params: Record<string, number>;
   config: Record<string, string>;
   resource?: ResourceRef;
+  resources?: ResourceRef[];
 }
 
 export interface GraphEdge {

@@ -2829,6 +2829,10 @@ namespace guitarfx
     const std::string resourceType = payload.value("resourceType", "");
     const std::string resourceId = payload.value("resourceId", "");
     const std::string filePath = payload.value("filePath", "");
+    const int resourceIndex = payload.value("resourceIndex", -1);
+    const std::string parameterId = payload.value("parameterId", "");
+    const bool hasParameterValue = payload.contains("parameterValue") && payload["parameterValue"].is_number();
+    const double parameterValue = hasParameterValue ? payload["parameterValue"].get<double>() : 0.0;
 
     if (nodeId.empty())
     {
@@ -2845,8 +2849,60 @@ namespace guitarfx
     {
       ref.filePath = filePath;
     }
+    if (!parameterId.empty())
+    {
+      ref.parameterId = parameterId;
+    }
+    if (hasParameterValue)
+    {
+      ref.parameterValue = parameterValue;
+    }
 
-    // Update only the targeted node
+    if (resourceIndex >= 0)
+    {
+      EnsureBasicGraph();
+      if (!mActivePreset)
+      {
+        return;
+      }
+
+      GraphNode* target = mActivePreset->graph.FindNode(nodeId);
+      if (!target)
+      {
+        return;
+      }
+
+      if (static_cast<size_t>(resourceIndex) >= target->resources.size())
+      {
+        target->resources.resize(static_cast<size_t>(resourceIndex) + 1);
+      }
+
+      ResourceRef& slot = target->resources[static_cast<size_t>(resourceIndex)];
+      if (!ref.resourceType.empty())
+        slot.resourceType = ref.resourceType;
+      if (!ref.resourceId.empty())
+        slot.resourceId = ref.resourceId;
+      if (!ref.filePath.empty())
+        slot.filePath = ref.filePath;
+      if (!ref.embeddedId.empty())
+        slot.embeddedId = ref.embeddedId;
+      if (!ref.parameterId.empty())
+        slot.parameterId = ref.parameterId;
+      if (ref.parameterValue.has_value())
+        slot.parameterValue = ref.parameterValue;
+
+      if (target->type == "amp_nam_blend")
+      {
+        target->resource.reset();
+      }
+
+      mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+      ApplyPreset(*mActivePreset);
+      mPendingStateBroadcast = true;
+      return;
+    }
+
+    // Update only the targeted node (single-resource)
     if (UpdateResourceForNodeId(nodeId, ref, true))
     {
       return;
@@ -2857,6 +2913,7 @@ namespace guitarfx
   {
     const std::string nodeId = payload.value("nodeId", "");
     const std::string resourceType = payload.value("resourceType", "");
+    const int resourceIndex = payload.value("resourceIndex", -1);
 
     if (nodeId.empty() || resourceType.empty())
     {
@@ -2900,6 +2957,10 @@ namespace guitarfx
       updatePayload["nodeId"] = nodeId;
       updatePayload["resourceType"] = resourceType;
       updatePayload["filePath"] = selectedPath.generic_string();
+      if (resourceIndex >= 0)
+      {
+        updatePayload["resourceIndex"] = resourceIndex;
+      }
       HandleUpdateNodeResourceRequest(updatePayload);
     }
 #else

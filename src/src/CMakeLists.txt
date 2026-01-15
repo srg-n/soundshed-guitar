@@ -67,6 +67,7 @@ set(_guitarfx_core_sources
   dsp/effects/CompressorEffect.h
   dsp/effects/NAMAmpEffect.h
   dsp/effects/OptimizedNAMAmpEffect.h
+  dsp/effects/MultiModelNAMAmpEffect.h
   dsp/effects/IRCabEffect.h
   dsp/effects/SimpleCabEffect.h
   

@@ -20,6 +20,10 @@ namespace guitarfx
         json["filePath"] = ref.filePath.string();
       if (!ref.embeddedId.empty())
         json["embeddedId"] = ref.embeddedId;
+      if (!ref.parameterId.empty())
+        json["parameterId"] = ref.parameterId;
+      if (ref.parameterValue.has_value())
+        json["parameterValue"] = *ref.parameterValue;
       return json;
     }
 
@@ -31,6 +35,11 @@ namespace guitarfx
       ref.resourceId = json.value("resourceId", json.value("id", ""));
       ref.filePath = json.value("filePath", "");
       ref.embeddedId = json.value("embeddedId", "");
+      ref.parameterId = json.value("parameterId", "");
+      if (json.contains("parameterValue") && json["parameterValue"].is_number())
+      {
+        ref.parameterValue = json["parameterValue"].get<double>();
+      }
       return ref;
     }
 
@@ -67,6 +76,18 @@ namespace guitarfx
       if (node.resource && node.resource->IsValid())
       {
         json["resource"] = SerializeResourceRef(*node.resource);
+      }
+
+      if (!node.resources.empty())
+      {
+        json["resources"] = nlohmann::json::array();
+        for (const auto& res : node.resources)
+        {
+          if (res.IsValid())
+          {
+            json["resources"].push_back(SerializeResourceRef(res));
+          }
+        }
       }
 
       return json;
@@ -119,6 +140,17 @@ namespace guitarfx
       if (json.contains("resource") && json["resource"].is_object())
       {
         node.resource = DeserializeResourceRef(json["resource"]);
+      }
+
+      if (json.contains("resources") && json["resources"].is_array())
+      {
+        for (const auto& resJson : json["resources"])
+        {
+          if (resJson.is_object())
+          {
+            node.resources.push_back(DeserializeResourceRef(resJson));
+          }
+        }
       }
 
       return node;

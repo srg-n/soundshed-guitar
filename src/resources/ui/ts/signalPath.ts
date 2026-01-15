@@ -23,6 +23,7 @@ const effectTypeIcons: Record<string, string> = {
   // Amps
   "amp_nam": "🎸",
   "amp_nam_optimized": "⚡",
+  "amp_nam_blend": "🧬",
   "amp_clean": "🎺",
   "amp_crunch": "🎷",
   
@@ -113,17 +114,25 @@ function isNodeBypassed(node: GraphNode): boolean {
   return false;
 }
 
-function getNodeResourceId(node: GraphNode): string {
-  const anyNode = node as unknown as { resource?: unknown };
-  const res = anyNode.resource as { id?: unknown; resourceId?: unknown } | undefined;
-  if (!res) return "";
-  return (typeof res.id === "string" ? res.id : (typeof res.resourceId === "string" ? res.resourceId : ""));
-}
+function getNodeResourceAtIndex(node: GraphNode, index = 0): { id: string; filePath: string; parameterValue?: number } {
+  const anyNode = node as unknown as {
+    resource?: unknown;
+    resources?: unknown;
+  };
 
-function getNodeResourceFilePath(node: GraphNode): string {
-  const anyNode = node as unknown as { resource?: unknown };
-  const res = anyNode.resource as { filePath?: unknown } | undefined;
-  return typeof res?.filePath === "string" ? res.filePath : "";
+  if (Array.isArray(anyNode.resources)) {
+    const res = anyNode.resources[index] as { id?: unknown; resourceId?: unknown; filePath?: unknown; parameterValue?: unknown } | undefined;
+    const id = typeof res?.id === "string" ? res.id : (typeof res?.resourceId === "string" ? res.resourceId : "");
+    const filePath = typeof res?.filePath === "string" ? res.filePath : "";
+    const parameterValue = typeof res?.parameterValue === "number" ? res.parameterValue : undefined;
+    return { id, filePath, parameterValue };
+  }
+
+  const res = anyNode.resource as { id?: unknown; resourceId?: unknown; filePath?: unknown; parameterValue?: unknown } | undefined;
+  const id = typeof res?.id === "string" ? res.id : (typeof res?.resourceId === "string" ? res.resourceId : "");
+  const filePath = typeof res?.filePath === "string" ? res.filePath : "";
+  const parameterValue = typeof res?.parameterValue === "number" ? res.parameterValue : undefined;
+  return { id, filePath, parameterValue };
 }
 
 export function renderSignalPathBar(): void {
@@ -505,8 +514,9 @@ function renderNodeElement(node: GraphNode): string {
   const displayName = getNodeDisplayName(node);
   
   let resourceLabel = "";
-  if (node.resource) {
-    resourceLabel = `<div class="node-resource">${getNodeResourceId(node) || "Custom"}</div>`;
+  const primaryResource = getNodeResourceAtIndex(node, 0);
+  if (primaryResource.id || primaryResource.filePath) {
+    resourceLabel = `<div class="node-resource">${primaryResource.id || "Custom"}</div>`;
   }
 
   return `
@@ -806,41 +816,66 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
   if (typeInfo?.requiresResource && typeInfo.resourceType) {
     const resourceType = typeInfo.resourceType;
     const resources = uiState.resourceLibrary[resourceType] || [];
-    const currentResourceId = getNodeResourceId(node);
-    const currentFilePath = getNodeResourceFilePath(node);
-    
-    const resourceOptions = resources.map((res: LibraryResource) => {
-      const selected = res.id === currentResourceId ? "selected" : "";
+    const browseAccept = resourceType === "nam" ? ".nam,.json" : resourceType === "ir" ? ".wav" : "*";
+
+    const buildOptions = (currentId: string) => resources.map((res: LibraryResource) => {
+      const selected = res.id === currentId ? "selected" : "";
       return `<option value="${res.id}" ${selected}>${res.name}</option>`;
     }).join("");
-    
-    const resourceLabel = resourceType === "nam" ? "Model" : resourceType === "ir" ? "IR" : "Resource";
-    const browseAccept = resourceType === "nam" ? ".nam,.json" : resourceType === "ir" ? ".wav" : "*";
-    
-    resourceSelector = `
-      <div class="node-resource-selector">
-        <label>${resourceLabel}</label>
-        <div class="resource-controls">
-          <select 
-            class="resource-dropdown" 
-            data-node-id="${node.id}" 
-            data-resource-type="${resourceType}"
-          >
-            <option value="">-- Select from Library --</option>
-            ${resourceOptions}
-            ${currentFilePath ? `<option value="__custom__" selected>Custom: ${currentFilePath.split("/").pop()}</option>` : ""}
-          </select>
-          <button 
-            class="resource-browse-btn" 
-            data-node-id="${node.id}" 
-            data-resource-type="${resourceType}"
-            data-accept="${browseAccept}"
-            title="Browse for file..."
-          >📁</button>
+
+    const buildSelector = (index: number, label: string) => {
+      const current = getNodeResourceAtIndex(node, index);
+      const resourceOptions = buildOptions(current.id);
+      const customOption = current.filePath
+        ? `<option value="__custom__" selected>Custom: ${current.filePath.split("/").pop()}</option>`
+        : "";
+
+      return `
+        <div class="node-resource-selector">
+          <label>${label}</label>
+          <div class="resource-controls">
+            <select
+              class="resource-dropdown"
+              data-node-id="${node.id}"
+              data-resource-type="${resourceType}"
+              data-resource-index="${index}"
+            >
+              <option value="">-- Select from Library --</option>
+              ${resourceOptions}
+              ${customOption}
+            </select>
+            <button
+              class="resource-browse-btn"
+              data-node-id="${node.id}"
+              data-resource-type="${resourceType}"
+              data-resource-index="${index}"
+              data-accept="${browseAccept}"
+              title="Browse for file..."
+            >📁</button>
+          </div>
+          ${current.filePath ? `<div class="resource-path-info" title="${current.filePath}">${current.filePath}</div>` : ""}
         </div>
-        ${currentFilePath ? `<div class="resource-path-info" title="${currentFilePath}">${currentFilePath}</div>` : ""}
-      </div>
-    `;
+      `;
+    };
+
+    if (node.type === "amp_nam_blend") {
+      const paramValue0 = getNodeResourceAtIndex(node, 0).parameterValue ?? 0;
+      const paramValue1 = getNodeResourceAtIndex(node, 1).parameterValue ?? 1;
+      resourceSelector = `
+        ${buildSelector(0, "Model A")}
+        <div class="node-resource-meta">
+          <label>Model A Value</label>
+          <input class="resource-param-value" type="number" step="0.1" data-node-id="${node.id}" data-resource-index="0" value="${paramValue0}" />
+        </div>
+        ${buildSelector(1, "Model B")}
+        <div class="node-resource-meta">
+          <label>Model B Value</label>
+          <input class="resource-param-value" type="number" step="0.1" data-node-id="${node.id}" data-resource-index="1" value="${paramValue1}" />
+        </div>
+      `;
+    } else {
+      resourceSelector = buildSelector(0, resourceType === "nam" ? "Model" : resourceType === "ir" ? "IR" : "Resource");
+    }
   }
 
   nodeParamsPanelElement.innerHTML = `
@@ -948,32 +983,47 @@ function bindNodeParamControls(node: GraphNode, preset: Preset): void {
 }
 
 function bindResourceControls(node: GraphNode, preset: Preset): void {
-  // Bind resource dropdown
-  const dropdown = nodeParamsPanelElement?.querySelector(".resource-dropdown") as HTMLSelectElement | null;
-  if (dropdown) {
+  // Bind resource dropdowns
+  const dropdowns = nodeParamsPanelElement?.querySelectorAll(".resource-dropdown") as NodeListOf<HTMLSelectElement> | null;
+  dropdowns?.forEach((dropdown) => {
     dropdown.addEventListener("change", () => {
       const nodeId = dropdown.dataset.nodeId;
       const resourceType = dropdown.dataset.resourceType;
       const resourceId = dropdown.value;
+      const resourceIndex = dropdown.dataset.resourceIndex ? parseInt(dropdown.dataset.resourceIndex, 10) : undefined;
       
       if (nodeId && resourceType && resourceId && resourceId !== "__custom__") {
-        sendNodeResourceUpdate(nodeId, resourceType, resourceId, "");
+        sendNodeResourceUpdate(nodeId, resourceType, resourceId, "", resourceIndex);
       }
     });
-  }
+  });
   
-  // Bind browse button
-  const browseBtn = nodeParamsPanelElement?.querySelector(".resource-browse-btn") as HTMLButtonElement | null;
-  if (browseBtn) {
+  // Bind browse buttons
+  const browseBtns = nodeParamsPanelElement?.querySelectorAll(".resource-browse-btn") as NodeListOf<HTMLButtonElement> | null;
+  browseBtns?.forEach((browseBtn) => {
     browseBtn.addEventListener("click", () => {
       const nodeId = browseBtn.dataset.nodeId;
       const resourceType = browseBtn.dataset.resourceType;
+      const resourceIndex = browseBtn.dataset.resourceIndex ? parseInt(browseBtn.dataset.resourceIndex, 10) : undefined;
       
       if (nodeId && resourceType) {
-        sendBrowseNodeResource(nodeId, resourceType);
+        sendBrowseNodeResource(nodeId, resourceType, resourceIndex);
       }
     });
-  }
+  });
+
+  // Bind parameter value inputs for blend models
+  const valueInputs = nodeParamsPanelElement?.querySelectorAll(".resource-param-value") as NodeListOf<HTMLInputElement> | null;
+  valueInputs?.forEach((input) => {
+    input.addEventListener("change", () => {
+      const nodeId = input.dataset.nodeId;
+      const resourceIndex = input.dataset.resourceIndex ? parseInt(input.dataset.resourceIndex, 10) : undefined;
+      const value = parseFloat(input.value);
+      if (nodeId && resourceIndex !== undefined && !Number.isNaN(value)) {
+        sendNodeResourceUpdate(nodeId, "nam", "", "", resourceIndex, value);
+      }
+    });
+  });
 }
 
 function bindCloseButton(): void {
@@ -1023,21 +1073,31 @@ function sendSignalPathNodeBypassUpdate(nodeId: string, bypassed: boolean): void
   });
 }
 
-function sendNodeResourceUpdate(nodeId: string, resourceType: string, resourceId: string, filePath: string): void {
+function sendNodeResourceUpdate(
+  nodeId: string,
+  resourceType: string,
+  resourceId: string,
+  filePath: string,
+  resourceIndex?: number,
+  parameterValue?: number,
+): void {
   postMessage({
     type: "updateNodeResource",
     nodeId,
     resourceType,
     resourceId,
     filePath,
+    resourceIndex,
+    parameterValue,
   });
 }
 
-function sendBrowseNodeResource(nodeId: string, resourceType: string): void {
+function sendBrowseNodeResource(nodeId: string, resourceType: string, resourceIndex?: number): void {
   postMessage({
     type: "browseNodeResource",
     nodeId,
     resourceType,
+    resourceIndex,
   });
 }
 

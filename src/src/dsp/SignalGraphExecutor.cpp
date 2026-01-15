@@ -167,8 +167,37 @@ namespace guitarfx
           state.processor->SetConfig(key, value);
         }
 
-        // Load resource if needed
-        if (node.resource && node.resource->IsValid() && mResourceLibrary)
+        // Load resources if needed
+        if (!node.resources.empty() && mResourceLibrary)
+        {
+          std::vector<ResourceRef> resolvedRefs;
+          std::vector<std::filesystem::path> resolvedPaths;
+          resolvedRefs.reserve(node.resources.size());
+          resolvedPaths.reserve(node.resources.size());
+
+          for (const auto& res : node.resources)
+          {
+            if (!res.IsValid())
+              continue;
+            auto path = mResourceLibrary->ResolveResource(res);
+            if (path)
+            {
+              resolvedRefs.push_back(res);
+              resolvedPaths.push_back(*path);
+            }
+            else if (res.IsFilePath())
+            {
+              resolvedRefs.push_back(res);
+              resolvedPaths.push_back(res.filePath);
+            }
+          }
+
+          if (!resolvedPaths.empty())
+          {
+            state.processor->LoadResources(resolvedRefs, resolvedPaths);
+          }
+        }
+        else if (node.resource && node.resource->IsValid() && mResourceLibrary)
         {
           auto path = mResourceLibrary->ResolveResource(*node.resource);
           if (path)

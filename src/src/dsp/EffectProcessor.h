@@ -3,6 +3,9 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <vector>
+
+#include "presets/PresetTypes.h"
 
 namespace guitarfx
 {
@@ -30,6 +33,13 @@ namespace guitarfx
 
     // Resource loading (for effects that need external files)
     virtual bool LoadResource(const std::filesystem::path &path) { return true; }
+    virtual bool LoadResources(const std::vector<ResourceRef> &refs,
+                               const std::vector<std::filesystem::path> &paths)
+    {
+      if (!paths.empty())
+        return LoadResource(paths.front());
+      return false;
+    }
     [[nodiscard]] virtual bool RequiresResource() const { return false; }
     [[nodiscard]] virtual bool HasResource() const { return true; }
     [[nodiscard]] virtual std::filesystem::path GetResourcePath() const { return {}; }

@@ -116,6 +116,18 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
+    type: "amp_nam_blend",
+    displayName: "NAM Blend",
+    category: "amp",
+    requiresResource: true,
+    resourceType: "nam",
+    parameters: [
+      { key: "blend", name: "Blend", default: 0, min: 0, max: 1, unit: "" },
+      { key: "inputGain", name: "Input", default: 0, min: -24, max: 24, unit: "dB" },
+      { key: "outputGain", name: "Output", default: 0, min: -24, max: 24, unit: "dB" }
+    ]
+  },
+  {
     type: "cab_ir",
     displayName: "IR Cabinet",
     category: "cab",
