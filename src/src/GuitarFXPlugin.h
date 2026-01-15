@@ -141,6 +141,8 @@ namespace guitarfx
     void HandleReplaceSignalPathNodeRequest(const nlohmann::json &payload);
     void HandleReorderSignalPathNodeRequest(const nlohmann::json &payload);
     void HandleDeleteSignalPathNodeRequest(const nlohmann::json &payload);
+    void HandleImportRemoteResourceRequest(const nlohmann::json &payload);
+    void AppendUserLibraryResource(const LibraryResource& resource);
     void EnsureBasicGraph();
     bool UpdateResourceForNodeType(const std::string& nodeType,
                      const std::string& resourceType,
@@ -206,6 +208,7 @@ namespace guitarfx
       int height = -1;
       bool HasBounds() const { return width > 0 && height > 0; }
     } mWindowBounds;
+    nlohmann::json mAppSettings = nlohmann::json::object();
     struct PreviewPlaybackBuffer
     {
       std::string id;

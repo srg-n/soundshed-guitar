@@ -7,6 +7,7 @@ import { previewSelectedDemoAudio } from "./demoAudio.js";
 import { handleTunerUpdate, handleTunerStarted, handleTunerStopped, handleTunerReferenceChanged, handleTunerLiveModeChanged } from "./tuner.js";
 import { applyUiSettings } from "./windowSettings.js";
 import { updateDSPPerformancePlot } from "./views.js";
+import { refreshSettingsView } from "./settings.js";
 import type { Preset, UiSettings } from "./types.js";
 
 export function handleIncomingMessage(message: string): void {
@@ -37,6 +38,10 @@ export function handleIncomingMessage(message: string): void {
       if (resourceLibrary) {
         uiState.resourceLibrary = resourceLibrary as import("./types.js").ResourceLibrary;
       }
+      const appSettings = (payload as { appSettings?: Record<string, unknown> }).appSettings;
+      if (appSettings) {
+        uiState.appSettings = appSettings as import("./types.js").AppSettings;
+      }
       const uiSettings = (payload as { uiSettings?: UiSettings }).uiSettings;
       if (uiSettings) {
         uiState.uiSettings = uiSettings;
@@ -56,6 +61,7 @@ export function handleIncomingMessage(message: string): void {
       syncControlsFromState();
       updatePresetActionButtons();
       showNotification("");
+      refreshSettingsView();
       break;
     }
     case "presetLoaded": {
@@ -148,6 +154,18 @@ export function handleIncomingMessage(message: string): void {
       appendLog(`IR loaded ← ${(payload as { path?: string }).path ?? "unknown"}`);
       renderActivePreset();
       showNotification("IR loaded", (payload as { path?: string }).path ?? "");
+      break;
+    }
+    case "resourceImported": {
+      const info = payload as { name?: string; resourceType?: string; filePath?: string };
+      appendLog(`resource imported ← ${info.name ?? "unknown"}`);
+      showNotification("Resource imported", info.name ?? info.filePath ?? "");
+      break;
+    }
+    case "resourceImportFailed": {
+      const info = payload as { message?: string; detail?: string };
+      appendLog(`resource import failed ← ${info.message ?? "unknown"}`);
+      showNotification(info.message ?? "Import failed", info.detail ?? "");
       break;
     }
     case "presetSaved": {

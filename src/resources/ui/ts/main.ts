@@ -17,6 +17,8 @@ import { themeSwitcher } from "./theme-switcher.js";
 import { initializeThemeSwitcherIcons } from "./theme-switcher-ui.js";
 import { startUiSettingsTracking } from "./windowSettings.js";
 import { renderFooterDemoAudioControls, bindFooterDemoAudioControls } from "./demoAudio.js";
+import { initSettingsPanel, updateSettingsSessionStatus } from "./settings.js";
+import { ensureTone3000Session } from "./tone3000.js";
 
 const tabButtons = Array.from(document.querySelectorAll(".tab-button"));
 const tabPanels = Array.from(document.querySelectorAll(".tab-panel"));
@@ -54,6 +56,11 @@ function switchMainPanel(panelId: string): void {
   // Update performance plot when performance panel is activated
   if (panelId === "performance") {
     updateDSPPerformancePlot();
+  }
+
+  if (panelId === "settings") {
+    initSettingsPanel();
+    void ensureTone3000Session().then(() => updateSettingsSessionStatus());
   }
 }
 

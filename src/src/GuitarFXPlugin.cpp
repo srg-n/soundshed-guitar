@@ -43,6 +43,30 @@ namespace guitarfx
 {
   namespace
   {
+    std::string SanitizeFilename(const std::string &raw)
+    {
+      std::string result;
+      result.reserve(raw.size());
+      for (unsigned char c : raw)
+      {
+        if (std::isalnum(c) || c == '-' || c == '_' || c == '.')
+        {
+          result.push_back(static_cast<char>(c));
+        }
+        else if (std::isspace(c))
+        {
+          result.push_back('_');
+        }
+      }
+
+      if (result.empty())
+      {
+        return "resource";
+      }
+
+      return result;
+    }
+
     bool IsEqNode(const GraphNode& node)
     {
       return node.type == "eq_parametric" || node.type == "eq";
@@ -1692,6 +1716,35 @@ namespace guitarfx
         SaveAppSettings();
       }
     }
+    else if (type == "setSetting")
+    {
+      const auto keyIt = payload.find("key");
+      if (keyIt != payload.end() && keyIt->is_string())
+      {
+        const std::string key = keyIt->get<std::string>();
+        if (key.empty())
+        {
+          return;
+        }
+
+        const auto valueIt = payload.find("value");
+        if (valueIt == payload.end() || valueIt->is_null())
+        {
+          mAppSettings.erase(key);
+        }
+        else if (valueIt->is_string() || valueIt->is_number() || valueIt->is_boolean())
+        {
+          mAppSettings[key] = *valueIt;
+        }
+        else
+        {
+          std::cerr << "[GuitarFXPlugin] Unsupported setting value type for key: " << key << std::endl;
+          return;
+        }
+
+        SaveAppSettings();
+      }
+    }
     else if (type == "setAutoLevel")
     {
       HandleSetAutoLevelRequest(payload);
@@ -1715,6 +1768,10 @@ namespace guitarfx
     else if (type == "addSignalPathNode")
     {
       HandleAddSignalPathNodeRequest(payload);
+    }
+    else if (type == "importRemoteResource")
+    {
+      HandleImportRemoteResourceRequest(payload);
     }
     else if (type == "splitSignalPathEdge")
     {
@@ -1813,6 +1870,7 @@ namespace guitarfx
       };
     }
     message["uiSettings"] = std::move(uiSettings);
+    message["appSettings"] = mAppSettings;
 
     if (mActivePreset)
     {
@@ -3213,6 +3271,136 @@ namespace guitarfx
     return output.good();
   }
 
+  void GuitarFXPlugin::AppendUserLibraryResource(const LibraryResource& resource)
+  {
+    try
+    {
+      const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
+      const auto libraryDir = settingsDir / "resources";
+      const auto libraryFile = libraryDir / "library.json";
+      (void)mFileSystem.EnsureDirectory(libraryDir);
+
+      nlohmann::json entries = nlohmann::json::array();
+      if (std::filesystem::exists(libraryFile))
+      {
+        std::ifstream input(libraryFile);
+        if (input)
+        {
+          nlohmann::json parsed;
+          input >> parsed;
+          if (parsed.is_array())
+          {
+            entries = std::move(parsed);
+          }
+        }
+      }
+
+      bool exists = false;
+      for (const auto& item : entries)
+      {
+        if (item.value("type", "") == resource.type && item.value("id", "") == resource.id)
+        {
+          exists = true;
+          break;
+        }
+      }
+
+      if (!exists)
+      {
+        nlohmann::json item;
+        item["type"] = resource.type;
+        item["id"] = resource.id;
+        item["name"] = resource.name;
+        item["category"] = resource.category;
+        item["description"] = resource.description;
+        item["filePath"] = resource.filePath.string();
+        item["hash"] = resource.hash;
+        item["tags"] = resource.tags;
+        entries.push_back(std::move(item));
+      }
+
+      std::ofstream output(libraryFile);
+      if (output)
+      {
+        output << entries.dump(2);
+      }
+    }
+    catch (const std::exception& e)
+    {
+      std::cerr << "[Plugin] Failed to update user resource library: " << e.what() << std::endl;
+    }
+  }
+
+  void GuitarFXPlugin::HandleImportRemoteResourceRequest(const nlohmann::json &payload)
+  {
+    const std::string resourceType = payload.value("resourceType", "");
+    const std::string resourceId = payload.value("resourceId", "");
+    const std::string name = payload.value("name", resourceId);
+    const std::string description = payload.value("description", "");
+    const std::string category = payload.value("category", "");
+    const std::string provider = payload.value("provider", "remote");
+    const std::string subfolder = payload.value("subfolder", "");
+    const std::string data = payload.value("data", "");
+    const std::string fileName = payload.value("fileName", "");
+
+    if (resourceType.empty() || resourceId.empty() || data.empty())
+    {
+      ReportErrorToUI("Import failed", "Missing resource metadata");
+      SendMessageToUI(nlohmann::json{{"type", "resourceImportFailed"}, {"message", "Import failed"}, {"detail", "Missing resource metadata"}}.dump());
+      return;
+    }
+
+    const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
+    auto targetDir = settingsDir / "resources" / provider;
+    if (!subfolder.empty())
+    {
+      targetDir /= subfolder;
+    }
+    (void)mFileSystem.EnsureDirectory(targetDir);
+
+    std::string resolvedName = fileName.empty() ? resourceId : fileName;
+    resolvedName = SanitizeFilename(resolvedName);
+    if (resolvedName.find('.') == std::string::npos)
+    {
+      resolvedName += resourceType == "ir" ? ".wav" : ".nam";
+    }
+
+    const auto targetPath = targetDir / resolvedName;
+    const std::vector<std::uint8_t> bytes = DecodeBase64(data);
+    if (bytes.empty())
+    {
+      ReportErrorToUI("Import failed", "Invalid base64 payload");
+      SendMessageToUI(nlohmann::json{{"type", "resourceImportFailed"}, {"message", "Import failed"}, {"detail", "Invalid base64 payload"}}.dump());
+      return;
+    }
+    if (!WriteFile(targetPath, bytes))
+    {
+      ReportErrorToUI("Import failed", "Failed to write file");
+      SendMessageToUI(nlohmann::json{{"type", "resourceImportFailed"}, {"message", "Import failed"}, {"detail", "Failed to write file"}}.dump());
+      return;
+    }
+
+    LibraryResource resource;
+    resource.type = resourceType;
+    resource.id = resourceId;
+    resource.name = name;
+    resource.category = category;
+    resource.description = description;
+    resource.filePath = targetPath;
+
+    mResourceLibrary.AddResource(resource);
+    AppendUserLibraryResource(resource);
+    BroadcastState();
+
+    nlohmann::json msg;
+    msg["type"] = "resourceImported";
+    msg["resourceType"] = resourceType;
+    msg["id"] = resourceId;
+    msg["name"] = name;
+    msg["filePath"] = targetPath.string();
+    SendMessageToUI(msg.dump());
+  }
+
   bool GuitarFXPlugin::StartSignalPathTest(double frequencyHz, double durationSeconds)
   {
     const double sampleRate = GetSampleRate();
@@ -3292,6 +3480,9 @@ namespace guitarfx
         };
       }
       settings["uiSettings"] = std::move(uiSettings);
+
+      // App settings
+      settings["appSettings"] = mAppSettings;
 
       // Audio settings
       nlohmann::json audioSettings;
@@ -3384,6 +3575,11 @@ namespace guitarfx
           mWindowBounds.width = b.value("width", mWindowBounds.width);
           mWindowBounds.height = b.value("height", mWindowBounds.height);
         }
+      }
+
+      if (settings.contains("appSettings") && settings["appSettings"].is_object())
+      {
+        mAppSettings = settings["appSettings"];
       }
 
       // Restore audio settings
@@ -3565,6 +3761,10 @@ namespace guitarfx
     {
       std::cerr << "[Plugin] IR library file not found: " << irPath.generic_string() << std::endl;
     }
+
+    // Load user resource library entries from settings directory
+    const auto userResourcesDir = mFileSystem.ResolveSettingsDirectory() / "resources";
+    mResourceLibrary.LoadFromDirectory(userResourcesDir);
   }
 
   void GuitarFXPlugin::LoadLastSessionState()

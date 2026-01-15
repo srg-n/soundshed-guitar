@@ -68,6 +68,8 @@ export const uiState: UiState = {
   demoAudioRepeat: false,
   logs: [],
   resourceLibrary: {},
+  appSettings: {},
+  tone3000Session: null,
   mixer: {
     activePresetIds: [],
     presets: {},

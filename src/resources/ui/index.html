@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="css/signal-path.css" />
     <link rel="stylesheet" href="css/modals.css" />
     <link rel="stylesheet" href="css/fx-library.css" />
+    <link rel="stylesheet" href="css/settings.css" />
   </head>
   <body>
     <div id="app">
@@ -34,6 +35,9 @@
         </button>
         <button class="icon-btn" data-panel="performance" title="Performance">
           <svg viewBox="0 0 24 24"><path d="M12 2v6m0 0l-4 4m4-4l4 4m-4 4v6" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+        </button>
+        <button class="icon-btn" data-panel="settings" title="Settings">
+          <svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm8.94 4a7.95 7.95 0 00-.14-1.5l2.12-1.65-2-3.46-2.5 1a7.97 7.97 0 00-2.6-1.5L15.5 2h-4l-.32 2.89a7.97 7.97 0 00-2.6 1.5l-2.5-1-2 3.46 2.12 1.65a7.95 7.95 0 000 3l-2.12 1.65 2 3.46 2.5-1a7.97 7.97 0 002.6 1.5L11.5 22h4l.32-2.89a7.97 7.97 0 002.6-1.5l2.5 1 2-3.46-2.12-1.65c.1-.5.14-1 .14-1.5z" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
         </button>
  
       </header>
@@ -589,6 +593,37 @@
               <h3>Per-Effect Times (μs)</h3>
               <div id="performance-details-list">
                 <!-- Per-effect timing details will be populated here -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="panel-settings">
+          <div class="panel-content settings-panel">
+            <h2>Settings</h2>
+            <div class="settings-section">
+              <h3>Tone3000 API</h3>
+              <div class="settings-row">
+                <label for="tone3000-api-key-input">API Key</label>
+                <input type="password" id="tone3000-api-key-input" placeholder="Enter your Tone3000 API key" />
+                <button id="tone3000-api-key-save">Save</button>
+                <button id="tone3000-api-key-clear" class="secondary">Clear</button>
+              </div>
+              <div class="settings-hint" id="tone3000-session-status">Session not started.</div>
+            </div>
+            <div class="settings-section">
+              <h3>Tone3000 Browser</h3>
+              <div class="tone3000-search">
+                <input type="text" id="tone3000-search-input" placeholder="Search tones..." />
+                <button id="tone3000-search-button">Search</button>
+              </div>
+              <div class="tone3000-browser">
+                <div class="tone3000-categories" id="tone3000-category-list">
+                  <!-- Category buttons rendered by JS -->
+                </div>
+                <div class="tone3000-results" id="tone3000-results">
+                  <!-- Search results rendered by JS -->
+                </div>
               </div>
             </div>
           </div>

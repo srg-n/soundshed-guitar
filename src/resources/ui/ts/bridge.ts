@@ -16,6 +16,14 @@ export function postMessage(payload: unknown): void {
   NAMBridge.postMessage(payload);
 }
 
+export function setAppSetting(key: string, value: unknown): void {
+  postMessage({
+    type: "setSetting",
+    key,
+    value,
+  });
+}
+
 export function setParameter(id: string, value: number): void {
   postMessage({
     type: "setParameter",

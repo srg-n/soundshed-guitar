@@ -139,6 +139,16 @@ export interface DemoSample {
   path: string;
 }
 
+export type AppSettingValue = string | number | boolean | null;
+
+export type AppSettings = Record<string, AppSettingValue>;
+
+export interface Tone3000Session {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+}
+
 export interface LibraryResource {
   id: string;
   name: string;
@@ -227,6 +237,8 @@ export interface UiState {
   demoAudioRepeat: boolean;
   logs: LogEntry[];
   resourceLibrary: ResourceLibrary;
+  appSettings: AppSettings;
+  tone3000Session?: Tone3000Session | null;
   mixer?: MixerState;
   uiSettings?: UiSettings;
   dspPerformance?: DSPPerformanceStats;
