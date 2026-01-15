@@ -412,7 +412,7 @@ export function syncControlsFromState(): void {
 
 // Input mode state
 let currentMonoMode = true;
-let currentInputChannel = 1;
+let currentInputChannel = 0;
 
 function sendInputModeToPlugin(): void {
   const message = JSON.stringify({
