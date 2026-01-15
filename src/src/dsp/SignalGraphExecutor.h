@@ -83,6 +83,7 @@ namespace guitarfx
 
     std::map<std::string, NodeState> mNodeStates;
     std::vector<std::string> mExecutionOrder;
+    std::map<std::string, int> mIncomingEdgeCount;
 
     double mSampleRate = 44100.0;
     int mMaxBlockSize = 512;

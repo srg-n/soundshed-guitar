@@ -21,6 +21,7 @@ namespace guitarfx
     mPrepared = false;
     mNodeStates.clear();
     mExecutionOrder.clear();
+    mIncomingEdgeCount.clear();
 
     // Add implicit input/output nodes if they're referenced in edges but not in nodes
     bool hasInputNode = false;
@@ -62,6 +63,16 @@ namespace guitarfx
       outputNode.type = kNodeTypeOutput;
       outputNode.enabled = true;
       mGraph.nodes.push_back(outputNode);
+    }
+
+    // Track incoming edge counts (used for multi-input summing)
+    for (const auto &node : mGraph.nodes)
+    {
+      mIncomingEdgeCount[node.id] = 0;
+    }
+    for (const auto &edge : mGraph.edges)
+    {
+      mIncomingEdgeCount[edge.to] += 1;
     }
 
     BuildExecutionOrder();
@@ -338,6 +349,8 @@ namespace guitarfx
         continue;
 
       // Gather inputs from incoming edges
+      const int incomingCount = mIncomingEdgeCount.count(nodeId) ? mIncomingEdgeCount[nodeId] : 0;
+      const bool shouldAccumulate = (node->type == kNodeTypeMixer) || (incomingCount > 1);
       for (const auto &edge : mGraph.edges)
       {
         if (edge.to == nodeId)
@@ -347,8 +360,8 @@ namespace guitarfx
           {
             const float gain = static_cast<float>(edge.gain);
 
-            // Handle mixer: accumulate inputs
-            if (node->type == kNodeTypeMixer)
+            // Handle mixer or any multi-input node: accumulate inputs
+            if (shouldAccumulate)
             {
               for (int i = 0; i < numSamples; ++i)
               {
