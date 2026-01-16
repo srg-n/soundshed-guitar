@@ -1,6 +1,6 @@
-# NeuronGuitar
+# GuitarFX
 
-NeuronGuitar is an iPlug2-based guitar processing plugin combining Neural Amp Modeler (NAM) with a modern web-driven UI. Targets VST3, AU, and AAX formats with an extensible signal graph architecture.
+GuitarFX is an iPlug2-based guitar processing plugin combining Neural Amp Modeler (NAM) with a modern web-driven UI. Targets VST3, AU, and AAX formats with an extensible signal graph architecture.
 
 ## Features
 
@@ -29,8 +29,8 @@ See [docs/](docs/) for architecture and reference documentation:
 
 1. **Clone and configure**
    ```powershell
-   git clone https://github.com/<your-account>/neuron-guitar.git
-   cd neuron-guitar/src
+   git clone 
+   cd /src
    cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
    ```
    CMake fetches dependencies (iPlug2, NeuralAmpModelerCore) via FetchContent.
@@ -77,7 +77,7 @@ cmake --build build --config Debug --target VST3DebugHost
 ./VST3DebugHost.exe --windowed
 ```
 Testing plugin (version with external resources) with pluginval:
-`C:\Tools>pluginval.exe  C:\Work\GIT\misc\neuron-guitar\src\build\GuitarFX.vst3`
+`C:\Tools>pluginval.exe  src\build\GuitarFX.vst3`
 
 ## License
 

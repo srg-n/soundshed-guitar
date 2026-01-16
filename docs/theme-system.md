@@ -101,7 +101,6 @@ Components use variables instead of hardcoded colors:
 Run the conversion script to replace hardcoded colors with variables:
 
 ```powershell
-cd c:\Work\GIT\misc\neuron-guitar
 .\scripts\convert-css-variables.ps1
 ```
 
