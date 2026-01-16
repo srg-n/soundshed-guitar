@@ -6,15 +6,15 @@ import { appendLog } from "./logging.js";
 import { previewSelectedDemoAudio } from "./demoAudio.js";
 import { handleTunerUpdate, handleTunerStarted, handleTunerStopped, handleTunerReferenceChanged, handleTunerLiveModeChanged } from "./tuner.js";
 import { applyUiSettings } from "./windowSettings.js";
-import { updateDSPPerformancePlot } from "./views.js";
+import { updateDSPPerformancePlot, updateSignalDiagnosticsView } from "./views.js";
 import { refreshSettingsView } from "./settings.js";
 import type { Preset, UiSettings } from "./types.js";
 
 export function handleIncomingMessage(message: string): void {
   const payload = JSON.parse(message) as Record<string, unknown>;
   const type = typeof payload.type === "string" ? payload.type : "";
-  // dspPerformance messages arrive frequently; avoid spamming console.
-  if (type !== "dspPerformance") {
+  // Frequent diagnostics messages; avoid spamming console.
+  if (type !== "dspPerformance" && type !== "signalLevelDiagnostics") {
     console.log("[JS] handleIncomingMessage received:", message.substring(0, 200));
     console.log("[JS] Parsed message type:", type);
   }
@@ -298,6 +298,14 @@ export function handleIncomingMessage(message: string): void {
        
         // Update plot if panel is visible
         updateDSPPerformancePlot();
+      }
+      break;
+    }
+    case "signalLevelDiagnostics": {
+      const diagnostics = payload as unknown as import("./types.js").SignalLevelDiagnostics;
+      if (diagnostics && diagnostics.input && diagnostics.output) {
+        uiState.signalDiagnostics = diagnostics;
+        updateSignalDiagnosticsView();
       }
       break;
     }

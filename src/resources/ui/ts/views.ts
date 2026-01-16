@@ -525,3 +525,126 @@ export function updateDSPPerformancePlot(): void {
       .join("");
   }
 }
+
+function formatDb(value: number): string {
+  if (!isFinite(value)) {
+    return "—";
+  }
+  return value.toFixed(1);
+}
+
+export function updateSignalDiagnosticsView(): void {
+  const diagnostics = uiState.signalDiagnostics;
+  const enabled = Boolean(uiState.appSettings?.["diagnostics.signalLevelsEnabled"]);
+
+  const statusEl = document.getElementById("signal-diagnostics-status");
+  if (statusEl) {
+    statusEl.textContent = enabled ? "Enabled" : "Disabled";
+  }
+
+  const inputPeak = document.getElementById("signal-input-peak");
+  const inputRms = document.getElementById("signal-input-rms");
+  const inputHeadroom = document.getElementById("signal-input-headroom");
+  const inputClip = document.getElementById("signal-input-clipping");
+
+  const outputPeak = document.getElementById("signal-output-peak");
+  const outputRms = document.getElementById("signal-output-rms");
+  const outputHeadroom = document.getElementById("signal-output-headroom");
+  const outputClip = document.getElementById("signal-output-clipping");
+
+  const listEl = document.getElementById("signal-diagnostics-list");
+
+  if (!enabled || !diagnostics) {
+    if (inputPeak) inputPeak.textContent = "—";
+    if (inputRms) inputRms.textContent = "—";
+    if (inputHeadroom) inputHeadroom.textContent = "—";
+    if (inputClip) {
+      inputClip.classList.remove("clip-on");
+      inputClip.classList.add("clip-off");
+      inputClip.childNodes.forEach((node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          node.textContent = "—";
+        }
+      });
+    }
+    if (outputPeak) outputPeak.textContent = "—";
+    if (outputRms) outputRms.textContent = "—";
+    if (outputHeadroom) outputHeadroom.textContent = "—";
+    if (outputClip) {
+      outputClip.classList.remove("clip-on");
+      outputClip.classList.add("clip-off");
+      outputClip.childNodes.forEach((node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          node.textContent = "—";
+        }
+      });
+    }
+    if (listEl) listEl.innerHTML = "<div class=\"performance-detail-item\">Diagnostics disabled.</div>";
+    return;
+  }
+
+  if (inputPeak) inputPeak.textContent = `${formatDb(diagnostics.input.peakDbfs)} dBFS`;
+  if (inputRms) inputRms.textContent = `${formatDb(diagnostics.input.rmsDbfs)} dBFS`;
+  if (inputHeadroom) inputHeadroom.textContent = `${formatDb(diagnostics.input.headroomDb)} dB`;
+  if (inputClip) {
+    inputClip.classList.toggle("clip-on", diagnostics.input.clipped);
+    inputClip.classList.toggle("clip-off", !diagnostics.input.clipped);
+    inputClip.childNodes.forEach((node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        node.textContent = diagnostics.input.clipped ? `Clipping (${diagnostics.input.clipCount})` : "OK";
+      }
+    });
+  }
+
+  if (outputPeak) outputPeak.textContent = `${formatDb(diagnostics.output.peakDbfs)} dBFS`;
+  if (outputRms) outputRms.textContent = `${formatDb(diagnostics.output.rmsDbfs)} dBFS`;
+  if (outputHeadroom) outputHeadroom.textContent = `${formatDb(diagnostics.output.headroomDb)} dB`;
+  if (outputClip) {
+    outputClip.classList.toggle("clip-on", diagnostics.output.clipped);
+    outputClip.classList.toggle("clip-off", !diagnostics.output.clipped);
+    outputClip.childNodes.forEach((node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        node.textContent = diagnostics.output.clipped ? `Clipping (${diagnostics.output.clipCount})` : "OK";
+      }
+    });
+  }
+
+  if (listEl) {
+    const rows = diagnostics.nodes
+      .map((node) => {
+        const scopeLabel = escapeHtml(node.scope);
+        const presetLabel = node.presetId ? `${escapeHtml(node.presetId)} · ` : "";
+        const nodeLabel = `${presetLabel}${escapeHtml(node.nodeId)} (${escapeHtml(node.nodeType)})`;
+        const peak = formatDb(node.levels.peakDbfs);
+        const headroom = formatDb(node.levels.headroomDb);
+        const clipClass = node.levels.clipped ? "clip-on" : "clip-off";
+        const clipText = node.levels.clipped ? `Clipping (${node.levels.clipCount})` : "OK";
+        return `
+          <div class=\"signal-diagnostics-item\">
+            <span class=\"signal-diagnostics-cell scope\">${scopeLabel}</span>
+            <span class=\"signal-diagnostics-cell node\">${nodeLabel}</span>
+            <span class=\"signal-diagnostics-cell\">${peak} dBFS</span>
+            <span class=\"signal-diagnostics-cell\">${headroom} dB</span>
+            <span class=\"signal-diagnostics-cell clip ${clipClass}\">
+              <span class=\"clip-indicator\"></span>
+              ${clipText}
+            </span>
+          </div>
+        `;
+      })
+      .join("");
+
+    listEl.innerHTML = `
+      <div class=\"signal-diagnostics-header\">
+        <span class=\"signal-diagnostics-cell scope\">Scope</span>
+        <span class=\"signal-diagnostics-cell node\">Node</span>
+        <span class=\"signal-diagnostics-cell\">Peak</span>
+        <span class=\"signal-diagnostics-cell\">Headroom</span>
+        <span class=\"signal-diagnostics-cell\">Clip</span>
+      </div>
+      <div class=\"signal-diagnostics-columns\">
+        ${rows}
+      </div>
+    `;
+  }
+}

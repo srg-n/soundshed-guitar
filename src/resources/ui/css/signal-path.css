@@ -4,7 +4,6 @@
 .signal-path-bar {
   display: flex;
   align-items: center;
-  background: linear-gradient(180deg, var(--text-dark-primary) 0%, #1e1e24 100%);
   border-bottom: 1px solid #3a3a44;
   padding: 8px 12px;
   gap: 12px;

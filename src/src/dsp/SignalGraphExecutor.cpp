@@ -8,11 +8,104 @@
 #include <queue>
 #include <set>
 #include <chrono>
+#include <tuple>
 
 namespace guitarfx
 {
+  namespace
+  {
+    struct LevelStats
+    {
+      double peak = 0.0;
+      double rms = 0.0;
+      int clipCount = 0;
+    };
+
+    LevelStats ComputeLevelStats(const float *left, const float *right, int numSamples)
+    {
+      LevelStats stats;
+      if (numSamples <= 0)
+      {
+        return stats;
+      }
+
+      double sumSquares = 0.0;
+      std::size_t sampleCount = 0;
+
+      if (left)
+      {
+        for (int i = 0; i < numSamples; ++i)
+        {
+          const float value = left[i];
+          const float absValue = std::abs(value);
+          stats.peak = std::max(stats.peak, static_cast<double>(absValue));
+          sumSquares += static_cast<double>(value) * static_cast<double>(value);
+          if (absValue > 1.0f)
+          {
+            stats.clipCount++;
+          }
+        }
+        sampleCount += static_cast<std::size_t>(numSamples);
+      }
+
+      if (right)
+      {
+        for (int i = 0; i < numSamples; ++i)
+        {
+          const float value = right[i];
+          const float absValue = std::abs(value);
+          stats.peak = std::max(stats.peak, static_cast<double>(absValue));
+          sumSquares += static_cast<double>(value) * static_cast<double>(value);
+          if (absValue > 1.0f)
+          {
+            stats.clipCount++;
+          }
+        }
+        sampleCount += static_cast<std::size_t>(numSamples);
+      }
+
+      if (sampleCount > 0)
+      {
+        stats.rms = std::sqrt(sumSquares / static_cast<double>(sampleCount));
+      }
+
+      return stats;
+    }
+  }
+
   SignalGraphExecutor::SignalGraphExecutor() = default;
   SignalGraphExecutor::~SignalGraphExecutor() = default;
+
+  SignalGraphExecutor::SignalGraphExecutor(SignalGraphExecutor &&other) noexcept
+  {
+    *this = std::move(other);
+  }
+
+  SignalGraphExecutor &SignalGraphExecutor::operator=(SignalGraphExecutor &&other) noexcept
+  {
+    if (this == &other)
+    {
+      return *this;
+    }
+
+    mGraph = std::move(other.mGraph);
+    mResourceLibrary = other.mResourceLibrary;
+    mNodeStates = std::move(other.mNodeStates);
+    mExecutionOrder = std::move(other.mExecutionOrder);
+    mIncomingEdgeCount = std::move(other.mIncomingEdgeCount);
+    mSampleRate = other.mSampleRate;
+    mMaxBlockSize = other.mMaxBlockSize;
+    mInputTrim = other.mInputTrim;
+    mOutputTrim = other.mOutputTrim;
+    mIsValid = other.mIsValid;
+    mPrepared = other.mPrepared;
+    mLastPerformanceStats = std::move(other.mLastPerformanceStats);
+    mTempLeftBuffer = std::move(other.mTempLeftBuffer);
+    mTempRightBuffer = std::move(other.mTempRightBuffer);
+    mSignalDiagnosticsEnabled.store(other.mSignalDiagnosticsEnabled.load(std::memory_order_acquire), std::memory_order_release);
+
+    return *this;
+  }
 
   void SignalGraphExecutor::SetGraph(const SignalGraph &graph)
   {
@@ -142,7 +235,11 @@ namespace guitarfx
 
     for (const auto &node : mGraph.nodes)
     {
-      NodeState state;
+      auto [it, inserted] = mNodeStates.emplace(
+        std::piecewise_construct,
+        std::forward_as_tuple(node.id),
+        std::forward_as_tuple());
+      NodeState &state = it->second;
       state.id = node.id;
       state.type = node.type;
 
@@ -218,7 +315,6 @@ namespace guitarfx
         }
       }
 
-      mNodeStates[node.id] = std::move(state);
     }
   }
 
@@ -277,6 +373,8 @@ namespace guitarfx
   {
     auto totalStart = std::chrono::high_resolution_clock::now();
 
+    const bool diagnosticsEnabled = mSignalDiagnosticsEnabled.load(std::memory_order_acquire);
+
     if (!mIsValid || !mPrepared || !inputs || !outputs)
     {
       // Output silence if not ready
@@ -303,6 +401,12 @@ namespace guitarfx
       std::fill(state.bufferLeft.begin(), state.bufferLeft.begin() + numSamples, 0.0f);
       std::fill(state.bufferRight.begin(), state.bufferRight.begin() + numSamples, 0.0f);
       state.hasInput = false;
+      if (diagnosticsEnabled)
+      {
+        state.peak.store(0.0, std::memory_order_relaxed);
+        state.rms.store(0.0, std::memory_order_relaxed);
+        state.clipCount.store(0, std::memory_order_relaxed);
+      }
     }
 
     // Apply input trim
@@ -329,6 +433,13 @@ namespace guitarfx
           }
         }
         state.hasInput = true;
+        if (diagnosticsEnabled)
+        {
+          const auto stats = ComputeLevelStats(state.bufferLeft.data(), state.bufferRight.data(), numSamples);
+          state.peak.store(stats.peak, std::memory_order_relaxed);
+          state.rms.store(stats.rms, std::memory_order_relaxed);
+          state.clipCount.store(stats.clipCount, std::memory_order_relaxed);
+        }
         break;
       }
     }
@@ -408,6 +519,14 @@ namespace guitarfx
           std::copy(mTempRightBuffer.begin(), mTempRightBuffer.begin() + numSamples, state->bufferRight.begin());
         }
       }
+
+      if (diagnosticsEnabled && state->hasInput)
+      {
+        const auto stats = ComputeLevelStats(state->bufferLeft.data(), state->bufferRight.data(), numSamples);
+        state->peak.store(stats.peak, std::memory_order_relaxed);
+        state->rms.store(stats.rms, std::memory_order_relaxed);
+        state->clipCount.store(stats.clipCount, std::memory_order_relaxed);
+      }
     }
 
     // Find output node and copy to output
@@ -440,6 +559,25 @@ namespace guitarfx
     auto totalDuration = std::chrono::duration_cast<std::chrono::microseconds>(totalEnd - totalStart);
     mLastPerformanceStats.totalProcessingTimeUs = static_cast<double>(totalDuration.count());
     mLastPerformanceStats.dspLoadPercent = (mLastPerformanceStats.totalProcessingTimeUs / realTimeUs) * 100.0;
+  }
+
+  std::vector<SignalGraphExecutor::NodeSignalLevel> SignalGraphExecutor::GetNodeSignalLevels() const
+  {
+    std::vector<NodeSignalLevel> result;
+    result.reserve(mNodeStates.size());
+
+    for (const auto &[id, state] : mNodeStates)
+    {
+      NodeSignalLevel entry;
+      entry.nodeId = state.id;
+      entry.nodeType = state.type;
+      entry.peak = state.peak.load(std::memory_order_relaxed);
+      entry.rms = state.rms.load(std::memory_order_relaxed);
+      entry.clipCount = state.clipCount.load(std::memory_order_relaxed);
+      result.push_back(std::move(entry));
+    }
+
+    return result;
   }
 
   void SignalGraphExecutor::SetNodeEnabled(const std::string &nodeId, bool enabled)

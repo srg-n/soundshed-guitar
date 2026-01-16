@@ -226,6 +226,31 @@ export interface DSPPerformanceStats {
   nodeProcessingTimesUs: Record<string, number>;
 }
 
+export interface SignalLevelMetrics {
+  peak: number;
+  rms: number;
+  peakDbfs: number;
+  rmsDbfs: number;
+  headroomDb: number;
+  clipped: boolean;
+  clipCount: number;
+}
+
+export interface SignalLevelNodeMetrics {
+  scope: "pre" | "post" | "preset" | string;
+  presetId?: string;
+  nodeId: string;
+  nodeType: string;
+  levels: SignalLevelMetrics;
+}
+
+export interface SignalLevelDiagnostics {
+  input: SignalLevelMetrics;
+  output: SignalLevelMetrics;
+  nodes: SignalLevelNodeMetrics[];
+  timestamp?: number;
+}
+
 export interface UiState {
   presets: Preset[];
   filteredPresets: Preset[];
@@ -244,6 +269,7 @@ export interface UiState {
   dspPerformance?: DSPPerformanceStats;
   dspPerformanceHistory: DSPPerformanceStats[];
   globalSignalChain?: GlobalSignalChainConfig;
+  signalDiagnostics?: SignalLevelDiagnostics | null;
 }
 
 declare global {

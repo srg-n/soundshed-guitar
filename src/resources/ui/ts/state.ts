@@ -13,10 +13,20 @@ export const DEMO_AUDIO_SAMPLES: DemoSample[] = [
     title: "Guitar Riff 02",
     path: "demo/guitar-riff-02.wav",
   },
-   {
+     {
     id: "di-riff-03",
     title: "Guitar Riff 03",
-    path: "demo/DI_Guitar_L.wav",
+    path: "demo/DI_Guitar_L.wav"
+     },
+   {
+    id: "di-audiocheck-whitenoise",
+    title: "White Noise (Gaussian)",
+    path: "demo/audiocheck.net_whitenoisegaussian.wav",
+  },
+    {
+    id: "di-audiocheck-sweep20-20klog",
+    title: "Sweep 20-20kHz (Logarithmic)",
+    path: "demo/audiocheck.net_sweep20-20klog.wav",
   },
 ];
 
@@ -85,6 +95,7 @@ export const uiState: UiState = {
   dspPerformance: undefined,
   dspPerformanceHistory: [],
   globalSignalChain: { ...DEFAULT_GLOBAL_SIGNAL_CHAIN },
+  signalDiagnostics: null,
 };
 
 export function clonePreset<T extends Preset | null>(preset: T): T {

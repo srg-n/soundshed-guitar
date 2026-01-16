@@ -43,6 +43,24 @@ namespace guitarfx
 {
   namespace
   {
+    constexpr const char* kSignalDiagnosticsSettingKey = "diagnostics.signalLevelsEnabled";
+    constexpr double kMinDbFS = -120.0;
+    constexpr double kMinLinear = 1e-6;
+
+    double ToDbFS(double linear)
+    {
+      if (!std::isfinite(linear) || linear <= kMinLinear)
+      {
+        return kMinDbFS;
+      }
+      return 20.0 * std::log10(linear);
+    }
+
+    double HeadroomDbFromPeak(double peak)
+    {
+      const double peakDb = ToDbFS(peak);
+      return std::max(0.0, -peakDb);
+    }
     std::string SanitizeFilename(const std::string &raw)
     {
       std::string result;
@@ -1192,6 +1210,60 @@ namespace guitarfx
       };
       SendMessageToUI(message.dump());
     }
+
+    if (mSignalDiagnosticsEnabled.load(std::memory_order_acquire))
+    {
+      mSignalDiagnosticsUpdateCounter++;
+      if (mSignalDiagnosticsUpdateCounter >= 15)
+      {
+        mSignalDiagnosticsUpdateCounter = 0;
+
+        const auto snapshot = mPresetMixer.GetSignalDiagnosticsSnapshot();
+        auto buildLevelJson = [](const MultiPresetMixer::SignalLevelStats &stats)
+        {
+          const double peakDb = ToDbFS(stats.peak);
+          const double rmsDb = ToDbFS(stats.rms);
+          const double headroomDb = HeadroomDbFromPeak(stats.peak);
+          const bool clipped = stats.clipCount > 0 || stats.peak >= 1.0;
+          return nlohmann::json{
+            {"peak", stats.peak},
+            {"rms", stats.rms},
+            {"peakDbfs", peakDb},
+            {"rmsDbfs", rmsDb},
+            {"headroomDb", headroomDb},
+            {"clipped", clipped},
+            {"clipCount", stats.clipCount},
+          };
+        };
+
+        nlohmann::json message;
+        message["type"] = "signalLevelDiagnostics";
+        message["input"] = buildLevelJson(snapshot.input);
+        message["output"] = buildLevelJson(snapshot.output);
+
+        nlohmann::json nodes = nlohmann::json::array();
+        for (const auto &node : snapshot.nodes)
+        {
+          nlohmann::json nodeJson;
+          nodeJson["scope"] = node.scope;
+          if (!node.presetId.empty())
+          {
+            nodeJson["presetId"] = node.presetId;
+          }
+          nodeJson["nodeId"] = node.nodeId;
+          nodeJson["nodeType"] = node.nodeType;
+          nodeJson["levels"] = buildLevelJson(node.levels);
+          nodes.push_back(std::move(nodeJson));
+        }
+        message["nodes"] = std::move(nodes);
+        message["timestamp"] = static_cast<std::int64_t>(std::time(nullptr));
+        SendMessageToUI(message.dump());
+      }
+    }
+    else
+    {
+      mSignalDiagnosticsUpdateCounter = 0;
+    }
   }
 
   void GuitarFXPlugin::OnUIOpen()
@@ -1750,7 +1822,23 @@ namespace guitarfx
           return;
         }
 
+        if (key == kSignalDiagnosticsSettingKey)
+        {
+          bool enabled = false;
+          if (valueIt != payload.end() && valueIt->is_boolean())
+          {
+            enabled = valueIt->get<bool>();
+          }
+          else if (valueIt != payload.end() && valueIt->is_number())
+          {
+            enabled = valueIt->get<double>() != 0.0;
+          }
+          mSignalDiagnosticsEnabled.store(enabled, std::memory_order_release);
+          mPresetMixer.SetSignalDiagnosticsEnabled(enabled);
+        }
+
         SaveAppSettings();
+        mPendingStateBroadcast = true;
       }
     }
     else if (type == "setAutoLevel")
@@ -2070,6 +2158,7 @@ namespace guitarfx
     mPresetMixer = MultiPresetMixer();
     mPresetMixer.SetResourceLibrary(&mResourceLibrary);
     mPresetMixer.SetGlobalChainConfig(globalChainConfig);
+    mPresetMixer.SetSignalDiagnosticsEnabled(mSignalDiagnosticsEnabled.load(std::memory_order_acquire));
     
     // Re-register tuner callback after resetting the mixer
     // (The constructor sets this up, but ApplyPreset creates a new mixer instance)
@@ -3614,6 +3703,21 @@ namespace guitarfx
       if (settings.contains("appSettings") && settings["appSettings"].is_object())
       {
         mAppSettings = settings["appSettings"];
+        const auto it = mAppSettings.find(kSignalDiagnosticsSettingKey);
+        if (it != mAppSettings.end())
+        {
+          bool enabled = false;
+          if (it->is_boolean())
+          {
+            enabled = it->get<bool>();
+          }
+          else if (it->is_number())
+          {
+            enabled = it->get<double>() != 0.0;
+          }
+          mSignalDiagnosticsEnabled.store(enabled, std::memory_order_release);
+          mPresetMixer.SetSignalDiagnosticsEnabled(enabled);
+        }
       }
 
       // Restore audio settings

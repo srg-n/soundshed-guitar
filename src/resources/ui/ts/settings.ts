@@ -3,15 +3,18 @@ import { setAppSetting } from "./bridge.js";
 import { appendLog } from "./logging.js";
 import { showNotification } from "./notifications.js";
 import { handleAppSettingUpdate } from "./tone3000.js";
+import { updateSignalDiagnosticsView } from "./views.js";
 import { initTone3000Browser } from "./tone3000Browser.js";
 import type { AppSettingValue } from "./types.js";
 
 const API_KEY_SETTING = "tone3000.apiKey";
+const DIAGNOSTICS_SETTING = "diagnostics.signalLevelsEnabled";
 
 const apiKeyInput = document.getElementById("tone3000-api-key-input") as HTMLInputElement | null;
 const saveButton = document.getElementById("tone3000-api-key-save");
 const clearButton = document.getElementById("tone3000-api-key-clear");
 const sessionStatus = document.getElementById("tone3000-session-status");
+const diagnosticsToggle = document.getElementById("signal-diagnostics-toggle") as HTMLInputElement | null;
 let settingsInitialized = false;
 
 export function initSettingsPanel(): void {
@@ -21,6 +24,7 @@ export function initSettingsPanel(): void {
   settingsInitialized = true;
   saveButton?.addEventListener("click", () => void saveApiKey());
   clearButton?.addEventListener("click", () => void clearApiKey());
+  diagnosticsToggle?.addEventListener("change", () => void updateDiagnosticsSetting());
 
   refreshSettingsView();
   initTone3000Browser();
@@ -32,7 +36,11 @@ export function refreshSettingsView(): void {
     apiKeyInput.value = "";
     apiKeyInput.placeholder = stored ? "API key stored" : "Enter your Tone3000 API key";
   }
+  if (diagnosticsToggle) {
+    diagnosticsToggle.checked = Boolean(getSettingValue(DIAGNOSTICS_SETTING));
+  }
   updateSessionStatus();
+  updateSignalDiagnosticsView();
 }
 
 async function saveApiKey(): Promise<void> {
@@ -59,6 +67,16 @@ async function clearApiKey(): Promise<void> {
 
   await handleAppSettingUpdate(API_KEY_SETTING, null);
   updateSessionStatus();
+}
+
+function updateDiagnosticsSetting(): void {
+  const enabled = Boolean(diagnosticsToggle?.checked);
+  uiState.appSettings[DIAGNOSTICS_SETTING] = enabled;
+  setAppSetting(DIAGNOSTICS_SETTING, enabled);
+  if (!enabled) {
+    uiState.signalDiagnostics = null;
+  }
+  updateSignalDiagnosticsView();
 }
 
 function updateSessionStatus(): void {

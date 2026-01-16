@@ -10,6 +10,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <atomic>
 
 namespace guitarfx
 {
@@ -46,9 +47,36 @@ namespace guitarfx
       double debugRawFreq = 0.0;  // Debug: Raw detected frequency before note mapping
     };
 
+    struct SignalLevelStats
+    {
+      double peak = 0.0;
+      double rms = 0.0;
+      int clipCount = 0;
+    };
+
+    struct NodeSignalLevel
+    {
+      std::string scope; // pre, post, preset
+      std::string presetId;
+      std::string nodeId;
+      std::string nodeType;
+      SignalLevelStats levels;
+    };
+
+    struct SignalDiagnosticsSnapshot
+    {
+      SignalLevelStats input;
+      SignalLevelStats output;
+      std::vector<NodeSignalLevel> nodes;
+    };
+
     using TunerCallback = std::function<void(const TunerResult &)>;
 
     MultiPresetMixer() = default;
+    MultiPresetMixer(const MultiPresetMixer &) = delete;
+    MultiPresetMixer &operator=(const MultiPresetMixer &) = delete;
+    MultiPresetMixer(MultiPresetMixer &&other) noexcept;
+    MultiPresetMixer &operator=(MultiPresetMixer &&other) noexcept;
 
     void SetResourceLibrary(ResourceLibrary *library) { mResourceLibrary = library; }
     [[nodiscard]] ResourceLibrary* GetResourceLibrary() const { return mResourceLibrary; }
@@ -152,6 +180,11 @@ namespace guitarfx
     [[nodiscard]] size_t GetPresetCount() const { return mInstances.size(); }
     [[nodiscard]] SignalGraphExecutor::DSPPerformanceStats GetPerformanceStats() const;
 
+    // Signal diagnostics
+    void SetSignalDiagnosticsEnabled(bool enabled);
+    [[nodiscard]] bool IsSignalDiagnosticsEnabled() const noexcept { return mSignalDiagnosticsEnabled.load(std::memory_order_acquire); }
+    [[nodiscard]] SignalDiagnosticsSnapshot GetSignalDiagnosticsSnapshot() const;
+
     // Tuner functionality
     void SetTunerEnabled(bool enabled);
     [[nodiscard]] bool IsTunerEnabled() const noexcept { return mTunerEnabled; }
@@ -229,6 +262,17 @@ namespace guitarfx
     std::size_t mTunerSampleCounter = 0;      // For throttling callback rate
     static constexpr std::size_t kTunerBufferSize = 4096;      // ~85ms at 48kHz for good low-frequency detection
     static constexpr std::size_t kTunerUpdateInterval = 2048;  // Update every ~42ms at 48kHz
+
+    struct AtomicLevelStats
+    {
+      std::atomic<double> peak{0.0};
+      std::atomic<double> rms{0.0};
+      std::atomic<int> clipCount{0};
+    };
+
+    std::atomic<bool> mSignalDiagnosticsEnabled{false};
+    AtomicLevelStats mInputLevels;
+    AtomicLevelStats mOutputLevels;
   };
 
 } // namespace guitarfx

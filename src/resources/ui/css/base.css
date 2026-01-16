@@ -175,6 +175,26 @@ body.fx-dragging .signal-connector {
 
 .performance-details {
   margin-top: 20px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.signal-diagnostics-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.signal-diagnostics-summary .performance-metric {
+  align-items: flex-start;
+}
+
+.signal-clip-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .performance-details h3 {
@@ -196,4 +216,74 @@ body.fx-dragging .signal-connector {
   background: var(--bg-secondary);
   border-radius: 3px;
   border: 1px solid var(--border-color);
+}
+
+.signal-diagnostics-header,
+.signal-diagnostics-item {
+  display: grid;
+  grid-template-columns: 90px minmax(240px, 1.6fr) 120px 120px 140px;
+  gap: 8px;
+  align-items: center;
+}
+
+.signal-diagnostics-header {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 6px;
+}
+
+.signal-diagnostics-columns {
+  column-count: 3;
+  column-gap: 12px;
+  margin-top: 8px;
+}
+
+.signal-diagnostics-item {
+  break-inside: avoid;
+  margin-bottom: 8px;
+}
+
+.signal-diagnostics-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--text-primary);
+}
+
+.signal-diagnostics-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.signal-diagnostics-cell.scope {
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.signal-diagnostics-cell.node {
+  color: var(--text-primary);
+}
+
+.signal-diagnostics-cell.clip {
+  font-weight: 600;
+}
+
+.clip-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #2ecc71;
+  box-shadow: 0 0 6px rgba(46, 204, 113, 0.6);
+}
+
+.clip-on .clip-indicator {
+  background: #ff4d4f;
+  box-shadow: 0 0 8px rgba(255, 77, 79, 0.8);
 }

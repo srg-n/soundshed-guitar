@@ -15,6 +15,57 @@ namespace guitarfx
     // Alternative note names (flats)
     constexpr std::array<const char *, 12> kNoteNamesFlat = {
         "C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"};
+
+    MultiPresetMixer::SignalLevelStats ComputeLevelStats(const float *left, const float *right, int numSamples)
+    {
+      MultiPresetMixer::SignalLevelStats stats;
+      if (numSamples <= 0)
+      {
+        return stats;
+      }
+
+      double sumSquares = 0.0;
+      std::size_t sampleCount = 0;
+
+      if (left)
+      {
+        for (int i = 0; i < numSamples; ++i)
+        {
+          const float value = left[i];
+          const float absValue = std::abs(value);
+          stats.peak = std::max(stats.peak, static_cast<double>(absValue));
+          sumSquares += static_cast<double>(value) * static_cast<double>(value);
+          if (absValue > 1.0f)
+          {
+            stats.clipCount++;
+          }
+        }
+        sampleCount += static_cast<std::size_t>(numSamples);
+      }
+
+      if (right)
+      {
+        for (int i = 0; i < numSamples; ++i)
+        {
+          const float value = right[i];
+          const float absValue = std::abs(value);
+          stats.peak = std::max(stats.peak, static_cast<double>(absValue));
+          sumSquares += static_cast<double>(value) * static_cast<double>(value);
+          if (absValue > 1.0f)
+          {
+            stats.clipCount++;
+          }
+        }
+        sampleCount += static_cast<std::size_t>(numSamples);
+      }
+
+      if (sampleCount > 0)
+      {
+        stats.rms = std::sqrt(sumSquares / static_cast<double>(sampleCount));
+      }
+
+      return stats;
+    }
   } // namespace
   bool MultiPresetMixer::AddActivePreset(const Preset &preset, const std::string &presetId, const std::string &name)
   {
@@ -31,6 +82,7 @@ namespace guitarfx
 
     inst.executor.SetResourceLibrary(mResourceLibrary);
     inst.executor.SetGraph(preset.graph);
+    inst.executor.SetSignalDiagnosticsEnabled(mSignalDiagnosticsEnabled.load(std::memory_order_acquire));
 
     if (mPrepared)
     {
@@ -43,6 +95,60 @@ namespace guitarfx
 
     mInstances.push_back(std::move(inst));
     return true;
+  }
+
+  MultiPresetMixer::MultiPresetMixer(MultiPresetMixer &&other) noexcept
+  {
+    *this = std::move(other);
+  }
+
+  MultiPresetMixer &MultiPresetMixer::operator=(MultiPresetMixer &&other) noexcept
+  {
+    if (this == &other)
+    {
+      return *this;
+    }
+
+    mResourceLibrary = other.mResourceLibrary;
+    mInstances = std::move(other.mInstances);
+    mSampleRate = other.mSampleRate;
+    mMaxBlockSize = other.mMaxBlockSize;
+    mPrepared = other.mPrepared;
+    mMasterGain = other.mMasterGain;
+    mLimiterEnabled = other.mLimiterEnabled;
+    mAutoLevelInput = other.mAutoLevelInput;
+    mAutoLevelOutput = other.mAutoLevelOutput;
+    mMonoMode = other.mMonoMode;
+    mInputChannel = other.mInputChannel;
+    mInputAutoLevelGain = other.mInputAutoLevelGain;
+    mOutputAutoLevelGain = other.mOutputAutoLevelGain;
+    mTempInL = std::move(other.mTempInL);
+    mTempInR = std::move(other.mTempInR);
+    mPreChainOutL = std::move(other.mPreChainOutL);
+    mPreChainOutR = std::move(other.mPreChainOutR);
+    mPostChainOutL = std::move(other.mPostChainOutL);
+    mPostChainOutR = std::move(other.mPostChainOutR);
+    mGlobalChainConfig = std::move(other.mGlobalChainConfig);
+    mPreChainExecutor = std::move(other.mPreChainExecutor);
+    mPostChainExecutor = std::move(other.mPostChainExecutor);
+    mGlobalChainNeedsRebuild = other.mGlobalChainNeedsRebuild;
+    mTunerEnabled = other.mTunerEnabled;
+    mLiveTunerMode = other.mLiveTunerMode;
+    mTunerReferenceFrequency = other.mTunerReferenceFrequency;
+    mTunerCallback = std::move(other.mTunerCallback);
+    mTunerBuffer = std::move(other.mTunerBuffer);
+    mTunerBufferWriteIndex = other.mTunerBufferWriteIndex;
+    mTunerSampleCounter = other.mTunerSampleCounter;
+
+    mSignalDiagnosticsEnabled.store(other.mSignalDiagnosticsEnabled.load(std::memory_order_acquire), std::memory_order_release);
+    mInputLevels.peak.store(other.mInputLevels.peak.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    mInputLevels.rms.store(other.mInputLevels.rms.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    mInputLevels.clipCount.store(other.mInputLevels.clipCount.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    mOutputLevels.peak.store(other.mOutputLevels.peak.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    mOutputLevels.rms.store(other.mOutputLevels.rms.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    mOutputLevels.clipCount.store(other.mOutputLevels.clipCount.load(std::memory_order_relaxed), std::memory_order_relaxed);
+
+    return *this;
   }
 
   void MultiPresetMixer::RemoveActivePreset(const std::string &presetId)
@@ -116,10 +222,12 @@ namespace guitarfx
     mPreChainExecutor.SetResourceLibrary(mResourceLibrary);
     mPreChainExecutor.SetGraph(mGlobalChainConfig.BuildPreChainGraph());
     mPreChainExecutor.SetInputTrim(mGlobalChainConfig.inputGain);
+    mPreChainExecutor.SetSignalDiagnosticsEnabled(mSignalDiagnosticsEnabled.load(std::memory_order_acquire));
     mPreChainExecutor.Prepare(mSampleRate, mMaxBlockSize);
 
     mPostChainExecutor.SetResourceLibrary(mResourceLibrary);
     mPostChainExecutor.SetGraph(mGlobalChainConfig.BuildPostChainGraph());
+    mPostChainExecutor.SetSignalDiagnosticsEnabled(mSignalDiagnosticsEnabled.load(std::memory_order_acquire));
     mPostChainExecutor.Prepare(mSampleRate, mMaxBlockSize);
 
     mMasterGain = std::pow(10.0, mGlobalChainConfig.outputGain / 20.0);
@@ -595,6 +703,8 @@ namespace guitarfx
     if (!outputs || numSamples <= 0)
       return;
 
+    const bool diagnosticsEnabled = mSignalDiagnosticsEnabled.load(std::memory_order_acquire);
+
     EnsureGlobalChainsUpToDate();
 
     // Safety check: ensure we're prepared before processing
@@ -637,6 +747,7 @@ namespace guitarfx
       processInR = mTempInR.data();
     }
 
+
     // Apply auto-level input gain (simple peak detection and normalization)
     if (mAutoLevelInput && processInL && processInR)
     {
@@ -663,6 +774,14 @@ namespace guitarfx
         processInL = mTempInL.data();
         processInR = mTempInR.data();
       }
+    }
+
+    if (diagnosticsEnabled)
+    {
+      const auto stats = ComputeLevelStats(processInL, processInR, numSamples);
+      mInputLevels.peak.store(stats.peak, std::memory_order_relaxed);
+      mInputLevels.rms.store(stats.rms, std::memory_order_relaxed);
+      mInputLevels.clipCount.store(stats.clipCount, std::memory_order_relaxed);
     }
 
     // Process tuner FIRST (before any processing, uses raw input for accurate pitch detection)
@@ -803,6 +922,14 @@ namespace guitarfx
       }
     }
 
+    if (diagnosticsEnabled)
+    {
+      const auto stats = ComputeLevelStats(outputs ? outputs[0] : nullptr, outputs ? outputs[1] : nullptr, numSamples);
+      mOutputLevels.peak.store(stats.peak, std::memory_order_relaxed);
+      mOutputLevels.rms.store(stats.rms, std::memory_order_relaxed);
+      mOutputLevels.clipCount.store(stats.clipCount, std::memory_order_relaxed);
+    }
+
     // Optional simple limiter (clip)
     if (mLimiterEnabled)
     {
@@ -817,6 +944,77 @@ namespace guitarfx
           outputs[1][i] = std::clamp(outputs[1][i], -1.0f, 1.0f);
       }
     }
+  }
+
+  void MultiPresetMixer::SetSignalDiagnosticsEnabled(bool enabled)
+  {
+    mSignalDiagnosticsEnabled.store(enabled, std::memory_order_release);
+    mPreChainExecutor.SetSignalDiagnosticsEnabled(enabled);
+    mPostChainExecutor.SetSignalDiagnosticsEnabled(enabled);
+    for (auto &inst : mInstances)
+    {
+      inst.executor.SetSignalDiagnosticsEnabled(enabled);
+    }
+  }
+
+  MultiPresetMixer::SignalDiagnosticsSnapshot MultiPresetMixer::GetSignalDiagnosticsSnapshot() const
+  {
+    SignalDiagnosticsSnapshot snapshot;
+    snapshot.input.peak = mInputLevels.peak.load(std::memory_order_relaxed);
+    snapshot.input.rms = mInputLevels.rms.load(std::memory_order_relaxed);
+    snapshot.input.clipCount = mInputLevels.clipCount.load(std::memory_order_relaxed);
+
+    snapshot.output.peak = mOutputLevels.peak.load(std::memory_order_relaxed);
+    snapshot.output.rms = mOutputLevels.rms.load(std::memory_order_relaxed);
+    snapshot.output.clipCount = mOutputLevels.clipCount.load(std::memory_order_relaxed);
+
+    const auto preLevels = mPreChainExecutor.GetNodeSignalLevels();
+    const auto postLevels = mPostChainExecutor.GetNodeSignalLevels();
+
+    snapshot.nodes.reserve(preLevels.size() + postLevels.size() + mInstances.size() * 8);
+
+    for (const auto &entry : preLevels)
+    {
+      NodeSignalLevel node;
+      node.scope = "pre";
+      node.nodeId = entry.nodeId;
+      node.nodeType = entry.nodeType;
+      node.levels.peak = entry.peak;
+      node.levels.rms = entry.rms;
+      node.levels.clipCount = entry.clipCount;
+      snapshot.nodes.push_back(std::move(node));
+    }
+
+    for (const auto &inst : mInstances)
+    {
+      const auto levels = inst.executor.GetNodeSignalLevels();
+      for (const auto &entry : levels)
+      {
+        NodeSignalLevel node;
+        node.scope = "preset";
+        node.presetId = inst.cfg.id;
+        node.nodeId = entry.nodeId;
+        node.nodeType = entry.nodeType;
+        node.levels.peak = entry.peak;
+        node.levels.rms = entry.rms;
+        node.levels.clipCount = entry.clipCount;
+        snapshot.nodes.push_back(std::move(node));
+      }
+    }
+
+    for (const auto &entry : postLevels)
+    {
+      NodeSignalLevel node;
+      node.scope = "post";
+      node.nodeId = entry.nodeId;
+      node.nodeType = entry.nodeType;
+      node.levels.peak = entry.peak;
+      node.levels.rms = entry.rms;
+      node.levels.clipCount = entry.clipCount;
+      snapshot.nodes.push_back(std::move(node));
+    }
+
+    return snapshot;
   }
 
   std::vector<std::string> MultiPresetMixer::GetActivePresetIds() const

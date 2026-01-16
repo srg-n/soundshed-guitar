@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <chrono>
+#include <atomic>
 
 namespace guitarfx
 {
@@ -26,13 +27,22 @@ namespace guitarfx
       std::map<std::string, double> nodeProcessingTimesUs; // Per-node times
     };
 
+    struct NodeSignalLevel
+    {
+      std::string nodeId;
+      std::string nodeType;
+      double peak = 0.0;
+      double rms = 0.0;
+      int clipCount = 0;
+    };
+
     SignalGraphExecutor();
     ~SignalGraphExecutor();
 
     SignalGraphExecutor(const SignalGraphExecutor &) = delete;
     SignalGraphExecutor &operator=(const SignalGraphExecutor &) = delete;
-    SignalGraphExecutor(SignalGraphExecutor &&) noexcept = default;
-    SignalGraphExecutor &operator=(SignalGraphExecutor &&) noexcept = default;
+    SignalGraphExecutor(SignalGraphExecutor &&other) noexcept;
+    SignalGraphExecutor &operator=(SignalGraphExecutor &&other) noexcept;
 
     // Setup
     void SetGraph(const SignalGraph &graph);
@@ -57,6 +67,11 @@ namespace guitarfx
     void SetInputTrim(double dB) { mInputTrim = dB; }
     void SetOutputTrim(double dB) { mOutputTrim = dB; }
 
+    // Signal level diagnostics (optional)
+    void SetSignalDiagnosticsEnabled(bool enabled) { mSignalDiagnosticsEnabled.store(enabled, std::memory_order_release); }
+    [[nodiscard]] bool IsSignalDiagnosticsEnabled() const { return mSignalDiagnosticsEnabled.load(std::memory_order_acquire); }
+    [[nodiscard]] std::vector<NodeSignalLevel> GetNodeSignalLevels() const;
+
     // Queries
     [[nodiscard]] bool IsValid() const { return mIsValid; }
     [[nodiscard]] std::vector<std::string> GetExecutionOrder() const { return mExecutionOrder; }
@@ -71,6 +86,9 @@ namespace guitarfx
       std::vector<float> bufferLeft;
       std::vector<float> bufferRight;
       bool hasInput = false;
+      std::atomic<double> peak{0.0};
+      std::atomic<double> rms{0.0};
+      std::atomic<int> clipCount{0};
     };
 
     void BuildExecutionOrder();
@@ -93,6 +111,8 @@ namespace guitarfx
     bool mPrepared = false;
 
     DSPPerformanceStats mLastPerformanceStats;
+
+    std::atomic<bool> mSignalDiagnosticsEnabled{false};
 
     // Temporary buffers for mixing
     std::vector<float> mTempLeftBuffer;

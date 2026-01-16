@@ -257,6 +257,8 @@ namespace guitarfx
     
     // DSP performance reporting
     int mDSPPerformanceUpdateCounter = 0;
+    int mSignalDiagnosticsUpdateCounter = 0;
+    std::atomic<bool> mSignalDiagnosticsEnabled{false};
     
     // Flag to prevent loading HTML multiple times
     bool mUIContentLoaded = false;
