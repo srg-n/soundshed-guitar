@@ -41,7 +41,7 @@ See [docs/](docs/) for architecture and reference documentation:
    ```
 
 3. **Install**
-   - **Windows VST3**: Copy `.vst3` from `build/src/platform/vst3/Release/` to `C:\Program Files\Common Files\VST3\`
+   - **Windows VST3**: Copy `.vst3` from `build/GuitarFX.vst3` to `C:\Program Files\Common Files\VST3\`
    - **macOS VST3**: Copy to `~/Library/Audio/Plug-Ins/VST3/`
 
 ## SDK Requirements
@@ -76,6 +76,8 @@ cmake --build build --config Debug --target GuitarFX_OfflineProcessingTest
 cmake --build build --config Debug --target VST3DebugHost
 ./VST3DebugHost.exe --windowed
 ```
+Testing plugin with pluginval:
+`C:\Tools>pluginval.exe  C:\Work\GIT\misc\neuron-guitar\src\build\GuitarFX.vst3`
 
 ## License
 
