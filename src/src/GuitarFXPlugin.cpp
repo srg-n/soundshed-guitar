@@ -45,9 +45,19 @@ namespace guitarfx
     constexpr const char* kSignalDiagnosticsSettingKey = "diagnostics.signalLevelsEnabled";
     constexpr const char* kMetronomeEnabledSettingKey = "metronome.enabled";
     constexpr const char* kMetronomeBpmSettingKey = "metronome.bpm";
+    constexpr const char* kMetronomeVolumeDbSettingKey = "metronome.volumeDb";
+    constexpr const char* kMetronomePanSettingKey = "metronome.pan";
+    constexpr const char* kMetronomeClickTypeSettingKey = "metronome.clickType";
+    constexpr const char* kMetronomeClickConfigSettingKey = "metronome.clickConfig";
     constexpr double kMetronomeDefaultBpm = 120.0;
     constexpr double kMetronomeMinBpm = 30.0;
     constexpr double kMetronomeMaxBpm = 300.0;
+    constexpr double kMetronomeMinVolumeDb = -60.0;
+    constexpr double kMetronomeMaxVolumeDb = 12.0;
+    constexpr double kMetronomeDefaultVolumeDb = -12.0;
+    constexpr double kMetronomeDefaultPan = 0.0;
+    constexpr int kMetronomeBeatsPerBar = 4;
+    constexpr const char* kMetronomeDefaultClickType = "click";
     constexpr double kMetronomeClickSeconds = 0.02;
     constexpr double kMetronomeClickFrequencyHz = 1800.0;
     constexpr double kMinDbFS = -120.0;
@@ -60,6 +70,15 @@ namespace guitarfx
         return kMinDbFS;
       }
       return 20.0 * std::log10(linear);
+    }
+
+    double LinearFromDb(double db)
+    {
+      if (!std::isfinite(db))
+      {
+        return 0.0;
+      }
+      return std::pow(10.0, db / 20.0);
     }
 
     double HeadroomDbFromPeak(double peak)
@@ -503,6 +522,31 @@ namespace guitarfx
       int bitsPerSample = 0;
       std::vector<std::vector<double>> channelSamples;
     };
+
+    std::vector<std::uint8_t> ReadFileBytes(const std::filesystem::path& path)
+    {
+      std::ifstream input(path, std::ios::binary);
+      if (!input)
+      {
+        return {};
+      }
+
+      input.seekg(0, std::ios::end);
+      const std::streamoff length = input.tellg();
+      if (length <= 0)
+      {
+        return {};
+      }
+      input.seekg(0, std::ios::beg);
+
+      std::vector<std::uint8_t> data(static_cast<std::size_t>(length));
+      input.read(reinterpret_cast<char*>(data.data()), length);
+      if (!input)
+      {
+        return {};
+      }
+      return data;
+    }
 
     std::optional<DecodedWav> DecodePcmWav(const std::vector<std::uint8_t> &bytes)
     {
@@ -1086,33 +1130,283 @@ namespace guitarfx
       mMetronomeClickPhaseIncrement = kTwoPi * kMetronomeClickFrequencyHz / sampleRate;
     }
 
-    const double volume = ClampValue(mMetronomeVolume.load(std::memory_order_relaxed), 0.0, 1.0);
+    const double volume = ClampValue(mMetronomeVolume.load(std::memory_order_relaxed), 0.0, LinearFromDb(kMetronomeMaxVolumeDb));
+    const double pan = ClampValue(mMetronomePan.load(std::memory_order_relaxed), -1.0, 1.0);
+    const double panAngle = (pan + 1.0) * (kTwoPi / 8.0);
+    const double panLeft = std::cos(panAngle);
+    const double panRight = std::sin(panAngle);
+    const auto clickSampleSet = mMetronomeClickSamples.load(std::memory_order_acquire);
+    const bool hasSampleClick = clickSampleSet &&
+      ((!clickSampleSet->low.empty() && !clickSampleSet->low.front().empty()) ||
+       (!clickSampleSet->high.empty() && !clickSampleSet->high.front().empty()));
 
     for (int frame = 0; frame < nFrames; ++frame)
     {
       if (mMetronomeSamplesUntilClick <= 0.0)
       {
-        mMetronomeClickSamplesRemaining = clickSamples;
+        if (hasSampleClick)
+        {
+          const bool useHigh = (mMetronomeBeatIndex % kMetronomeBeatsPerBar) == 0;
+          const auto& preferred = useHigh ? clickSampleSet->high : clickSampleSet->low;
+          const auto& fallback = useHigh ? clickSampleSet->low : clickSampleSet->high;
+          const auto& selected = (!preferred.empty() && !preferred.front().empty()) ? preferred : fallback;
+          mMetronomeClickSamplesRemaining = selected.empty() ? 0 : static_cast<int>(selected.front().size());
+          mMetronomeClickSamplePosition = 0;
+          mMetronomeClickUseHigh = useHigh;
+          mMetronomeBeatIndex = (mMetronomeBeatIndex + 1) % kMetronomeBeatsPerBar;
+        }
+        else
+        {
+          mMetronomeClickSamplesRemaining = clickSamples;
+        }
         mMetronomeSamplesUntilClick += samplesPerBeat;
       }
 
-      float clickSample = 0.0f;
+      float clickSampleL = 0.0f;
+      float clickSampleR = 0.0f;
       if (mMetronomeClickSamplesRemaining > 0)
       {
-        const double envelope = static_cast<double>(mMetronomeClickSamplesRemaining) / static_cast<double>(clickSamples);
-        clickSample = static_cast<float>(std::sin(mMetronomeClickPhase) * envelope * volume);
-        mMetronomeClickPhase += mMetronomeClickPhaseIncrement;
-        if (mMetronomeClickPhase >= kTwoPi)
+        if (hasSampleClick)
         {
-          mMetronomeClickPhase -= kTwoPi;
+          const auto& preferred = mMetronomeClickUseHigh ? clickSampleSet->high : clickSampleSet->low;
+          const auto& fallback = mMetronomeClickUseHigh ? clickSampleSet->low : clickSampleSet->high;
+          const auto& selected = (!preferred.empty() && !preferred.front().empty()) ? preferred : fallback;
+          if (!selected.empty() && !selected.front().empty())
+          {
+            const int index = mMetronomeClickSamplePosition;
+            if (index >= 0 && static_cast<std::size_t>(index) < selected.front().size())
+            {
+              clickSampleL = static_cast<float>(selected[0][static_cast<std::size_t>(index)]);
+              clickSampleR = selected.size() > 1
+                ? static_cast<float>(selected[1][static_cast<std::size_t>(index)])
+                : clickSampleL;
+            }
+          }
+          ++mMetronomeClickSamplePosition;
+          --mMetronomeClickSamplesRemaining;
         }
-        --mMetronomeClickSamplesRemaining;
+        else
+        {
+          const double envelope = static_cast<double>(mMetronomeClickSamplesRemaining) / static_cast<double>(clickSamples);
+          const float clickSample = static_cast<float>(std::sin(mMetronomeClickPhase) * envelope);
+          clickSampleL = clickSample;
+          clickSampleR = clickSample;
+          mMetronomeClickPhase += mMetronomeClickPhaseIncrement;
+          if (mMetronomeClickPhase >= kTwoPi)
+          {
+            mMetronomeClickPhase -= kTwoPi;
+          }
+          --mMetronomeClickSamplesRemaining;
+        }
       }
 
-      outputs[0][frame] += clickSample;
-      outputs[1][frame] += clickSample;
+      outputs[0][frame] += clickSampleL * static_cast<float>(volume * panLeft);
+      outputs[1][frame] += clickSampleR * static_cast<float>(volume * panRight);
       mMetronomeSamplesUntilClick -= 1.0;
     }
+  }
+
+  void GuitarFXPlugin::UpdateMetronomeClickConfigFromSettings()
+  {
+    mMetronomeClickConfig.clear();
+
+    const auto configIt = mAppSettings.find(kMetronomeClickConfigSettingKey);
+    bool hasValidConfig = false;
+    if (configIt != mAppSettings.end() && configIt->is_array())
+    {
+      for (const auto& entry : *configIt)
+      {
+        if (!entry.is_object())
+        {
+          continue;
+        }
+
+        const std::string id = entry.value("id", "");
+        if (id.empty())
+        {
+          continue;
+        }
+
+        MetronomeClickTypeConfig config;
+        config.id = id;
+        config.label = entry.value("label", id);
+        const std::string lowPath = entry.value("lowPath", "");
+        const std::string highPath = entry.value("highPath", "");
+        if (!lowPath.empty())
+        {
+          config.lowPath = std::filesystem::path{lowPath};
+        }
+        if (!highPath.empty())
+        {
+          config.highPath = std::filesystem::path{highPath};
+        }
+        mMetronomeClickConfig.push_back(std::move(config));
+        hasValidConfig = true;
+      }
+    }
+
+    if (!hasValidConfig)
+    {
+      const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
+      const auto metronomeDir = settingsDir / "metronome";
+      (void)mFileSystem.EnsureDirectory(metronomeDir);
+
+      const std::array<std::pair<std::string, std::string>, 3> defaults = {
+        std::make_pair(std::string{"click"}, std::string{"Click"}),
+        std::make_pair(std::string{"drum"}, std::string{"Drum"}),
+        std::make_pair(std::string{"electronic"}, std::string{"Electronic"})
+      };
+
+      nlohmann::json defaultConfig = nlohmann::json::array();
+      for (const auto& [id, label] : defaults)
+      {
+        MetronomeClickTypeConfig config;
+        config.id = id;
+        config.label = label;
+        config.lowPath = metronomeDir / (id + "_low.wav");
+        config.highPath = metronomeDir / (id + "_high.wav");
+        mMetronomeClickConfig.push_back(config);
+
+        nlohmann::json entry;
+        entry["id"] = id;
+        entry["label"] = label;
+        entry["lowPath"] = config.lowPath.generic_string();
+        entry["highPath"] = config.highPath.generic_string();
+        defaultConfig.push_back(std::move(entry));
+      }
+
+      mAppSettings[kMetronomeClickConfigSettingKey] = std::move(defaultConfig);
+    }
+
+    if (mMetronomeClickConfig.empty())
+    {
+      return;
+    }
+
+    if (mMetronomeClickType.empty())
+    {
+      mMetronomeClickType = mMetronomeClickConfig.front().id;
+    }
+  }
+
+  const GuitarFXPlugin::MetronomeClickTypeConfig* GuitarFXPlugin::FindMetronomeClickType(const std::string& id) const
+  {
+    for (const auto& config : mMetronomeClickConfig)
+    {
+      if (config.id == id)
+      {
+        return &config;
+      }
+    }
+    return mMetronomeClickConfig.empty() ? nullptr : &mMetronomeClickConfig.front();
+  }
+
+  std::shared_ptr<GuitarFXPlugin::MetronomeClickSamples> GuitarFXPlugin::BuildMetronomeClickSamples(const MetronomeClickTypeConfig& config, double targetSampleRate) const
+  {
+    if (targetSampleRate <= 0.0)
+    {
+      return nullptr;
+    }
+
+    auto samples = std::make_shared<MetronomeClickSamples>();
+
+    auto loadWav = [&](const std::filesystem::path& path, std::vector<std::vector<iplug::sample>>& target, std::string_view label)
+    {
+      if (path.empty())
+      {
+        return;
+      }
+      if (!std::filesystem::exists(path))
+      {
+        std::cerr << "[Plugin] Metronome " << label << " sample not found: " << path.generic_string() << std::endl;
+        return;
+      }
+
+      const auto bytes = ReadFileBytes(path);
+      if (bytes.empty())
+      {
+        std::cerr << "[Plugin] Metronome " << label << " sample empty: " << path.generic_string() << std::endl;
+        return;
+      }
+
+      const auto wavData = DecodePcmWav(bytes);
+      if (!wavData)
+      {
+        std::cerr << "[Plugin] Metronome " << label << " sample unsupported WAV: " << path.generic_string() << std::endl;
+        return;
+      }
+
+      auto resampled = ConvertToSampleRate(*wavData, targetSampleRate);
+      if (resampled.empty() || resampled.front().empty())
+      {
+        std::cerr << "[Plugin] Metronome " << label << " sample empty after resample: " << path.generic_string() << std::endl;
+        return;
+      }
+
+      std::size_t minFrames = resampled.front().size();
+      for (const auto& channel : resampled)
+      {
+        if (channel.empty())
+        {
+          return;
+        }
+        minFrames = std::min(minFrames, channel.size());
+      }
+      for (auto& channel : resampled)
+      {
+        if (channel.size() > minFrames)
+        {
+          channel.resize(minFrames);
+        }
+      }
+
+      target = std::move(resampled);
+    };
+
+    loadWav(config.lowPath, samples->low, "low");
+    loadWav(config.highPath, samples->high, "high");
+
+    if (samples->low.empty() && samples->high.empty())
+    {
+      return nullptr;
+    }
+
+    return samples;
+  }
+
+  void GuitarFXPlugin::RefreshMetronomeClickSamples()
+  {
+    if (!kIsStandaloneBuild)
+    {
+      return;
+    }
+
+    if (mMetronomeClickConfig.empty())
+    {
+      UpdateMetronomeClickConfigFromSettings();
+    }
+
+    const double sampleRate = GetSampleRate();
+    if (sampleRate <= 0.0)
+    {
+      return;
+    }
+
+    const auto* config = FindMetronomeClickType(mMetronomeClickType);
+    if (!config)
+    {
+      mMetronomeClickSamples.store(nullptr, std::memory_order_release);
+      return;
+    }
+
+    if (config->id != mMetronomeClickType)
+    {
+      mMetronomeClickType = config->id;
+      mAppSettings[kMetronomeClickTypeSettingKey] = mMetronomeClickType;
+    }
+
+    auto samples = BuildMetronomeClickSamples(*config, sampleRate);
+    mMetronomeClickSamples.store(samples, std::memory_order_release);
   }
 
   void GuitarFXPlugin::OnReset()
@@ -1136,6 +1430,10 @@ namespace guitarfx
     mMetronomeSamplesUntilClick = 0.0;
     mMetronomeClickSamplesRemaining = 0;
     mMetronomeClickPhase = 0.0;
+    mMetronomeBeatIndex = 0;
+    mMetronomeClickSamplePosition = 0;
+    mMetronomeClickUseHigh = false;
+    RefreshMetronomeClickSamples();
   }
   // ============================
   // MultiPresetMixer controller
@@ -2190,11 +2488,23 @@ namespace guitarfx
     message["environment"] = {
       {"standalone", kIsStandaloneBuild}
     };
+    nlohmann::json clickTypes = nlohmann::json::array();
+    for (const auto& config : mMetronomeClickConfig)
+    {
+      clickTypes.push_back({
+        {"id", config.id},
+        {"label", config.label}
+      });
+    }
     message["metronome"] = {
       {"bpm", GetEffectiveTempoBpm()},
       {"enabled", mMetronomeEnabled.load(std::memory_order_relaxed)},
       {"editable", kIsStandaloneBuild},
-      {"source", kIsStandaloneBuild ? "app" : "host"}
+      {"source", kIsStandaloneBuild ? "app" : "host"},
+      {"volumeDb", mMetronomeVolumeDb.load(std::memory_order_relaxed)},
+      {"pan", mMetronomePan.load(std::memory_order_relaxed)},
+      {"clickType", mMetronomeClickType},
+      {"clickTypes", std::move(clickTypes)}
     };
 
     if (mActivePreset)
@@ -2261,6 +2571,18 @@ namespace guitarfx
     message["enabled"] = mMetronomeEnabled.load(std::memory_order_relaxed);
     message["editable"] = kIsStandaloneBuild;
     message["source"] = kIsStandaloneBuild ? "app" : "host";
+    message["volumeDb"] = mMetronomeVolumeDb.load(std::memory_order_relaxed);
+    message["pan"] = mMetronomePan.load(std::memory_order_relaxed);
+    message["clickType"] = mMetronomeClickType;
+    nlohmann::json clickTypes = nlohmann::json::array();
+    for (const auto& config : mMetronomeClickConfig)
+    {
+      clickTypes.push_back({
+        {"id", config.id},
+        {"label", config.label}
+      });
+    }
+    message["clickTypes"] = std::move(clickTypes);
     SendMessageToUI(message.dump());
   }
 
@@ -2921,6 +3243,43 @@ namespace guitarfx
       mMetronomeEnabled.store(enabled, std::memory_order_release);
       mAppSettings[kMetronomeEnabledSettingKey] = enabled;
       changed = true;
+    }
+
+    if (payload.contains("volumeDb") && payload["volumeDb"].is_number())
+    {
+      const double volumeDb = ClampValue(payload.value("volumeDb", kMetronomeDefaultVolumeDb), kMetronomeMinVolumeDb, kMetronomeMaxVolumeDb);
+      mMetronomeVolumeDb.store(volumeDb, std::memory_order_release);
+      mMetronomeVolume.store(ClampValue(LinearFromDb(volumeDb), 0.0, LinearFromDb(kMetronomeMaxVolumeDb)), std::memory_order_release);
+      mAppSettings[kMetronomeVolumeDbSettingKey] = volumeDb;
+      changed = true;
+    }
+
+    if (payload.contains("pan") && payload["pan"].is_number())
+    {
+      const double pan = ClampValue(payload.value("pan", kMetronomeDefaultPan), -1.0, 1.0);
+      mMetronomePan.store(pan, std::memory_order_release);
+      mAppSettings[kMetronomePanSettingKey] = pan;
+      changed = true;
+    }
+
+    if (payload.contains("clickConfig") && payload["clickConfig"].is_array())
+    {
+      mAppSettings[kMetronomeClickConfigSettingKey] = payload["clickConfig"];
+      UpdateMetronomeClickConfigFromSettings();
+      RefreshMetronomeClickSamples();
+      changed = true;
+    }
+
+    if (payload.contains("clickType") && payload["clickType"].is_string())
+    {
+      const std::string clickType = payload.value("clickType", std::string{kMetronomeDefaultClickType});
+      if (!clickType.empty())
+      {
+        mMetronomeClickType = clickType;
+        mAppSettings[kMetronomeClickTypeSettingKey] = clickType;
+        RefreshMetronomeClickSamples();
+        changed = true;
+      }
     }
 
     if (changed)
@@ -3792,6 +4151,23 @@ namespace guitarfx
       if (!std::filesystem::exists(settingsFile))
       {
         std::cout << "[Plugin] No settings file found at: " << settingsFile.generic_string() << std::endl;
+        if (kIsStandaloneBuild)
+        {
+          mAppSettings = nlohmann::json::object();
+          mMetronomeBpm.store(kMetronomeDefaultBpm, std::memory_order_release);
+          mMetronomeEnabled.store(false, std::memory_order_release);
+          mMetronomeVolumeDb.store(kMetronomeDefaultVolumeDb, std::memory_order_release);
+          mMetronomeVolume.store(ClampValue(LinearFromDb(kMetronomeDefaultVolumeDb), 0.0, LinearFromDb(kMetronomeMaxVolumeDb)), std::memory_order_release);
+          mMetronomePan.store(kMetronomeDefaultPan, std::memory_order_release);
+          mMetronomeClickType = kMetronomeDefaultClickType;
+          mAppSettings[kMetronomeBpmSettingKey] = kMetronomeDefaultBpm;
+          mAppSettings[kMetronomeEnabledSettingKey] = false;
+          mAppSettings[kMetronomeVolumeDbSettingKey] = kMetronomeDefaultVolumeDb;
+          mAppSettings[kMetronomePanSettingKey] = kMetronomeDefaultPan;
+          mAppSettings[kMetronomeClickTypeSettingKey] = mMetronomeClickType;
+          UpdateMetronomeClickConfigFromSettings();
+          RefreshMetronomeClickSamples();
+        }
         return;
       }
 
@@ -3884,6 +4260,46 @@ namespace guitarfx
             }
             mMetronomeEnabled.store(enabled, std::memory_order_release);
           }
+
+          const auto volumeIt = mAppSettings.find(kMetronomeVolumeDbSettingKey);
+          if (volumeIt != mAppSettings.end() && volumeIt->is_number())
+          {
+            const double volumeDb = ClampValue(volumeIt->get<double>(), kMetronomeMinVolumeDb, kMetronomeMaxVolumeDb);
+            mMetronomeVolumeDb.store(volumeDb, std::memory_order_release);
+            mMetronomeVolume.store(ClampValue(LinearFromDb(volumeDb), 0.0, LinearFromDb(kMetronomeMaxVolumeDb)), std::memory_order_release);
+          }
+          else
+          {
+            mMetronomeVolumeDb.store(kMetronomeDefaultVolumeDb, std::memory_order_release);
+            mMetronomeVolume.store(ClampValue(LinearFromDb(kMetronomeDefaultVolumeDb), 0.0, LinearFromDb(kMetronomeMaxVolumeDb)), std::memory_order_release);
+            mAppSettings[kMetronomeVolumeDbSettingKey] = kMetronomeDefaultVolumeDb;
+          }
+
+          const auto panIt = mAppSettings.find(kMetronomePanSettingKey);
+          if (panIt != mAppSettings.end() && panIt->is_number())
+          {
+            const double pan = ClampValue(panIt->get<double>(), -1.0, 1.0);
+            mMetronomePan.store(pan, std::memory_order_release);
+          }
+          else
+          {
+            mMetronomePan.store(kMetronomeDefaultPan, std::memory_order_release);
+            mAppSettings[kMetronomePanSettingKey] = kMetronomeDefaultPan;
+          }
+
+          const auto clickTypeIt = mAppSettings.find(kMetronomeClickTypeSettingKey);
+          if (clickTypeIt != mAppSettings.end() && clickTypeIt->is_string())
+          {
+            mMetronomeClickType = clickTypeIt->get<std::string>();
+          }
+          else
+          {
+            mMetronomeClickType = kMetronomeDefaultClickType;
+            mAppSettings[kMetronomeClickTypeSettingKey] = mMetronomeClickType;
+          }
+
+          UpdateMetronomeClickConfigFromSettings();
+          RefreshMetronomeClickSamples();
         }
       }
 

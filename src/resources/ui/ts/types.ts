@@ -139,7 +139,12 @@ export interface DemoSample {
   path: string;
 }
 
-export type AppSettingValue = string | number | boolean | null;
+export type AppSettingPrimitive = string | number | boolean | null;
+export type AppSettingValue = AppSettingPrimitive | AppSettingObject | AppSettingArray;
+export interface AppSettingObject {
+  [key: string]: AppSettingValue;
+}
+export type AppSettingArray = AppSettingValue[];
 
 export type AppSettings = Record<string, AppSettingValue>;
 
@@ -255,11 +260,22 @@ export interface EnvironmentState {
   standalone: boolean;
 }
 
+export interface MetronomeClickTypeOption {
+  id: string;
+  label?: string;
+  lowPath?: string;
+  highPath?: string;
+}
+
 export interface MetronomeState {
   bpm: number;
   enabled: boolean;
   editable: boolean;
   source: "app" | "host";
+  volumeDb: number;
+  pan: number;
+  clickType: string;
+  clickTypes?: MetronomeClickTypeOption[];
 }
 
 export interface UiState {

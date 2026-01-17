@@ -762,10 +762,10 @@
               <div class="metronome-top-row">
                 <div class="metronome-control-block">
                   <span class="metronome-label">Volume</span>
-                  <div class="knob metronome-knob" data-param="metronome_volume" data-value="0">
+                  <div class="knob metronome-knob" data-param="metronome_volume" data-value="-12">
                     <div class="knob-indicator"></div>
                   </div>
-                  <span class="metronome-value" id="metronome-volume-value">0.0 dB</span>
+                  <span class="metronome-value" id="metronome-volume-value">-12.0 dB</span>
                 </div>
                 <div class="metronome-control-block wide">
                   <span class="metronome-label">Time Signature</span>
@@ -777,10 +777,9 @@
                 </div>
                 <div class="metronome-control-block wide">
                   <span class="metronome-label">Sound</span>
-                  <select class="metronome-select" disabled>
-                    <option selected>Click</option>
-                    <option>Electronic</option>
-                    <option>Drum</option>
+                  <select class="metronome-select" id="metronome-sound-select">
+                    <option value="click" selected>Click</option>
+                    <option value="drum">Drum</option>
                   </select>
                 </div>
                 <div class="metronome-control-block">

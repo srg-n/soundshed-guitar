@@ -74,6 +74,13 @@ export function setLimiterEnabled(enabled: boolean): void {
   appendLog(`setLimiterEnabled → ${enabled}`);
 }
 
-export function setMetronome(payload: { bpm?: number; enabled?: boolean }): void {
+export function setMetronome(payload: {
+  bpm?: number;
+  enabled?: boolean;
+  volumeDb?: number;
+  pan?: number;
+  clickType?: string;
+  clickConfig?: Array<{ id: string; label?: string; lowPath?: string; highPath?: string }>;
+}): void {
   postMessage({ type: "setMetronome", ...payload });
 }

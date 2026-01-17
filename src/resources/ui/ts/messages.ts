@@ -53,13 +53,21 @@ export function handleIncomingMessage(message: string): void {
       if (environment) {
         applyEnvironmentState({ standalone: Boolean(environment.standalone) });
       }
-      const metronome = (payload as { metronome?: { bpm?: number; enabled?: boolean; editable?: boolean; source?: string } }).metronome;
+      const metronome = (payload as { metronome?: { bpm?: number; enabled?: boolean; editable?: boolean; source?: string; volumeDb?: number; pan?: number; clickType?: string; clickTypes?: Array<{ id?: string; label?: string }> } }).metronome;
       if (metronome) {
         applyMetronomeState({
           bpm: typeof metronome.bpm === "number" ? metronome.bpm : uiState.metronome?.bpm ?? 120,
           enabled: Boolean(metronome.enabled),
           editable: metronome.editable !== undefined ? Boolean(metronome.editable) : true,
           source: metronome.source === "host" ? "host" : "app",
+          volumeDb: typeof metronome.volumeDb === "number" ? metronome.volumeDb : uiState.metronome?.volumeDb ?? -12,
+          pan: typeof metronome.pan === "number" ? metronome.pan : uiState.metronome?.pan ?? 0,
+          clickType: typeof metronome.clickType === "string" ? metronome.clickType : uiState.metronome?.clickType ?? "click",
+          clickTypes: Array.isArray(metronome.clickTypes)
+            ? metronome.clickTypes
+                .filter((entry) => entry && typeof entry.id === "string")
+                .map((entry) => ({ id: entry.id ?? "", label: typeof entry.label === "string" ? entry.label : entry.id }))
+            : uiState.metronome?.clickTypes,
         });
       }
       uiState.signalTest = null;
@@ -75,17 +83,26 @@ export function handleIncomingMessage(message: string): void {
       renderActivePreset();
       syncControlsFromState();
       updatePresetActionButtons();
+      updatePresetDropdownSelection();
       showNotification("");
       refreshSettingsView();
       break;
     }
     case "metronomeState": {
-      const metroPayload = payload as { bpm?: number; enabled?: boolean; editable?: boolean; source?: string };
+      const metroPayload = payload as { bpm?: number; enabled?: boolean; editable?: boolean; source?: string; volumeDb?: number; pan?: number; clickType?: string; clickTypes?: Array<{ id?: string; label?: string }> };
       applyMetronomeState({
         bpm: typeof metroPayload.bpm === "number" ? metroPayload.bpm : uiState.metronome?.bpm ?? 120,
         enabled: Boolean(metroPayload.enabled),
         editable: metroPayload.editable !== undefined ? Boolean(metroPayload.editable) : true,
         source: metroPayload.source === "host" ? "host" : "app",
+        volumeDb: typeof metroPayload.volumeDb === "number" ? metroPayload.volumeDb : uiState.metronome?.volumeDb ?? -12,
+        pan: typeof metroPayload.pan === "number" ? metroPayload.pan : uiState.metronome?.pan ?? 0,
+        clickType: typeof metroPayload.clickType === "string" ? metroPayload.clickType : uiState.metronome?.clickType ?? "click",
+        clickTypes: Array.isArray(metroPayload.clickTypes)
+          ? metroPayload.clickTypes
+              .filter((entry) => entry && typeof entry.id === "string")
+              .map((entry) => ({ id: entry.id ?? "", label: typeof entry.label === "string" ? entry.label : entry.id }))
+          : uiState.metronome?.clickTypes,
       });
       break;
     }

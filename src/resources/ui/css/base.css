@@ -341,6 +341,7 @@ body:not(.is-standalone) .main-content .metronome-only {
 }
 
 .metronome-bpm-input[type="number"] {
+  appearance: textfield;
   -moz-appearance: textfield;
 }
 

@@ -83,7 +83,22 @@ export const uiState: UiState = {
   demoAudioRepeat: false,
   logs: [],
   resourceLibrary: {},
-  appSettings: {},
+  appSettings: {
+    "metronome.clickConfig": [
+      {
+        id: "click",
+        label: "Click",
+        lowPath: "C:\\Work\\GIT\\misc\\neuron-guitar\\src\\resources\\ui\\demo\\metronome\\click\\Low.wav",
+        highPath: "C:\\Work\\GIT\\misc\\neuron-guitar\\src\\resources\\ui\\demo\\metronome\\click\\High.wav",
+      },
+      {
+        id: "drum",
+        label: "Drum",
+        lowPath: "C:\\Work\\GIT\\misc\\neuron-guitar\\src\\resources\\ui\\demo\\metronome\\kit1\\Low.wav",
+        highPath: "C:\\Work\\GIT\\misc\\neuron-guitar\\src\\resources\\ui\\demo\\metronome\\kit1\\High.wav",
+      },
+    ],
+  },
   tone3000Session: null,
   mixer: {
     activePresetIds: [],
@@ -97,7 +112,20 @@ export const uiState: UiState = {
   globalSignalChain: { ...DEFAULT_GLOBAL_SIGNAL_CHAIN },
   signalDiagnostics: null,
   environment: { standalone: false },
-  metronome: { bpm: 120, enabled: false, editable: true, source: "app" },
+  metronome: {
+    bpm: 120,
+    enabled: false,
+    editable: true,
+    source: "app",
+    volumeDb: -12,
+    pan: 0,
+    clickType: "click",
+    clickTypes: [
+      { id: "click", label: "Click" },
+      { id: "drum", label: "Drum" },
+      { id: "electronic", label: "Electronic" },
+    ],
+  },
 };
 
 export function clonePreset<T extends Preset | null>(preset: T): T {

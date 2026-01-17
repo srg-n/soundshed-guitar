@@ -14,6 +14,8 @@ const metronomeState = {
 let metronomeModal: HTMLElement | null = null;
 let metronomeCloseBtn: HTMLElement | null = null;
 let metronomeIconButton: HTMLButtonElement | null = null;
+let metronomeVolumeKnob: GenericKnob | null = null;
+let metronomePanKnob: GenericKnob | null = null;
 
 function clampBpm(value: number): number {
   if (!isFinite(value)) return uiState.metronome?.bpm ?? 120;
@@ -35,6 +37,7 @@ function getMetronomeElements(): {
   footerBpmInput: HTMLInputElement | null;
   footerBpmSlider: HTMLInputElement | null;
   footerBpmValue: HTMLElement | null;
+  soundSelect: HTMLSelectElement | null;
   modal: HTMLElement | null;
   closeButton: HTMLElement | null;
   iconButton: HTMLButtonElement | null;
@@ -56,6 +59,7 @@ function getMetronomeElements(): {
     footerBpmInput: footerPanel?.querySelector<HTMLInputElement>("#footer-bpm-input") ?? null,
     footerBpmSlider: footerPanel?.querySelector<HTMLInputElement>("#footer-bpm-slider") ?? null,
     footerBpmValue: document.getElementById("footer-bpm-value"),
+    soundSelect: panel?.querySelector<HTMLSelectElement>("#metronome-sound-select") ?? null,
     modal: panel,
     closeButton: document.getElementById("metronome-close-btn"),
     iconButton: document.querySelector<HTMLButtonElement>(
@@ -86,8 +90,18 @@ function syncMetronomeControls(): void {
     footerBpmSlider,
     footerBpmValue,
     footerBpmPanel,
+    soundSelect,
   } = getMetronomeElements();
-  const state = uiState.metronome ?? { bpm: 120, enabled: false, editable: false, source: "app" };
+  const state = uiState.metronome ?? {
+    bpm: 120,
+    enabled: false,
+    editable: false,
+    source: "app",
+    volumeDb: -12,
+    pan: 0,
+    clickType: "click",
+    clickTypes: [],
+  };
   const bpm = clampBpm(state.bpm);
   const editable = isEditable();
 
@@ -152,6 +166,29 @@ function syncMetronomeControls(): void {
     footerBpmPanel.setAttribute("aria-hidden", "true");
   }
 
+  if (metronomeVolumeKnob) {
+    metronomeVolumeKnob.setValue(state.volumeDb ?? -12);
+  }
+
+  if (metronomePanKnob) {
+    metronomePanKnob.setValue(state.pan ?? 0);
+  }
+
+  if (soundSelect) {
+    const clickTypes = state.clickTypes ?? [];
+    if (clickTypes.length) {
+      soundSelect.innerHTML = "";
+      clickTypes.forEach((type: { id: string; label?: string }) => {
+        const option = document.createElement("option");
+        option.value = type.id;
+        option.textContent = type.label ?? type.id;
+        soundSelect.appendChild(option);
+      });
+    }
+    soundSelect.value = state.clickType ?? "click";
+    soundSelect.disabled = !editable;
+  }
+
   if (bpmUpButton) bpmUpButton.disabled = !editable;
   if (bpmDownButton) bpmDownButton.disabled = !editable;
 }
@@ -166,16 +203,17 @@ function initializeMetronomeKnobs(): void {
     '.metronome-knob[data-param="metronome_volume"]',
   );
   if (volumeKnob) {
-    new GenericKnob({
+    metronomeVolumeKnob = new GenericKnob({
       knobElement: volumeKnob,
       paramId: "metronome_volume",
       minValue: -60,
-      maxValue: 6,
-      defaultValue: 0,
+      maxValue: 12,
+      defaultValue: -12,
       displayFormat: (value) => `${value.toFixed(1)} dB`,
       valueDisplayId: "metronome-volume-value",
       sensitivity: 0.5,
       sendParameter: false,
+      onValueChange: (value) => updateVolumeDb(value),
     });
   }
 
@@ -183,7 +221,7 @@ function initializeMetronomeKnobs(): void {
     '.metronome-knob[data-param="metronome_pan"]',
   );
   if (panKnob) {
-    new GenericKnob({
+    metronomePanKnob = new GenericKnob({
       knobElement: panKnob,
       paramId: "metronome_pan",
       minValue: -1,
@@ -197,6 +235,7 @@ function initializeMetronomeKnobs(): void {
       valueDisplayId: "metronome-pan-value",
       sensitivity: 0.02,
       sendParameter: false,
+      onValueChange: (value) => updatePan(value),
     });
   }
 }
@@ -208,7 +247,16 @@ function applyBodyStandaloneClass(): void {
 function updateBpm(nextBpm: number): void {
   const bpm = clampBpm(nextBpm);
   uiState.metronome = {
-    ...(uiState.metronome ?? { bpm, enabled: false, editable: true, source: "app" }),
+    ...(uiState.metronome ?? {
+      bpm,
+      enabled: false,
+      editable: true,
+      source: "app",
+      volumeDb: -12,
+      pan: 0,
+      clickType: "click",
+      clickTypes: [],
+    }),
     bpm,
   };
   setMetronome({ bpm });
@@ -217,11 +265,75 @@ function updateBpm(nextBpm: number): void {
 
 function updateEnabled(nextEnabled: boolean): void {
   uiState.metronome = {
-    ...(uiState.metronome ?? { bpm: 120, enabled: nextEnabled, editable: true, source: "app" }),
+    ...(uiState.metronome ?? {
+      bpm: 120,
+      enabled: nextEnabled,
+      editable: true,
+      source: "app",
+      volumeDb: -12,
+      pan: 0,
+      clickType: "click",
+      clickTypes: [],
+    }),
     enabled: nextEnabled,
   };
   setMetronome({ enabled: nextEnabled });
   syncMetronomeControls();
+}
+
+function updateVolumeDb(nextVolumeDb: number): void {
+  if (!isEditable()) return;
+  uiState.metronome = {
+    ...(uiState.metronome ?? {
+      bpm: 120,
+      enabled: false,
+      editable: true,
+      source: "app",
+      volumeDb: nextVolumeDb,
+      pan: 0,
+      clickType: "click",
+      clickTypes: [],
+    }),
+    volumeDb: nextVolumeDb,
+  };
+  setMetronome({ volumeDb: nextVolumeDb });
+}
+
+function updatePan(nextPan: number): void {
+  if (!isEditable()) return;
+  uiState.metronome = {
+    ...(uiState.metronome ?? {
+      bpm: 120,
+      enabled: false,
+      editable: true,
+      source: "app",
+      volumeDb: -12,
+      pan: nextPan,
+      clickType: "click",
+      clickTypes: [],
+    }),
+    pan: nextPan,
+  };
+  setMetronome({ pan: nextPan });
+}
+
+function updateClickType(nextType: string): void {
+  if (!isEditable()) return;
+  if (!nextType) return;
+  uiState.metronome = {
+    ...(uiState.metronome ?? {
+      bpm: 120,
+      enabled: false,
+      editable: true,
+      source: "app",
+      volumeDb: -12,
+      pan: 0,
+      clickType: nextType,
+      clickTypes: [],
+    }),
+    clickType: nextType,
+  };
+  setMetronome({ clickType: nextType });
 }
 
 function openMetronome(): void {
@@ -247,7 +359,16 @@ export function applyEnvironmentState(environment: EnvironmentState): void {
 
 export function applyMetronomeState(nextState: Partial<MetronomeState>): void {
   uiState.metronome = {
-    ...(uiState.metronome ?? { bpm: 120, enabled: false, editable: true, source: "app" }),
+    ...(uiState.metronome ?? {
+      bpm: 120,
+      enabled: false,
+      editable: true,
+      source: "app",
+      volumeDb: -12,
+      pan: 0,
+      clickType: "click",
+      clickTypes: [],
+    }),
     ...nextState,
   };
   syncMetronomeControls();
@@ -268,6 +389,7 @@ export function initializeMetronome(): void {
     footerBpmPanel,
     footerBpmInput,
     footerBpmSlider,
+    soundSelect,
     modal,
     closeButton,
     iconButton,
@@ -305,6 +427,12 @@ export function initializeMetronome(): void {
   if (bpmDownButton) {
     bpmDownButton.addEventListener("click", () => {
       updateBpm((uiState.metronome?.bpm ?? 120) - BPM_STEP);
+    });
+  }
+
+  if (soundSelect) {
+    soundSelect.addEventListener("change", () => {
+      updateClickType(soundSelect.value);
     });
   }
 

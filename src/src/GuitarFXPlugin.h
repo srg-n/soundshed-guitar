@@ -119,6 +119,20 @@ namespace guitarfx
     };
 
   private:
+    struct MetronomeClickSamples
+    {
+      std::vector<std::vector<iplug::sample>> low;
+      std::vector<std::vector<iplug::sample>> high;
+    };
+
+    struct MetronomeClickTypeConfig
+    {
+      std::string id;
+      std::string label;
+      std::filesystem::path lowPath;
+      std::filesystem::path highPath;
+    };
+
     void InitializeParameters();
     void SendMessageToUI(const std::string& jsonMessage);
     void HandleUIMessage(const std::string &message);
@@ -148,6 +162,10 @@ namespace guitarfx
     void HandleReorderSignalPathNodeRequest(const nlohmann::json &payload);
     void HandleDeleteSignalPathNodeRequest(const nlohmann::json &payload);
     void HandleImportRemoteResourceRequest(const nlohmann::json &payload);
+    void RefreshMetronomeClickSamples();
+    void UpdateMetronomeClickConfigFromSettings();
+    const MetronomeClickTypeConfig* FindMetronomeClickType(const std::string& id) const;
+    std::shared_ptr<MetronomeClickSamples> BuildMetronomeClickSamples(const MetronomeClickTypeConfig& config, double targetSampleRate) const;
     void AppendUserLibraryResource(const LibraryResource& resource);
     void EnsureBasicGraph();
     bool UpdateResourceForNodeType(const std::string& nodeType,
@@ -221,12 +239,20 @@ namespace guitarfx
     nlohmann::json mAppSettings = nlohmann::json::object();
     std::atomic<double> mMetronomeBpm{120.0};
     std::atomic<bool> mMetronomeEnabled{false};
-    std::atomic<double> mMetronomeVolume{0.2};
+    std::atomic<double> mMetronomeVolume{0.25};
+    std::atomic<double> mMetronomeVolumeDb{-12.0};
+    std::atomic<double> mMetronomePan{0.0};
     std::atomic<bool> mMetronomeResetPending{false};
+    std::atomic<std::shared_ptr<MetronomeClickSamples>> mMetronomeClickSamples{nullptr};
+    std::vector<MetronomeClickTypeConfig> mMetronomeClickConfig;
+    std::string mMetronomeClickType{"click"};
     double mMetronomeSamplesUntilClick = 0.0;
     int mMetronomeClickSamplesRemaining = 0;
     double mMetronomeClickPhase = 0.0;
     double mMetronomeClickPhaseIncrement = 0.0;
+    int mMetronomeBeatIndex = 0;
+    int mMetronomeClickSamplePosition = 0;
+    bool mMetronomeClickUseHigh = false;
     double mLastBroadcastTempo = 120.0;
     int mMetronomeUpdateCounter = 0;
     struct PreviewPlaybackBuffer
