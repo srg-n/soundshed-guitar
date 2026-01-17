@@ -151,7 +151,8 @@ body:not(.is-standalone) .main-content .metronome-only {
   letter-spacing: 0.06em;
 }
 
-.metronome-select {
+.metronome-select,
+.themed-select {
   width: 100%;
   padding: 8px 10px;
   border-radius: 8px;
@@ -161,7 +162,41 @@ body:not(.is-standalone) .main-content .metronome-only {
   font-size: 12px;
 }
 
-.metronome-select:disabled {
+.metronome-select:disabled,
+.themed-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.themed-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--border-dark-medium);
+  background: var(--bg-dark-tertiary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.themed-checkbox:checked {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.themed-checkbox:checked::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--bg-dark-primary);
+}
+
+.themed-checkbox:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
