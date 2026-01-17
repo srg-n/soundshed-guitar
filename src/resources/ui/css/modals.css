@@ -75,13 +75,14 @@
 }
 
 .tuner-modal .tuner-content {
-  background: var(--text-primary);
-  border-radius: 12px;
-  width: 520px;
+  background: var(--bg-dark-primary);
+  border-radius: 16px;
+  width: 560px;
   max-width: 95vw;
   padding: 0;
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border-dark-light);
+  box-shadow: var(--shadow-xl);
 }
 
 .tuner-header {
@@ -89,14 +90,14 @@
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  background: var(--text-dark-primary);
-  border-bottom: 1px solid var(--text-primary);
+  background: var(--bg-dark-secondary);
+  border-bottom: 1px solid var(--border-dark-medium);
 }
 
 .tuner-title {
   font-size: 16px;
   font-weight: 600;
-  color: #e8e8ec;
+  color: var(--text-dark-primary);
 }
 
 .tuner-header-controls {
@@ -108,7 +109,7 @@
 .tuner-mute-btn {
   background: transparent;
   border: none;
-  color: #8a8a90;
+  color: var(--text-dark-muted);
   cursor: pointer;
   padding: 4px;
   display: flex;
@@ -118,7 +119,7 @@
 }
 
 .tuner-mute-btn:hover {
-  color: #e8e8ec;
+  color: var(--text-dark-primary);
 }
 
 .tuner-mute-btn.muted {
@@ -128,7 +129,7 @@
 .tuner-close-btn {
   background: transparent;
   border: none;
-  color: #8a8a90;
+  color: var(--text-dark-muted);
   font-size: 24px;
   cursor: pointer;
   padding: 0 4px;
@@ -137,12 +138,12 @@
 }
 
 .tuner-close-btn:hover {
-  color: #e8e8ec;
+  color: var(--text-dark-primary);
 }
 
 .tuner-display {
   padding: 30px 20px;
-  background: var(--text-primary);
+  background: var(--bg-dark-primary);
 }
 
 .tuner-cents-display {
@@ -155,12 +156,12 @@
 
 .cents-marker {
   font-size: 14px;
-  color: #6a6a70;
+  color: var(--text-dark-muted);
   font-variant-numeric: tabular-nums;
 }
 
 .cents-indicator {
-  color: var(--color-primary);
+  color: var(--color-accent);
   font-size: 18px;
   font-weight: bold;
   animation: pulse 1s ease-in-out infinite;
@@ -173,7 +174,7 @@
 
 .cents-value {
   font-size: 18px;
-  color: #a8a8b0;
+  color: var(--text-dark-secondary);
   font-variant-numeric: tabular-nums;
   min-width: 80px;
   text-align: center;
@@ -194,7 +195,7 @@
   left: 0;
   right: 0;
   height: 2px;
-  background: #5a5a60;
+  background: var(--border-dark-medium);
   transform: translateY(-50%);
 }
 
@@ -203,8 +204,8 @@
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  background: #e05040;
-  border: 3px solid var(--text-dark-primary);
+  background: var(--color-accent);
+  border: 3px solid var(--bg-dark-secondary);
   left: 50%;
   transform: translateX(-50%);
   transition: left 0.15s ease-out, background-color 0.2s;
@@ -221,7 +222,7 @@
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  border: 3px solid #e8e8ec;
+  border: 3px solid var(--border-dark-light);
   background: transparent;
   left: 50%;
   transform: translateX(-50%);
@@ -237,7 +238,7 @@
 
 .adjacent-note {
   font-size: 24px;
-  color: #5a5a60;
+  color: var(--text-dark-muted);
   min-width: 60px;
 }
 
@@ -252,7 +253,7 @@
 .current-note {
   font-size: 72px;
   font-weight: 300;
-  color: #e8e8ec;
+  color: var(--text-dark-primary);
   letter-spacing: -2px;
   text-align: center;
 }
@@ -262,8 +263,8 @@
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  background: var(--text-dark-primary);
-  border-top: 1px solid var(--text-primary);
+  background: var(--bg-dark-secondary);
+  border-top: 1px solid var(--border-dark-medium);
 }
 
 .tuner-control-group {
@@ -274,9 +275,9 @@
 
 .tuner-unit-btn {
   padding: 8px 16px;
-  border: 1px solid #5a5a60;
-  background: transparent;
-  color: #8a8a90;
+  border: 1px solid var(--border-dark-medium);
+  background: var(--bg-dark-tertiary);
+  color: var(--text-dark-secondary);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
@@ -292,13 +293,13 @@
 }
 
 .tuner-unit-btn.active {
-  background: var(--text-primary);
-  color: #e8e8ec;
-  border-color: var(--text-primary);
+  background: var(--text-dark-primary);
+  color: var(--bg-dark-primary);
+  border-color: var(--text-dark-primary);
 }
 
 .tuner-unit-btn:hover:not(.active) {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .tuner-toggle {
@@ -306,7 +307,7 @@
 }
 
 .tuner-toggle-label {
-  color: #a8a8b0;
+  color: var(--text-dark-secondary);
   font-size: 13px;
 }
 
@@ -318,10 +319,10 @@
 .tuner-ref-input {
   width: 70px;
   padding: 6px 8px;
-  border: 1px solid #5a5a60;
+  border: 1px solid var(--border-dark-medium);
   border-radius: 6px 0 0 6px;
-  background: var(--text-primary);
-  color: #e8e8ec;
+  background: var(--bg-dark-tertiary);
+  color: var(--text-dark-primary);
   font-size: 14px;
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -339,10 +340,10 @@
 
 .tuner-ref-btn {
   padding: 2px 8px;
-  border: 1px solid #5a5a60;
+  border: 1px solid var(--border-dark-medium);
   border-left: none;
-  background: var(--text-primary);
-  color: #a8a8b0;
+  background: var(--bg-dark-tertiary);
+  color: var(--text-dark-secondary);
   font-size: 8px;
   cursor: pointer;
   transition: all 0.2s;
@@ -359,15 +360,51 @@
 }
 
 .tuner-ref-btn:hover {
-  background: #5a5a60;
-  color: #e8e8ec;
+  background: var(--bg-dark-secondary);
+  color: var(--text-dark-primary);
 }
 
 .tuner-display.no-signal .tuner-pitch-indicator {
-  background: #5a5a60;
+  background: var(--border-dark-medium);
   opacity: 0.5;
 }
 
 .tuner-display.no-signal .current-note {
-  color: #5a5a60;
+  color: var(--text-dark-muted);
+}
+
+/* Metronome Modal */
+.metronome-modal {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.metronome-modal .metronome-content {
+  width: 760px;
+  max-width: 95vw;
+  padding: 0;
+}
+
+.metronome-modal .metronome-card {
+  margin: 0;
+}
+
+.metronome-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.metronome-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dark-muted);
+  font-size: 22px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.metronome-close-btn:hover {
+  color: var(--text-dark-primary);
 }

@@ -71,6 +71,9 @@ function initializeIconBarTabs(): void {
     btn.addEventListener("click", () => {
       const panelId = (btn as HTMLElement).dataset.panel;
       if (panelId) {
+        if (panelId === "metronome") {
+          return;
+        }
         switchMainPanel(panelId);
       }
     });

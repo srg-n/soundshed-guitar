@@ -7,6 +7,14 @@ const BPM_MIN = 30;
 const BPM_MAX = 300;
 const BPM_STEP = 1;
 
+const metronomeState = {
+  isOpen: false,
+};
+
+let metronomeModal: HTMLElement | null = null;
+let metronomeCloseBtn: HTMLElement | null = null;
+let metronomeIconButton: HTMLButtonElement | null = null;
+
 function clampBpm(value: number): number {
   if (!isFinite(value)) return uiState.metronome?.bpm ?? 120;
   return Math.min(BPM_MAX, Math.max(BPM_MIN, value));
@@ -27,8 +35,11 @@ function getMetronomeElements(): {
   footerBpmInput: HTMLInputElement | null;
   footerBpmSlider: HTMLInputElement | null;
   footerBpmValue: HTMLElement | null;
+  modal: HTMLElement | null;
+  closeButton: HTMLElement | null;
+  iconButton: HTMLButtonElement | null;
 } {
-  const panel = document.getElementById("panel-metronome");
+  const panel = document.getElementById("metronome-modal");
   const footerPanel = document.getElementById("footer-bpm-panel");
   return {
     panel,
@@ -45,6 +56,11 @@ function getMetronomeElements(): {
     footerBpmInput: footerPanel?.querySelector<HTMLInputElement>("#footer-bpm-input") ?? null,
     footerBpmSlider: footerPanel?.querySelector<HTMLInputElement>("#footer-bpm-slider") ?? null,
     footerBpmValue: document.getElementById("footer-bpm-value"),
+    modal: panel,
+    closeButton: document.getElementById("metronome-close-btn"),
+    iconButton: document.querySelector<HTMLButtonElement>(
+      '.icon-bar .icon-btn[data-panel="metronome"]',
+    ),
   };
 }
 
@@ -208,6 +224,21 @@ function updateEnabled(nextEnabled: boolean): void {
   syncMetronomeControls();
 }
 
+function openMetronome(): void {
+  if (!metronomeModal) return;
+  metronomeModal.style.display = "flex";
+  metronomeState.isOpen = true;
+  metronomeIconButton?.classList.add("active");
+  syncMetronomeControls();
+}
+
+function closeMetronome(): void {
+  if (!metronomeModal) return;
+  metronomeModal.style.display = "none";
+  metronomeState.isOpen = false;
+  metronomeIconButton?.classList.remove("active");
+}
+
 export function applyEnvironmentState(environment: EnvironmentState): void {
   uiState.environment = environment;
   applyBodyStandaloneClass();
@@ -237,10 +268,17 @@ export function initializeMetronome(): void {
     footerBpmPanel,
     footerBpmInput,
     footerBpmSlider,
+    modal,
+    closeButton,
+    iconButton,
   } = getMetronomeElements();
   if (!panel) {
     // Still wire footer BPM if panel is not mounted yet
   }
+
+  metronomeModal = modal;
+  metronomeCloseBtn = closeButton;
+  metronomeIconButton = iconButton;
 
   initializeMetronomeKnobs();
 
@@ -277,14 +315,43 @@ export function initializeMetronome(): void {
     });
   }
 
-  if (footerMetronomeButton) {
-    footerMetronomeButton.addEventListener("click", () => {
-      const metronomeTab = document.querySelector<HTMLElement>(
-        '.icon-bar .icon-btn[data-panel="metronome"]',
-      );
-      metronomeTab?.click();
+  if (metronomeIconButton) {
+    metronomeIconButton.addEventListener("click", () => {
+      if (metronomeState.isOpen) {
+        closeMetronome();
+      } else {
+        openMetronome();
+      }
     });
   }
+
+  if (footerMetronomeButton) {
+    footerMetronomeButton.addEventListener("click", () => {
+      if (metronomeState.isOpen) {
+        closeMetronome();
+      } else {
+        openMetronome();
+      }
+    });
+  }
+
+  if (metronomeCloseBtn) {
+    metronomeCloseBtn.addEventListener("click", () => closeMetronome());
+  }
+
+  if (metronomeModal) {
+    metronomeModal.addEventListener("click", (event) => {
+      if (event.target === metronomeModal) {
+        closeMetronome();
+      }
+    });
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && metronomeState.isOpen) {
+      closeMetronome();
+    }
+  });
 
   if (footerBpmButton && footerBpmPanel) {
     const togglePanel = () => {
