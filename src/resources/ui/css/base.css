@@ -18,6 +18,12 @@ body {
   font-size: 12px;
 }
 
+.prevent-select {
+  -webkit-user-select: none; /* Safari */
+  -ms-user-select: none; /* IE 10 and IE 11 */
+  user-select: none; /* Standard syntax */
+}
+
 #app {
   display: flex;
   flex-direction: column;
@@ -558,4 +564,134 @@ body.fx-dragging .signal-connector {
 .clip-on .clip-indicator {
   background: #ff4d4f;
   box-shadow: 0 0 8px rgba(255, 77, 79, 0.8);
+}
+
+/* ===== Modern Scrollbar Styles ===== */
+
+/* Webkit Browsers (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  border: 1px solid var(--border-light);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: 4px;
+  border: 1px solid var(--border-light);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+  border-color: var(--border-medium);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: var(--border-darker);
+}
+
+::-webkit-scrollbar-corner {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+}
+
+/* Firefox */
+* {
+  scrollbar-color: var(--border-medium) var(--bg-secondary);
+}
+
+/* Theme-specific scrollbar variations */
+.theme-light ::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+  border-color: var(--border-light);
+}
+
+.theme-light ::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-color: var(--border-light);
+}
+
+.theme-light ::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+.theme-dark ::-webkit-scrollbar-track {
+  background: var(--bg-dark-secondary);
+  border-color: var(--border-dark-light);
+}
+
+.theme-dark ::-webkit-scrollbar-thumb {
+  background: var(--border-dark-medium);
+  border-color: var(--border-dark-light);
+}
+
+.theme-dark ::-webkit-scrollbar-thumb:hover {
+  background: var(--border-dark-strong);
+}
+
+.theme-dark * {
+  scrollbar-color: var(--border-dark-medium) var(--bg-dark-secondary);
+}
+
+.theme-classic ::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+  border-color: var(--border-light);
+}
+
+.theme-classic ::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-color: var(--border-light);
+}
+
+.theme-classic ::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent);
+}
+
+.theme-gritty ::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-color: var(--border-light);
+}
+
+.theme-gritty ::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-color: var(--border-light);
+}
+
+.theme-gritty ::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent);
+}
+
+/* Special scrollbar for dark panels */
+.dark-panel ::-webkit-scrollbar-track {
+  background: var(--bg-dark-secondary);
+  border-color: var(--border-dark-light);
+}
+
+.dark-panel ::-webkit-scrollbar-thumb {
+  background: var(--border-dark-medium);
+  border-color: var(--border-dark-light);
+}
+
+.dark-panel ::-webkit-scrollbar-thumb:hover {
+  background: var(--border-dark-strong);
+}
+
+.dark-panel * {
+  scrollbar-color: var(--border-dark-medium) var(--bg-dark-secondary);
+}
+
+/* Hide scrollbars when not needed (optional enhancement) */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

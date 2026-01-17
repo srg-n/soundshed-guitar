@@ -15,8 +15,13 @@
   flex: 1;
   overflow-x: auto;
   overflow-y: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: #4a4a58 var(--text-dark-primary);
+  
+  scrollbar-color: var(--border-medium) var(--bg-secondary);
+}
+
+/* Theme-specific scrollbar for signal path */
+.theme-dark .signal-path-scroll {
+  scrollbar-color: var(--border-dark-medium) var(--bg-dark-secondary);
 }
 
 .signal-path-scroll::-webkit-scrollbar {
@@ -24,17 +29,21 @@
 }
 
 .signal-path-scroll::-webkit-scrollbar-track {
-  background: var(--text-dark-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
   border-radius: 3px;
 }
 
 .signal-path-scroll::-webkit-scrollbar-thumb {
-  background: #4a4a58;
+  background: var(--border-medium);
+  border: 1px solid var(--border-light);
   border-radius: 3px;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .signal-path-scroll::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
+  background: var(--border-strong);
+  border-color: var(--border-medium);
 }
 
 .signal-path-nodes {
@@ -1221,20 +1230,33 @@
   flex: 1;
 }
 
+.effect-selection-dropdown {
+  
+  scrollbar-color: var(--border-medium) var(--bg-dark-secondary);
+}
+
+.theme-dark .effect-selection-dropdown {
+  scrollbar-color: var(--border-dark-medium) var(--bg-dark-secondary);
+}
+
 .effect-selection-dropdown::-webkit-scrollbar {
   width: 8px;
 }
 
 .effect-selection-dropdown::-webkit-scrollbar-track {
-  background: #1e1e24;
+  background: var(--bg-dark-secondary);
+  border: 1px solid var(--border-dark-light);
   border-radius: 4px;
 }
 
 .effect-selection-dropdown::-webkit-scrollbar-thumb {
-  background: #4a4a58;
+  background: var(--border-dark-medium);
+  border: 1px solid var(--border-dark-light);
   border-radius: 4px;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .effect-selection-dropdown::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
+  background: var(--border-dark-strong);
+  border-color: var(--border-dark-medium);
 }

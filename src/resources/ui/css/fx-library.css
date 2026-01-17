@@ -86,6 +86,22 @@
   align-content: flex-start;
 }
 
+.fx-selector-categories,
+.fx-selector-effects-list {
+
+  scrollbar-color: var(--border-dark-medium) var(--bg-fx-categories);
+}
+
+.theme-light .fx-selector-categories,
+.theme-light .fx-selector-effects-list {
+  scrollbar-color: var(--border-medium) var(--bg-fx-categories);
+}
+
+.theme-dark .fx-selector-categories,
+.theme-dark .fx-selector-effects-list {
+  scrollbar-color: var(--border-dark-medium) var(--bg-fx-categories);
+}
+
 .fx-selector-categories::-webkit-scrollbar,
 .fx-selector-effects-list::-webkit-scrollbar {
   width: 6px;
@@ -93,13 +109,52 @@
 
 .fx-selector-categories::-webkit-scrollbar-track,
 .fx-selector-effects-list::-webkit-scrollbar-track {
-  background: #1a1a22;
+  background: var(--bg-fx-categories);
+  border: 1px solid var(--border-dark-light);
+  border-radius: 3px;
+}
+
+.theme-light .fx-selector-categories::-webkit-scrollbar-track,
+.theme-light .fx-selector-effects-list::-webkit-scrollbar-track {
+  border-color: var(--border-light);
 }
 
 .fx-selector-categories::-webkit-scrollbar-thumb,
 .fx-selector-effects-list::-webkit-scrollbar-thumb {
-  background: #4a4a58;
+  background: var(--border-dark-medium);
+  border: 1px solid var(--border-dark-light);
   border-radius: 3px;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.theme-light .fx-selector-categories::-webkit-scrollbar-thumb,
+.theme-light .fx-selector-effects-list::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-color: var(--border-light);
+}
+
+.theme-dark .fx-selector-categories::-webkit-scrollbar-thumb,
+.theme-dark .fx-selector-effects-list::-webkit-scrollbar-thumb {
+  background: var(--border-dark-medium);
+  border-color: var(--border-dark-light);
+}
+
+.fx-selector-categories::-webkit-scrollbar-thumb:hover,
+.fx-selector-effects-list::-webkit-scrollbar-thumb:hover {
+  background: var(--border-dark-strong);
+  border-color: var(--border-dark-medium);
+}
+
+.theme-light .fx-selector-categories::-webkit-scrollbar-thumb:hover,
+.theme-light .fx-selector-effects-list::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+  border-color: var(--border-medium);
+}
+
+.theme-dark .fx-selector-categories::-webkit-scrollbar-thumb:hover,
+.theme-dark .fx-selector-effects-list::-webkit-scrollbar-thumb:hover {
+  background: var(--border-dark-strong);
+  border-color: var(--border-dark-medium);
 }
 
 /* FX Category Tab */
