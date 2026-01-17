@@ -404,6 +404,24 @@ export function initializeMetronome(): void {
 
   initializeMetronomeKnobs();
 
+  const clickConfigSetting = uiState.appSettings?.["metronome.clickConfig"];
+  if (Array.isArray(clickConfigSetting)) {
+    const clickConfig = clickConfigSetting.flatMap((entry) => {
+      if (!entry || typeof entry !== "object") return [];
+      const value = entry as { id?: unknown; label?: unknown; lowPath?: unknown; highPath?: unknown };
+      const id = typeof value.id === "string" ? value.id : "";
+      const label = typeof value.label === "string" ? value.label : undefined;
+      const lowPath = typeof value.lowPath === "string" ? value.lowPath : undefined;
+      const highPath = typeof value.highPath === "string" ? value.highPath : undefined;
+      if (!id || (!lowPath && !highPath)) return [];
+      return [{ id, label, lowPath, highPath }];
+    });
+
+    if (clickConfig.length) {
+      setMetronome({ clickConfig });
+    }
+  }
+
   if (bpmInput) {
     bpmInput.addEventListener("change", () => {
       const value = parseFloat(bpmInput.value);

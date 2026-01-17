@@ -11,6 +11,7 @@
 #include <fstream>
 #include <optional>
 #include <sstream>
+#include <system_error>
 #include <vector>
 #include <iostream> // For std::cout
 
@@ -96,6 +97,92 @@ namespace guitarfx
 #else
     constexpr bool kIsStandaloneBuild = false;
 #endif
+
+    bool IsValidResourceRoot(const std::filesystem::path& root)
+    {
+      if (root.empty())
+      {
+        return false;
+      }
+
+      std::error_code ec;
+      if (!std::filesystem::exists(root, ec))
+      {
+        return false;
+      }
+
+      const auto uiIndex = root / "ui" / "index.html";
+      const auto modelsJson = root / "ui" / "data" / "audiofx-models.json";
+      const auto irJson = root / "ui" / "data" / "ir-library.json";
+      const auto ampsDir = root / "amps";
+      const auto irDir = root / "ir";
+
+      const bool hasUi = std::filesystem::exists(uiIndex, ec);
+      const bool hasModels = std::filesystem::exists(modelsJson, ec);
+      const bool hasIrJson = std::filesystem::exists(irJson, ec);
+      const bool hasAmps = std::filesystem::exists(ampsDir, ec);
+      const bool hasIr = std::filesystem::exists(irDir, ec);
+
+      return hasUi || hasModels || hasIrJson || hasAmps || hasIr;
+    }
+
+    std::filesystem::path ResolveDefaultResourceRoot(HMODULE moduleHandle)
+    {
+      std::vector<std::filesystem::path> candidates;
+
+      WDL_String bundlePath;
+      iplug::BundleResourcePath(bundlePath, moduleHandle);
+      if (bundlePath.GetLength() > 0)
+      {
+        const auto root = std::filesystem::path{bundlePath.Get()};
+        candidates.push_back(root);
+        candidates.push_back(root / "resources");
+      }
+
+      WDL_String pluginPath;
+      iplug::PluginPath(pluginPath, moduleHandle);
+      if (pluginPath.GetLength() > 0)
+      {
+        const auto pluginDir = std::filesystem::path{pluginPath.Get()};
+        candidates.push_back(pluginDir / "resources");
+        candidates.push_back(pluginDir / "Resources");
+        candidates.push_back(pluginDir / ".." / "Resources");
+        candidates.push_back(pluginDir / ".." / "resources");
+      }
+
+      if (kIsStandaloneBuild || candidates.empty())
+      {
+        WDL_String hostPath;
+        iplug::HostPath(hostPath, nullptr);
+        if (hostPath.GetLength() > 0)
+        {
+          const auto hostDir = std::filesystem::path{hostPath.Get()};
+          candidates.push_back(hostDir / "resources");
+          candidates.push_back(hostDir / "Resources");
+        }
+      }
+
+      for (const auto& candidate : candidates)
+      {
+        const auto normalized = candidate.lexically_normal();
+        if (IsValidResourceRoot(normalized))
+        {
+          return normalized;
+        }
+      }
+
+      std::error_code ec;
+      for (const auto& candidate : candidates)
+      {
+        if (std::filesystem::exists(candidate, ec))
+        {
+          return candidate.lexically_normal();
+        }
+      }
+
+      return {};
+    }
+
     std::string SanitizeFilename(const std::string &raw)
     {
       std::string result;
@@ -771,15 +858,15 @@ namespace guitarfx
     std::cout << "[Plugin] Constructor called, gHINSTANCE=" << (void*)::gHINSTANCE << std::endl;
 
     // Initialize the resource root early so preset loading can find bundled assets
-    WDL_String bundlePath;
-    iplug::BundleResourcePath(bundlePath, ::gHINSTANCE);
-    if (bundlePath.GetLength() == 0)
+    mResourceRoot = ResolveDefaultResourceRoot(::gHINSTANCE);
+    if (mResourceRoot.empty())
     {
-      iplug::HostPath(bundlePath, nullptr);
-      bundlePath.Append("resources\\");
+      std::cerr << "[Plugin] Resource root could not be resolved; built-in presets may not load." << std::endl;
     }
-    mResourceRoot = std::filesystem::path{bundlePath.Get()};
-    std::cout << "[Plugin] Resource root set to: " << mResourceRoot.generic_string() << std::endl;
+    else
+    {
+      std::cout << "[Plugin] Resource root set to: " << mResourceRoot.generic_string() << std::endl;
+    }
 
     // Load resource libraries (NAM models, IRs) from JSON files
     LoadResourceLibraries();

@@ -139,6 +139,8 @@ add_custom_command(TARGET GuitarFX_VST3 POST_BUILD
     -D SOURCE_DLL="$<TARGET_FILE:GuitarFX_VST3>"
     -D DEST_BUNDLE_DIR="${VST3_BUNDLE_DIR}"
     -D RESOURCE_UI_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../resources/ui"
+    -D RESOURCE_AMPS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../resources/amps"
+    -D RESOURCE_IR_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../resources/ir"
     -P "${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake/CopyVst3Bundle.cmake"
   COMMENT "Updating VST3 bundle structure"
 )
