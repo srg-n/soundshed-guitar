@@ -147,6 +147,10 @@ namespace guitarfx
       item["filePath"] = resource.filePath.string();
       item["hash"] = resource.hash;
       item["tags"] = resource.tags;
+      if (!resource.metadata.empty())
+      {
+        item["metadata"] = resource.metadata;
+      }
       json.push_back(item);
     }
 
@@ -191,6 +195,26 @@ namespace guitarfx
           for (const auto& tag : item["tags"])
           {
             resource.tags.push_back(tag.get<std::string>());
+          }
+        }
+
+        if (item.contains("metadata") && item["metadata"].is_object())
+        {
+          for (const auto& entry : item["metadata"].items())
+          {
+            const auto& value = entry.value();
+            if (value.is_string())
+            {
+              resource.metadata[entry.key()] = value.get<std::string>();
+            }
+            else if (value.is_number())
+            {
+              resource.metadata[entry.key()] = value.dump();
+            }
+            else if (value.is_boolean())
+            {
+              resource.metadata[entry.key()] = value.get<bool>() ? "true" : "false";
+            }
           }
         }
 

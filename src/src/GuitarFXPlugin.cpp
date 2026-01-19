@@ -183,15 +183,49 @@ namespace guitarfx
       return {};
     }
 
-    std::string SanitizeFilename(const std::string &raw)
+    std::string ToUpperAscii(std::string value)
+    {
+      for (char& c : value)
+      {
+        c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+      }
+      return value;
+    }
+
+    bool IsWindowsReservedName(const std::string& name)
+    {
+      if (name.empty())
+      {
+        return false;
+      }
+
+      const auto dotPos = name.find('.');
+      const std::string base = dotPos == std::string::npos ? name : name.substr(0, dotPos);
+      const std::string upper = ToUpperAscii(base);
+      static const std::array<const char*, 22> kReserved = {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+      };
+
+      return std::any_of(kReserved.begin(), kReserved.end(), [&](const char* reserved) {
+        return upper == reserved;
+      });
+    }
+
+    std::string SanitizePathSegment(const std::string& raw, bool allowDots)
     {
       std::string result;
       result.reserve(raw.size());
       for (unsigned char c : raw)
       {
-        if (std::isalnum(c) || c == '-' || c == '_' || c == '.')
+        if (std::isalnum(c) || c == '-' || c == '_')
         {
           result.push_back(static_cast<char>(c));
+        }
+        else if (allowDots && c == '.')
+        {
+          result.push_back('.');
         }
         else if (std::isspace(c))
         {
@@ -199,12 +233,66 @@ namespace guitarfx
         }
       }
 
-      if (result.empty())
+      while (!result.empty() && result.front() == '.')
       {
-        return "resource";
+        result.erase(result.begin());
+      }
+      while (!result.empty() && result.back() == '.')
+      {
+        result.pop_back();
+      }
+
+      if (result.empty() || result == "." || result == "..")
+      {
+        result = "resource";
+      }
+
+      if (IsWindowsReservedName(result))
+      {
+        result = "_" + result;
       }
 
       return result;
+    }
+
+    std::filesystem::path SanitizeSubfolderPath(const std::string& raw)
+    {
+      std::filesystem::path result;
+      std::string segment;
+      segment.reserve(raw.size());
+
+      auto pushSegment = [&]() {
+        if (segment.empty())
+        {
+          return;
+        }
+        std::string sanitized = SanitizePathSegment(segment, true);
+        if (!sanitized.empty() && sanitized != "." && sanitized != "..")
+        {
+          result /= sanitized;
+        }
+        segment.clear();
+      };
+
+      for (char c : raw)
+      {
+        if (c == '/' || c == '\\')
+        {
+          pushSegment();
+        }
+        else
+        {
+          segment.push_back(c);
+        }
+      }
+      pushSegment();
+
+      return result;
+    }
+
+    std::string SanitizeFilename(const std::string &raw)
+    {
+      return SanitizePathSegment(raw, true);
     }
 
     bool IsEqNode(const GraphNode& node)
@@ -2626,6 +2714,10 @@ namespace guitarfx
       resJson["category"] = res.category;
       resJson["description"] = res.description;
       resJson["filePath"] = res.filePath.generic_string();
+      if (!res.metadata.empty())
+      {
+        resJson["metadata"] = res.metadata;
+      }
       resourceLibraryJson[res.type].push_back(std::move(resJson));
     }
     message["resourceLibrary"] = std::move(resourceLibraryJson);
@@ -4021,6 +4113,10 @@ namespace guitarfx
         item["filePath"] = resource.filePath.string();
         item["hash"] = resource.hash;
         item["tags"] = resource.tags;
+        if (!resource.metadata.empty())
+        {
+          item["metadata"] = resource.metadata;
+        }
         entries.push_back(std::move(item));
       }
 
@@ -4047,6 +4143,7 @@ namespace guitarfx
     const std::string subfolder = payload.value("subfolder", "");
     const std::string data = payload.value("data", "");
     const std::string fileName = payload.value("fileName", "");
+    const nlohmann::json metadataPayload = payload.value("metadata", nlohmann::json::object());
 
     if (resourceType.empty() || resourceId.empty() || data.empty())
     {
@@ -4056,10 +4153,12 @@ namespace guitarfx
     }
 
     const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
-    auto targetDir = settingsDir / "resources" / provider;
-    if (!subfolder.empty())
+    const auto sanitizedProvider = SanitizePathSegment(provider, true);
+    auto targetDir = settingsDir / "resources" / sanitizedProvider;
+    const auto sanitizedSubfolder = SanitizeSubfolderPath(subfolder);
+    if (!sanitizedSubfolder.empty())
     {
-      targetDir /= subfolder;
+      targetDir /= sanitizedSubfolder;
     }
     (void)mFileSystem.EnsureDirectory(targetDir);
 
@@ -4092,6 +4191,25 @@ namespace guitarfx
     resource.category = category;
     resource.description = description;
     resource.filePath = targetPath;
+    if (metadataPayload.is_object())
+    {
+      for (const auto& entry : metadataPayload.items())
+      {
+        const auto& value = entry.value();
+        if (value.is_string())
+        {
+          resource.metadata[entry.key()] = value.get<std::string>();
+        }
+        else if (value.is_number())
+        {
+          resource.metadata[entry.key()] = value.dump();
+        }
+        else if (value.is_boolean())
+        {
+          resource.metadata[entry.key()] = value.get<bool>() ? "true" : "false";
+        }
+      }
+    }
 
     mResourceLibrary.AddResource(resource);
     AppendUserLibraryResource(resource);

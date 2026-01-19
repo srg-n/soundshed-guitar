@@ -160,6 +160,7 @@ export interface LibraryResource {
   category: string;
   description: string;
   filePath: string;
+  metadata?: Record<string, string>;
 }
 
 export interface ResourceLibrary {

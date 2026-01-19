@@ -33,18 +33,15 @@
         <button class="icon-btn" data-panel="mixer" title="Mixer">
           <svg viewBox="0 0 24 24"><rect x="4" y="4" width="3" height="16" rx="1" fill="currentColor"/><rect x="10.5" y="7" width="3" height="13" rx="1" fill="currentColor"/><rect x="17" y="5" width="3" height="15" rx="1" fill="currentColor"/></svg>
         </button>
-        <button class="icon-btn metronome-only" data-panel="metronome" title="Metronome">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M7 20h10l-2-12H9l-2 12z"/>
-            <path d="M12 4v6"/>
-            <circle cx="12" cy="14" r="1.5" fill="currentColor" stroke="none"/>
-          </svg>
-        </button>
+
         <button class="icon-btn" data-panel="performance" title="Performance">
           <svg viewBox="0 0 24 24"><path d="M12 2v6m0 0l-4 4m4-4l4 4m-4 4v6" stroke="currentColor" stroke-width="2" fill="none"/></svg>
         </button>
-        <button class="icon-btn" data-panel="settings" title="Settings">
-          <svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm8.94 4a7.95 7.95 0 00-.14-1.5l2.12-1.65-2-3.46-2.5 1a7.97 7.97 0 00-2.6-1.5L15.5 2h-4l-.32 2.89a7.97 7.97 0 00-2.6 1.5l-2.5-1-2 3.46 2.12 1.65a7.95 7.95 0 000 3l-2.12 1.65 2 3.46 2.5-1a7.97 7.97 0 002.6 1.5L11.5 22h4l.32-2.89a7.97 7.97 0 002.6-1.5l2.5 1 2-3.46-2.12-1.65c.1-.5.14-1 .14-1.5z" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+        <button class="icon-btn" data-panel="settings" title="Equipment Library">
+          <svg viewBox="0 0 24 24">
+            <path d="M4 6h6v14H4zM14 4h6v16h-6z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+            <path d="M6 10h2M6 13h2M16 9h2M16 12h2M16 15h2" stroke="currentColor" stroke-width="1.5" fill="none"/>
+          </svg>
         </button>
  
       </header>
@@ -648,47 +645,83 @@
 
         <div class="tab-panel" id="panel-settings">
           <div class="panel-content settings-panel">
-            <h2>Settings</h2>
-            <div class="settings-section">
-              <h3>Tone3000 API</h3>
-              <div class="settings-row">
-                <label for="tone3000-api-key-input">API Key</label>
-                <input type="password" id="tone3000-api-key-input" placeholder="Enter your Tone3000 API key" />
-                <button id="tone3000-api-key-save">Save</button>
-                <button id="tone3000-api-key-clear" class="secondary">Clear</button>
-              </div>
-              <div class="settings-hint" id="tone3000-session-status">Session not started.</div>
+            <h2>Equipment Library</h2>
+            <div class="equipment-tabs">
+              <button class="equipment-tab-btn active" data-equipment-tab="tone3000">Tone 3000</button>
+              <button class="equipment-tab-btn" data-equipment-tab="library">Library</button>
             </div>
-            <div class="settings-section">
-              <h3>Tone3000 Browser</h3>
-              <div class="tone3000-search">
-                <input type="text" id="tone3000-search-input" placeholder="Search tones..." />
-                <button id="tone3000-search-button">Search</button>
-              </div>
-              <div class="tone3000-browser">
-                <div class="tone3000-categories" id="tone3000-category-list">
-                  <!-- Category buttons rendered by JS -->
+
+            <div class="equipment-tab-panel active" id="equipment-tab-tone3000">
+              <div class="settings-section">
+                <h3>Tone3000 API</h3>
+                <div class="settings-row">
+                  <label for="tone3000-api-key-input">API Key</label>
+                  <input type="password" id="tone3000-api-key-input" placeholder="Enter your Tone3000 API key" />
+                  <button id="tone3000-api-key-save">Save</button>
+                  <button id="tone3000-api-key-clear" class="secondary">Clear</button>
                 </div>
-                <div class="tone3000-results" id="tone3000-results">
-                  <!-- Search results rendered by JS -->
+                <div class="settings-hint" id="tone3000-session-status">Session not started.</div>
+              </div>
+              <div class="settings-section">
+                <h3>Tone3000 Browser</h3>
+                <div class="tone3000-search">
+                  <input type="text" id="tone3000-search-input" placeholder="Search tones..." />
+                  <button id="tone3000-search-button">Search</button>
+                </div>
+                <div class="tone3000-browser">
+                  <div class="tone3000-categories" id="tone3000-category-list">
+                    <!-- Category buttons rendered by JS -->
+                  </div>
+                  <div class="tone3000-results" id="tone3000-results">
+                    <!-- Search results rendered by JS -->
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div class="settings-section">
-              <h3>IR Quality</h3>
-              <div class="ir-quality-section">
-                <div class="ir-quality-header">
-                  <span class="ir-quality-label">IR QUALITY</span>
-                  <select id="ir-quality-select" class="ir-quality-select">
-                    <option value="0">Economy</option>
-                    <option value="1" selected>Standard</option>
-                    <option value="2">High</option>
-                    <option value="3">Full</option>
+            <div class="equipment-tab-panel" id="equipment-tab-library">
+              <div class="settings-section">
+                <h3>Resource Library</h3>
+                <div class="equipment-library-filters">
+                  <input type="text" id="equipment-library-search" placeholder="Search models and IRs..." />
+                  <select id="equipment-library-type">
+                    <option value="all">All Types</option>
+                    <option value="nam">Amp Models</option>
+                    <option value="ir">Cab IRs</option>
+                  </select>
+                  <select id="equipment-library-source">
+                    <option value="all">All Sources</option>
+                    <option value="built-in">Built-in</option>
+                    <option value="imported">Imported</option>
+                  </select>
+                  <select id="equipment-library-view">
+                    <option value="list">List View</option>
+                    <option value="grouped">Group by Tone</option>
+                  </select>
+                  <select id="equipment-library-category">
+                    <option value="all">All Categories</option>
                   </select>
                 </div>
-                <div class="ir-quality-info">
-                  <span id="ir-quality-samples">~2048 samples</span>
+                <div class="equipment-library-summary" id="equipment-library-summary"></div>
+                <div class="equipment-library-results" id="equipment-library-results">
+                  <!-- Library results rendered by JS -->
+                </div>
+              </div>
+              <div class="settings-section">
+                <h3>IR Quality</h3>
+                <div class="ir-quality-section">
+                  <div class="ir-quality-header">
+                    <span class="ir-quality-label">IR QUALITY</span>
+                    <select id="ir-quality-select" class="ir-quality-select">
+                      <option value="0">Economy</option>
+                      <option value="1" selected>Standard</option>
+                      <option value="2">High</option>
+                      <option value="3">Full</option>
+                    </select>
+                  </div>
+                  <div class="ir-quality-info">
+                    <span id="ir-quality-samples">~2048 samples</span>
+                  </div>
                 </div>
               </div>
             </div>

@@ -22,13 +22,13 @@ std::filesystem::path FileSystem::ResolveSettingsDirectory() const
   const char* appData = std::getenv("APPDATA");
   if (appData)
   {
-    return std::filesystem::path{appData} / "GuitarFX";
+    return std::filesystem::path{appData} / "SoundshedGuitar";
   }
 #else
   const char* home = std::getenv("HOME");
   if (home)
   {
-    return std::filesystem::path{home} / ".config" / "GuitarFX";
+    return std::filesystem::path{home} / ".config" / "SoundshedGuitar";
   }
 #endif
   return std::filesystem::path{"settings"};

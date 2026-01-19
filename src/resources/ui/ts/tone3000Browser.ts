@@ -16,6 +16,7 @@ const searchButtonEl = document.getElementById("tone3000-search-button");
 interface Tone3000Tone {
   id: string;
   title: string;
+  name?: string;
   description?: string;
   gear?: string;
   platform?: string;
@@ -244,7 +245,10 @@ async function importToneModels(button: HTMLButtonElement, tone: Tone3000Tone): 
     }
 
     const resourceType = (tone.platform ?? "nam").toLowerCase() === "ir" ? "ir" : "nam";
-    const subfolder = `${tone.gear ?? "other"}`.replace(/[^a-z0-9-_]+/gi, "-");
+    const gearFolder = sanitizeFilename(tone.gear ?? "other");
+    const toneLabel = tone.title ?? tone.name ?? "tone";
+    const toneFolder = sanitizeFilename(toneLabel);
+    const subfolder = `${gearFolder}/${toneFolder}`;
 
     for (const model of models) {
       const modelResponse = await fetch(model.model_url, {
@@ -259,7 +263,7 @@ async function importToneModels(button: HTMLButtonElement, tone: Tone3000Tone): 
 
       const buffer = await modelResponse.arrayBuffer();
       const contentType = modelResponse.headers.get("content-type") ?? "";
-      const fileNameHint = sanitizeFilename(`${tone.title}-${model.name}`);
+      const fileNameHint = sanitizeFilename(model.name ?? toneLabel ?? "model");
 
       if (contentType.includes("zip") || model.model_url.toLowerCase().endsWith(".zip")) {
         await importZipBuffer(buffer, {
@@ -283,6 +287,15 @@ async function importToneModels(button: HTMLButtonElement, tone: Tone3000Tone): 
           category: tone.gear ?? "",
           subfolder,
           fileName,
+          metadata: {
+            provider: "tone3000",
+            toneId: String(tone.id),
+            toneTitle: tone.title ?? tone.name ??"",
+            gear: tone.gear ?? "",
+            platform: tone.platform ?? "",
+            modelId: String(model.id),
+            modelName: model.name ?? "",
+          },
           data,
         });
       }
@@ -336,6 +349,18 @@ async function importZipBuffer(
       category: tone.gear ?? "",
       subfolder: options.subfolder,
       fileName,
+      metadata: {
+        provider: "tone3000",
+        toneId: String(tone.id),
+        toneTitle: tone.title ?? "",
+        groupId: String(tone.id),
+        groupName: tone.title ?? tone.name ?? "",
+        gear: tone.gear ?? "",
+        platform: tone.platform ?? "",
+        modelId: String(options.modelId),
+        modelName: options.nameHint ?? "",
+        entryName: entry.name,
+      },
       data,
     });
 

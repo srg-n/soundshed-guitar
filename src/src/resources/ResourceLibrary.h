@@ -24,6 +24,7 @@ namespace guitarfx
     std::filesystem::path filePath; // Actual file location
     std::string hash;        // SHA-256 for verification
     std::vector<std::string> tags; // Searchable tags
+    std::map<std::string, std::string> metadata; // Arbitrary metadata (provider, gear, etc.)
   };
 
   /**

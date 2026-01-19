@@ -6,6 +6,45 @@
   gap: 20px;
 }
 
+.equipment-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.equipment-tab-btn {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-dark);
+  background: var(--overlay-light);
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.equipment-tab-btn.active {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: transparent;
+}
+
+.equipment-tab-btn:hover {
+  transform: translateY(-1px);
+}
+
+.equipment-tab-panel {
+  display: none;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.equipment-tab-panel.active {
+  display: flex;
+}
+
 .settings-section {
   background: var(--overlay-light);
   border: 1px solid var(--border-dark);
@@ -70,6 +109,79 @@
   margin-top: 8px;
   font-size: 11px;
   color: var(--text-tertiary);
+}
+
+.equipment-library-filters {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) 140px 140px 160px 180px;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.equipment-library-filters input,
+.equipment-library-filters select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-dark);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.equipment-library-summary {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-bottom: 10px;
+}
+
+.equipment-library-results {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.equipment-library-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--overlay-light);
+  border: 1px solid var(--border-dark);
+}
+
+.equipment-library-item-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.equipment-library-item-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.equipment-library-item-meta {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.equipment-library-empty {
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--overlay-light);
+  border: 1px dashed var(--border-dark);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  text-align: center;
 }
 
 /* ===== Tone3000 Browser ===== */
