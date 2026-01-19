@@ -51,3 +51,5 @@ src/resources/ir/
 Testing/Temporary/
 
 .cache/
+
+installer/dist/
