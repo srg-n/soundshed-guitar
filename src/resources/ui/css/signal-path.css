@@ -904,6 +904,33 @@
   align-items: flex-start;
 }
 
+.eq-visualizer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid #4a4a58;
+  border-radius: 6px;
+}
+
+.eq-visualizer-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #9aa0b5;
+}
+
+.eq-curve-canvas {
+  width: 100%;
+  height: 140px;
+  border-radius: 4px;
+  background: rgba(16, 18, 24, 0.8);
+}
+
 .node-actions {
   display: flex;
   gap: 8px;
@@ -981,6 +1008,28 @@
 .node-param-knob {
   width: 40px;
   height: 40px;
+  background: linear-gradient(135deg, #505060, #38384a);
+  border-radius: 50%;
+  position: relative;
+  cursor: pointer;
+  border: 2px solid #606078;
+  box-shadow: 0 2px 6px var(--overlay-darker);
+}
+
+.node-param-knob .knob-indicator {
+  width: 2px;
+  height: 14px;
+  background: #50b878;
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  transform-origin: bottom center;
+  transform: translateX(-50%);
+  border-radius: 1px;
+}
+
+.node-param-knob:hover {
+  border-color: #50b878;
 }
 
 .node-param-value {
