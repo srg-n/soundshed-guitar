@@ -115,10 +115,6 @@ namespace guitarfx
       kParamDoublerEnabled,
       kParamDoublerDelay,
       kParamTranspose,
-      kParamSimpleCabEnabled,
-      kParamSimpleCabBass,
-      kParamSimpleCabPresence,
-      kParamSimpleCabBrightness,
       kParamIRQuality,  // IR quality mode (Economy/Standard/High/Full)
       // Parametric EQ parameters
       kParamEQEnabled,
@@ -132,16 +128,6 @@ namespace guitarfx
       kParamEQHighMidQ,
       kParamEQHighGain,
       kParamEQHighFreq,
-      // Delay effect parameters
-      kParamDelayEnabled,
-      kParamDelayTime,
-      kParamDelayFeedback,
-      kParamDelayMix,
-      // Reverb effect parameters
-      kParamReverbEnabled,
-      kParamReverbDecay,
-      kParamReverbDamping,
-      kParamReverbMix,
       kParamCount
     };
 

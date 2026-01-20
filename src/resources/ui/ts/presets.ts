@@ -616,7 +616,7 @@ async function exportCurrentPresetArchive(): Promise<void> {
   const data = arrayBufferToBase64(buffer);
   postMessage({
     type: "savePresetArchive",
-    fileName: `${sanitizeFilename(preset.name || preset.id || "preset")}.presetz`,
+    fileName: `${sanitizeFilename(preset.name || preset.id || "preset")}.soundshed.zip`,
     data,
   });
 }

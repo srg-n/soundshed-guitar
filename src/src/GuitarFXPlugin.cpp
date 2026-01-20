@@ -593,14 +593,6 @@ namespace guitarfx
         return "doubler_delay";
       case GuitarFXPlugin::kParamTranspose:
         return "transpose";
-      case GuitarFXPlugin::kParamSimpleCabEnabled:
-        return "simplecab_enabled";
-      case GuitarFXPlugin::kParamSimpleCabBass:
-        return "simplecab_bass";
-      case GuitarFXPlugin::kParamSimpleCabPresence:
-        return "simplecab_presence";
-      case GuitarFXPlugin::kParamSimpleCabBrightness:
-        return "simplecab_brightness";
       case GuitarFXPlugin::kParamIRQuality:
         return "ir_quality";
       case GuitarFXPlugin::kParamEQEnabled:
@@ -625,24 +617,6 @@ namespace guitarfx
         return "eq_high_gain";
       case GuitarFXPlugin::kParamEQHighFreq:
         return "eq_high_freq";
-      // Delay effect
-      case GuitarFXPlugin::kParamDelayEnabled:
-        return "delay_enabled";
-      case GuitarFXPlugin::kParamDelayTime:
-        return "delay_time";
-      case GuitarFXPlugin::kParamDelayFeedback:
-        return "delay_feedback";
-      case GuitarFXPlugin::kParamDelayMix:
-        return "delay_mix";
-      // Reverb effect
-      case GuitarFXPlugin::kParamReverbEnabled:
-        return "reverb_enabled";
-      case GuitarFXPlugin::kParamReverbDecay:
-        return "reverb_decay";
-      case GuitarFXPlugin::kParamReverbDamping:
-        return "reverb_damping";
-      case GuitarFXPlugin::kParamReverbMix:
-        return "reverb_mix";
       default:
         return "";
       }
@@ -689,22 +663,6 @@ namespace guitarfx
       if (key == "transpose")
       {
         return GuitarFXPlugin::kParamTranspose;
-      }
-      if (key == "simplecab_enabled")
-      {
-        return GuitarFXPlugin::kParamSimpleCabEnabled;
-      }
-      if (key == "simplecab_bass")
-      {
-        return GuitarFXPlugin::kParamSimpleCabBass;
-      }
-      if (key == "simplecab_presence")
-      {
-        return GuitarFXPlugin::kParamSimpleCabPresence;
-      }
-      if (key == "simplecab_brightness")
-      {
-        return GuitarFXPlugin::kParamSimpleCabBrightness;
       }
       if (key == "ir_quality")
       {
@@ -753,40 +711,6 @@ namespace guitarfx
       if (key == "eq_high_freq")
       {
         return GuitarFXPlugin::kParamEQHighFreq;
-      }
-      // Delay effect
-      if (key == "delay_enabled")
-      {
-        return GuitarFXPlugin::kParamDelayEnabled;
-      }
-      if (key == "delay_time")
-      {
-        return GuitarFXPlugin::kParamDelayTime;
-      }
-      if (key == "delay_feedback")
-      {
-        return GuitarFXPlugin::kParamDelayFeedback;
-      }
-      if (key == "delay_mix")
-      {
-        return GuitarFXPlugin::kParamDelayMix;
-      }
-      // Reverb effect
-      if (key == "reverb_enabled")
-      {
-        return GuitarFXPlugin::kParamReverbEnabled;
-      }
-      if (key == "reverb_decay")
-      {
-        return GuitarFXPlugin::kParamReverbDecay;
-      }
-      if (key == "reverb_damping")
-      {
-        return GuitarFXPlugin::kParamReverbDamping;
-      }
-      if (key == "reverb_mix")
-      {
-        return GuitarFXPlugin::kParamReverbMix;
       }
       return std::nullopt;
     }
@@ -2194,18 +2118,6 @@ namespace guitarfx
     case kParamTranspose:
       mPresetMixer.SetTranspose(static_cast<int>(std::round(param->Value())));
       break;
-    case kParamSimpleCabEnabled:
-      mPresetMixer.SetSimpleCabEnabled(param->Bool());
-      break;
-    case kParamSimpleCabBass:
-      mPresetMixer.SetSimpleCabBass(param->Value());
-      break;
-    case kParamSimpleCabPresence:
-      mPresetMixer.SetSimpleCabPresence(param->Value());
-      break;
-    case kParamSimpleCabBrightness:
-      mPresetMixer.SetSimpleCabBrightness(param->Value());
-      break;
     case kParamIRQuality:
       mPresetMixer.SetIRQuality(param->Value());
       break;
@@ -2320,33 +2232,6 @@ namespace guitarfx
         }
       }
       break;
-    // Delay effect
-    case kParamDelayEnabled:
-      mPresetMixer.SetDelayEnabled(param->Bool());
-      break;
-    case kParamDelayTime:
-      mPresetMixer.SetDelayTime(param->Value());
-      break;
-    case kParamDelayFeedback:
-      mPresetMixer.SetDelayFeedback(param->Value() / 100.0);
-      break;
-    case kParamDelayMix:
-      mPresetMixer.SetDelayMix(param->Value() / 100.0);
-      break;
-    // Reverb effect
-    case kParamReverbEnabled:
-      mPresetMixer.SetReverbEnabled(param->Bool());
-      break;
-    case kParamReverbDecay:
-      mPresetMixer.SetReverbDecay(param->Value());
-      break;
-    case kParamReverbDamping:
-      mPresetMixer.SetReverbDamping(param->Value());
-      break;
-    case kParamReverbMix:
-      mPresetMixer.SetReverbMix(param->Value() / 100.0);
-      mPresetMixer.SetReverbMix(param->Value() / 100.0);
-      break;
     default:
       break;
     }
@@ -2366,10 +2251,6 @@ namespace guitarfx
     GetParam(kParamDoublerEnabled)->InitBool("Doubler", false);
     GetParam(kParamDoublerDelay)->InitDouble("Doubler Delay", 6.0, 0.5, 50.0, 0.1, "ms");
     GetParam(kParamTranspose)->InitInt("Transpose", 0, -12, 12, "st");
-    GetParam(kParamSimpleCabEnabled)->InitBool("Simple Cab", false);
-    GetParam(kParamSimpleCabBass)->InitDouble("Simple Cab Bass", 0.5, 0.0, 1.0, 0.01);
-    GetParam(kParamSimpleCabPresence)->InitDouble("Simple Cab Presence", 0.5, 0.0, 1.0, 0.01);
-    GetParam(kParamSimpleCabBrightness)->InitDouble("Simple Cab Brightness", 0.5, 0.0, 1.0, 0.01);
     // IR Quality: 0=Economy, 1=Standard, 2=High, 3=Full
     GetParam(kParamIRQuality)->InitEnum("IR Quality", 1, 4, "", iplug::IParam::kFlagsNone,
       "", "Economy", "Standard", "High", "Full");
@@ -2385,18 +2266,6 @@ namespace guitarfx
     GetParam(kParamEQHighMidQ)->InitDouble("EQ High-Mid Q", 1.0, 0.1, 10.0, 0.1);
     GetParam(kParamEQHighGain)->InitDouble("EQ High Gain", 0.0, -12.0, 12.0, 0.1, "dB");
     GetParam(kParamEQHighFreq)->InitDouble("EQ High Freq", 8000.0, 2000.0, 16000.0, 1.0, "Hz");
-
-    // Delay effect parameters
-    GetParam(kParamDelayEnabled)->InitBool("Delay", false);
-    GetParam(kParamDelayTime)->InitDouble("Delay Time", 300.0, 1.0, 2000.0, 1.0, "ms");
-    GetParam(kParamDelayFeedback)->InitDouble("Delay Feedback", 30.0, 0.0, 95.0, 1.0, "%");
-    GetParam(kParamDelayMix)->InitDouble("Delay Mix", 30.0, 0.0, 100.0, 1.0, "%");
-
-    // Reverb effect parameters
-    GetParam(kParamReverbEnabled)->InitBool("Reverb", false);
-    GetParam(kParamReverbDecay)->InitDouble("Reverb Decay", 0.5, 0.1, 0.99, 0.01);
-    GetParam(kParamReverbDamping)->InitDouble("Reverb Damping", 0.5, 0.0, 1.0, 0.01);
-    GetParam(kParamReverbMix)->InitDouble("Reverb Mix", 30.0, 0.0, 100.0, 1.0, "%");
   }
 
   // Send a JSON message to the WebView UI
@@ -3858,60 +3727,6 @@ namespace guitarfx
       else if (paramKey == "highGain" || paramKey == "band3_gain") handled = applyParam(kParamEQHighGain) || handled;
       else if (paramKey == "highFreq" || paramKey == "band3_freq") handled = applyParam(kParamEQHighFreq) || handled;
     }
-    else if (node.type == "delay_digital" || node.type == "delay")
-    {
-      if (paramKey == "time")
-      {
-        auto *param = GetParam(kParamDelayTime);
-        if (param) { param->Set(value); OnParamChange(kParamDelayTime); handled = true; }
-      }
-      else if (paramKey == "feedback")
-      {
-        auto *param = GetParam(kParamDelayFeedback);
-        if (param) { param->Set(value); OnParamChange(kParamDelayFeedback); handled = true; }
-      }
-      else if (paramKey == "mix")
-      {
-        auto *param = GetParam(kParamDelayMix);
-        if (param) { param->Set(value); OnParamChange(kParamDelayMix); handled = true; }
-      }
-    }
-    else if (node.type == "reverb_room" || node.type == "reverb")
-    {
-      if (paramKey == "decay")
-      {
-        auto *param = GetParam(kParamReverbDecay);
-        if (param) { param->Set(value); OnParamChange(kParamReverbDecay); handled = true; }
-      }
-      else if (paramKey == "damping")
-      {
-        auto *param = GetParam(kParamReverbDamping);
-        if (param) { param->Set(value); OnParamChange(kParamReverbDamping); handled = true; }
-      }
-      else if (paramKey == "mix")
-      {
-        auto *param = GetParam(kParamReverbMix);
-        if (param) { param->Set(value); OnParamChange(kParamReverbMix); handled = true; }
-      }
-    }
-    else if (node.type == "cab_simple" || node.type == "simple_cab")
-    {
-      if (paramKey == "bass")
-      {
-        auto *param = GetParam(kParamSimpleCabBass);
-        if (param) { param->Set(value); OnParamChange(kParamSimpleCabBass); handled = true; }
-      }
-      else if (paramKey == "presence")
-      {
-        auto *param = GetParam(kParamSimpleCabPresence);
-        if (param) { param->Set(value); OnParamChange(kParamSimpleCabPresence); handled = true; }
-      }
-      else if (paramKey == "brightness")
-      {
-        auto *param = GetParam(kParamSimpleCabBrightness);
-        if (param) { param->Set(value); OnParamChange(kParamSimpleCabBrightness); handled = true; }
-      }
-    }
 
     if (!handled && !mActivePresetId.empty())
     {
@@ -5183,7 +4998,7 @@ namespace guitarfx
   {
 #ifdef _WIN32
     const std::string dataEncoded = payload.value("data", "");
-    const std::string suggestedName = payload.value("fileName", "preset.presetz");
+    const std::string suggestedName = payload.value("fileName", "preset.soundshed.zip");
     if (dataEncoded.empty())
     {
       SendMessageToUI(nlohmann::json{{"type", "presetExportFailed"}, {"message", "Missing export data"}}.dump());
@@ -5205,7 +5020,7 @@ namespace guitarfx
     OPENFILENAMEW ofn = {0};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = nullptr;
-    ofn.lpstrFilter = L"Preset Archive (*.presetz)\0*.presetz\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFilter = L"Preset Archive (*.soundshed.zip)\0*.soundshed.zip\0All Files (*.*)\0*.*\0";
     ofn.lpstrFile = filePath;
     ofn.nMaxFile = MAX_PATH;
     ofn.lpstrTitle = L"Save Preset Archive";

@@ -111,23 +111,11 @@ namespace guitarfx
     void SetOutputTrim(double dB);
     void SetAmpDrive(double value);
     void SetAmpTone(double value);
-    void SetSimpleCabEnabled(bool enabled);
-    void SetSimpleCabBass(double value);
-    void SetSimpleCabPresence(double value);
-    void SetSimpleCabBrightness(double value);
     void SetIRQuality(double value);
     void SetEQEnabled(bool enabled);
     void SetEQBandGain(int band, double value);
     void SetEQBandFrequency(int band, double value);
     void SetEQBandQ(int band, double value);
-    void SetDelayEnabled(bool enabled);
-    void SetDelayTime(double value);
-    void SetDelayFeedback(double value);
-    void SetDelayMix(double value);
-    void SetReverbEnabled(bool enabled);
-    void SetReverbDecay(double value);
-    void SetReverbDamping(double value);
-    void SetReverbMix(double value);
 
     // Global signal chain configuration
     void SetGlobalChainConfig(const GlobalSignalChainConfig& config);

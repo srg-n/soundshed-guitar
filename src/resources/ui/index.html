@@ -24,9 +24,7 @@
         <button class="icon-btn active" data-panel="amp" title="Amp">
           <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2" stroke="currentColor" stroke-width="2" fill="none"/></svg>
         </button>
-        <button class="icon-btn" data-panel="effects" title="Effects">
-          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
-        </button>
+
         <button class="icon-btn" data-panel="eq" title="EQ">
           <svg viewBox="0 0 24 24"><path d="M4 21v-7M12 21V3M20 21v-11" stroke="currentColor" stroke-width="2" fill="none"/></svg>
         </button>
@@ -329,134 +327,11 @@
               </div>
             </div>
 
-            <!-- Cab Section Icons -->
-            <div class="cab-section">
-              <div class="cab-power-control">
-                <span class="cab-power-label">CAB</span>
-                <div class="power-switch cab-power-switch" id="cab-power-switch">
-                  <div class="power-indicator"></div>
-                </div>
-              </div>
-              <button class="cab-btn" title="Cabinet 1">
-                <div class="cab-icon cab-1x12"></div>
-              </button>
-              <button class="cab-btn active" title="Cabinet 2">
-                <div class="cab-icon cab-2x12"></div>
-              </button>
-              <button class="cab-btn" title="Cabinet 3">
-                <div class="cab-icon cab-4x12"></div>
-              </button>
-            </div>
-
-            <!-- Simple Cab Section -->
-            <div class="simplecab-section">
-              <div class="simplecab-header">
-                <span class="simplecab-label">SIMPLE CAB</span>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="simplecab-toggle" />
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-              <div class="simplecab-controls">
-                <div class="simplecab-knob-control">
-                  <span class="simplecab-knob-label">BASS</span>
-                  <div class="knob simplecab-knob" data-param="simplecab-bass" data-value="0.5">
-                    <div class="knob-indicator"></div>
-                  </div>
-                  <span class="knob-value" id="simplecab-bass-value">50%</span>
-                </div>
-                <div class="simplecab-knob-control">
-                  <span class="simplecab-knob-label">PRESENCE</span>
-                  <div class="knob simplecab-knob" data-param="simplecab-presence" data-value="0.5">
-                    <div class="knob-indicator"></div>
-                  </div>
-                  <span class="knob-value" id="simplecab-presence-value">50%</span>
-                </div>
-                <div class="simplecab-knob-control">
-                  <span class="simplecab-knob-label">BRIGHTNESS</span>
-                  <div class="knob simplecab-knob" data-param="simplecab-brightness" data-value="0.5">
-                    <div class="knob-indicator"></div>
-                  </div>
-                  <span class="knob-value" id="simplecab-brightness-value">50%</span>
-                </div>
-              </div>
-            </div>
+            
           </div>
         </div>
 
-        <!-- Effects Panel -->
-        <div class="tab-panel" id="panel-effects">
-          <div class="panel-content">
-            <!-- Delay Effect -->
-            <div class="effect-section">
-              <div class="effect-header">
-                <span class="effect-label">DELAY</span>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="delay-toggle" />
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-              <div class="effect-controls">
-                <div class="effect-knob-control">
-                  <span class="effect-knob-label">TIME</span>
-                  <div class="effect-knob" data-param="delay_time" data-value="300">
-                    <div class="knob-indicator"></div>
-                  </div>
-                  <span class="knob-value" id="delay-time-value">300 ms</span>
-                </div>
-                <div class="effect-knob-control">
-                  <span class="effect-knob-label">FEEDBACK</span>
-                  <div class="effect-knob" data-param="delay_feedback" data-value="30">
-                    <div class="knob-indicator"></div>
-                  </div>
-                  <span class="knob-value" id="delay-feedback-value">30%</span>
-                </div>
-                <div class="effect-knob-control">
-                  <span class="effect-knob-label">MIX</span>
-                  <div class="effect-knob" data-param="delay_mix" data-value="30">
-                    <div class="knob-indicator"></div>
-                  </div>
-                  <span class="knob-value" id="delay-mix-value">30%</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Reverb Effect -->
-            <div class="effect-section">
-              <div class="effect-header">
-                <span class="effect-label">REVERB</span>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="reverb-toggle" />
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-              <div class="effect-controls">
-                <div class="effect-knob-control">
-                  <span class="effect-knob-label">DECAY</span>
-                  <div class="effect-knob" data-param="reverb_decay" data-value="0.5">
-                    <div class="knob-indicator"></div>
-                  </div>
-                  <span class="knob-value" id="reverb-decay-value">0.50</span>
-                </div>
-                <div class="effect-knob-control">
-                  <span class="effect-knob-label">DAMPING</span>
-                  <div class="effect-knob" data-param="reverb_damping" data-value="0.5">
-                    <div class="knob-indicator"></div>
-                  </div>
-                  <span class="knob-value" id="reverb-damping-value">0.50</span>
-                </div>
-                <div class="effect-knob-control">
-                  <span class="effect-knob-label">MIX</span>
-                  <div class="effect-knob" data-param="reverb_mix" data-value="30">
-                    <div class="knob-indicator"></div>
-                  </div>
-                  <span class="knob-value" id="reverb-mix-value">30%</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
+       
         <!-- EQ Panel -->
         <div class="tab-panel" id="panel-eq">
           <div class="panel-content">
