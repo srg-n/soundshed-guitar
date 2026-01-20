@@ -6,6 +6,7 @@
  */
 
 import { EffectTypeRegistry, type EffectTypeInfo } from "./presetV2.js";
+import { uiState } from "./state.js";
 import { postMessage } from "./bridge.js";
 
 // DOM Elements
@@ -76,9 +77,12 @@ function renderCategories(): void {
   if (!fxSelectorCategories) return;
 
   const allEffects = EffectTypeRegistry.getAll();
+  const blendItems = getBlendFxItems();
   
   const categoriesHtml = FX_CATEGORIES.map((category) => {
     const effects = allEffects.filter((e) => e.category === category.id);
+    const blends = blendItems.filter((b) => b.category === category.id);
+    const totalCount = effects.length + blends.length;
     const activeClass = activeCategory === category.id ? "active" : "";
 
     return `
@@ -87,7 +91,7 @@ function renderCategories(): void {
            style="--category-color: ${category.color}">
         <span class="fx-category-icon">${category.icon}</span>
         <span class="fx-category-name">${category.name}</span>
-        <span class="fx-category-count">${effects.length}</span>
+        <span class="fx-category-count">${totalCount}</span>
       </div>
     `;
   }).join("");
@@ -118,6 +122,7 @@ export function renderEffectsList(): void {
   
   // Get effects for active category
   let effects = allEffects.filter((e) => e.category === activeCategory);
+  let blends = getBlendFxItems().filter((b) => b.category === activeCategory);
   
   // Apply search filter across all categories if searching
   if (searchFilter) {
@@ -126,9 +131,14 @@ export function renderEffectsList(): void {
       e.type.toLowerCase().includes(searchFilter) ||
       e.category.toLowerCase().includes(searchFilter)
     );
+    blends = getBlendFxItems().filter((b) =>
+      b.displayName.toLowerCase().includes(searchFilter) ||
+      b.type.toLowerCase().includes(searchFilter) ||
+      b.category.toLowerCase().includes(searchFilter)
+    );
   }
 
-  if (effects.length === 0) {
+  if (effects.length === 0 && blends.length === 0) {
     fxSelectorEffectsList.innerHTML = `
       <div style="padding: 20px; text-align: center; color: #6a6a80; font-size: 12px;">
         ${searchFilter ? "No effects match your search" : "No effects in this category"}
@@ -144,7 +154,14 @@ export function renderEffectsList(): void {
     return renderFxItem(effect, color);
   }).join("");
 
-  fxSelectorEffectsList.innerHTML = effectsHtml;
+  const blendsHtml = blends.map((blend) => {
+    const color = searchFilter
+      ? FX_CATEGORIES.find((c) => c.id === blend.category)?.color || "#808080"
+      : categoryColor;
+    return renderFxItem(blend, color, blend.blendId, blend.blendCategory);
+  }).join("");
+
+  fxSelectorEffectsList.innerHTML = effectsHtml + blendsHtml;
 
   // Bind drag handlers to FX items
   bindFxItemDragHandlers();
@@ -153,14 +170,20 @@ export function renderEffectsList(): void {
 /**
  * Render a single FX item card.
  */
-function renderFxItem(effect: EffectTypeInfo, categoryColor: string): string {
+function renderFxItem(effect: EffectTypeInfo, categoryColor: string, blendId?: string, blendCategory?: string): string {
   const resourceBadge = effect.requiresResource 
     ? `<span class="fx-item-badge" title="Requires ${effect.resourceType}">📁</span>` 
     : "";
+  const blendBadge = blendId
+    ? `<span class="fx-item-badge" title="Custom blend">🧪</span>`
+    : "";
 
   return `
-    <div class="fx-item" 
-         data-effect-type="${effect.type}" 
+        <div class="fx-item" 
+          data-effect-type="${effect.type}" 
+          data-blend-id="${blendId ?? ""}"
+          data-blend-category="${blendCategory ?? ""}"
+          data-effect-category="${effect.category}"
          draggable="true"
          style="--category-color: ${categoryColor}">
       <div class="fx-item-icon">${getEffectIcon(effect.type)}</div>
@@ -168,7 +191,7 @@ function renderFxItem(effect: EffectTypeInfo, categoryColor: string): string {
         <div class="fx-item-name">${effect.displayName}</div>
         <div class="fx-item-type">${effect.type}</div>
       </div>
-      ${resourceBadge}
+      ${resourceBadge}${blendBadge}
     </div>
   `;
 }
@@ -185,8 +208,14 @@ function bindFxItemDragHandlers(): void {
     
     el.addEventListener("dragstart", (e: DragEvent) => {
       const effectType = el.dataset.effectType;
+      const blendId = el.dataset.blendId;
       if (effectType && e.dataTransfer) {
         e.dataTransfer.setData("application/x-fx-effect", effectType);
+        if (blendId) {
+          e.dataTransfer.setData("application/x-fx-blend", blendId);
+          e.dataTransfer.setData("application/x-fx-blend-name", el.querySelector(".fx-item-name")?.textContent ?? "");
+          e.dataTransfer.setData("application/x-fx-blend-category", el.dataset.blendCategory ?? "");
+        }
         e.dataTransfer.effectAllowed = "copy";
         el.classList.add("dragging");
         
@@ -200,6 +229,38 @@ function bindFxItemDragHandlers(): void {
       document.body.classList.remove("fx-dragging");
     });
   });
+}
+
+type BlendFxItem = EffectTypeInfo & { blendId: string; blendCategory: string };
+
+function getBlendFxItems(): BlendFxItem[] {
+  const blends = uiState.blendLibrary ?? [];
+  const categoryMap: Record<string, string> = {
+    pedal: "utility",
+    preamp: "amp",
+    amp: "amp",
+    "full-rig": "amp",
+    cab: "cab",
+  };
+
+  return blends.map((blend) => {
+    const mappedCategory = categoryMap[blend.category] ?? "amp";
+    return {
+      type: "amp_nam_blend",
+      displayName: blend.name || "Custom Blend",
+      category: mappedCategory,
+      requiresResource: true,
+      resourceType: "nam",
+      parameters: EffectTypeRegistry.get("amp_nam_blend")?.parameters ?? [],
+      blendId: blend.id,
+      blendCategory: blend.category,
+    };
+  });
+}
+
+export function refreshFxSelector(): void {
+  renderCategories();
+  renderEffectsList();
 }
 
 /**
@@ -261,11 +322,18 @@ function getEffectIcon(effectType: string): string {
 /**
  * Send message to add a signal path node at a specific position.
  */
-export function sendAddSignalPathNode(effectType: string, insertAfter: string): void {
+export function sendAddSignalPathNode(
+  effectType: string,
+  insertAfter: string,
+  options?: { config?: Record<string, string>; label?: string; category?: string },
+): void {
   postMessage({
     type: "addSignalPathNode",
     effectType,
     insertAfter,
+    config: options?.config,
+    label: options?.label,
+    category: options?.category,
   });
 }
 
@@ -282,10 +350,17 @@ export interface SignalPathEdgeRef {
  * This is required once the graph supports parallel paths (splitter/mixer),
  * because a node may have multiple outgoing edges.
  */
-export function sendAddSignalPathNodeOnEdge(effectType: string, edge: SignalPathEdgeRef): void {
+export function sendAddSignalPathNodeOnEdge(
+  effectType: string,
+  edge: SignalPathEdgeRef,
+  options?: { config?: Record<string, string>; label?: string; category?: string },
+): void {
   postMessage({
     type: "addSignalPathNode",
     effectType,
     edge,
+    config: options?.config,
+    label: options?.label,
+    category: options?.category,
   });
 }

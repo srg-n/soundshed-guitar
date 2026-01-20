@@ -14,6 +14,10 @@
   z-index: 1000;
 }
 
+#blend-editor-modal {
+  background: rgba(0, 0, 0, 0.75);
+}
+
 .modal-content {
   background: linear-gradient(180deg, #e8ecf4 0%, var(--bg-secondary) 100%);
   border-radius: 12px;
@@ -67,6 +71,161 @@
   padding: 16px 20px;
   background: linear-gradient(180deg, #d8dce4 0%, var(--bg-tertiary) 100%);
   border-top: 1px solid var(--bg-tertiary);
+}
+
+/* Blend Editor Modal */
+.blend-editor-modal {
+  width: 860px;
+  max-width: 98vw;
+  background: var(--bg-dark-primary);
+  border: 1px solid var(--border-dark-light);
+  box-shadow: var(--shadow-xl);
+}
+
+.blend-editor-modal .modal-header {
+  background: var(--bg-dark-secondary);
+  border-bottom: 1px solid var(--border-dark-medium);
+}
+
+.blend-editor-modal .modal-header h3 {
+  color: var(--text-dark-primary);
+}
+
+.blend-editor-modal .modal-close {
+  color: var(--text-dark-muted);
+}
+
+.blend-editor-modal .modal-close:hover {
+  color: var(--text-dark-primary);
+}
+
+.blend-editor-modal .modal-body {
+  background: var(--bg-dark-primary);
+  color: var(--text-dark-secondary);
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.blend-editor-modal .modal-footer {
+  background: var(--bg-dark-secondary);
+  border-top: 1px solid var(--border-dark-medium);
+}
+
+.blend-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.blend-model-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--bg-dark-secondary);
+  border: 1px solid var(--border-dark-medium);
+}
+
+.blend-model-header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.blend-model-header select {
+  flex: 1;
+}
+
+.blend-model-params {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.blend-model-param {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-dark-muted);
+}
+
+.blend-model-row select,
+.blend-model-row input {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-dark-light);
+  background: var(--bg-dark-primary);
+  color: var(--text-dark-primary);
+  font-size: 12px;
+}
+
+.blend-model-row button {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: none;
+  background: var(--bg-dark-tertiary);
+  color: var(--text-dark-primary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.blend-model-row .blend-model-auto {
+  background: #2f3a4f;
+}
+
+.blend-parameter-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.blend-param-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--bg-dark-secondary);
+  border: 1px solid var(--border-dark-medium);
+  color: var(--text-dark-primary);
+  font-size: 11px;
+}
+
+.blend-param-remove {
+  border: none;
+  background: transparent;
+  color: var(--text-dark-muted);
+  cursor: pointer;
+}
+
+.blend-parameter-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.blend-parameter-controls select {
+  flex: 1;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-dark-light);
+  background: var(--bg-dark-primary);
+  color: var(--text-dark-primary);
+  font-size: 12px;
+}
+
+.blend-model-row .blend-model-remove {
+  background: #c84a4a;
+  color: #fff;
+}
+
+.blend-add-model {
+  margin-top: 6px;
 }
 
 /* Tuner Modal */

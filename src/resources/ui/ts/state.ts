@@ -83,6 +83,7 @@ export const uiState: UiState = {
   demoAudioRepeat: false,
   logs: [],
   resourceLibrary: {},
+  blendLibrary: [],
   appSettings: {
     "metronome.clickConfig": [
       {

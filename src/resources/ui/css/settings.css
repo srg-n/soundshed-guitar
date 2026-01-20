@@ -154,6 +154,23 @@
   border: 1px solid var(--border-dark);
 }
 
+.equipment-library-item-actions {
+  display: flex;
+  align-items: center;
+}
+
+.equipment-library-create-blend {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-dark);
+  background: var(--overlay-medium);
+  color: var(--text-primary);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+}
+
 .equipment-library-item-main {
   flex: 1;
   min-width: 0;

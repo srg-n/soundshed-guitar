@@ -169,6 +169,28 @@ export interface ResourceLibrary {
   [key: string]: LibraryResource[] | undefined;
 }
 
+export type BlendMode = "snap" | "interpolate";
+
+export interface BlendModelMapping {
+  id: string;
+  parameterId?: string;
+  parameterValue?: number;
+  parameters?: Record<string, number>;
+}
+
+export interface BlendDefinition {
+  id: string;
+  name: string;
+  category: string;
+  models: string[];
+  blendMode?: BlendMode;
+  controlMap?: Record<string, number>;
+  modelMappings?: BlendModelMapping[];
+  parameters?: string[];
+}
+
+export type BlendLibrary = BlendDefinition[];
+
 export interface MixerPresetState {
   id: string;
   mix: number; // 0..1
@@ -290,6 +312,7 @@ export interface UiState {
   demoAudioRepeat: boolean;
   logs: LogEntry[];
   resourceLibrary: ResourceLibrary;
+  blendLibrary?: BlendLibrary;
   appSettings: AppSettings;
   tone3000Session?: Tone3000Session | null;
   mixer?: MixerState;

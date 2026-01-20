@@ -78,7 +78,9 @@ namespace guitarfx
         json["resource"] = SerializeResourceRef(*node.resource);
       }
 
-      if (!node.resources.empty())
+      const bool isBlendRef = node.type == "amp_nam_blend"
+        && node.config.find("blendId") != node.config.end();
+      if (!node.resources.empty() && !isBlendRef)
       {
         json["resources"] = nlohmann::json::array();
         for (const auto& res : node.resources)

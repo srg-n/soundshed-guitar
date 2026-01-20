@@ -2562,6 +2562,18 @@ namespace guitarfx
     {
       HandleImportRemoteResourceRequest(payload);
     }
+    else if (type == "saveBlendDefinition")
+    {
+      HandleSaveBlendDefinitionRequest(payload);
+    }
+    else if (type == "requestResourceData")
+    {
+      HandleRequestResourceDataRequest(payload);
+    }
+    else if (type == "saveBlendArchive")
+    {
+      HandleSaveBlendArchiveRequest(payload);
+    }
     else if (type == "splitSignalPathEdge")
     {
       HandleSplitSignalPathEdgeRequest(payload);
@@ -2721,6 +2733,10 @@ namespace guitarfx
       resourceLibraryJson[res.type].push_back(std::move(resJson));
     }
     message["resourceLibrary"] = std::move(resourceLibraryJson);
+    if (mBlendLibrary.is_array())
+    {
+      message["blendLibrary"] = mBlendLibrary;
+    }
 
     SendMessageToUI(message.dump());
     mPendingStateBroadcast = false;
@@ -2891,6 +2907,7 @@ namespace guitarfx
 
     Preset presetWithEQ = preset;
     EnsureParametricEQNode(presetWithEQ, *this);
+    ApplyBlendDefinitions(presetWithEQ);
 
     // Preserve global signal chain settings across mixer resets
     const auto globalChainConfig = mPresetMixer.GetGlobalChainConfig();
@@ -2986,6 +3003,133 @@ namespace guitarfx
       applyEqParam(kParamEQHighMidQ, "highMidQ");
       applyEqParam(kParamEQHighGain, "highGain");
       applyEqParam(kParamEQHighFreq, "highFreq");
+    }
+  }
+
+  void GuitarFXPlugin::ApplyBlendDefinitions(Preset& preset)
+  {
+    if (!mBlendLibrary.is_array())
+    {
+      return;
+    }
+
+    auto findBlend = [&](const std::string& id) -> nlohmann::json {
+      for (const auto& blend : mBlendLibrary)
+      {
+        if (blend.is_object() && blend.value("id", "") == id)
+        {
+          return blend;
+        }
+      }
+      return nlohmann::json::object();
+    };
+
+    for (auto& node : preset.graph.nodes)
+    {
+      if (node.type != "amp_nam_blend")
+      {
+        continue;
+      }
+
+      const auto blendIt = node.config.find("blendId");
+      if (blendIt == node.config.end())
+      {
+        continue;
+      }
+
+      const std::string blendId = blendIt->second;
+      if (blendId.empty())
+      {
+        continue;
+      }
+
+      const nlohmann::json blend = findBlend(blendId);
+      if (!blend.is_object())
+      {
+        continue;
+      }
+
+      const auto mappingsJson = blend.value("modelMappings", nlohmann::json::array());
+      const auto modelsJson = blend.value("models", nlohmann::json::array());
+      if ((!mappingsJson.is_array() || mappingsJson.empty()) && (!modelsJson.is_array() || modelsJson.empty()))
+      {
+        continue;
+      }
+
+      node.resources.clear();
+
+      if (mappingsJson.is_array() && !mappingsJson.empty())
+      {
+        const std::size_t count = mappingsJson.size();
+        for (std::size_t i = 0; i < count; ++i)
+        {
+          const auto& mapping = mappingsJson[i];
+          if (!mapping.is_object())
+          {
+            continue;
+          }
+
+          const std::string modelId = mapping.value("id", "");
+          if (modelId.empty())
+          {
+            continue;
+          }
+
+          ResourceRef ref;
+          ref.resourceType = "nam";
+          ref.resourceId = modelId;
+          const std::string parameterId = mapping.value("parameterId", "");
+          if (!parameterId.empty())
+          {
+            ref.parameterId = parameterId;
+          }
+          if (mapping.contains("parameterValue") && mapping["parameterValue"].is_number())
+          {
+            ref.parameterValue = mapping["parameterValue"].get<double>();
+          }
+          else if (count > 1)
+          {
+            ref.parameterValue = static_cast<double>(i) / static_cast<double>(count - 1);
+          }
+          else
+          {
+            ref.parameterValue = 0.0;
+          }
+
+          node.resources.push_back(std::move(ref));
+        }
+      }
+      else if (modelsJson.is_array())
+      {
+        const std::size_t count = modelsJson.size();
+        for (std::size_t i = 0; i < count; ++i)
+        {
+          if (!modelsJson[i].is_string())
+          {
+            continue;
+          }
+
+          ResourceRef ref;
+          ref.resourceType = "nam";
+          ref.resourceId = modelsJson[i].get<std::string>();
+          if (count > 1)
+          {
+            ref.parameterValue = static_cast<double>(i) / static_cast<double>(count - 1);
+          }
+          else
+          {
+            ref.parameterValue = 0.0;
+          }
+          node.resources.push_back(std::move(ref));
+        }
+      }
+
+      const std::string blendMode = blend.value("blendMode", "interpolate");
+      node.config["blendMode"] = blendMode;
+      if (node.label.empty())
+      {
+        node.label = blend.value("name", "");
+      }
     }
   }
 
@@ -4042,6 +4186,28 @@ namespace guitarfx
     return output;
   }
 
+  std::string GuitarFXPlugin::EncodeBase64(const std::vector<std::uint8_t> &data)
+  {
+    static constexpr char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string output;
+    output.reserve(((data.size() + 2) / 3) * 4);
+
+    for (std::size_t i = 0; i < data.size(); i += 3)
+    {
+      const std::uint32_t octetA = data[i];
+      const std::uint32_t octetB = (i + 1) < data.size() ? data[i + 1] : 0;
+      const std::uint32_t octetC = (i + 2) < data.size() ? data[i + 2] : 0;
+      const std::uint32_t triple = (octetA << 16) | (octetB << 8) | octetC;
+
+      output.push_back(alphabet[(triple >> 18) & 0x3F]);
+      output.push_back(alphabet[(triple >> 12) & 0x3F]);
+      output.push_back((i + 1) < data.size() ? alphabet[(triple >> 6) & 0x3F] : '=');
+      output.push_back((i + 2) < data.size() ? alphabet[triple & 0x3F] : '=');
+    }
+
+    return output;
+  }
+
   bool GuitarFXPlugin::WriteFile(const std::filesystem::path &target, const std::vector<std::uint8_t> &data) const
   {
     if (target.empty())
@@ -4222,6 +4388,163 @@ namespace guitarfx
     msg["name"] = name;
     msg["filePath"] = targetPath.string();
     SendMessageToUI(msg.dump());
+  }
+
+  void GuitarFXPlugin::HandleSaveBlendDefinitionRequest(const nlohmann::json &payload)
+  {
+    const nlohmann::json blend = payload.value("blend", nlohmann::json::object());
+    if (!blend.is_object())
+    {
+      ReportErrorToUI("Blend save failed", "Missing blend payload");
+      return;
+    }
+
+    const std::string id = blend.value("id", "");
+    if (id.empty())
+    {
+      ReportErrorToUI("Blend save failed", "Missing blend id");
+      return;
+    }
+
+    const std::string category = blend.value("category", "");
+    const std::array<std::string, 5> allowedCategories = {
+      "pedal", "preamp", "amp", "full-rig", "cab"
+    };
+    if (!category.empty())
+    {
+      const bool isAllowed = std::any_of(allowedCategories.begin(), allowedCategories.end(), [&](const std::string& entry) {
+        return entry == category;
+      });
+      if (!isAllowed)
+      {
+        ReportErrorToUI("Blend save failed", "Invalid category");
+        return;
+      }
+    }
+
+    if (!mBlendLibrary.is_array())
+    {
+      mBlendLibrary = nlohmann::json::array();
+    }
+
+    nlohmann::json updated = nlohmann::json::array();
+    for (const auto& item : mBlendLibrary)
+    {
+      if (item.value("id", "") == id)
+      {
+        continue;
+      }
+      updated.push_back(item);
+    }
+    updated.push_back(blend);
+    mBlendLibrary = std::move(updated);
+
+    SaveBlendLibrary();
+    BroadcastState();
+  }
+
+  void GuitarFXPlugin::HandleRequestResourceDataRequest(const nlohmann::json &payload)
+  {
+    const std::string requestId = payload.value("requestId", "");
+    const std::string resourceType = payload.value("resourceType", "");
+    const std::string resourceId = payload.value("resourceId", "");
+
+    if (requestId.empty() || resourceType.empty() || resourceId.empty())
+    {
+      SendMessageToUI(nlohmann::json{{"type", "resourceDataFailed"}, {"requestId", requestId}, {"message", "Missing resource request info"}}.dump());
+      return;
+    }
+
+    ResourceRef ref;
+    ref.resourceType = resourceType;
+    ref.resourceId = resourceId;
+    const auto resolvedPath = ResolveResourceRef(ref);
+    if (!resolvedPath || resolvedPath->empty())
+    {
+      SendMessageToUI(nlohmann::json{{"type", "resourceDataFailed"}, {"requestId", requestId}, {"message", "Resource not found"}}.dump());
+      return;
+    }
+
+    std::ifstream input(*resolvedPath, std::ios::binary);
+    if (!input)
+    {
+      SendMessageToUI(nlohmann::json{{"type", "resourceDataFailed"}, {"requestId", requestId}, {"message", "Failed to open resource file"}}.dump());
+      return;
+    }
+
+    std::vector<std::uint8_t> data((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+    if (data.empty())
+    {
+      SendMessageToUI(nlohmann::json{{"type", "resourceDataFailed"}, {"requestId", requestId}, {"message", "Resource file empty"}}.dump());
+      return;
+    }
+
+    const std::string encoded = EncodeBase64(data);
+    nlohmann::json response;
+    response["type"] = "resourceData";
+    response["requestId"] = requestId;
+    response["resourceType"] = resourceType;
+    response["resourceId"] = resourceId;
+    response["fileName"] = resolvedPath->filename().string();
+    response["data"] = encoded;
+    SendMessageToUI(response.dump());
+  }
+
+  void GuitarFXPlugin::HandleSaveBlendArchiveRequest(const nlohmann::json &payload)
+  {
+#ifdef _WIN32
+    const std::string dataEncoded = payload.value("data", "");
+    const std::string suggestedName = payload.value("fileName", "blend.namz");
+    if (dataEncoded.empty())
+    {
+      SendMessageToUI(nlohmann::json{{"type", "blendExportFailed"}, {"message", "Missing export data"}}.dump());
+      return;
+    }
+
+    wchar_t filePath[MAX_PATH] = {0};
+    std::wstring defaultName;
+    if (!suggestedName.empty())
+    {
+      defaultName.assign(suggestedName.begin(), suggestedName.end());
+    }
+    if (!defaultName.empty() && defaultName.size() < MAX_PATH)
+    {
+      std::wcsncpy(filePath, defaultName.c_str(), MAX_PATH - 1);
+    }
+
+    OPENFILENAMEW ofn = {0};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = nullptr;
+    ofn.lpstrFilter = L"NAM Blend Archive (*.namz)\0*.namz\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFile = filePath;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrTitle = L"Save Blend Archive";
+    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+    if (!GetSaveFileNameW(&ofn))
+    {
+      SendMessageToUI(nlohmann::json{{"type", "blendExportFailed"}, {"message", "Save cancelled"}}.dump());
+      return;
+    }
+
+    const auto decodedBytes = DecodeBase64(dataEncoded);
+    if (decodedBytes.empty())
+    {
+      SendMessageToUI(nlohmann::json{{"type", "blendExportFailed"}, {"message", "Invalid export data"}}.dump());
+      return;
+    }
+
+    const std::filesystem::path targetPath{filePath};
+    if (!WriteFile(targetPath, decodedBytes))
+    {
+      SendMessageToUI(nlohmann::json{{"type", "blendExportFailed"}, {"message", "Failed to save file"}}.dump());
+      return;
+    }
+
+    SendMessageToUI(nlohmann::json{{"type", "blendExportSaved"}, {"path", targetPath.generic_string()}}.dump());
+#else
+    ReportErrorToUI("Export not supported", "Blend archive export is only available on Windows");
+#endif
   }
 
   bool GuitarFXPlugin::StartSignalPathTest(double frequencyHz, double durationSeconds)
@@ -4691,6 +5014,63 @@ namespace guitarfx
     // Load user resource library entries from settings directory
     const auto userResourcesDir = mFileSystem.ResolveSettingsDirectory() / "resources";
     mResourceLibrary.LoadFromDirectory(userResourcesDir);
+
+    LoadBlendLibrary();
+  }
+
+  void GuitarFXPlugin::LoadBlendLibrary()
+  {
+    mBlendLibrary = nlohmann::json::array();
+    try
+    {
+      const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
+      const auto libraryFile = settingsDir / "resources" / "blend-fx-library.json";
+      if (!std::filesystem::exists(libraryFile))
+      {
+        return;
+      }
+
+      std::ifstream input(libraryFile);
+      if (!input)
+      {
+        return;
+      }
+
+      nlohmann::json parsed;
+      input >> parsed;
+      if (parsed.is_array())
+      {
+        mBlendLibrary = std::move(parsed);
+      }
+    }
+    catch (const std::exception& e)
+    {
+      std::cerr << "[Plugin] Failed to load blend library: " << e.what() << std::endl;
+    }
+  }
+
+  void GuitarFXPlugin::SaveBlendLibrary() const
+  {
+    try
+    {
+      const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
+      const auto libraryDir = settingsDir / "resources";
+      if (!mFileSystem.EnsureDirectory(libraryDir))
+      {
+        return;
+      }
+      const auto libraryFile = libraryDir / "blend-fx-library.json";
+
+      std::ofstream output(libraryFile);
+      if (output)
+      {
+        output << mBlendLibrary.dump(2);
+      }
+    }
+    catch (const std::exception& e)
+    {
+      std::cerr << "[Plugin] Failed to save blend library: " << e.what() << std::endl;
+    }
   }
 
   void GuitarFXPlugin::LoadLastSessionState()
@@ -4738,6 +5118,9 @@ namespace guitarfx
   {
     const std::string effectType = payload.value("effectType", "");
     const std::string insertAfter = payload.value("insertAfter", "");
+    const std::string labelOverride = payload.value("label", "");
+    const std::string categoryOverride = payload.value("category", "");
+    const auto configPayload = payload.value("config", nlohmann::json::object());
 
     std::string edgeFrom;
     std::string edgeTo;
@@ -4898,6 +5281,27 @@ namespace guitarfx
     {
       newNode.category = "utility";
       newNode.label = effectType;
+    }
+
+    if (configPayload.is_object())
+    {
+      for (const auto& entry : configPayload.items())
+      {
+        if (entry.value().is_string())
+        {
+          newNode.config[entry.key()] = entry.value().get<std::string>();
+        }
+      }
+    }
+
+    if (!labelOverride.empty())
+    {
+      newNode.label = labelOverride;
+    }
+
+    if (!categoryOverride.empty())
+    {
+      newNode.category = categoryOverride;
     }
 
     // Preserve edge attributes (important for mixer input gains)
@@ -5121,6 +5525,9 @@ namespace guitarfx
   {
     const std::string nodeId = payload.value("nodeId", "");
     const std::string newEffectType = payload.value("newEffectType", "");
+    const std::string labelOverride = payload.value("label", "");
+    const std::string categoryOverride = payload.value("category", "");
+    const auto configPayload = payload.value("config", nlohmann::json::object());
 
     if (nodeId.empty() || newEffectType.empty())
     {
@@ -5167,11 +5574,34 @@ namespace guitarfx
     node->category = newEffectInfo.category;
     node->params.clear();
     node->resource.reset();
+    node->resources.clear();
+    node->config.clear();
 
     // Set default parameter values for new effect type
     for (const auto& paramDef : newEffectInfo.parameters)
     {
       node->params[paramDef.id] = paramDef.defaultValue;
+    }
+
+    if (configPayload.is_object())
+    {
+      for (const auto& entry : configPayload.items())
+      {
+        if (entry.value().is_string())
+        {
+          node->config[entry.key()] = entry.value().get<std::string>();
+        }
+      }
+    }
+
+    if (!labelOverride.empty())
+    {
+      node->label = labelOverride;
+    }
+
+    if (!categoryOverride.empty())
+    {
+      node->category = categoryOverride;
     }
 
     // Re-serialize and broadcast

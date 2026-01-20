@@ -1,12 +1,18 @@
 import { uiState } from "./state.js";
-import type { Preset, GraphNode, GraphEdge, LibraryResource } from "./types.js";
+import type { Preset, GraphNode, GraphEdge, LibraryResource, BlendModelMapping, BlendLibrary } from "./types.js";
 import { postMessage } from "./bridge.js";
 import { EffectTypeRegistry, type EffectTypeInfo } from "./presetV2.js";
 import { sendAddSignalPathNode, sendAddSignalPathNodeOnEdge, type SignalPathEdgeRef } from "./fxSelector.js";
 import { GenericKnob } from "./controls.js";
+import { buildBlendModelMappingsFromIds } from "./blendUtils.js";
+import { BlendEditorModal } from "./blendEditor.js";
 
 const signalPathNodesElement = document.getElementById("signal-path-nodes");
 const nodeParamsPanelElement = document.getElementById("node-params-panel");
+const blendEditorModal = new BlendEditorModal({
+  getBlendLibrary: () => uiState.blendLibrary ?? ([] as BlendLibrary),
+  getResourceLibrary: () => uiState.resourceLibrary,
+});
 
 // Drag-drop state
 let draggedNodeId: string | null = null;
@@ -70,6 +76,9 @@ function getCategoryClass(category: string): string {
   const categoryMap: Record<string, string> = {
     "dynamics": "dynamics",
     "amp": "amp",
+    "pedal": "amp",
+    "preamp": "amp",
+    "full-rig": "amp",
     "cab": "cab",
     "eq": "eq",
     "modulation": "modulation",
@@ -78,6 +87,57 @@ function getCategoryClass(category: string): string {
     "utility": "utility",
   };
   return categoryMap[category] || "utility";
+}
+
+function getResourceBaseName(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, "/");
+  return normalized.split("/").pop() || filePath;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function getLibraryResource(resourceType: string | undefined, resourceId: string): LibraryResource | undefined {
+  if (!resourceType || !resourceId) return undefined;
+  const resources = uiState.resourceLibrary[resourceType] || [];
+  return resources.find((res) => res.id === resourceId);
+}
+
+function getLibraryResourceName(resourceType: string | undefined, resourceId: string): string {
+  const match = getLibraryResource(resourceType, resourceId);
+  return match?.name?.trim() ?? "";
+}
+
+function getNodeResourceDisplayName(node: GraphNode, index = 0): string {
+  const typeInfo = EffectTypeRegistry.get(node.type);
+  const resourceType = typeInfo?.resourceType;
+  const resource = getNodeResourceAtIndex(node, index);
+
+  if (resource.filePath) {
+    return getResourceBaseName(resource.filePath);
+  }
+
+  const libraryName = getLibraryResourceName(resourceType, resource.id);
+  return libraryName || resource.id;
+}
+
+function getNodeResourceSummary(node: GraphNode): string {
+  const anyNode = node as unknown as { resources?: unknown };
+  if (Array.isArray(anyNode.resources)) {
+    const names = anyNode.resources
+      .map((_, index) => getNodeResourceDisplayName(node, index))
+      .filter((name) => Boolean(name));
+    if (names.length > 1) return names.join(" + ");
+    if (names.length === 1) return names[0];
+  }
+
+  return getNodeResourceDisplayName(node, 0);
 }
 
 function getNodeDisplayName(node: GraphNode): string {
@@ -92,9 +152,23 @@ function getNodeDisplayName(node: GraphNode): string {
   const explicit = typeof anyNode.displayName === "string" && anyNode.displayName.trim()
     ? anyNode.displayName.trim()
     : (typeof anyNode.label === "string" && anyNode.label.trim() ? anyNode.label.trim() : "");
-  if (explicit) return explicit;
-
   const typeInfo = nodeType ? EffectTypeRegistry.get(nodeType) : undefined;
+  const blendId = (node as unknown as { config?: Record<string, string> }).config?.blendId;
+  if (blendId) {
+    const blend = uiState.blendLibrary?.find((entry) => entry.id === blendId);
+    if (blend?.name) {
+      return blend.name;
+    }
+  }
+
+  if (explicit && explicit !== (typeInfo?.displayName || "")) {
+    return explicit;
+  }
+
+  const resourceTitle = typeInfo?.requiresResource ? getNodeResourceSummary(node) : "";
+  if (resourceTitle) return resourceTitle;
+
+  if (explicit) return explicit;
   return typeInfo?.displayName || nodeType || "(Unknown)";
 }
 
@@ -104,7 +178,11 @@ function getNodeCategory(node: GraphNode): string {
   if (explicit) return explicit;
   const nodeType = typeof anyNode.type === "string" ? anyNode.type : "";
   const typeInfo = nodeType ? EffectTypeRegistry.get(nodeType) : undefined;
-  return typeInfo?.category || "utility";
+  const category = typeInfo?.category || "utility";
+  if (category === "pedal" || category === "preamp" || category === "full-rig") {
+    return "amp";
+  }
+  return category;
 }
 
 function isNodeBypassed(node: GraphNode): boolean {
@@ -121,15 +199,23 @@ function getNodeResourceAtIndex(node: GraphNode, index = 0): { id: string; fileP
   };
 
   if (Array.isArray(anyNode.resources)) {
-    const res = anyNode.resources[index] as { id?: unknown; resourceId?: unknown; filePath?: unknown; parameterValue?: unknown } | undefined;
-    const id = typeof res?.id === "string" ? res.id : (typeof res?.resourceId === "string" ? res.resourceId : "");
+    const res = anyNode.resources[index] as { id?: unknown; resourceId?: unknown; embeddedId?: unknown; filePath?: unknown; parameterValue?: unknown } | undefined;
+    const id = typeof res?.id === "string"
+      ? res.id
+      : (typeof res?.resourceId === "string"
+        ? res.resourceId
+        : (typeof res?.embeddedId === "string" ? res.embeddedId : ""));
     const filePath = typeof res?.filePath === "string" ? res.filePath : "";
     const parameterValue = typeof res?.parameterValue === "number" ? res.parameterValue : undefined;
     return { id, filePath, parameterValue };
   }
 
-  const res = anyNode.resource as { id?: unknown; resourceId?: unknown; filePath?: unknown; parameterValue?: unknown } | undefined;
-  const id = typeof res?.id === "string" ? res.id : (typeof res?.resourceId === "string" ? res.resourceId : "");
+  const res = anyNode.resource as { id?: unknown; resourceId?: unknown; embeddedId?: unknown; filePath?: unknown; parameterValue?: unknown } | undefined;
+  const id = typeof res?.id === "string"
+    ? res.id
+    : (typeof res?.resourceId === "string"
+      ? res.resourceId
+      : (typeof res?.embeddedId === "string" ? res.embeddedId : ""));
   const filePath = typeof res?.filePath === "string" ? res.filePath : "";
   const parameterValue = typeof res?.parameterValue === "number" ? res.parameterValue : undefined;
   return { id, filePath, parameterValue };
@@ -487,12 +573,17 @@ function renderGraphSignalPath(preset: Preset): void {
   bindSplitAndCollapseHandlers();
 }
 
-function sendAddEffectAtEdgeOrFallback(effectType: string, edge: EdgeRef | null, fallbackInsertAfter: string): void {
+function sendAddEffectAtEdgeOrFallback(
+  effectType: string,
+  edge: EdgeRef | null,
+  fallbackInsertAfter: string,
+  options?: { config?: Record<string, string>; label?: string; category?: string },
+): void {
   if (edge) {
-    sendAddSignalPathNodeOnEdge(effectType, edge);
+    sendAddSignalPathNodeOnEdge(effectType, edge, options);
   } else {
     // Back-compat: linear chain insertion by node id
-    sendAddSignalPathNode(effectType, fallbackInsertAfter);
+    sendAddSignalPathNode(effectType, fallbackInsertAfter, options);
   }
 }
 
@@ -508,9 +599,9 @@ function renderNodeElement(node: GraphNode): string {
   const displayName = getNodeDisplayName(node);
   
   let resourceLabel = "";
-  const primaryResource = getNodeResourceAtIndex(node, 0);
-  if (primaryResource.id || primaryResource.filePath) {
-    resourceLabel = `<div class="node-resource">${primaryResource.id || "Custom"}</div>`;
+  const resourceSummary = getNodeResourceSummary(node);
+  if (resourceSummary) {
+    resourceLabel = `<div class="node-resource">${resourceSummary}</div>`;
   }
 
   return `
@@ -660,12 +751,14 @@ function bindNodeClickHandlers(preset: Preset): void {
       
       // Check if dragging from FX library
       const fxEffectType = Array.from(e.dataTransfer?.types ?? []).includes("application/x-fx-effect");
+      const fxBlendType = Array.from(e.dataTransfer?.types ?? []).includes("application/x-fx-blend");
+      const fxResourceGroup = Array.from(e.dataTransfer?.types ?? []).includes("application/x-resource-group");
       
-      if (nodeId && (nodeId !== draggedNodeId || fxEffectType)) {
+      if (nodeId && (nodeId !== draggedNodeId || fxEffectType || fxBlendType || fxResourceGroup)) {
         dragOverNodeId = nodeId;
         el.classList.add("drag-over");
         if (e.dataTransfer) {
-          e.dataTransfer.dropEffect = fxEffectType ? "copy" : "move";
+          e.dataTransfer.dropEffect = (fxEffectType || fxBlendType || fxResourceGroup) ? "copy" : "move";
         }
       }
     });
@@ -685,16 +778,32 @@ function bindNodeClickHandlers(preset: Preset): void {
       
       // Check if dropping from FX library
       const fxEffectType = e.dataTransfer?.getData("application/x-fx-effect");
+      const fxBlendId = e.dataTransfer?.getData("application/x-fx-blend");
+      const fxBlendName = e.dataTransfer?.getData("application/x-fx-blend-name");
+      const fxBlendCategory = e.dataTransfer?.getData("application/x-fx-blend-category");
+      const resourceGroupPayload = e.dataTransfer?.getData("application/x-resource-group");
       
-      if (fxEffectType && targetNodeId && preset.graph) {
+      if (resourceGroupPayload && targetNodeId && preset.graph) {
+        const targetNode = preset.graph.nodes.find((n) => n.id === targetNodeId);
+        if (targetNode && targetNode.type === "amp_nam_blend") {
+          handleResourceGroupDrop(resourceGroupPayload, targetNodeId, true);
+        } else {
+          handleResourceGroupDrop(resourceGroupPayload, targetNodeId, false);
+        }
+      } else if ((fxEffectType || fxBlendId) && targetNodeId && preset.graph) {
+        const resolvedType = fxEffectType || "amp_nam_blend";
         // Dropping FX library item onto existing node - replace if same category
         const targetNode = preset.graph.nodes.find((n) => n.id === targetNodeId);
-        const effectTypeInfo = EffectTypeRegistry.get(fxEffectType);
+        const effectTypeInfo = EffectTypeRegistry.get(resolvedType);
         
         if (targetNode && effectTypeInfo) {
           if (targetNode.category === effectTypeInfo.category) {
             // Same category - replace the node
-            sendReplaceSignalPathNode(targetNodeId, fxEffectType);
+            sendReplaceSignalPathNode(targetNodeId, resolvedType, {
+              config: fxBlendId ? { blendId: fxBlendId } : undefined,
+              label: fxBlendName || undefined,
+              category: fxBlendCategory || undefined,
+            });
           }
           // Different category - ignore the drop (could show a message)
         }
@@ -755,15 +864,17 @@ function bindConnectorDropHandlers(preset: Preset): void {
       
       // Only accept drops from FX library
       const fxEffectType = Array.from(e.dataTransfer?.types ?? []).includes("application/x-fx-effect");
+      const fxBlendType = Array.from(e.dataTransfer?.types ?? []).includes("application/x-fx-blend");
+      const fxResourceGroup = Array.from(e.dataTransfer?.types ?? []).includes("application/x-resource-group");
       const signalNodeId = e.dataTransfer?.getData("application/x-signal-node") || "";
       const isSignalNode = Boolean(signalNodeId);
       
-      if (fxEffectType || isSignalNode) {
+      if (fxEffectType || fxBlendType || fxResourceGroup || isSignalNode) {
         const connector = el.querySelector(".signal-connector") as HTMLElement | null;
         connector?.classList.add("drag-over");
         el.classList.add("drag-over");
         if (e.dataTransfer) {
-          e.dataTransfer.dropEffect = fxEffectType ? "copy" : "move";
+          e.dataTransfer.dropEffect = (fxEffectType || fxBlendType || fxResourceGroup) ? "copy" : "move";
         }
       }
     });
@@ -779,11 +890,22 @@ function bindConnectorDropHandlers(preset: Preset): void {
     el.addEventListener("drop", (e: DragEvent) => {
       e.preventDefault();
       const fxEffectType = e.dataTransfer?.getData("application/x-fx-effect");
+      const fxBlendId = e.dataTransfer?.getData("application/x-fx-blend");
+      const fxBlendName = e.dataTransfer?.getData("application/x-fx-blend-name");
+      const fxBlendCategory = e.dataTransfer?.getData("application/x-fx-blend-category");
+      const resourceGroupPayload = e.dataTransfer?.getData("application/x-resource-group");
       const signalNodeId = e.dataTransfer?.getData("application/x-signal-node");
 
       const edge = parseEdgeFromDataset(el);
-      if (fxEffectType && preset.graph) {
-        sendAddEffectAtEdgeOrFallback(fxEffectType, edge, "__input__");
+      if (resourceGroupPayload && preset.graph) {
+        handleResourceGroupDrop(resourceGroupPayload, null, false, edge);
+      } else if ((fxEffectType || fxBlendId) && preset.graph) {
+        const resolvedType = fxEffectType || "amp_nam_blend";
+        sendAddEffectAtEdgeOrFallback(resolvedType, edge, "__input__", {
+          config: fxBlendId ? { blendId: fxBlendId } : undefined,
+          label: fxBlendName || undefined,
+          category: fxBlendCategory || undefined,
+        });
       } else if (signalNodeId && edge && preset.graph) {
         const node = preset.graph.nodes.find((n) => n.id === signalNodeId);
         if (node && node.type !== "splitter" && node.type !== "mixer") {
@@ -869,6 +991,20 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
     const resourceType = typeInfo.resourceType;
     const resources = uiState.resourceLibrary[resourceType] || [];
     const browseAccept = resourceType === "nam" ? ".nam,.json" : resourceType === "ir" ? ".wav" : "*";
+    const blendId = (node as unknown as { config?: Record<string, string> }).config?.blendId;
+    if (blendId) {
+      const blend = uiState.blendLibrary?.find((entry) => entry.id === blendId);
+      const blendModels = blend?.models ?? [];
+      resourceSelector = `
+        <div class="node-resource-selector" data-node-id="${node.id}">
+          <label>Blend</label>
+          <div class="resource-controls">
+            <button class="blend-open-btn" data-node-id="${node.id}">Edit Blend</button>
+          </div>
+          <div class="resource-path-info">Models: ${blendModels.length}</div>
+        </div>
+      `;
+    } else {
 
     const buildOptions = (currentId: string) => resources.map((res: LibraryResource) => {
       const selected = res.id === currentId ? "selected" : "";
@@ -910,23 +1046,28 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
       `;
     };
 
-    if (node.type === "amp_nam_blend") {
-      const paramValue0 = getNodeResourceAtIndex(node, 0).parameterValue ?? 0;
-      const paramValue1 = getNodeResourceAtIndex(node, 1).parameterValue ?? 1;
-      resourceSelector = `
-        ${buildSelector(0, "Model A")}
-        <div class="node-resource-meta">
-          <label>Model A Value</label>
-          <input class="resource-param-value" type="number" step="0.1" data-node-id="${node.id}" data-resource-index="0" value="${paramValue0}" />
-        </div>
-        ${buildSelector(1, "Model B")}
-        <div class="node-resource-meta">
-          <label>Model B Value</label>
-          <input class="resource-param-value" type="number" step="0.1" data-node-id="${node.id}" data-resource-index="1" value="${paramValue1}" />
-        </div>
-      `;
-    } else {
-      resourceSelector = buildSelector(0, resourceType === "nam" ? "Model" : resourceType === "ir" ? "IR" : "Resource");
+      if (node.type === "amp_nam_blend") {
+        const items = (node as unknown as { resources?: unknown[] }).resources ?? [];
+        const modelSelectors = items.length ? items.map((_, index) => {
+          const paramValue = getNodeResourceAtIndex(node, index).parameterValue ?? index;
+          return `
+            ${buildSelector(index, `Model ${index + 1}`)}
+            <div class="node-resource-meta">
+              <label>Model ${index + 1} Value</label>
+              <input class="resource-param-value" type="number" step="0.1" data-node-id="${node.id}" data-resource-index="${index}" value="${paramValue}" />
+            </div>
+          `;
+        }).join("") : `
+          ${buildSelector(0, "Model 1")}
+          <div class="node-resource-meta">
+            <label>Model 1 Value</label>
+            <input class="resource-param-value" type="number" step="0.1" data-node-id="${node.id}" data-resource-index="0" value="0" />
+          </div>
+        `;
+        resourceSelector = modelSelectors;
+      } else {
+        resourceSelector = buildSelector(0, resourceType === "nam" ? "Model" : resourceType === "ir" ? "IR" : "Resource");
+      }
     }
   }
 
@@ -952,6 +1093,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
   // Bind controls
   bindNodeParamControls(node, preset);
   bindResourceControls(node, preset);
+  bindBlendEditorControls(node);
   bindCloseButton();
   bindBypassButton(node, preset);
 }
@@ -1044,6 +1186,48 @@ function bindResourceControls(node: GraphNode, preset: Preset): void {
   });
 }
 
+function bindBlendEditorControls(node: GraphNode): void {
+  const blendId = (node as unknown as { config?: Record<string, string> }).config?.blendId;
+  if (!blendId) {
+    return;
+  }
+
+  const openButton = nodeParamsPanelElement?.querySelector(".blend-open-btn") as HTMLButtonElement | null;
+  openButton?.addEventListener("click", () => {
+    blendEditorModal.open(node);
+  });
+}
+
+export function initializeBlendEditorModal(): void {
+  blendEditorModal.initialize();
+}
+
+function getNodeResourceIds(node: GraphNode): string[] {
+  const anyNode = node as unknown as { resources?: unknown };
+  if (!Array.isArray(anyNode.resources)) {
+    const fallback = getNodeResourceAtIndex(node, 0).id;
+    return fallback ? [fallback] : [];
+  }
+
+  const ids: string[] = [];
+  anyNode.resources.forEach((res, index) => {
+    const ref = res as { id?: unknown; resourceId?: unknown; embeddedId?: unknown } | undefined;
+    const id = typeof ref?.id === "string"
+      ? ref.id
+      : (typeof ref?.resourceId === "string" ? ref.resourceId : (typeof ref?.embeddedId === "string" ? ref.embeddedId : ""));
+    if (id) {
+      ids.push(id);
+    } else {
+      const fallback = getNodeResourceAtIndex(node, index).id;
+      if (fallback) {
+        ids.push(fallback);
+      }
+    }
+  });
+
+  return Array.from(new Set(ids));
+}
+
 function bindCloseButton(): void {
   const closeBtn = nodeParamsPanelElement?.querySelector(".close-params-btn");
   if (closeBtn) {
@@ -1134,11 +1318,18 @@ function sendSignalPathNodeDelete(nodeId: string): void {
   });
 }
 
-function sendReplaceSignalPathNode(nodeId: string, newEffectType: string): void {
+function sendReplaceSignalPathNode(
+  nodeId: string,
+  newEffectType: string,
+  options?: { config?: Record<string, string>; label?: string; category?: string },
+): void {
   postMessage({
     type: "replaceSignalPathNode",
     nodeId,
     newEffectType,
+    config: options?.config,
+    label: options?.label,
+    category: options?.category,
   });
 }
 
@@ -1200,8 +1391,9 @@ function showEffectSelectionDropdown(buttonElement: HTMLElement, edge: EdgeRef |
   let dropdownHtml = '<div class="effect-dropdown-header">Add Effect</div>';
   
   categoryOrder.forEach((categoryId) => {
-    const effects = effectsByCategory.get(categoryId);
-    if (effects && effects.length > 0) {
+    const effects = effectsByCategory.get(categoryId) ?? [];
+    const blendEntries = getBlendEntriesForCategory(categoryId);
+    if (effects.length > 0 || blendEntries.length > 0) {
       const categoryInfo = FX_CATEGORIES.find(c => c.id === categoryId);
       dropdownHtml += `
         <div class="effect-dropdown-category">
@@ -1212,6 +1404,12 @@ function showEffectSelectionDropdown(buttonElement: HTMLElement, edge: EdgeRef |
             <div class="effect-dropdown-item" data-effect-type="${effect.type}">
               <span class="effect-dropdown-icon">${getNodeIcon(effect.type)}</span>
               <span class="effect-dropdown-name">${effect.displayName}</span>
+            </div>
+          `).join('')}
+          ${blendEntries.map((blend) => `
+            <div class="effect-dropdown-item" data-effect-type="amp_nam_blend" data-blend-id="${blend.id}" data-blend-name="${escapeHtml(blend.name)}" data-blend-category="${blend.originalCategory}">
+              <span class="effect-dropdown-icon">🧪</span>
+              <span class="effect-dropdown-name">${escapeHtml(blend.name)}</span>
             </div>
           `).join('')}
         </div>
@@ -1232,8 +1430,15 @@ function showEffectSelectionDropdown(buttonElement: HTMLElement, edge: EdgeRef |
   effectItems.forEach((item) => {
     item.addEventListener("click", () => {
       const effectType = (item as HTMLElement).dataset.effectType;
+      const blendId = (item as HTMLElement).dataset.blendId;
+      const blendName = (item as HTMLElement).dataset.blendName;
+      const blendCategory = (item as HTMLElement).dataset.blendCategory;
       if (effectType) {
-        sendAddEffectAtEdgeOrFallback(effectType, edge, edge?.from ?? "__input__");
+        sendAddEffectAtEdgeOrFallback(effectType, edge, edge?.from ?? "__input__", {
+          config: blendId ? { blendId } : undefined,
+          label: blendName || undefined,
+          category: blendCategory || undefined,
+        });
         dropdown.remove();
       }
     });
@@ -1261,4 +1466,108 @@ const FX_CATEGORIES = [
   { id: "reverb", name: "Reverb", icon: "🏛️", color: "#4878e0" },
   { id: "utility", name: "Utility", icon: "🔧", color: "#808080" },
 ];
+
+function getBlendEntriesForCategory(categoryId: string): Array<{ id: string; name: string; category: string; originalCategory: string } > {
+  const blends = uiState.blendLibrary ?? [];
+  const mapCategory = (value: string): string => {
+    switch (value) {
+      case "cab":
+        return "cab";
+      case "pedal":
+        return "utility";
+      case "preamp":
+      case "amp":
+      case "full-rig":
+      default:
+        return "amp";
+    }
+  };
+
+  return blends
+    .map((blend) => ({
+      id: blend.id,
+      name: blend.name,
+      category: mapCategory(blend.category),
+      originalCategory: blend.category,
+    }))
+    .filter((blend) => blend.category === categoryId);
+}
+
+type ResourceGroupPayload = {
+  groupId: string;
+  title: string;
+  category: string;
+  modelIds: string[];
+  modelMappings?: BlendModelMapping[];
+};
+
+function handleResourceGroupDrop(
+  payloadRaw: string,
+  targetNodeId: string | null,
+  updateOnly: boolean,
+  edge?: SignalPathEdgeRef | null,
+): void {
+  let payload: ResourceGroupPayload | null = null;
+  try {
+    payload = JSON.parse(payloadRaw) as ResourceGroupPayload;
+  } catch {
+    payload = null;
+  }
+  if (!payload || !payload.modelIds?.length) {
+    return;
+  }
+
+  const modelMappings = payload.modelMappings?.length
+    ? payload.modelMappings
+    : buildBlendModelMappingsFromIds(payload.modelIds, uiState.resourceLibrary);
+
+  const existingBlendId = targetNodeId
+    ? (uiState.presetCache.get(uiState.activePresetId ?? "")?.graph?.nodes.find((n) => n.id === targetNodeId)?.config?.blendId ?? "")
+    : "";
+
+  const blendId = existingBlendId || (typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+
+  const blendName = existingBlendId
+    ? (uiState.blendLibrary?.find((blend) => blend.id === existingBlendId)?.name ?? payload.title)
+    : payload.title;
+
+  postMessage({
+    type: "saveBlendDefinition",
+    blend: {
+      id: blendId,
+      name: blendName,
+      category: payload.category,
+      models: modelMappings.map((mapping) => mapping.id),
+      modelMappings,
+      blendMode: "interpolate",
+    },
+  });
+
+  if (updateOnly && targetNodeId) {
+    sendReplaceSignalPathNode(targetNodeId, "amp_nam_blend", {
+      config: { blendId },
+      label: blendName,
+      category: payload.category,
+    });
+    return;
+  }
+
+  if (targetNodeId) {
+    sendReplaceSignalPathNode(targetNodeId, "amp_nam_blend", {
+      config: { blendId },
+      label: blendName,
+      category: payload.category,
+    });
+    return;
+  }
+
+  const normalizedEdge = edge ? { ...edge, gain: edge.gain ?? 1.0 } : null;
+  sendAddEffectAtEdgeOrFallback("amp_nam_blend", normalizedEdge, edge?.from ?? "__input__", {
+    config: { blendId },
+    label: blendName,
+    category: payload.category,
+  });
+}
 

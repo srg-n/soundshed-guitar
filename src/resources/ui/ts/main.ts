@@ -21,6 +21,7 @@ import { initDiagnosticsToggle, initSettingsPanel, updateSettingsSessionStatus }
 import { ensureTone3000Session } from "./tone3000.js";
 import { postMessage } from "./bridge.js";
 import { initializeMetronome } from "./metronome.js";
+import { initializeBlendEditorModal } from "./signalPath.js";
 
 const tabButtons = Array.from(document.querySelectorAll(".tab-button"));
 const tabPanels = Array.from(document.querySelectorAll(".tab-panel"));
@@ -111,6 +112,7 @@ async function bootstrap(): Promise<void> {
   initializePresetActionButtons();
   initializeTuner();
   initializeMetronome();
+  initializeBlendEditorModal();
   initFxSelector();
   startUiSettingsTracking();
   initDiagnosticsToggle();

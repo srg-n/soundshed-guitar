@@ -1,5 +1,5 @@
 import { uiState } from "./state.js";
-import { setAppSetting } from "./bridge.js";
+import { setAppSetting, postMessage } from "./bridge.js";
 import { appendLog } from "./logging.js";
 import { showNotification } from "./notifications.js";
 import { handleAppSettingUpdate } from "./tone3000.js";
@@ -7,6 +7,7 @@ import { updateSignalDiagnosticsView } from "./views.js";
 import { initTone3000Browser } from "./tone3000Browser.js";
 import { getAudioFxLibrary, getIrLibrary } from "./dataLibraries.js";
 import type { AppSettingValue } from "./types.js";
+import { buildBlendModelMappingsFromIds } from "./blendUtils.js";
 
 const API_KEY_SETTING = "tone3000.apiKey";
 const DIAGNOSTICS_SETTING = "diagnostics.signalLevelsEnabled";
@@ -319,7 +320,7 @@ function renderGroupedLibraryView(filtered: LibraryItem[], totalCount: number): 
         : "Mixed";
       const modelCountLabel = `${group.count} models`;
       return `
-        <div class="equipment-library-item">
+        <div class="equipment-library-item equipment-library-group" draggable="true" data-group-id="${escapeHtml(group.groupId)}">
           <div class="equipment-library-item-main">
             <div class="equipment-library-item-title">${escapeHtml(group.title)}</div>
             <div class="equipment-library-item-meta">
@@ -330,10 +331,16 @@ function renderGroupedLibraryView(filtered: LibraryItem[], totalCount: number): 
               <span>${escapeHtml(modelCountLabel)}</span>
             </div>
           </div>
+          <div class="equipment-library-item-actions">
+            <button class="equipment-library-create-blend" data-group-id="${escapeHtml(group.groupId)}">Create Blend</button>
+          </div>
         </div>
       `;
     })
     .join("");
+
+  bindBlendCreateButtons(grouped);
+  bindBlendGroupDragHandlers(grouped);
 }
 
 function renderLibraryItemRow(item: LibraryItem): string {
@@ -364,6 +371,8 @@ type ToneGroup = {
   types: Set<string>;
   categories: Set<string>;
   origins: Set<string>;
+  modelIds: string[];
+  gear?: string;
 };
 
 function groupLibraryItemsByTone(items: LibraryItem[]): ToneGroup[] {
@@ -378,11 +387,16 @@ function groupLibraryItemsByTone(items: LibraryItem[]): ToneGroup[] {
     const key = `${toneId}:${toneTitle}`;
     const existing = groups.get(key);
     const origin = inferResourceOrigin(item.filePath);
+    const gear = item.metadata?.gear ?? item.category;
     if (existing) {
       existing.count += 1;
       existing.types.add(item.type);
       existing.categories.add(item.category || "Uncategorized");
       existing.origins.add(origin);
+      existing.modelIds.push(item.id);
+      if (!existing.gear && gear) {
+        existing.gear = gear;
+      }
     } else {
       groups.set(key, {
         groupId: toneId,
@@ -391,11 +405,102 @@ function groupLibraryItemsByTone(items: LibraryItem[]): ToneGroup[] {
         types: new Set([item.type]),
         categories: new Set([item.category || "Uncategorized"]),
         origins: new Set([origin]),
+        modelIds: [item.id],
+        gear: gear,
       });
     }
   });
 
   return Array.from(groups.values()).sort((a, b) => a.title.localeCompare(b.title));
+}
+
+function bindBlendCreateButtons(groups: ToneGroup[]): void {
+  const buttons = libraryResults?.querySelectorAll(".equipment-library-create-blend");
+  if (!buttons) {
+    return;
+  }
+
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const groupId = (btn as HTMLElement).dataset.groupId ?? "";
+      const group = groups.find((entry) => entry.groupId === groupId);
+      if (!group) {
+        return;
+      }
+      createBlendFromGroup(group);
+    });
+  });
+}
+
+function bindBlendGroupDragHandlers(groups: ToneGroup[]): void {
+  const items = libraryResults?.querySelectorAll(".equipment-library-group") as NodeListOf<HTMLElement> | null;
+  if (!items) {
+    return;
+  }
+
+  items.forEach((item) => {
+    item.addEventListener("dragstart", (event: DragEvent) => {
+      const groupId = item.dataset.groupId ?? "";
+      const group = groups.find((entry) => entry.groupId === groupId);
+      if (!group || !event.dataTransfer) {
+        return;
+      }
+
+      const payload = {
+        groupId: group.groupId,
+        title: group.title,
+        category: normalizeBlendCategory(group.gear),
+        modelIds: group.modelIds,
+        modelMappings: buildBlendModelMappingsFromIds(group.modelIds, uiState.resourceLibrary),
+      };
+      event.dataTransfer.setData("application/x-resource-group", JSON.stringify(payload));
+      event.dataTransfer.effectAllowed = "copy";
+      item.classList.add("dragging");
+      document.body.classList.add("fx-dragging");
+    });
+
+    item.addEventListener("dragend", () => {
+      item.classList.remove("dragging");
+      document.body.classList.remove("fx-dragging");
+    });
+  });
+}
+
+function createBlendFromGroup(group: ToneGroup): void {
+  const id = typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const name = prompt("Blend name", group.title) ?? group.title;
+  if (!name.trim()) {
+    return;
+  }
+
+  const snapMode = confirm("Snap between models? Click OK for snap, Cancel for interpolate.");
+
+  const category = normalizeBlendCategory(group.gear);
+  const modelMappings = buildBlendModelMappingsFromIds(group.modelIds, uiState.resourceLibrary);
+  const blend = {
+    id,
+    name: name.trim(),
+    category,
+    models: modelMappings.map((mapping) => mapping.id),
+    modelMappings,
+    blendMode: snapMode ? "snap" : "interpolate",
+  };
+
+  postMessage({
+    type: "saveBlendDefinition",
+    blend,
+  });
+}
+
+function normalizeBlendCategory(category?: string): string {
+  const value = (category ?? "").toLowerCase();
+  const allowed = new Set(["pedal", "preamp", "amp", "full-rig", "cab"]);
+  if (allowed.has(value)) {
+    return value;
+  }
+  return "amp";
 }
 
 function updateCategoryOptions(items: LibraryItem[]): void {

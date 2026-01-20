@@ -172,6 +172,10 @@ public:
     {
       mParameterId = value;
     }
+    else if (key == "blendMode")
+    {
+      mSnapBlend = (value == "snap");
+    }
   }
 
   [[nodiscard]] double GetParam(const std::string& key) const override
@@ -437,6 +441,18 @@ private:
 
     const double lowerValue = mModels[lowerIndex].parameterValue;
     const double upperValue = mModels[upperIndex].parameterValue;
+    if (mSnapBlend)
+    {
+      const double lowerDist = std::abs(target - lowerValue);
+      const double upperDist = std::abs(upperValue - target);
+      const std::size_t chosen = lowerDist <= upperDist ? lowerIndex : upperIndex;
+      selection.lowerIndex = chosen;
+      selection.upperIndex = chosen;
+      selection.weightLower = 1.0;
+      selection.weightUpper = 0.0;
+      return selection;
+    }
+
     const double denom = std::max(upperValue - lowerValue, 1e-9);
     const double t = std::clamp((target - lowerValue) / denom, 0.0, 1.0);
 
@@ -507,6 +523,7 @@ private:
 
     UpdateEffectiveGains();
   }
+  bool mSnapBlend = false;
 };
 
 inline void RegisterMultiModelNAMAmpEffect()

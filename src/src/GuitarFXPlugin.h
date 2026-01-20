@@ -162,6 +162,9 @@ namespace guitarfx
     void HandleReorderSignalPathNodeRequest(const nlohmann::json &payload);
     void HandleDeleteSignalPathNodeRequest(const nlohmann::json &payload);
     void HandleImportRemoteResourceRequest(const nlohmann::json &payload);
+    void HandleSaveBlendDefinitionRequest(const nlohmann::json &payload);
+    void HandleRequestResourceDataRequest(const nlohmann::json &payload);
+    void HandleSaveBlendArchiveRequest(const nlohmann::json &payload);
     void RefreshMetronomeClickSamples();
     void UpdateMetronomeClickConfigFromSettings();
     const MetronomeClickTypeConfig* FindMetronomeClickType(const std::string& id) const;
@@ -178,10 +181,12 @@ namespace guitarfx
     void ProcessThroughGlobalChain(iplug::sample **inputs, iplug::sample **outputs, int nFrames);
     void BroadcastState();
     void ApplyPreset(const guitarfx::Preset &preset);
+    void ApplyBlendDefinitions(Preset& preset);
     bool ApplyNodeParameter(const guitarfx::GraphNode& node, const std::string& paramKey, double value);
     void ReportErrorToUI(std::string_view message, std::string_view detail = {});
     [[nodiscard]] std::optional<std::filesystem::path> ResolveResourceRef(const ResourceRef &ref) const;
     [[nodiscard]] static std::vector<std::uint8_t> DecodeBase64(const std::string &encoded);
+    [[nodiscard]] static std::string EncodeBase64(const std::vector<std::uint8_t> &data);
     bool WriteFile(const std::filesystem::path &target, const std::vector<std::uint8_t> &data) const;
     
     // App settings persistence
@@ -189,6 +194,8 @@ namespace guitarfx
     void LoadAppSettings();
     void LoadLastSessionState();
     void LoadResourceLibraries();
+    void LoadBlendLibrary();
+    void SaveBlendLibrary() const;
     void LoadWebViewContent(bool forceReload);
     void SendMetronomeStateToUI();
     void RenderMetronome(iplug::sample **outputs, int nFrames);
@@ -209,6 +216,7 @@ namespace guitarfx
 
     MultiPresetMixer mPresetMixer;
     ResourceLibrary mResourceLibrary;
+    nlohmann::json mBlendLibrary = nlohmann::json::array();
     FileSystem mFileSystem;
     ModelHasher mHasher;
     std::filesystem::path mResourceRoot;

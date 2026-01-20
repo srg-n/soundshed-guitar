@@ -1,0 +1,740 @@
+import type {
+  BlendLibrary,
+  BlendModelMapping,
+  GraphNode,
+  ResourceLibrary,
+  LibraryResource,
+} from "./types.js";
+import { postMessage } from "./bridge.js";
+import { buildBlendModelMappingsFromIds, inferParamValueFromName } from "./blendUtils.js";
+
+type BlendEditorDependencies = {
+  getBlendLibrary: () => BlendLibrary;
+  getResourceLibrary: () => ResourceLibrary;
+};
+
+type ParamSpec = {
+  id: string;
+  label: string;
+  min: number;
+  max: number;
+};
+
+const PARAM_SPECS: ParamSpec[] = [
+  { id: "gain", label: "Gain", min: 0, max: 10 },
+  { id: "drive", label: "Drive", min: 0, max: 10 },
+  { id: "contour", label: "Contour", min: 0, max: 10 },
+  { id: "treble", label: "Treble", min: 0, max: 10 },
+  { id: "middle", label: "Middle", min: 0, max: 10 },
+  { id: "bass", label: "Bass", min: 0, max: 10 },
+  { id: "presence", label: "Presence", min: 0, max: 10 },
+];
+
+export class BlendEditorModal {
+  private readonly deps: BlendEditorDependencies;
+  private initialized = false;
+  private activeParams: string[] = [];
+
+  private modal = document.getElementById("blend-editor-modal") as HTMLElement | null;
+  private nameInput = document.getElementById("blend-editor-name-input") as HTMLInputElement | null;
+  private modeSelect = document.getElementById("blend-editor-mode-select") as HTMLSelectElement | null;
+  private categorySelect = document.getElementById("blend-editor-category-select") as HTMLSelectElement | null;
+  private modelList = document.getElementById("blend-model-list");
+  private addModelBtn = document.getElementById("blend-add-model-btn") as HTMLButtonElement | null;
+  private saveBtn = document.getElementById("blend-editor-save") as HTMLButtonElement | null;
+  private cancelBtn = document.getElementById("blend-editor-cancel") as HTMLButtonElement | null;
+  private closeBtn = document.getElementById("blend-editor-modal-close") as HTMLButtonElement | null;
+  private paramList = document.getElementById("blend-parameter-list");
+  private paramSelect = document.getElementById("blend-parameter-add-select") as HTMLSelectElement | null;
+  private paramAddBtn = document.getElementById("blend-parameter-add-btn") as HTMLButtonElement | null;
+  private exportBtn = document.getElementById("blend-editor-export") as HTMLButtonElement | null;
+  private importBtn = document.getElementById("blend-editor-import") as HTMLButtonElement | null;
+  private importInput = document.getElementById("blend-import-input") as HTMLInputElement | null;
+  private paramAutoBtn = document.getElementById("blend-parameter-auto-btn") as HTMLButtonElement | null;
+
+  constructor(deps: BlendEditorDependencies) {
+    this.deps = deps;
+  }
+
+  initialize(): void {
+    if (this.initialized) {
+      return;
+    }
+    this.initialized = true;
+
+    this.closeBtn?.addEventListener("click", () => this.close());
+    this.cancelBtn?.addEventListener("click", () => this.close());
+    this.addModelBtn?.addEventListener("click", () => this.addModelRow());
+    this.saveBtn?.addEventListener("click", () => this.save());
+    this.paramAddBtn?.addEventListener("click", () => this.addParameter());
+    this.paramAutoBtn?.addEventListener("click", () => this.autoMapParameters());
+    this.exportBtn?.addEventListener("click", () => void this.exportBlendArchive());
+    this.importBtn?.addEventListener("click", () => this.importInput?.click());
+    this.importInput?.addEventListener("change", () => void this.importBlendArchive());
+
+    if (this.paramSelect) {
+      this.paramSelect.innerHTML = PARAM_SPECS.map((spec) => `<option value="${spec.id}">${spec.label}</option>`).join("");
+    }
+
+    this.modal?.addEventListener("click", (event) => {
+      if (event.target === this.modal) {
+        this.close();
+      }
+    });
+  }
+
+  open(node: GraphNode): void {
+    const blendId = (node as unknown as { config?: Record<string, string> }).config?.blendId;
+    if (!blendId || !this.modal) {
+      return;
+    }
+
+    this.initialize();
+
+    const blend = this.deps.getBlendLibrary().find((entry) => entry.id === blendId);
+    const category = blend?.category ?? node.category ?? "amp";
+    const mappings = blend?.modelMappings?.length
+      ? blend.modelMappings
+      : buildBlendModelMappingsFromIds(blend?.models ?? [], this.deps.getResourceLibrary());
+
+    this.activeParams = resolveActiveParams(blend, mappings);
+
+    if (this.nameInput) {
+      this.nameInput.value = blend?.name ?? blendId;
+    }
+    if (this.modeSelect) {
+      this.modeSelect.value = blend?.blendMode ?? "interpolate";
+    }
+    if (this.categorySelect) {
+      const options = Array.from(this.categorySelect.options).map((opt) => opt.value);
+      this.categorySelect.value = options.includes(category) ? category : "amp";
+    }
+
+    this.renderParameterList();
+    this.renderModelList(mappings, category);
+
+    this.modal.dataset.blendId = blendId;
+    this.modal.dataset.nodeId = node.id;
+    this.modal.style.display = "flex";
+  }
+
+  private close(): void {
+    if (!this.modal) {
+      return;
+    }
+    this.modal.style.display = "none";
+    delete this.modal.dataset.blendId;
+    delete this.modal.dataset.nodeId;
+    if (this.modelList) {
+      this.modelList.innerHTML = "";
+    }
+    this.activeParams = [];
+  }
+
+  private renderParameterList(): void {
+    if (!this.paramList) {
+      return;
+    }
+    this.paramList.innerHTML = this.activeParams
+      .map((paramId) => {
+        const spec = getParamSpec(paramId);
+        const label = spec?.label ?? paramId;
+        return `
+          <span class="blend-param-chip" data-param-id="${paramId}">
+            ${escapeHtml(label)}
+            <button type="button" class="blend-param-remove">×</button>
+          </span>
+        `;
+      })
+      .join("");
+
+    const chips = this.paramList.querySelectorAll(".blend-param-remove");
+    chips.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const chip = (btn as HTMLElement).closest(".blend-param-chip") as HTMLElement | null;
+        const paramId = chip?.dataset.paramId ?? "";
+        if (!paramId) {
+          return;
+        }
+        this.activeParams = this.activeParams.filter((entry) => entry !== paramId);
+        if (!this.activeParams.length) {
+          this.activeParams = ["gain"];
+        }
+        this.renderParameterList();
+        this.renderModelList(this.collectCurrentMappings(), this.categorySelect?.value ?? "amp");
+      });
+    });
+  }
+
+  private addParameter(): void {
+    const next = this.paramSelect?.value ?? "";
+    if (!next || this.activeParams.includes(next)) {
+      return;
+    }
+    this.activeParams = [...this.activeParams, next];
+    this.renderParameterList();
+    this.renderModelList(this.collectCurrentMappings(), this.categorySelect?.value ?? "amp");
+  }
+
+  private autoMapParameters(): void {
+    if (!this.modelList) {
+      return;
+    }
+
+    const rows = Array.from(this.modelList.querySelectorAll(".blend-model-row"));
+    const modelIds = rows
+      .map((row) => (row.querySelector(".blend-model-select") as HTMLSelectElement | null)?.value ?? "")
+      .filter((id) => Boolean(id));
+
+    if (!modelIds.length) {
+      return;
+    }
+
+    const resources = this.deps.getResourceLibrary().nam ?? [];
+    const paramSet = new Set<string>();
+    const mappings: BlendModelMapping[] = modelIds.map((id) => {
+      const match = resources.find((res) => res.id === id);
+      const parameters: Record<string, number> = {};
+      PARAM_SPECS.forEach((spec) => {
+        const value = inferParamValueFromName(match?.name ?? "", spec.id);
+        if (value !== null) {
+          parameters[spec.id] = value;
+          paramSet.add(spec.id);
+        }
+      });
+      return { id, parameters };
+    });
+
+    const params = Array.from(paramSet);
+    this.activeParams = params.length ? params : ["gain"];
+    this.renderParameterList();
+    this.renderModelList(mappings, this.categorySelect?.value ?? "amp");
+  }
+
+  private async exportBlendArchive(): Promise<void> {
+    if (!this.modal) {
+      return;
+    }
+    const blendId = this.modal.dataset.blendId ?? "";
+    const blend = this.deps.getBlendLibrary().find((entry) => entry.id === blendId);
+    if (!blend) {
+      return;
+    }
+
+    const zipLib = window.JSZip;
+    if (!zipLib) {
+      return;
+    }
+
+    const zip = new zipLib();
+    const resourcesFolder = zip.folder("resources");
+    if (!resourcesFolder) {
+      return;
+    }
+
+    const resources = this.deps.getResourceLibrary().nam ?? [];
+    const exportResources: Array<{ id: string; name: string; category: string; type: string; fileName: string }> = [];
+
+    for (const modelId of blend.models ?? []) {
+      const resource = resources.find((res) => res.id === modelId);
+      if (!resource) {
+        continue;
+      }
+      const fileName = buildArchiveFileName(resource);
+      const data = await requestResourceData("nam", resource.id);
+      if (!data) {
+        continue;
+      }
+      resourcesFolder.file(fileName, data, { base64: true });
+      exportResources.push({
+        id: resource.id,
+        name: resource.name,
+        category: resource.category,
+        type: "nam",
+        fileName,
+      });
+    }
+
+    const archive = {
+      formatVersion: 1,
+      blend: {
+        ...blend,
+      },
+      resources: exportResources,
+    };
+
+    zip.file("blend.json", JSON.stringify(archive, null, 2));
+    const blob = await zip.generateAsync({ type: "blob" });
+    const buffer = await blob.arrayBuffer();
+    const data = arrayBufferToBase64(buffer);
+    postMessage({
+      type: "saveBlendArchive",
+      fileName: `${sanitizeFilename(blend.name || blend.id || "blend")}.namz`,
+      data,
+    });
+  }
+
+  private async importBlendArchive(): Promise<void> {
+    const file = this.importInput?.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    if (this.importInput) {
+      this.importInput.value = "";
+    }
+
+    const zipLib = window.JSZip;
+    if (!zipLib) {
+      return;
+    }
+
+    const buffer = await file.arrayBuffer();
+    const zip = await zipLib.loadAsync(buffer);
+    const blendEntry = zip.file("blend.json");
+    if (!blendEntry) {
+      return;
+    }
+
+    const blendText = await blendEntry.async("text");
+    const archive = JSON.parse(blendText) as {
+      blend?: BlendLibrary[number];
+      resources?: Array<{ id?: string; fileName?: string; name?: string; category?: string; type?: string }>;
+    };
+
+    const zipFiles = Object.values(zip.files) as JSZipObject[];
+    const fileMap = new Map<string, JSZipObject>();
+    zipFiles.forEach((entry) => {
+      if (!entry.dir) {
+        const name = entry.name.replace(/^resources\//, "");
+        fileMap.set(name, entry);
+      }
+    });
+
+    const idMap = new Map<string, string>();
+    const resourcesToImport = archive.resources ?? [];
+
+    for (const resource of resourcesToImport) {
+      const fileName = resource.fileName ?? "";
+      const entry = fileMap.get(fileName);
+      if (!entry) {
+        continue;
+      }
+      const dataBuffer = await entry.async("arraybuffer");
+      const data = arrayBufferToBase64(dataBuffer);
+      const newId = generateResourceId(fileName);
+      idMap.set(resource.id ?? fileName, newId);
+
+      postMessage({
+        type: "importRemoteResource",
+        provider: "blendArchive",
+        resourceType: "nam",
+        resourceId: newId,
+        name: resource.name ?? fileName,
+        description: "",
+        category: resource.category ?? "",
+        subfolder: "blend-imports",
+        fileName,
+        metadata: {
+          provider: "blendArchive",
+          sourceFile: fileName,
+        },
+        data,
+      });
+    }
+
+    const originalBlend = archive.blend;
+    if (!originalBlend) {
+      return;
+    }
+
+    const newBlendId = generateResourceId(originalBlend.id || originalBlend.name || "blend");
+    const remapId = (id: string) => idMap.get(id) ?? id;
+    const models = (originalBlend.models ?? []).map(remapId);
+    const modelMappings = (originalBlend.modelMappings ?? []).map((mapping) => ({
+      ...mapping,
+      id: remapId(mapping.id),
+    }));
+
+    postMessage({
+      type: "saveBlendDefinition",
+      blend: {
+        ...originalBlend,
+        id: newBlendId,
+        models,
+        modelMappings,
+      },
+    });
+  }
+
+  private renderModelList(mappings: BlendModelMapping[], category: string): void {
+    if (!this.modelList) {
+      return;
+    }
+
+    if (!mappings.length) {
+      mappings = [{ id: "" }];
+    }
+
+    this.modelList.innerHTML = mappings
+      .map((mapping, index) => {
+        const parameters = mapping.parameters ?? buildParameterMapFromLegacy(mapping);
+        return `
+          <div class="blend-model-row" data-index="${index}">
+            <div class="blend-model-header">
+              <select class="blend-model-select">
+                ${this.buildModelOptions(mapping.id)}
+              </select>
+              <button class="blend-model-auto" type="button">Auto</button>
+              <button class="blend-model-remove" type="button">Remove</button>
+            </div>
+            <div class="blend-model-params">
+              ${this.activeParams.map((paramId) => renderParamInput(paramId, parameters)).join("")}
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
+    this.bindModelRowEvents(category);
+  }
+
+  private buildModelOptions(selectedId: string): string {
+    const resources = this.deps.getResourceLibrary().nam ?? [];
+    const options = resources
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((res) => {
+        const selected = res.id === selectedId ? "selected" : "";
+        return `<option value="${res.id}" ${selected}>${escapeHtml(res.name)}</option>`;
+      })
+      .join("");
+
+    const selectedMissing = selectedId && !resources.some((res) => res.id === selectedId);
+    const missingOption = selectedMissing
+      ? `<option value="${escapeHtml(selectedId)}" selected>Missing: ${escapeHtml(selectedId)}</option>`
+      : "";
+
+    return `
+      <option value="">-- Select model --</option>
+      ${missingOption}
+      ${options}
+    `;
+  }
+
+  private bindModelRowEvents(category: string): void {
+    if (!this.modelList) {
+      return;
+    }
+
+    const rows = this.modelList.querySelectorAll(".blend-model-row");
+    rows.forEach((row) => {
+      const select = row.querySelector(".blend-model-select") as HTMLSelectElement | null;
+      const autoBtn = row.querySelector(".blend-model-auto") as HTMLButtonElement | null;
+      const removeBtn = row.querySelector(".blend-model-remove") as HTMLButtonElement | null;
+
+      const applyAuto = (force: boolean) => {
+        if (!select || !select.value) {
+          return;
+        }
+        const currentId = select.value;
+        const match = getLibraryResource(this.deps.getResourceLibrary(), "nam", currentId);
+        this.activeParams.forEach((paramId) => {
+          const input = row.querySelector(`.blend-model-param-value[data-param-id="${paramId}"]`) as HTMLInputElement | null;
+          if (!input) {
+            return;
+          }
+          if (input.value.trim() && !force) {
+            return;
+          }
+          const inferred = inferParamValueFromName(match?.name ?? "", paramId);
+          if (inferred === null) {
+            return;
+          }
+          const spec = getParamSpec(paramId);
+          input.value = spec ? denormalizeValue(inferred, spec) : inferred.toFixed(2);
+        });
+      };
+
+      select?.addEventListener("change", () => applyAuto(false));
+      autoBtn?.addEventListener("click", () => applyAuto(true));
+      removeBtn?.addEventListener("click", () => {
+        row.remove();
+      });
+    });
+  }
+
+  private addModelRow(): void {
+    if (!this.modelList) {
+      return;
+    }
+
+    const category = this.categorySelect?.value ?? "amp";
+    const index = this.modelList.querySelectorAll(".blend-model-row").length;
+    const row = document.createElement("div");
+    row.className = "blend-model-row";
+    row.dataset.index = index.toString();
+    row.innerHTML = `
+      <div class="blend-model-header">
+        <select class="blend-model-select">
+          ${this.buildModelOptions("")}
+        </select>
+        <button class="blend-model-auto" type="button">Auto</button>
+        <button class="blend-model-remove" type="button">Remove</button>
+      </div>
+      <div class="blend-model-params">
+        ${this.activeParams.map((paramId) => renderParamInput(paramId, {})).join("")}
+      </div>
+    `;
+    this.modelList.appendChild(row);
+    this.bindModelRowEvents(category);
+  }
+
+  private save(): void {
+    if (!this.modal) {
+      return;
+    }
+    const blendId = this.modal.dataset.blendId ?? "";
+    if (!blendId) {
+      return;
+    }
+
+    const name = (this.nameInput?.value ?? "").trim();
+    if (!name) {
+      return;
+    }
+
+    const category = (this.categorySelect?.value ?? "amp").trim();
+    const blendMode = (this.modeSelect?.value ?? "interpolate") as "snap" | "interpolate";
+
+    const modelMappings: BlendModelMapping[] = [];
+    const rows = this.modelList?.querySelectorAll(".blend-model-row") ?? [];
+    rows.forEach((row) => {
+      const select = row.querySelector(".blend-model-select") as HTMLSelectElement | null;
+      const modelId = select?.value?.trim() ?? "";
+      if (!modelId) {
+        return;
+      }
+
+      const parameters: Record<string, number> = {};
+      this.activeParams.forEach((paramId) => {
+        const input = row.querySelector(`.blend-model-param-value[data-param-id="${paramId}"]`) as HTMLInputElement | null;
+        const raw = input?.value?.trim() ?? "";
+        const numeric = raw ? Number.parseFloat(raw) : NaN;
+        if (Number.isNaN(numeric)) {
+          return;
+        }
+        const spec = getParamSpec(paramId);
+        parameters[paramId] = spec ? normalizeValue(numeric, spec) : numeric;
+      });
+
+      const primaryParam = this.activeParams[0] ?? "";
+      const primaryValue = primaryParam && primaryParam in parameters ? parameters[primaryParam] : undefined;
+
+      const mapping: BlendModelMapping = {
+        id: modelId,
+      };
+      if (primaryParam) {
+        mapping.parameterId = primaryParam;
+      }
+      if (primaryValue !== undefined) {
+        mapping.parameterValue = primaryValue;
+      }
+      if (Object.keys(parameters).length) {
+        mapping.parameters = parameters;
+      }
+      modelMappings.push(mapping);
+    });
+
+    const models = modelMappings.map((mapping) => mapping.id);
+    postMessage({
+      type: "saveBlendDefinition",
+      blend: {
+        id: blendId,
+        name,
+        category,
+        parameters: this.activeParams.slice(),
+        models,
+        modelMappings,
+        blendMode,
+      },
+    });
+
+    this.close();
+  }
+
+  private collectCurrentMappings(): BlendModelMapping[] {
+    if (!this.modelList) {
+      return [];
+    }
+    const rows = this.modelList.querySelectorAll(".blend-model-row");
+    const mappings: BlendModelMapping[] = [];
+    rows.forEach((row) => {
+      const select = row.querySelector(".blend-model-select") as HTMLSelectElement | null;
+      const modelId = select?.value?.trim() ?? "";
+      if (!modelId) {
+        return;
+      }
+      const parameters: Record<string, number> = {};
+      this.activeParams.forEach((paramId) => {
+        const input = row.querySelector(`.blend-model-param-value[data-param-id="${paramId}"]`) as HTMLInputElement | null;
+        const raw = input?.value?.trim() ?? "";
+        const numeric = raw ? Number.parseFloat(raw) : NaN;
+        if (Number.isNaN(numeric)) {
+          return;
+        }
+        const spec = getParamSpec(paramId);
+        parameters[paramId] = spec ? normalizeValue(numeric, spec) : numeric;
+      });
+      mappings.push({ id: modelId, parameters });
+    });
+    return mappings;
+  }
+}
+
+function resolveActiveParams(blend: BlendLibrary[number] | undefined, mappings: BlendModelMapping[]): string[] {
+  const params = new Set<string>();
+  if (blend?.parameters?.length) {
+    blend.parameters.forEach((param) => params.add(param));
+  }
+  mappings.forEach((mapping) => {
+    if (mapping.parameters) {
+      Object.keys(mapping.parameters).forEach((param) => params.add(param));
+    }
+    if (mapping.parameterId) {
+      params.add(mapping.parameterId);
+    }
+  });
+  if (!params.size) {
+    params.add("gain");
+  }
+  return Array.from(params);
+}
+
+function renderParamInput(paramId: string, parameters: Record<string, number>): string {
+  const spec = getParamSpec(paramId);
+  const label = spec?.label ?? paramId;
+  const value = typeof parameters[paramId] === "number"
+    ? (spec ? denormalizeValue(parameters[paramId], spec) : parameters[paramId].toFixed(2))
+    : "";
+  const step = spec ? "0.1" : "0.01";
+  return `
+    <label class="blend-model-param">
+      <span>${escapeHtml(label)}</span>
+      <input class="blend-model-param-value" data-param-id="${paramId}" type="number" step="${step}" placeholder="Value" value="${escapeHtml(value)}" />
+    </label>
+  `;
+}
+
+function buildParameterMapFromLegacy(mapping: BlendModelMapping): Record<string, number> {
+  if (mapping.parameters) {
+    return mapping.parameters;
+  }
+  if (mapping.parameterId && typeof mapping.parameterValue === "number") {
+    return { [mapping.parameterId]: mapping.parameterValue };
+  }
+  return {};
+}
+
+function getLibraryResource(library: ResourceLibrary, resourceType: string, resourceId: string): LibraryResource | undefined {
+  if (!resourceType || !resourceId) return undefined;
+  const resources = library[resourceType] || [];
+  return resources.find((res) => res.id === resourceId);
+}
+
+function getParamSpec(parameterId: string): ParamSpec | null {
+  if (!parameterId) {
+    return null;
+  }
+  return PARAM_SPECS.find((spec) => spec.id === parameterId) ?? null;
+}
+
+function normalizeValue(value: number, spec: ParamSpec): number {
+  if (value < 0) {
+    return value / 10;
+  }
+  const clamped = Math.min(spec.max, Math.max(spec.min, value));
+  const range = spec.max - spec.min;
+  if (range <= 0) {
+    return 0;
+  }
+  return (clamped - spec.min) / range;
+}
+
+function denormalizeValue(value: number, spec: ParamSpec): string {
+  const range = spec.max - spec.min;
+  const raw = value < 0 ? value * 10 : spec.min + value * range;
+  return raw.toFixed(1);
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function sanitizeFilename(raw: string): string {
+  const trimmed = raw.trim() || "blend";
+  return trimmed.replace(/[^a-z0-9-_\.]+/gi, "-");
+}
+
+function buildArchiveFileName(resource: LibraryResource): string {
+  const name = resource.filePath ? resource.filePath.split(/[\\/]/).pop() ?? "" : "";
+  if (name) {
+    return name;
+  }
+  return `${sanitizeFilename(resource.id || resource.name || "model")}.nam`;
+}
+
+function generateResourceId(seed: string): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${sanitizeFilename(seed)}-${Math.random().toString(16).slice(2)}`;
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  bytes.forEach((b) => {
+    binary += String.fromCharCode(b);
+  });
+  return btoa(binary);
+}
+
+type ResourceDataResponse = {
+  requestId: string;
+  data?: string;
+  fileName?: string;
+  message?: string;
+};
+
+const resourceRequests = new Map<string, (data?: string) => void>();
+
+async function requestResourceData(resourceType: string, resourceId: string): Promise<string | undefined> {
+  const requestId = generateResourceId(resourceId);
+  const promise = new Promise<string | undefined>((resolve) => {
+    resourceRequests.set(requestId, resolve);
+  });
+
+  postMessage({
+    type: "requestResourceData",
+    requestId,
+    resourceType,
+    resourceId,
+  });
+
+  return promise;
+}
+
+export function handleResourceDataMessage(payload: ResourceDataResponse): void {
+  const resolve = resourceRequests.get(payload.requestId);
+  if (!resolve) {
+    return;
+  }
+  resourceRequests.delete(payload.requestId);
+  resolve(payload.data);
+}

@@ -8,8 +8,10 @@ import { handleTunerUpdate, handleTunerStarted, handleTunerStopped, handleTunerR
 import { applyUiSettings } from "./windowSettings.js";
 import { updateDSPPerformancePlot, updateSignalDiagnosticsView } from "./views.js";
 import { refreshSettingsView } from "./settings.js";
+import { refreshFxSelector } from "./fxSelector.js";
 import { applyEnvironmentState, applyMetronomeState } from "./metronome.js";
 import type { Preset, UiSettings } from "./types.js";
+import { handleResourceDataMessage } from "./blendEditor.js";
 
 export function handleIncomingMessage(message: string): void {
   const payload = JSON.parse(message) as Record<string, unknown>;
@@ -38,6 +40,11 @@ export function handleIncomingMessage(message: string): void {
       const resourceLibrary = (payload as { resourceLibrary?: Record<string, unknown[]> }).resourceLibrary;
       if (resourceLibrary) {
         uiState.resourceLibrary = resourceLibrary as import("./types.js").ResourceLibrary;
+      }
+      const blendLibrary = (payload as { blendLibrary?: unknown[] }).blendLibrary;
+      if (Array.isArray(blendLibrary)) {
+        uiState.blendLibrary = blendLibrary as import("./types.js").BlendLibrary;
+        refreshFxSelector();
       }
       const appSettings = (payload as { appSettings?: Record<string, unknown> }).appSettings;
       if (appSettings) {
@@ -208,6 +215,24 @@ export function handleIncomingMessage(message: string): void {
       const info = payload as { message?: string; detail?: string };
       appendLog(`resource import failed ← ${info.message ?? "unknown"}`);
       showNotification(info.message ?? "Import failed", info.detail ?? "");
+      break;
+    }
+    case "resourceData": {
+      handleResourceDataMessage(payload as { requestId: string; data?: string; fileName?: string; message?: string });
+      break;
+    }
+    case "resourceDataFailed": {
+      handleResourceDataMessage(payload as { requestId: string; data?: string; fileName?: string; message?: string });
+      break;
+    }
+    case "blendExportSaved": {
+      const info = payload as { path?: string };
+      showNotification("Blend exported", info.path ?? "");
+      break;
+    }
+    case "blendExportFailed": {
+      const info = payload as { message?: string };
+      showNotification("Blend export failed", info.message ?? "");
       break;
     }
     case "presetSaved": {

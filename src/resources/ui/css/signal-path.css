@@ -1101,6 +1101,22 @@
   border-color: var(--color-primary);
 }
 
+.blend-open-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  background: #4a4a5a;
+  border: 1px solid #5a5a6a;
+  border-radius: 4px;
+  color: #e0e0f0;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.blend-open-btn:hover {
+  background: #5a5a6a;
+  border-color: var(--color-primary);
+}
+
 /* ===== Signal Add Button (+ between nodes) ===== */
 
 .signal-connector-wrapper {
