@@ -273,6 +273,9 @@ function getEffectIcon(effectType: string): string {
     "compressor_vca": "📊",
     "compressor_opto": "💡",
     "compressor_fet": "⚡",
+    "overdrive": "🔥",
+    "distortion": "💥",
+    "fuzz": "🌪️",
     
     // Amps
     "amp_nam": "🎸",
@@ -296,6 +299,8 @@ function getEffectIcon(effectType: string): string {
     "flanger": "〰️",
     "phaser": "🌀",
     "tremolo": "📳",
+    "auto_wah": "🎛️",
+    "octave": "🎼",
     "vibrato": "🎭",
     
     // Delay

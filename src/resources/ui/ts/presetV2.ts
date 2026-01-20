@@ -94,6 +94,42 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
+    type: "overdrive",
+    displayName: "Overdrive",
+    category: "dynamics",
+    requiresResource: false,
+    parameters: [
+      { key: "drive", name: "Drive", default: 0.5, min: 0, max: 1, unit: "amount" },
+      { key: "tone", name: "Tone", default: 0.5, min: 0, max: 1, unit: "amount" },
+      { key: "level", name: "Level", default: 0, min: -12, max: 12, unit: "dB" },
+      { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "amount" }
+    ]
+  },
+  {
+    type: "distortion",
+    displayName: "Distortion",
+    category: "dynamics",
+    requiresResource: false,
+    parameters: [
+      { key: "drive", name: "Drive", default: 0.6, min: 0, max: 1, unit: "amount" },
+      { key: "tone", name: "Tone", default: 0.5, min: 0, max: 1, unit: "amount" },
+      { key: "level", name: "Level", default: 0, min: -12, max: 12, unit: "dB" },
+      { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "amount" }
+    ]
+  },
+  {
+    type: "fuzz",
+    displayName: "Fuzz",
+    category: "dynamics",
+    requiresResource: false,
+    parameters: [
+      { key: "drive", name: "Drive", default: 0.7, min: 0, max: 1, unit: "amount" },
+      { key: "tone", name: "Tone", default: 0.5, min: 0, max: 1, unit: "amount" },
+      { key: "level", name: "Level", default: 0, min: -12, max: 12, unit: "dB" },
+      { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "amount" }
+    ]
+  },
+  {
     type: "limiter_brickwall",
     displayName: "Brickwall Limiter",
     category: "dynamics",
@@ -232,6 +268,81 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     requiresResource: false,
     parameters: [
       { key: "semitones", name: "Semitones", default: 0, min: -24, max: 24, unit: "st" },
+      { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "amount" }
+    ]
+  },
+  {
+    type: "chorus",
+    displayName: "Chorus",
+    category: "modulation",
+    requiresResource: false,
+    parameters: [
+      { key: "rate", name: "Rate", default: 1.2, min: 0.1, max: 10, unit: "Hz" },
+      { key: "depth", name: "Depth", default: 12, min: 0, max: 20, unit: "ms" },
+      { key: "delay", name: "Delay", default: 18, min: 1, max: 30, unit: "ms" },
+      { key: "feedback", name: "Feedback", default: 0.1, min: 0, max: 0.95, unit: "amount" },
+      { key: "mix", name: "Mix", default: 0.4, min: 0, max: 1, unit: "amount" }
+    ]
+  },
+  {
+    type: "flanger",
+    displayName: "Flanger",
+    category: "modulation",
+    requiresResource: false,
+    parameters: [
+      { key: "rate", name: "Rate", default: 0.25, min: 0.05, max: 5, unit: "Hz" },
+      { key: "depth", name: "Depth", default: 2, min: 0, max: 5, unit: "ms" },
+      { key: "delay", name: "Delay", default: 1, min: 0.1, max: 5, unit: "ms" },
+      { key: "feedback", name: "Feedback", default: 0.2, min: 0, max: 0.95, unit: "amount" },
+      { key: "mix", name: "Mix", default: 0.5, min: 0, max: 1, unit: "amount" }
+    ]
+  },
+  {
+    type: "phaser",
+    displayName: "Phaser",
+    category: "modulation",
+    requiresResource: false,
+    parameters: [
+      { key: "rate", name: "Rate", default: 0.4, min: 0.05, max: 8, unit: "Hz" },
+      { key: "depth", name: "Depth", default: 0.8, min: 0, max: 1, unit: "amount" },
+      { key: "feedback", name: "Feedback", default: 0.3, min: 0, max: 0.95, unit: "amount" },
+      { key: "mix", name: "Mix", default: 0.5, min: 0, max: 1, unit: "amount" }
+    ]
+  },
+  {
+    type: "tremolo",
+    displayName: "Tremolo",
+    category: "modulation",
+    requiresResource: false,
+    parameters: [
+      { key: "rate", name: "Rate", default: 4, min: 0.1, max: 12, unit: "Hz" },
+      { key: "depth", name: "Depth", default: 0.7, min: 0, max: 1, unit: "amount" },
+      { key: "shape", name: "Shape", default: 0, min: 0, max: 1, unit: "amount" },
+      { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "amount" }
+    ]
+  },
+  {
+    type: "auto_wah",
+    displayName: "Auto-Wah",
+    category: "modulation",
+    requiresResource: false,
+    parameters: [
+      { key: "sensitivity", name: "Sensitivity", default: 0.6, min: 0, max: 1, unit: "amount" },
+      { key: "minFreq", name: "Min Freq", default: 300, min: 200, max: 1000, unit: "Hz" },
+      { key: "maxFreq", name: "Max Freq", default: 2800, min: 800, max: 5000, unit: "Hz" },
+      { key: "resonance", name: "Resonance", default: 2.5, min: 0.5, max: 10, unit: "Q" },
+      { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "amount" }
+    ]
+  },
+  {
+    type: "octave",
+    displayName: "Octave",
+    category: "modulation",
+    requiresResource: false,
+    parameters: [
+      { key: "octaveUp", name: "Oct Up", default: 0.6, min: 0, max: 1, unit: "amount" },
+      { key: "octaveDown", name: "Oct Down", default: 0.6, min: 0, max: 1, unit: "amount" },
+      { key: "tone", name: "Tone", default: 0.5, min: 0, max: 1, unit: "amount" },
       { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "amount" }
     ]
   },

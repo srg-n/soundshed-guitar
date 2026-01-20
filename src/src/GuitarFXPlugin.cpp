@@ -3905,6 +3905,12 @@ namespace guitarfx
       }
     }
 
+    if (!handled && !mActivePresetId.empty())
+    {
+      mPresetMixer.SetNodeParam(mActivePresetId, node.id, paramKey, value);
+      handled = true;
+    }
+
     return handled;
   }
 

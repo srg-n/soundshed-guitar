@@ -10,6 +10,15 @@
 #include "dsp/effects/PitchShiftEffect.h"
 #include "dsp/effects/ReverbEffect.h"
 #include "dsp/effects/CompressorEffect.h"
+#include "dsp/effects/OverdriveEffect.h"
+#include "dsp/effects/DistortionEffect.h"
+#include "dsp/effects/FuzzEffect.h"
+#include "dsp/effects/ChorusEffect.h"
+#include "dsp/effects/FlangerEffect.h"
+#include "dsp/effects/PhaserEffect.h"
+#include "dsp/effects/TremoloEffect.h"
+#include "dsp/effects/AutoWahEffect.h"
+#include "dsp/effects/OctaveEffect.h"
 #include "dsp/effects/LimiterEffect.h"
 #include "dsp/effects/NAMAmpEffect.h"
 #include "dsp/effects/OptimizedNAMAmpEffect.h"
@@ -51,6 +60,9 @@ namespace guitarfx
     RegisterNoiseGateEffect();
     RegisterCompressorEffects(); // VCA and Opto compressors
     RegisterLimiterEffect();
+    RegisterOverdriveEffect();
+    RegisterDistortionEffect();
+    RegisterFuzzEffect();
 
     // EQ
     RegisterParametricEQEffect();
@@ -71,6 +83,12 @@ namespace guitarfx
 
     // Modulation effects
     RegisterPitchShiftEffect();
+    RegisterChorusEffect();
+    RegisterFlangerEffect();
+    RegisterPhaserEffect();
+    RegisterTremoloEffect();
+    RegisterAutoWahEffect();
+    RegisterOctaveEffect();
   }
 
 } // namespace guitarfx
