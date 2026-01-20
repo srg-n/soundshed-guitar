@@ -323,6 +323,7 @@ export interface UiState {
   signalDiagnostics?: SignalLevelDiagnostics | null;
   environment?: EnvironmentState;
   metronome?: MetronomeState;
+  namCalibrationStatus?: Record<string, "calibrating" | "ready" | "failed">;
 }
 
 declare global {

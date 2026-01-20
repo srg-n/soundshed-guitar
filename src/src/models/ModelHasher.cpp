@@ -8,6 +8,12 @@
 namespace guitarfx
 {
 
+  /// Computes a 64-bit FNV-1a hash of the file contents.
+  /// Reads the file in 4KB chunks, XORs each byte into the hash, and multiplies by
+  /// the FNV prime using the standard FNV-1a offset basis. Returns the hash as a
+  /// lowercase hexadecimal string, or an empty string if the file cannot be opened.
+  /// @param filePath Path to the file to hash.
+  /// @return Hexadecimal string of the 64-bit FNV-1a hash, or empty on failure.
   std::string ModelHasher::HashFile(const std::filesystem::path &filePath) const
   {
     std::ifstream input(filePath, std::ios::binary);

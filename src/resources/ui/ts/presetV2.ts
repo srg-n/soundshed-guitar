@@ -76,7 +76,7 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
       { key: "release", name: "Release", default: 100, min: 10, max: 2000, unit: "ms" },
       { key: "knee", name: "Knee", default: 6, min: 0, max: 24, unit: "dB" },
       { key: "makeup", name: "Makeup", default: 0, min: 0, max: 24, unit: "dB" },
-      { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "" }
+      { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "amount" }
     ]
   },
   {
@@ -90,7 +90,7 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
       { key: "attack", name: "Attack", default: 20, min: 5, max: 200, unit: "ms" },
       { key: "release", name: "Release", default: 300, min: 50, max: 3000, unit: "ms" },
       { key: "makeup", name: "Makeup", default: 0, min: 0, max: 24, unit: "dB" },
-      { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "" }
+      { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "amount" }
     ]
   },
   {
@@ -101,7 +101,11 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     resourceType: "nam",
     parameters: [
       { key: "inputGain", name: "Input", default: 0, min: -24, max: 24, unit: "dB" },
-      { key: "outputGain", name: "Output", default: 0, min: -24, max: 24, unit: "dB" }
+      { key: "outputGain", name: "Output", default: 0, min: -24, max: 24, unit: "dB" },
+      { key: "autoLevelInput", name: "Auto Level Input", default: 1, min: 0, max: 1, unit: "toggle" },
+      { key: "autoLevelOutput", name: "Auto Level Output", default: 1, min: 0, max: 1, unit: "toggle" },
+      { key: "calibrationInputLevel", name: "Cal Input", default: -18, min: -60, max: 24, unit: "dB" },
+      { key: "calibrationOutputLevel", name: "Cal Output", default: -18, min: -60, max: 24, unit: "dB" }
     ]
   },
   {
@@ -112,7 +116,11 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     resourceType: "nam",
     parameters: [
       { key: "inputGain", name: "Input", default: 0, min: -24, max: 24, unit: "dB" },
-      { key: "outputGain", name: "Output", default: 0, min: -24, max: 24, unit: "dB" }
+      { key: "outputGain", name: "Output", default: 0, min: -24, max: 24, unit: "dB" },
+      { key: "autoLevelInput", name: "Auto Level Input", default: 1, min: 0, max: 1, unit: "toggle" },
+      { key: "autoLevelOutput", name: "Auto Level Output", default: 1, min: 0, max: 1, unit: "toggle" },
+      { key: "calibrationInputLevel", name: "Cal Input", default: -18, min: -60, max: 24, unit: "dB" },
+      { key: "calibrationOutputLevel", name: "Cal Output", default: -18, min: -60, max: 24, unit: "dB" }
     ]
   },
   {
@@ -122,7 +130,7 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     requiresResource: true,
     resourceType: "nam",
     parameters: [
-      { key: "blend", name: "Blend", default: 0, min: 0, max: 1, unit: "" },
+      { key: "blend", name: "Blend", default: 0, min: 0, max: 1, unit: "amount" },
       { key: "inputGain", name: "Input", default: 0, min: -24, max: 24, unit: "dB" },
       { key: "outputGain", name: "Output", default: 0, min: -24, max: 24, unit: "dB" }
     ]
@@ -134,7 +142,7 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     requiresResource: true,
     resourceType: "ir",
     parameters: [
-      { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "" },
+      { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "amount" },
       { key: "outputGain", name: "Output", default: 0, min: -24, max: 24, unit: "dB" }
     ]
   },
@@ -144,10 +152,10 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     category: "cab",
     requiresResource: false,
     parameters: [
-      { key: "bass", name: "Bass", default: 0.5, min: 0, max: 1, unit: "" },
-      { key: "presence", name: "Presence", default: 0.5, min: 0, max: 1, unit: "" },
-      { key: "brightness", name: "Brightness", default: 0.5, min: 0, max: 1, unit: "" },
-      { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "" }
+      { key: "bass", name: "Bass", default: 0.5, min: 0, max: 1, unit: "amount" },
+      { key: "presence", name: "Presence", default: 0.5, min: 0, max: 1, unit: "amount" },
+      { key: "brightness", name: "Brightness", default: 0.5, min: 0, max: 1, unit: "amount" },
+      { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "amount" }
     ]
   },
   {
@@ -160,10 +168,10 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
       { key: "band0_freq", name: "Low Freq", default: 100, min: 20, max: 500, unit: "Hz" },
       { key: "band1_gain", name: "Low-Mid Gain", default: 0, min: -18, max: 18, unit: "dB" },
       { key: "band1_freq", name: "Low-Mid Freq", default: 400, min: 200, max: 2000, unit: "Hz" },
-      { key: "band1_q", name: "Low-Mid Q", default: 1.0, min: 0.1, max: 10, unit: "" },
+      { key: "band1_q", name: "Low-Mid Q", default: 1.0, min: 0.1, max: 10, unit: "amount" },
       { key: "band2_gain", name: "High-Mid Gain", default: 0, min: -18, max: 18, unit: "dB" },
       { key: "band2_freq", name: "High-Mid Freq", default: 2000, min: 1000, max: 8000, unit: "Hz" },
-      { key: "band2_q", name: "High-Mid Q", default: 1.0, min: 0.1, max: 10, unit: "" },
+      { key: "band2_q", name: "High-Mid Q", default: 1.0, min: 0.1, max: 10, unit: "amount" },
       { key: "band3_gain", name: "High Gain", default: 0, min: -18, max: 18, unit: "dB" },
       { key: "band3_freq", name: "High Freq", default: 8000, min: 4000, max: 20000, unit: "Hz" }
     ]
@@ -175,7 +183,7 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     requiresResource: false,
     parameters: [
       { key: "gain", name: "Gain", default: 0, min: -60, max: 24, unit: "dB" },
-      { key: "polarity", name: "Invert", default: 0, min: 0, max: 1, unit: "" }
+      { key: "polarity", name: "Invert", default: 0, min: 0, max: 1, unit: "toggle" }
     ]
   },
   {
@@ -192,8 +200,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     requiresResource: false,
     parameters: [
       { key: "time", name: "Time", default: 300, min: 1, max: 2000, unit: "ms" },
-      { key: "feedback", name: "Feedback", default: 0.4, min: 0, max: 0.95, unit: "" },
-      { key: "mix", name: "Mix", default: 0.3, min: 0, max: 1, unit: "" },
+      { key: "feedback", name: "Feedback", default: 0.4, min: 0, max: 0.95, unit: "amount" },
+      { key: "mix", name: "Mix", default: 0.3, min: 0, max: 1, unit: "amount" },
       { key: "highCut", name: "High Cut", default: 8000, min: 500, max: 20000, unit: "Hz" }
     ]
   },
@@ -204,7 +212,7 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     requiresResource: false,
     parameters: [
       { key: "time", name: "Delay Time", default: 6, min: 0, max: 100, unit: "ms" },
-      { key: "mix", name: "Mix", default: 0.3, min: 0, max: 1, unit: "" }
+      { key: "mix", name: "Mix", default: 0.3, min: 0, max: 1, unit: "amount" }
     ]
   },
   {
@@ -214,7 +222,7 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     requiresResource: false,
     parameters: [
       { key: "semitones", name: "Semitones", default: 0, min: -24, max: 24, unit: "st" },
-      { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "" }
+      { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "amount" }
     ]
   },
   {
@@ -223,9 +231,9 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     category: "reverb",
     requiresResource: false,
     parameters: [
-      { key: "decay", name: "Decay", default: 0.5, min: 0, max: 1, unit: "" },
-      { key: "damping", name: "Damping", default: 0.5, min: 0, max: 1, unit: "" },
-      { key: "mix", name: "Mix", default: 0.3, min: 0, max: 1, unit: "" }
+      { key: "decay", name: "Decay", default: 0.5, min: 0, max: 1, unit: "amount" },
+      { key: "damping", name: "Damping", default: 0.5, min: 0, max: 1, unit: "amount" },
+      { key: "mix", name: "Mix", default: 0.3, min: 0, max: 1, unit: "amount" }
     ]
   }
 ];

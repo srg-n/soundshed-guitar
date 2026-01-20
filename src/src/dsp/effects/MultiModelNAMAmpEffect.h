@@ -160,15 +160,7 @@ public:
 
   void SetConfig(const std::string& key, const std::string& value) override
   {
-    if (key == "autoLevelInput")
-    {
-      mAutoLevelInput = ParseBool(value);
-    }
-    else if (key == "autoLevelOutput")
-    {
-      mAutoLevelOutput = ParseBool(value);
-    }
-    else if (key == "parameterId")
+    if (key == "parameterId")
     {
       mParameterId = value;
     }
@@ -281,13 +273,15 @@ private:
   double mInputGain = 1.0;
   double mOutputGain = 1.0;
   double mBlend = 0.0;
-  bool mAutoLevelInput = false;
-  bool mAutoLevelOutput = false;
+  bool mAutoLevelInput = true;
+  bool mAutoLevelOutput = true;
   bool mEnabled = true;
   std::string mParameterId;
 
   double mCachedAutoInputGain = 1.0;
   double mCachedAutoOutputGain = 1.0;
+  std::optional<double> mCalibrationInputLevel;
+  std::optional<double> mCalibrationOutputLevel;
 
   void UpdateEffectiveGains()
   {
@@ -501,17 +495,20 @@ private:
     static constexpr double kTargetInputLeveldBu = -18.0;
     static constexpr double kTargetOutputLeveldB = -18.0;
 
-    if (mAutoLevelInput && blendedInputLevel.has_value())
+    const auto inputLevel = mCalibrationInputLevel.has_value() ? mCalibrationInputLevel : blendedInputLevel;
+    const auto outputLevel = mCalibrationOutputLevel.has_value() ? mCalibrationOutputLevel : blendedOutputLevel;
+
+    if (mAutoLevelInput && inputLevel.has_value())
     {
-      const double deltaDb = std::clamp(kTargetInputLeveldBu - *blendedInputLevel, -24.0, 24.0);
+      const double deltaDb = std::clamp(kTargetInputLeveldBu - *inputLevel, -24.0, 24.0);
       mAutoInputGain = std::pow(10.0, deltaDb / 20.0);
     }
 
     if (mAutoLevelOutput)
     {
-      if (blendedOutputLevel.has_value())
+      if (outputLevel.has_value())
       {
-        const double deltaDb = std::clamp(kTargetOutputLeveldB - *blendedOutputLevel, -24.0, 24.0);
+        const double deltaDb = std::clamp(kTargetOutputLeveldB - *outputLevel, -24.0, 24.0);
         mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
       }
       else if (blendedLoudness.has_value())

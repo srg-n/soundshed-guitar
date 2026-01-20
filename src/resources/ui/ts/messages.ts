@@ -8,6 +8,7 @@ import { handleTunerUpdate, handleTunerStarted, handleTunerStopped, handleTunerR
 import { applyUiSettings } from "./windowSettings.js";
 import { updateDSPPerformancePlot, updateSignalDiagnosticsView } from "./views.js";
 import { refreshSettingsView } from "./settings.js";
+import { refreshSelectedNodeParams } from "./signalPath.js";
 import { refreshFxSelector } from "./fxSelector.js";
 import { applyEnvironmentState, applyMetronomeState } from "./metronome.js";
 import type { Preset, UiSettings } from "./types.js";
@@ -196,6 +197,41 @@ export function handleIncomingMessage(message: string): void {
       appendLog(`model loaded ← ${(payload as { path?: string }).path ?? "unknown"}`);
       renderActivePreset();
       showNotification("Model loaded", (payload as { path?: string }).path ?? "");
+      break;
+    }
+    case "namCalibrationStatus": {
+      const info = payload as { nodeId?: string; status?: string };
+      if (info.nodeId) {
+        uiState.namCalibrationStatus = uiState.namCalibrationStatus ?? {};
+        if (info.status === "calibrating") {
+          uiState.namCalibrationStatus[info.nodeId] = "calibrating";
+        } else {
+          delete uiState.namCalibrationStatus[info.nodeId];
+        }
+        renderActivePreset();
+      }
+      break;
+    }
+    case "namCalibrationApplied": {
+      const info = payload as { nodeId?: string; params?: Record<string, number> };
+      if (!info.nodeId || !info.params) {
+        break;
+      }
+      const activePresetId = uiState.activePresetId ?? "";
+      const preset = uiState.presetCache.get(activePresetId) ?? uiState.presets.find((p) => p.id === activePresetId);
+      if (preset?.graph) {
+        const node = preset.graph.nodes.find((n) => n.id === info.nodeId);
+        if (node) {
+          Object.entries(info.params).forEach(([key, value]) => {
+            if (typeof value === "number") {
+              node.params[key] = value;
+            }
+          });
+          uiState.presetCache.set(preset.id, preset);
+          renderActivePreset();
+          refreshSelectedNodeParams();
+        }
+      }
       break;
     }
     case "irLoaded": {

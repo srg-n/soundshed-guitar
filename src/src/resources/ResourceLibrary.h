@@ -7,6 +7,10 @@
 #include <string>
 #include <vector>
 
+#ifdef UpdateResource
+#undef UpdateResource
+#endif
+
 namespace guitarfx
 {
   struct ResourceRef;

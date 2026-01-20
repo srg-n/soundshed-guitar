@@ -27,6 +27,8 @@
 #include "dsp/IRTypes.h"
 #include "dsp/EffectRegistry.h"
 #include "resources/ResourceLibrary.h"
+#include "NAM/dsp.h"
+#include "NAM/get_dsp.h"
 #include "IPlug_include_in_plug_src.h"
 #include "IPlugPaths.h"
 #include "wdlstring.h"
@@ -63,6 +65,10 @@ namespace guitarfx
     constexpr double kMetronomeClickFrequencyHz = 1800.0;
     constexpr double kMinDbFS = -120.0;
     constexpr double kMinLinear = 1e-6;
+    constexpr const char* kNamCalibrationFileName = "model-calibration.json";
+    constexpr const char* kSessionLogFileName = "session-log.txt";
+    constexpr double kNamCalibrationFrequencyHz = 1000.0;
+    constexpr double kNamCalibrationDurationSeconds = 1.0;
 
     double ToDbFS(double linear)
     {
@@ -71,6 +77,92 @@ namespace guitarfx
         return kMinDbFS;
       }
       return 20.0 * std::log10(linear);
+    }
+
+    std::optional<GuitarFXPlugin::NamCalibrationData> RunNamCalibration(const std::filesystem::path& modelPath,
+                                                                        double sampleRate,
+                                                                        int blockSize,
+                                                                        std::string& error)
+    {
+      try
+      {
+        auto model = ::nam::get_dsp(modelPath);
+        if (!model)
+        {
+          error = "Failed to load NAM model";
+          return std::nullopt;
+        }
+
+        blockSize = std::max(64, blockSize);
+        model->Reset(sampleRate, blockSize);
+
+        constexpr double kTwoPiLocal = 6.28318530717958647692;
+        const int totalSamples = std::max(1, static_cast<int>(sampleRate * kNamCalibrationDurationSeconds));
+        std::vector<NAM_SAMPLE> input(static_cast<size_t>(blockSize));
+        std::vector<NAM_SAMPLE> output(static_cast<size_t>(blockSize));
+
+        double inputSumSquares = 0.0;
+        double outputSumSquares = 0.0;
+        double phase = 0.0;
+        const double phaseIncrement = (kTwoPiLocal * kNamCalibrationFrequencyHz) / sampleRate;
+
+        int processed = 0;
+        while (processed < totalSamples)
+        {
+          const int frames = std::min(blockSize, totalSamples - processed);
+          for (int i = 0; i < frames; ++i)
+          {
+            const double sample = std::sin(phase);
+            phase += phaseIncrement;
+            if (phase >= kTwoPiLocal)
+            {
+              phase -= kTwoPiLocal;
+            }
+
+            input[static_cast<size_t>(i)] = static_cast<NAM_SAMPLE>(sample);
+            inputSumSquares += sample * sample;
+          }
+
+          model->process(input.data(), output.data(), frames);
+
+          for (int i = 0; i < frames; ++i)
+          {
+            const double out = static_cast<double>(output[static_cast<size_t>(i)]);
+            outputSumSquares += out * out;
+          }
+
+          processed += frames;
+        }
+
+        if (processed <= 0)
+        {
+          error = "Calibration produced no samples";
+          return std::nullopt;
+        }
+
+        const double inputRms = std::sqrt(inputSumSquares / static_cast<double>(processed));
+        const double outputRms = std::sqrt(outputSumSquares / static_cast<double>(processed));
+        if (!std::isfinite(inputRms) || !std::isfinite(outputRms) || outputRms <= kMinLinear)
+        {
+          error = "Calibration produced invalid RMS";
+          return std::nullopt;
+        }
+
+        GuitarFXPlugin::NamCalibrationData data;
+        data.inputLevelDb = ToDbFS(inputRms);
+        data.outputLevelDb = ToDbFS(outputRms);
+        return data;
+      }
+      catch (const std::exception& ex)
+      {
+        error = ex.what();
+        return std::nullopt;
+      }
+      catch (...)
+      {
+        error = "Unknown calibration error";
+        return std::nullopt;
+      }
     }
 
     double LinearFromDb(double db)
@@ -92,6 +184,21 @@ namespace guitarfx
     {
       return std::min(maximum, std::max(minimum, value));
     }
+
+        std::string FormatTimestamp()
+        {
+      const auto now = std::chrono::system_clock::now();
+      const auto tt = std::chrono::system_clock::to_time_t(now);
+      std::tm localTime{};
+    #ifdef _WIN32
+      localtime_s(&localTime, &tt);
+    #else
+      localtime_r(&tt, &localTime);
+    #endif
+      std::ostringstream oss;
+      oss << std::put_time(&localTime, "%Y-%m-%d %H:%M:%S");
+      return oss.str();
+        }
 #ifdef APP_API
     constexpr bool kIsStandaloneBuild = true;
 #else
@@ -1726,6 +1833,15 @@ namespace guitarfx
       SendMessageToUI(message.dump());
     }
 
+    if (mNamCalibrationFuture && mNamCalibrationFuture->wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+    {
+      const auto result = mNamCalibrationFuture->get();
+      mNamCalibrationFuture.reset();
+      mNamCalibrationActiveJob.reset();
+      ApplyNamCalibrationResult(result);
+      ProcessNamCalibrationQueue();
+    }
+
     // Send tuner data updates to UI
     if (mTunerDataPending.exchange(false, std::memory_order_acq_rel))
     {
@@ -2550,6 +2666,10 @@ namespace guitarfx
     {
       HandleUpdateNodeResourceRequest(payload);
     }
+    else if (type == "rerunNamCalibration")
+    {
+      HandleRerunNamCalibrationRequest(payload);
+    }
     else if (type == "browseNodeResource")
     {
       HandleBrowseNodeResourceRequest(payload);
@@ -3004,6 +3124,17 @@ namespace guitarfx
       applyEqParam(kParamEQHighGain, "highGain");
       applyEqParam(kParamEQHighFreq, "highFreq");
     }
+
+    if (mActivePreset)
+    {
+      for (const auto& node : mActivePreset->graph.nodes)
+      {
+        if ((node.type == "amp_nam" || node.type == "amp_nam_optimized") && node.resource && node.resource->IsValid())
+        {
+          QueueNamCalibrationForNode(node.id, *node.resource);
+        }
+      }
+    }
   }
 
   void GuitarFXPlugin::ApplyBlendDefinitions(Preset& preset)
@@ -3242,6 +3373,17 @@ namespace guitarfx
     }
 
     SaveAppSettings();
+
+    if (mActivePreset)
+    {
+      for (const auto& node : mActivePreset->graph.nodes)
+      {
+        if ((node.type == "amp_nam" || node.type == "amp_nam_optimized") && node.resource && node.resource->IsValid())
+        {
+          QueueNamCalibrationForNode(node.id, *node.resource);
+        }
+      }
+    }
 
     nlohmann::json message;
     message["type"] = "modelLoaded";
@@ -3766,6 +3908,465 @@ namespace guitarfx
     return handled;
   }
 
+  void GuitarFXPlugin::SendNamCalibrationStatus(const std::string& nodeId, const std::string& status)
+  {
+    if (nodeId.empty() || status.empty())
+    {
+      return;
+    }
+
+    nlohmann::json message;
+    message["type"] = "namCalibrationStatus";
+    message["nodeId"] = nodeId;
+    message["status"] = status;
+    SendMessageToUI(message.dump());
+  }
+
+  void GuitarFXPlugin::AppendSessionLog(std::string_view message)
+  {
+    if (message.empty())
+    {
+      return;
+    }
+
+    const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
+    (void)mFileSystem.EnsureDirectory(settingsDir);
+    const auto logPath = settingsDir / kSessionLogFileName;
+
+    std::ofstream output(logPath, std::ios::app);
+    if (!output)
+    {
+      return;
+    }
+
+    output << FormatTimestamp() << " " << message << "\n";
+  }
+
+  void GuitarFXPlugin::ClearNamCalibrationParams(GraphNode& node) const
+  {
+    node.params.erase("calibrationInputLevel");
+    node.params.erase("calibrationOutputLevel");
+  }
+
+  std::optional<GuitarFXPlugin::NamCalibrationData> GuitarFXPlugin::GetNamCalibrationFromCache(const std::string& hash) const
+  {
+    if (hash.empty())
+    {
+      return std::nullopt;
+    }
+
+    const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
+    const auto filePath = settingsDir / kNamCalibrationFileName;
+    if (!std::filesystem::exists(filePath))
+    {
+      return std::nullopt;
+    }
+
+    nlohmann::json root;
+    std::ifstream input(filePath);
+    if (!input)
+    {
+      return std::nullopt;
+    }
+
+    try
+    {
+      input >> root;
+    }
+    catch (...)
+    {
+      return std::nullopt;
+    }
+
+    if (!root.is_object() || !root.contains("models") || !root["models"].is_object())
+    {
+      return std::nullopt;
+    }
+
+    const auto& models = root["models"];
+    if (!models.contains(hash) || !models[hash].is_object())
+    {
+      return std::nullopt;
+    }
+
+    const auto& entry = models[hash];
+    NamCalibrationData data;
+    data.inputLevelDb = entry.value("inputLevelDb", 0.0);
+    data.outputLevelDb = entry.value("outputLevelDb", 0.0);
+    return data;
+  }
+
+  void GuitarFXPlugin::StoreNamCalibrationInCache(const std::string& hash, const NamCalibrationData& data)
+  {
+    if (hash.empty())
+    {
+      return;
+    }
+
+    const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
+    const auto filePath = settingsDir / kNamCalibrationFileName;
+    (void)mFileSystem.EnsureDirectory(settingsDir);
+
+    nlohmann::json root = nlohmann::json::object();
+    if (std::filesystem::exists(filePath))
+    {
+      std::ifstream input(filePath);
+      if (input)
+      {
+        try
+        {
+          input >> root;
+        }
+        catch (...)
+        {
+          root = nlohmann::json::object();
+        }
+      }
+    }
+
+    if (!root.is_object())
+    {
+      root = nlohmann::json::object();
+    }
+    if (!root.contains("models") || !root["models"].is_object())
+    {
+      root["models"] = nlohmann::json::object();
+    }
+
+    root["models"][hash] = {
+      {"hash", hash},
+      {"inputLevelDb", data.inputLevelDb},
+      {"outputLevelDb", data.outputLevelDb}
+    };
+
+    std::ofstream output(filePath);
+    if (output)
+    {
+      output << root.dump(2);
+    }
+  }
+
+  void GuitarFXPlugin::RemoveNamCalibrationFromCache(const std::string& hash)
+  {
+    if (hash.empty())
+    {
+      return;
+    }
+
+    const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
+    const auto filePath = settingsDir / kNamCalibrationFileName;
+    if (!std::filesystem::exists(filePath))
+    {
+      return;
+    }
+
+    nlohmann::json root;
+    std::ifstream input(filePath);
+    if (!input)
+    {
+      return;
+    }
+
+    try
+    {
+      input >> root;
+    }
+    catch (...)
+    {
+      return;
+    }
+
+    if (!root.is_object() || !root.contains("models") || !root["models"].is_object())
+    {
+      return;
+    }
+
+    auto& models = root["models"];
+    if (models.contains(hash))
+    {
+      models.erase(hash);
+      std::ofstream output(filePath);
+      if (output)
+      {
+        output << root.dump(2);
+      }
+    }
+  }
+
+  void GuitarFXPlugin::ApplyNamCalibrationToNode(const std::string& nodeId,
+                                                 const std::string& hash,
+                                                 const NamCalibrationData& data)
+  {
+    if (!mActivePreset)
+    {
+      return;
+    }
+
+    GraphNode* node = mActivePreset->graph.FindNode(nodeId);
+    if (!node)
+    {
+      return;
+    }
+
+    const auto hashIt = node->config.find("modelHash");
+    if (hashIt != node->config.end() && hashIt->second != hash)
+    {
+      return;
+    }
+
+    node->params["calibrationInputLevel"] = data.inputLevelDb;
+    node->params["calibrationOutputLevel"] = data.outputLevelDb;
+
+    if (!node->params.count("autoLevelInput"))
+    {
+      node->params["autoLevelInput"] = 1.0;
+    }
+    if (!node->params.count("autoLevelOutput"))
+    {
+      node->params["autoLevelOutput"] = 1.0;
+    }
+
+    mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+
+    if (!mActivePresetId.empty())
+    {
+      mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "calibrationInputLevel", data.inputLevelDb);
+      mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "calibrationOutputLevel", data.outputLevelDb);
+      mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "autoLevelInput", node->params["autoLevelInput"]);
+      mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "autoLevelOutput", node->params["autoLevelOutput"]);
+    }
+
+    nlohmann::json message;
+    message["type"] = "namCalibrationApplied";
+    message["nodeId"] = nodeId;
+    message["params"] = {
+      {"calibrationInputLevel", data.inputLevelDb},
+      {"calibrationOutputLevel", data.outputLevelDb},
+      {"autoLevelInput", node->params["autoLevelInput"]},
+      {"autoLevelOutput", node->params["autoLevelOutput"]}
+    };
+    SendMessageToUI(message.dump());
+
+    mPendingStateBroadcast = true;
+  }
+
+  void GuitarFXPlugin::QueueNamCalibrationForNode(const std::string& nodeId, const ResourceRef& ref, bool force)
+  {
+    if (nodeId.empty())
+    {
+      return;
+    }
+
+    const auto resolvedPath = ResolveResourceRef(ref);
+    if (!resolvedPath)
+    {
+      return;
+    }
+
+    const std::string hash = mHasher.HashFile(*resolvedPath);
+    if (hash.empty())
+    {
+      return;
+    }
+
+    if (mActivePreset)
+    {
+      if (auto* node = mActivePreset->graph.FindNode(nodeId))
+      {
+        node->config["modelHash"] = hash;
+        ClearNamCalibrationParams(*node);
+        if (!node->params.count("autoLevelInput"))
+        {
+          node->params["autoLevelInput"] = 1.0;
+        }
+        if (!node->params.count("autoLevelOutput"))
+        {
+          node->params["autoLevelOutput"] = 1.0;
+        }
+        mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+        mPendingStateBroadcast = true;
+      }
+    }
+
+    if (force)
+    {
+      RemoveNamCalibrationFromCache(hash);
+    }
+
+    if (!force)
+    {
+      if (auto cached = GetNamCalibrationFromCache(hash))
+      {
+        ApplyNamCalibrationToNode(nodeId, hash, *cached);
+        SendNamCalibrationStatus(nodeId, "ready");
+        return;
+      }
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(mNamCalibrationMutex);
+      auto& waiters = mNamCalibrationWaiters[hash];
+      if (std::find(waiters.begin(), waiters.end(), nodeId) == waiters.end())
+      {
+        waiters.push_back(nodeId);
+      }
+
+      if (!mNamCalibrationInFlight.count(hash))
+      {
+        mNamCalibrationQueue.push_back({hash, *resolvedPath, ref.resourceType, ref.resourceId});
+        mNamCalibrationInFlight.insert(hash);
+      }
+    }
+
+    SendNamCalibrationStatus(nodeId, "calibrating");
+    AppendSessionLog("NAM calibration started: " + hash);
+    ProcessNamCalibrationQueue();
+  }
+
+  void GuitarFXPlugin::HandleRerunNamCalibrationRequest(const nlohmann::json &payload)
+  {
+    const std::string nodeId = payload.value("nodeId", "");
+    if (nodeId.empty())
+    {
+      ReportErrorToUI("Recalibration failed", "Missing node id");
+      return;
+    }
+
+    if (!mActivePreset)
+    {
+      ReportErrorToUI("Recalibration failed", "No active preset");
+      return;
+    }
+
+    GraphNode* node = mActivePreset->graph.FindNode(nodeId);
+    if (!node)
+    {
+      ReportErrorToUI("Recalibration failed", "Node not found");
+      return;
+    }
+
+    if (node->type != "amp_nam" && node->type != "amp_nam_optimized")
+    {
+      ReportErrorToUI("Recalibration failed", "Selected node is not a NAM amp");
+      return;
+    }
+
+    std::optional<ResourceRef> ref;
+    if (node->resource && node->resource->IsValid())
+    {
+      ref = *node->resource;
+    }
+    else if (!node->resources.empty() && node->resources.front().IsValid())
+    {
+      ref = node->resources.front();
+    }
+
+    if (ref)
+    {
+      const auto resolvedPath = ResolveResourceRef(*ref);
+      if (!resolvedPath)
+      {
+        ReportErrorToUI("Recalibration failed", "Model file not found");
+        return;
+      }
+      QueueNamCalibrationForNode(nodeId, *ref, true);
+      nlohmann::json message;
+      message["type"] = "debug";
+      message["message"] = "NAM recalibration queued";
+      SendMessageToUI(message.dump());
+      return;
+    }
+
+    ReportErrorToUI("Recalibration failed", "No model assigned to this node");
+  }
+
+  void GuitarFXPlugin::ProcessNamCalibrationQueue()
+  {
+    if (mNamCalibrationFuture && mNamCalibrationFuture->wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+    {
+      return;
+    }
+
+    NamCalibrationJob job;
+    {
+      std::lock_guard<std::mutex> lock(mNamCalibrationMutex);
+      if (mNamCalibrationFuture || mNamCalibrationQueue.empty())
+      {
+        return;
+      }
+
+      job = mNamCalibrationQueue.front();
+      mNamCalibrationQueue.pop_front();
+      mNamCalibrationActiveJob = job;
+    }
+
+    const double sampleRate = std::max(1.0, GetSampleRate());
+    const int blockSize = std::max(64, GetBlockSize());
+    mNamCalibrationFuture = std::async(std::launch::async, [job, sampleRate, blockSize]() {
+      GuitarFXPlugin::NamCalibrationResult result;
+      result.job = job;
+      std::string error;
+      if (auto data = RunNamCalibration(job.path, sampleRate, blockSize, error))
+      {
+        result.success = true;
+        result.data = *data;
+      }
+      else
+      {
+        result.success = false;
+        result.error = error;
+      }
+      return result;
+    });
+  }
+
+  void GuitarFXPlugin::ApplyNamCalibrationResult(const NamCalibrationResult& result)
+  {
+    const std::string& hash = result.job.hash;
+
+    std::vector<std::string> waiters;
+    {
+      std::lock_guard<std::mutex> lock(mNamCalibrationMutex);
+      if (auto it = mNamCalibrationWaiters.find(hash); it != mNamCalibrationWaiters.end())
+      {
+        waiters = std::move(it->second);
+        mNamCalibrationWaiters.erase(it);
+      }
+      mNamCalibrationInFlight.erase(hash);
+    }
+
+    if (!result.success)
+    {
+      AppendSessionLog("NAM calibration failed: " + result.job.hash + (result.error.empty() ? "" : " (" + result.error + ")"));
+      for (const auto& nodeId : waiters)
+      {
+        SendNamCalibrationStatus(nodeId, "failed");
+      }
+      return;
+    }
+
+    AppendSessionLog("NAM calibration complete: " + result.job.hash);
+
+    StoreNamCalibrationInCache(hash, result.data);
+
+    if (!result.job.resourceType.empty() && !result.job.resourceId.empty())
+    {
+      if (auto resource = mResourceLibrary.LookupResource(result.job.resourceType, result.job.resourceId))
+      {
+        auto updated = *resource;
+        updated.metadata["calibration.inputLevelDb"] = std::to_string(result.data.inputLevelDb);
+        updated.metadata["calibration.outputLevelDb"] = std::to_string(result.data.outputLevelDb);
+        (mResourceLibrary.UpdateResource)(result.job.resourceType, result.job.resourceId, updated);
+      }
+    }
+
+    for (const auto& nodeId : waiters)
+    {
+      ApplyNamCalibrationToNode(nodeId, hash, result.data);
+      SendNamCalibrationStatus(nodeId, "ready");
+    }
+  }
+
   void GuitarFXPlugin::HandleUpdateSignalPathNodeBypassRequest(const nlohmann::json &payload)
   {
     const std::string nodeId = payload.value("nodeId", "");
@@ -3878,6 +4479,14 @@ namespace guitarfx
     // Update only the targeted node (single-resource)
     if (UpdateResourceForNodeId(nodeId, ref, true))
     {
+      if (mActivePreset)
+      {
+        GraphNode* node = mActivePreset->graph.FindNode(nodeId);
+        if (node && (node->type == "amp_nam" || node->type == "amp_nam_optimized") && node->resource && node->resource->IsValid())
+        {
+          QueueNamCalibrationForNode(nodeId, *node->resource);
+        }
+      }
       return;
     }
   }
@@ -4315,6 +4924,7 @@ namespace guitarfx
     {
       ReportErrorToUI("Import failed", "Missing resource metadata");
       SendMessageToUI(nlohmann::json{{"type", "resourceImportFailed"}, {"message", "Import failed"}, {"detail", "Missing resource metadata"}}.dump());
+      AppendSessionLog("Import failed: missing resource metadata");
       return;
     }
 
@@ -4341,12 +4951,14 @@ namespace guitarfx
     {
       ReportErrorToUI("Import failed", "Invalid base64 payload");
       SendMessageToUI(nlohmann::json{{"type", "resourceImportFailed"}, {"message", "Import failed"}, {"detail", "Invalid base64 payload"}}.dump());
+      AppendSessionLog("Import failed: invalid base64 payload for " + resourceType + ":" + resourceId);
       return;
     }
     if (!WriteFile(targetPath, bytes))
     {
       ReportErrorToUI("Import failed", "Failed to write file");
       SendMessageToUI(nlohmann::json{{"type", "resourceImportFailed"}, {"message", "Import failed"}, {"detail", "Failed to write file"}}.dump());
+      AppendSessionLog("Import failed: write error for " + resourceType + ":" + resourceId);
       return;
     }
 
@@ -4388,6 +5000,7 @@ namespace guitarfx
     msg["name"] = name;
     msg["filePath"] = targetPath.string();
     SendMessageToUI(msg.dump());
+    AppendSessionLog("Imported resource " + resourceType + ":" + resourceId + " (" + targetPath.string() + ")");
   }
 
   void GuitarFXPlugin::HandleSaveBlendDefinitionRequest(const nlohmann::json &payload)
@@ -4498,6 +5111,7 @@ namespace guitarfx
     if (dataEncoded.empty())
     {
       SendMessageToUI(nlohmann::json{{"type", "blendExportFailed"}, {"message", "Missing export data"}}.dump());
+      AppendSessionLog("Blend export failed: missing export data");
       return;
     }
 
@@ -4524,6 +5138,7 @@ namespace guitarfx
     if (!GetSaveFileNameW(&ofn))
     {
       SendMessageToUI(nlohmann::json{{"type", "blendExportFailed"}, {"message", "Save cancelled"}}.dump());
+      AppendSessionLog("Blend export cancelled");
       return;
     }
 
@@ -4531,6 +5146,7 @@ namespace guitarfx
     if (decodedBytes.empty())
     {
       SendMessageToUI(nlohmann::json{{"type", "blendExportFailed"}, {"message", "Invalid export data"}}.dump());
+      AppendSessionLog("Blend export failed: invalid export data");
       return;
     }
 
@@ -4538,10 +5154,12 @@ namespace guitarfx
     if (!WriteFile(targetPath, decodedBytes))
     {
       SendMessageToUI(nlohmann::json{{"type", "blendExportFailed"}, {"message", "Failed to save file"}}.dump());
+      AppendSessionLog("Blend export failed: write error for " + targetPath.generic_string());
       return;
     }
 
     SendMessageToUI(nlohmann::json{{"type", "blendExportSaved"}, {"path", targetPath.generic_string()}}.dump());
+    AppendSessionLog("Blend export saved: " + targetPath.generic_string());
 #else
     ReportErrorToUI("Export not supported", "Blend archive export is only available on Windows");
 #endif
@@ -4696,6 +5314,7 @@ namespace guitarfx
           UpdateMetronomeClickConfigFromSettings();
           RefreshMetronomeClickSamples();
         }
+        AppendSessionLog("Session started");
         return;
       }
 
@@ -4868,6 +5487,7 @@ namespace guitarfx
       }
 
       std::cout << "[Plugin] Loaded app settings from: " << settingsFile.generic_string() << std::endl;
+      AppendSessionLog("Session started");
     }
     catch (const std::exception &e)
     {

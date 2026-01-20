@@ -119,6 +119,7 @@ export const uiState: UiState = {
   globalSignalChain: { ...DEFAULT_GLOBAL_SIGNAL_CHAIN },
   signalDiagnostics: null,
   environment: { standalone: false },
+  namCalibrationStatus: {},
   metronome: {
     bpm: 120,
     enabled: false,

@@ -1,6 +1,7 @@
 import { uiState } from "./state.js";
 import type { Preset, GraphNode, GraphEdge, LibraryResource, BlendModelMapping, BlendLibrary } from "./types.js";
 import { postMessage } from "./bridge.js";
+import { showNotification } from "./notifications.js";
 import { EffectTypeRegistry, type EffectTypeInfo } from "./presetV2.js";
 import { sendAddSignalPathNode, sendAddSignalPathNodeOnEdge, type SignalPathEdgeRef } from "./fxSelector.js";
 import { GenericKnob } from "./controls.js";
@@ -275,6 +276,24 @@ export function renderSignalPathBar(): void {
   }
 
   updateSignalPathClipIndicators();
+}
+
+export function refreshSelectedNodeParams(): void {
+  if (!selectedNodeId) {
+    return;
+  }
+  const activePresetId = uiState.activePresetId;
+  const activePreset = activePresetId
+    ? (uiState.presetCache.get(activePresetId) ?? uiState.presets.find((p) => p.id === activePresetId))
+    : undefined;
+  if (!activePreset?.graph) {
+    return;
+  }
+  const node = activePreset.graph.nodes.find((n) => n.id === selectedNodeId);
+  if (!node) {
+    return;
+  }
+  showNodeParamsPanel(node, activePreset);
 }
 
 type EdgeRef = SignalPathEdgeRef & { gain: number };
@@ -597,6 +616,7 @@ function renderNodeElement(node: GraphNode): string {
   const selectedClass = selectedNodeId === node.id ? "selected" : "";
   const allowDelete = node.type !== "splitter" && node.type !== "mixer";
   const displayName = getNodeDisplayName(node);
+  const isCalibrating = uiState.namCalibrationStatus?.[node.id] === "calibrating";
   
   let resourceLabel = "";
   const resourceSummary = getNodeResourceSummary(node);
@@ -617,6 +637,7 @@ function renderNodeElement(node: GraphNode): string {
         ${resourceLabel}
       </div>
       <span class="node-clip-indicator clip-inactive" aria-hidden="true"></span>
+      ${isCalibrating ? '<div class="node-calibration-badge">CAL</div>' : ""}
       ${isNodeBypassed(node) ? '<div class="node-bypass-badge">OFF</div>' : ""}
     </div>
   `;
@@ -947,14 +968,31 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
   const typeInfo = EffectTypeRegistry.get(node.type);
   const paramDefs = typeInfo?.parameters || [];
   
-  const paramControls = Object.entries(node.params).map(([key, value]) => {
-    const paramDef = paramDefs.find(p => p.key === key);
-    const label = paramDef?.name || formatParamLabel(key);
-    const min = paramDef?.min ?? 0;
-    const max = paramDef?.max ?? 1;
-    const unit = paramDef?.unit || "";
-    const defaultValue = paramDef?.default ?? value;
-    
+  const paramControls = paramDefs.map((paramDef) => {
+    const key = paramDef.key;
+    const rawValue = node.params[key];
+    const value = typeof rawValue === "number" ? rawValue : paramDef.default;
+    const label = paramDef.name || formatParamLabel(key);
+    const min = paramDef.min ?? 0;
+    const max = paramDef.max ?? 1;
+    const unit = paramDef.unit || "amount";
+    const defaultValue = paramDef.default ?? value;
+    const isToggle = isToggleParam(paramDef);
+
+    if (isToggle) {
+      const checked = value >= 0.5;
+      return `
+        <div class="node-param-group">
+          <span class="node-param-label">${label}</span>
+          <label class="toggle-switch">
+            <input class="node-param-toggle" type="checkbox" data-node-id="${node.id}" data-param-key="${key}" ${checked ? "checked" : ""}>
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="node-param-value">${checked ? "On" : "Off"}</span>
+        </div>
+      `;
+    }
+
     return `
       <div class="node-param-group">
         <span class="node-param-label">${label}</span>
@@ -984,6 +1022,13 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
       ${bypassed ? "Enable" : "Bypass"}
     </button>
   `;
+
+  const canRecalibrate = node.type === "amp_nam" || node.type === "amp_nam_optimized";
+  const recalibrateButton = canRecalibrate
+    ? `
+      <button class="node-calibrate-btn" data-node-id="${node.id}">Recalibrate</button>
+    `
+    : "";
 
   // Build resource selector if this node type requires a resource
   let resourceSelector = "";
@@ -1086,6 +1131,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
       </div>
       <div class="node-actions">
         ${bypassButton}
+        ${recalibrateButton}
       </div>
     </div>
   `;
@@ -1096,6 +1142,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
   bindBlendEditorControls(node);
   bindCloseButton();
   bindBypassButton(node, preset);
+  bindCalibrationButton(node);
 }
 
 function formatParamLabel(key: string): string {
@@ -1104,7 +1151,29 @@ function formatParamLabel(key: string): string {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function isToggleParam(paramDef: { key: string; min?: number; max?: number; unit?: string }): boolean {
+  return paramDef.unit==="toggle";
+}
+
 function bindNodeParamControls(node: GraphNode, preset: Preset): void {
+  const toggles = nodeParamsPanelElement?.querySelectorAll(".node-param-toggle");
+  toggles?.forEach((toggleEl) => {
+    const input = toggleEl as HTMLInputElement;
+    input.addEventListener("change", () => {
+      const nodeId = input.dataset.nodeId;
+      const paramKey = input.dataset.paramKey;
+      if (nodeId && paramKey) {
+        const value = input.checked ? 1 : 0;
+        node.params[paramKey] = value;
+        sendSignalPathNodeParamUpdate(nodeId, paramKey, value);
+        const valueLabel = input.closest(".node-param-group")?.querySelector(".node-param-value") as HTMLElement | null;
+        if (valueLabel) {
+          valueLabel.textContent = input.checked ? "On" : "Off";
+        }
+      }
+    });
+  });
+
   const knobs = nodeParamsPanelElement?.querySelectorAll(".node-param-knob");
   if (!knobs) {
     return;
@@ -1118,7 +1187,7 @@ function bindNodeParamControls(node: GraphNode, preset: Preset): void {
     const paramKey = knob.dataset.paramKey;
     const min = parseFloat(knob.dataset.min || "0");
     const max = parseFloat(knob.dataset.max || "1");
-    const unit = knob.dataset.unit || "";
+    const unit = knob.dataset.unit || "amount";
     const defaultValue = parseFloat(knob.dataset.default || knob.dataset.value || "0");
     const sensitivity = (max - min) / 200;
 
@@ -1128,7 +1197,7 @@ function bindNodeParamControls(node: GraphNode, preset: Preset): void {
       minValue: min,
       maxValue: max,
       defaultValue,
-      displayFormat: (value) => `${value.toFixed(2)}${unit}`,
+      displayFormat: (value) => `${value.toFixed(2)}${unit === "amount" ? "" : unit}`,
       valueDisplay,
       sensitivity,
       sendParameter: false,
@@ -1256,6 +1325,21 @@ function bindBypassButton(node: GraphNode, preset: Preset): void {
       showNodeParamsPanel(node, preset);
     });
   }
+}
+
+function bindCalibrationButton(node: GraphNode): void {
+  const calibrateBtn = nodeParamsPanelElement?.querySelector(".node-calibrate-btn") as HTMLButtonElement | null;
+  if (!calibrateBtn) {
+    return;
+  }
+
+  calibrateBtn.addEventListener("click", () => {
+    showNotification("Recalibration started", getNodeDisplayName(node));
+    postMessage({
+      type: "rerunNamCalibration",
+      nodeId: node.id,
+    });
+  });
 }
 
 function sendSignalPathNodeParamUpdate(nodeId: string, paramKey: string, value: number): void {

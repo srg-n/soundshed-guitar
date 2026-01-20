@@ -115,8 +115,30 @@ namespace guitarfx
         mUserOutputGain = std::pow(10.0, std::clamp(value, -24.0, 24.0) / 20.0);
         UpdateEffectiveGains();
       }
+      else if (key == "autoLevelInput")
+      {
+        mAutoLevelInput = value > 0.5;
+        RecalculateAutoGains();
+      }
+      else if (key == "autoLevelOutput")
+      {
+        mAutoLevelOutput = value > 0.5;
+        RecalculateAutoGains();
+      }
+      else if (key == "calibrationInputLevel")
+      {
+        mCalibrationInputLevel = value;
+        RecalculateAutoGains();
+      }
+      else if (key == "calibrationOutputLevel")
+      {
+        mCalibrationOutputLevel = value;
+        RecalculateAutoGains();
+      }
       else if (key == "enabled")
+      {
         mEnabled = value > 0.5;
+      }
     }
 
     void SetConfig(const std::string &key, const std::string &value) override
@@ -190,11 +212,13 @@ namespace guitarfx
     double mAutoOutputGain = 1.0;
     double mInputGain = 1.0;
     double mOutputGain = 1.0;
-    bool mAutoLevelInput = false;
-    bool mAutoLevelOutput = false;
+    bool mAutoLevelInput = true;
+    bool mAutoLevelOutput = true;
     std::optional<double> mModelInputLevel;
     std::optional<double> mModelOutputLevel;
     std::optional<double> mModelLoudness;
+    std::optional<double> mCalibrationInputLevel;
+    std::optional<double> mCalibrationOutputLevel;
     bool mEnabled = true;
 
     void UpdateEffectiveGains()
@@ -211,17 +235,20 @@ namespace guitarfx
       mAutoInputGain = 1.0;
       mAutoOutputGain = 1.0;
 
-      if (mAutoLevelInput && mModelInputLevel.has_value())
+      const auto inputLevel = mCalibrationInputLevel.has_value() ? mCalibrationInputLevel : mModelInputLevel;
+      const auto outputLevel = mCalibrationOutputLevel.has_value() ? mCalibrationOutputLevel : mModelOutputLevel;
+
+      if (mAutoLevelInput && inputLevel.has_value())
       {
-        const double deltaDb = std::clamp(kTargetInputLeveldBu - *mModelInputLevel, -24.0, 24.0);
+        const double deltaDb = std::clamp(kTargetInputLeveldBu - *inputLevel, -24.0, 24.0);
         mAutoInputGain = std::pow(10.0, deltaDb / 20.0);
       }
 
       if (mAutoLevelOutput)
       {
-        if (mModelOutputLevel.has_value())
+        if (outputLevel.has_value())
         {
-          const double deltaDb = std::clamp(kTargetOutputLeveldB - *mModelOutputLevel, -24.0, 24.0);
+          const double deltaDb = std::clamp(kTargetOutputLeveldB - *outputLevel, -24.0, 24.0);
           mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
         }
         else if (mModelLoudness.has_value())
@@ -254,8 +281,12 @@ namespace guitarfx
     info.requiresResource = true;
     info.resourceType = "nam"; // .nam model files
     info.parameters = {
-        {"inputGain", "Input Gain", 0.0, -24.0, 24.0, "dB"},
-        {"outputGain", "Output Gain", 0.0, -24.0, 24.0, "dB"}};
+      {"inputGain", "Input Gain", 0.0, -24.0, 24.0, "dB"},
+      {"outputGain", "Output Gain", 0.0, -24.0, 24.0, "dB"},
+      {"autoLevelInput", "Auto Level Input", 1.0, 0.0, 1.0, ""},
+      {"autoLevelOutput", "Auto Level Output", 1.0, 0.0, 1.0, ""},
+      {"calibrationInputLevel", "Calibration Input", -18.0, -60.0, 24.0, "dB"},
+      {"calibrationOutputLevel", "Calibration Output", -18.0, -60.0, 24.0, "dB"}};
 
     EffectRegistry::Instance().Register("amp_nam", info, []()
                                         { return std::make_unique<NAMAmpEffect>(); });

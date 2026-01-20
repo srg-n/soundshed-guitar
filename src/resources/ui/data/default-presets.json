@@ -12,7 +12,7 @@
     "globals": {
       "inputTrim": 0,
       "outputTrim": 0,
-      "outputVolume": 0.8,
+      "outputVolume": 1.0,
       "transpose": 0
     },
     "graph": {
@@ -79,7 +79,7 @@
     "globals": {
       "inputTrim": 0,
       "outputTrim": 0,
-      "outputVolume": 0.8,
+      "outputVolume": 1.0,
       "transpose": 0
     },
     "graph": {
@@ -146,7 +146,7 @@
     "globals": {
       "inputTrim": 0,
       "outputTrim": 0,
-      "outputVolume": 0.75,
+      "outputVolume": 1.0,
       "transpose": 0
     },
     "graph": {
@@ -221,9 +221,9 @@
     "createdAt": "2025-01-01T00:00:00.000Z",
     "modifiedAt": "2025-01-01T00:00:00.000Z",
     "globals": {
-      "inputTrim": -3,
+      "inputTrim": 0,
       "outputTrim": 0,
-      "outputVolume": 0.75,
+      "outputVolume": 1.0,
       "transpose": 0
     },
     "graph": {
@@ -288,9 +288,9 @@
     "createdAt": "2025-01-01T00:00:00.000Z",
     "modifiedAt": "2025-01-01T00:00:00.000Z",
     "globals": {
-      "inputTrim": -6,
-      "outputTrim": -3,
-      "outputVolume": 0.7,
+      "inputTrim": 0,
+      "outputTrim": 0,
+      "outputVolume": 1.0,
       "transpose": 0
     },
     "graph": {
@@ -386,9 +386,9 @@
     "createdAt": "2025-01-01T00:00:00.000Z",
     "modifiedAt": "2025-01-01T00:00:00.000Z",
     "globals": {
-      "inputTrim": -6,
-      "outputTrim": -3,
-      "outputVolume": 0.7,
+      "inputTrim": 0,
+      "outputTrim": 0,
+      "outputVolume": 1.0,
       "transpose": 0
     },
     "graph": {
@@ -463,9 +463,9 @@
     "createdAt": "2025-01-01T00:00:00.000Z",
     "modifiedAt": "2025-01-01T00:00:00.000Z",
     "globals": {
-      "inputTrim": -6,
-      "outputTrim": -6,
-      "outputVolume": 0.65,
+      "inputTrim": 0,
+      "outputTrim": 0,
+      "outputVolume": 1.0,
       "transpose": 0
     },
     "graph": {
@@ -540,9 +540,9 @@
     "createdAt": "2025-01-01T00:00:00.000Z",
     "modifiedAt": "2025-01-01T00:00:00.000Z",
     "globals": {
-      "inputTrim": -3,
+      "inputTrim": 0,
       "outputTrim": 0,
-      "outputVolume": 0.75,
+      "outputVolume": 1.0,
       "transpose": 0
     },
     "graph": {
@@ -630,9 +630,9 @@
     "createdAt": "2025-01-01T00:00:00.000Z",
     "modifiedAt": "2025-01-01T00:00:00.000Z",
     "globals": {
-      "inputTrim": -6,
-      "outputTrim": -3,
-      "outputVolume": 0.7,
+      "inputTrim": 0,
+      "outputTrim": 0,
+      "outputVolume": 1.0,
       "transpose": 0
     },
     "graph": {
@@ -730,9 +730,9 @@
     "createdAt": "2025-01-01T00:00:00.000Z",
     "modifiedAt": "2025-01-01T00:00:00.000Z",
     "globals": {
-      "inputTrim": -3,
+      "inputTrim": 0,
       "outputTrim": 0,
-      "outputVolume": 0.75,
+      "outputVolume": 1.0,
       "transpose": 0
     },
     "graph": {
@@ -809,7 +809,7 @@
     "globals": {
       "inputTrim": 0,
       "outputTrim": 0,
-      "outputVolume": 0.8,
+      "outputVolume": 1.0,
       "transpose": 0
     },
     "graph": {
@@ -865,8 +865,8 @@
     "modifiedAt": "2025-01-01T00:00:00.000Z",
     "globals": {
       "inputTrim": 0,
-      "outputTrim": -3,
-      "outputVolume": 0.75,
+      "outputTrim": 0,
+      "outputVolume": 1.0,
       "transpose": 0
     },
     "graph": {

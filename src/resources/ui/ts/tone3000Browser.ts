@@ -49,6 +49,38 @@ let activeCategory = CATEGORIES[0];
 let activeQuery = "";
 let currentTones: Tone3000Tone[] = [];
 
+function getToneImportStatus(tone: Tone3000Tone): { status: "imported" | "partial" | "none"; importedCount: number } {
+  const toneId = String(tone.id);
+  const seen = new Set<string>();
+  const resourceTypes = ["nam", "ir"];
+
+  resourceTypes.forEach((type) => {
+    const resources = uiState.resourceLibrary[type] || [];
+    resources.forEach((resource) => {
+      const metadata = resource.metadata || {};
+      const resourceToneId = metadata.toneId || metadata.groupId;
+      if (resourceToneId && String(resourceToneId) === toneId) {
+        const modelKey = type === "ir"
+          ? metadata.entryName || metadata.modelId || resource.id
+          : metadata.modelId || resource.id;
+        if (modelKey) {
+          seen.add(String(modelKey));
+        }
+      }
+    });
+  });
+
+  const importedCount = seen.size;
+  const modelCount = tone.models_count ?? 0;
+  if (modelCount > 0 && importedCount >= modelCount) {
+    return { status: "imported", importedCount };
+  }
+  if (importedCount > 0) {
+    return { status: "partial", importedCount };
+  }
+  return { status: "none", importedCount };
+}
+
 export function initTone3000Browser(): void {
   renderCategories();
   if (resultsEl) {
@@ -187,6 +219,16 @@ function renderResults(tones: Tone3000Tone[]): void {
   resultsEl.innerHTML = tones
     .map((tone) => {
       const modelCount = tone.models_count ?? 0;
+      const importStatus = getToneImportStatus(tone);
+      const statusLabel =
+        importStatus.status === "imported"
+          ? "Imported"
+          : importStatus.status === "partial"
+            ? "Partially Imported"
+            : "";
+      const statusBadge = statusLabel ? `<span class="tone3000-status">${statusLabel}</span>` : "";
+      const disableImport = importStatus.status === "imported" && modelCount > 0;
+      const buttonLabel = disableImport ? "Imported" : "Import";
       return `
         <div class="tone3000-item" data-tone-id="${String(tone.id)}">
           <div class="tone3000-item-main">
@@ -196,10 +238,11 @@ function renderResults(tones: Tone3000Tone[]): void {
               <span>${escapeHtml(tone.platform ?? "")}</span>
               <span>${modelCount} models</span>
               <span>${escapeHtml(tone.user?.username ?? "")}</span>
+              ${statusBadge}
             </div>
           </div>
           <div class="tone3000-item-actions">
-            <button class="tone3000-import-btn" data-tone-id="${String(tone.id)}">Import</button>
+            <button class="tone3000-import-btn" data-tone-id="${String(tone.id)}" ${disableImport ? "disabled" : ""}>${buttonLabel}</button>
           </div>
         </div>
       `;

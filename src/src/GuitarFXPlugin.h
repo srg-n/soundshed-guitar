@@ -3,13 +3,18 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <filesystem>
+#include <future>
+#include <iomanip>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <queue>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -29,6 +34,28 @@ namespace guitarfx
   {
   public:
     explicit GuitarFXPlugin(const iplug::InstanceInfo &info);
+
+    struct NamCalibrationData
+    {
+      double inputLevelDb = 0.0;
+      double outputLevelDb = 0.0;
+    };
+
+    struct NamCalibrationJob
+    {
+      std::string hash;
+      std::filesystem::path path;
+      std::string resourceType;
+      std::string resourceId;
+    };
+
+    struct NamCalibrationResult
+    {
+      NamCalibrationJob job;
+      bool success = false;
+      std::string error;
+      NamCalibrationData data;
+    };
 
     void ProcessBlock(iplug::sample **inputs, iplug::sample **outputs, int nFrames) override;
     void OnReset() override;
@@ -155,6 +182,7 @@ namespace guitarfx
     void HandleUpdateSignalPathNodeBypassRequest(const nlohmann::json &payload);
     void HandleUpdateNodeResourceRequest(const nlohmann::json &payload);
     void HandleBrowseNodeResourceRequest(const nlohmann::json &payload);
+    void HandleRerunNamCalibrationRequest(const nlohmann::json &payload);
     void HandleAddSignalPathNodeRequest(const nlohmann::json &payload);
     void HandleSplitSignalPathEdgeRequest(const nlohmann::json &payload);
     void HandleCollapseSignalPathSplitRequest(const nlohmann::json &payload);
@@ -183,6 +211,16 @@ namespace guitarfx
     void ApplyPreset(const guitarfx::Preset &preset);
     void ApplyBlendDefinitions(Preset& preset);
     bool ApplyNodeParameter(const guitarfx::GraphNode& node, const std::string& paramKey, double value);
+    void QueueNamCalibrationForNode(const std::string& nodeId, const ResourceRef& ref, bool force = false);
+    void ProcessNamCalibrationQueue();
+    void ApplyNamCalibrationResult(const NamCalibrationResult& result);
+    [[nodiscard]] std::optional<NamCalibrationData> GetNamCalibrationFromCache(const std::string& hash) const;
+    void StoreNamCalibrationInCache(const std::string& hash, const NamCalibrationData& data);
+    void RemoveNamCalibrationFromCache(const std::string& hash);
+    void ApplyNamCalibrationToNode(const std::string& nodeId, const std::string& hash, const NamCalibrationData& data);
+    void ClearNamCalibrationParams(GraphNode& node) const;
+    void SendNamCalibrationStatus(const std::string& nodeId, const std::string& status);
+    void AppendSessionLog(std::string_view message);
     void ReportErrorToUI(std::string_view message, std::string_view detail = {});
     [[nodiscard]] std::optional<std::filesystem::path> ResolveResourceRef(const ResourceRef &ref) const;
     [[nodiscard]] static std::vector<std::uint8_t> DecodeBase64(const std::string &encoded);
@@ -233,6 +271,12 @@ namespace guitarfx
     SignalPathTestResult mSignalTestResult;
     std::atomic<bool> mSignalTestActive{false};
     std::atomic<bool> mSignalTestResultPending{false};
+    std::deque<NamCalibrationJob> mNamCalibrationQueue;
+    std::optional<std::future<NamCalibrationResult>> mNamCalibrationFuture;
+    std::optional<NamCalibrationJob> mNamCalibrationActiveJob;
+    std::unordered_map<std::string, std::vector<std::string>> mNamCalibrationWaiters;
+    std::unordered_set<std::string> mNamCalibrationInFlight;
+    mutable std::mutex mNamCalibrationMutex;
 
     // UI settings persistence
     double mUiZoom = 1.0;
