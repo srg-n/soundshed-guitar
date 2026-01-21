@@ -8,6 +8,7 @@ import { initTone3000Browser } from "./tone3000Browser.js";
 import { getAudioFxLibrary, getIrLibrary } from "./dataLibraries.js";
 import type { AppSettingValue } from "./types.js";
 import { buildBlendModelMappingsFromIds } from "./blendUtils.js";
+import { themeSwitcher, type ThemeName } from "./theme-switcher.js";
 
 const API_KEY_SETTING = "tone3000.apiKey";
 const DIAGNOSTICS_SETTING = "diagnostics.signalLevelsEnabled";
@@ -23,6 +24,7 @@ const interfaceCalibrationToggle = document.getElementById("interface-calibratio
 const interfaceCalibrationReferenceInput = document.getElementById("interface-calibration-reference") as HTMLInputElement | null;
 const equipmentTabButtons = Array.from(document.querySelectorAll(".equipment-tab-btn"));
 const equipmentTabPanels = Array.from(document.querySelectorAll(".equipment-tab-panel"));
+const themeSelect = document.getElementById("theme-select") as HTMLSelectElement | null;
 const librarySearchInput = document.getElementById("equipment-library-search") as HTMLInputElement | null;
 const libraryTypeSelect = document.getElementById("equipment-library-type") as HTMLSelectElement | null;
 const librarySourceSelect = document.getElementById("equipment-library-source") as HTMLSelectElement | null;
@@ -30,9 +32,13 @@ const libraryViewSelect = document.getElementById("equipment-library-view") as H
 const libraryCategorySelect = document.getElementById("equipment-library-category") as HTMLSelectElement | null;
 const libraryResults = document.getElementById("equipment-library-results");
 const librarySummary = document.getElementById("equipment-library-summary");
+const libraryTabButtons = Array.from(document.querySelectorAll(".library-tab-btn"));
+const libraryTabPanels = Array.from(document.querySelectorAll(".library-tab-panel"));
 let settingsInitialized = false;
 let libraryFiltersInitialized = false;
 let equipmentTabsInitialized = false;
+let themeSelectInitialized = false;
+let libraryTabsInitialized = false;
 
 export function initSettingsPanel(): void {
   if (settingsInitialized) {
@@ -45,6 +51,8 @@ export function initSettingsPanel(): void {
   initInterfaceCalibrationControls();
   initEquipmentTabs();
   initLibraryFilters();
+  initThemeSelect();
+  initLibraryTabs();
 
   refreshSettingsView();
   initTone3000Browser();
@@ -57,11 +65,41 @@ function initEquipmentTabs(): void {
   equipmentTabsInitialized = true;
   equipmentTabButtons.forEach((button) => {
     button.addEventListener("click", () => {
-      const tabId = (button as HTMLElement).dataset.equipmentTab ?? "tone3000";
+      const tabId = (button as HTMLElement).dataset.equipmentTab ?? "settings";
       activateEquipmentTab(tabId);
     });
   });
-  activateEquipmentTab("tone3000");
+  activateEquipmentTab("settings");
+}
+
+function initThemeSelect(): void {
+  if (!themeSelect || themeSelectInitialized) {
+    return;
+  }
+  themeSelectInitialized = true;
+
+  const themes: Array<{ value: ThemeName; label: string }> = [
+    { value: "default", label: "Default" },
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+    { value: "classic", label: "Classic 70s" },
+    { value: "gritty", label: "Worn Pedal" },
+  ];
+
+  themeSelect.innerHTML = themes
+    .map((theme) => `<option value="${theme.value}">${theme.label}</option>`)
+    .join("");
+
+  themeSelect.value = themeSwitcher.getCurrentTheme();
+
+  themeSelect.addEventListener("change", () => {
+    const value = themeSelect.value as ThemeName;
+    themeSwitcher.setTheme(value);
+  });
+
+  window.addEventListener("themeChanged", ((event: CustomEvent) => {
+    themeSelect.value = event.detail.theme as ThemeName;
+  }) as EventListener);
 }
 
 function activateEquipmentTab(tabId: string): void {
@@ -87,6 +125,34 @@ function initLibraryFilters(): void {
   librarySourceSelect?.addEventListener("change", () => renderLibraryView());
   libraryViewSelect?.addEventListener("change", () => renderLibraryView());
   libraryCategorySelect?.addEventListener("change", () => renderLibraryView());
+}
+
+function initLibraryTabs(): void {
+  if (libraryTabsInitialized) {
+    return;
+  }
+  libraryTabsInitialized = true;
+
+  libraryTabButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const tabId = (button as HTMLElement).dataset.libraryTab ?? "tone3000";
+      activateLibraryTab(tabId);
+    });
+  });
+
+  activateLibraryTab("tone3000");
+}
+
+function activateLibraryTab(tabId: string): void {
+  libraryTabButtons.forEach((button) => {
+    const isActive = (button as HTMLElement).dataset.libraryTab === tabId;
+    button.classList.toggle("active", isActive);
+  });
+
+  libraryTabPanels.forEach((panel) => {
+    const isMatch = (panel as HTMLElement).id === `library-tab-${tabId}`;
+    panel.classList.toggle("active", isMatch);
+  });
 }
 
 export function initDiagnosticsToggle(): void {
@@ -121,6 +187,9 @@ export function refreshSettingsView(): void {
     const resolvedValue = Number.isFinite(referenceValue) ? referenceValue : 12.0;
     interfaceCalibrationReferenceInput.value = resolvedValue.toFixed(1);
     interfaceCalibrationReferenceInput.disabled = !interfaceEnabled;
+  }
+  if (themeSelect) {
+    themeSelect.value = themeSwitcher.getCurrentTheme();
   }
   updateSessionStatus();
   updateSignalDiagnosticsView();

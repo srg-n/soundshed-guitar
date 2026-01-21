@@ -6,6 +6,45 @@
   gap: 20px;
 }
 
+.library-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.library-tab-btn {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-dark);
+  background: var(--overlay-light);
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.library-tab-btn.active {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: transparent;
+}
+
+.library-tab-btn:hover {
+  transform: translateY(-1px);
+}
+
+.library-tab-panel {
+  display: none;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.library-tab-panel.active {
+  display: flex;
+}
+
 .equipment-tabs {
   display: flex;
   gap: 8px;
@@ -67,6 +106,10 @@
   align-items: center;
 }
 
+.settings-row.settings-row-two {
+  grid-template-columns: 120px 1fr;
+}
+
 .settings-row label {
   font-size: 11px;
   text-transform: uppercase;
@@ -76,7 +119,8 @@
 
 .settings-row input[type="password"],
 .settings-row input[type="text"],
-.settings-row input[type="number"] {
+.settings-row input[type="number"],
+.settings-row select {
   width: 100%;
   padding: 8px 10px;
   border-radius: 6px;
@@ -84,6 +128,12 @@
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: 12px;
+}
+
+.settings-input-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .settings-unit {

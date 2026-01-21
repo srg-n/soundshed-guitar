@@ -468,6 +468,10 @@
   border: 1px solid var(--border-lighter);
 }
 
+.signal-chain-section-chain {
+  position: relative;
+}
+
 .section-title {
   display: flex;
   align-items: center;
@@ -503,6 +507,24 @@
   background: linear-gradient(180deg, #f0f2f8 0%, #e0e4ec 100%);
   border-radius: 8px;
   overflow-x: auto;
+}
+
+.signal-chain-performance-link {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.signal-chain-performance-link:hover {
+  color: var(--color-primary);
 }
 
 .fx-node {

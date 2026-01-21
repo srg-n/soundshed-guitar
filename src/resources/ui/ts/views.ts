@@ -388,7 +388,7 @@ export function renderPresetDetails(
         </div>
       </div>
 
-      <div class="signal-chain-section">
+      <div class="signal-chain-section signal-chain-section-chain">
         <h3 class="section-title">
           <span class="section-icon">${renderIcon("link", "section-icon-img")}</span>
           Signal Chain
@@ -405,6 +405,7 @@ export function renderPresetDetails(
             <span class="fx-node-label">Output</span>
           </div>
         </div>
+        <button class="signal-chain-performance-link" type="button">Performance</button>
       </div>
 
       <div class="signal-chain-section">
@@ -443,6 +444,14 @@ export function renderPresetDetails(
   }
   bindDemoAudioControls();
   hooks.onBindLoadButtons();
+
+  const performanceLink = presetDetailsElement.querySelector(".signal-chain-performance-link") as HTMLButtonElement | null;
+  if (performanceLink) {
+    performanceLink.addEventListener("click", () => {
+      const perfButton = document.querySelector(".icon-bar .icon-btn[data-panel=\"performance\"]") as HTMLElement | null;
+      perfButton?.click();
+    });
+  }
 
   const mixerHost = presetDetailsElement.querySelector(".mixer-panel-host") as HTMLElement | null;
   if (mixerHost) {

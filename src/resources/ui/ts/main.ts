@@ -14,7 +14,6 @@ import { requestSignalPathTest } from "./presets.js";
 import { initializeTuner } from "./tuner.js";
 import { initFxSelector } from "./fxSelector.js";
 import { themeSwitcher } from "./theme-switcher.js";
-import { initializeThemeSwitcherIcons } from "./theme-switcher-ui.js";
 import { startUiSettingsTracking } from "./windowSettings.js";
 import { renderFooterDemoAudioControls, bindFooterDemoAudioControls } from "./demoAudio.js";
 import { initDiagnosticsToggle, initSettingsPanel, updateSettingsSessionStatus } from "./settings.js";
@@ -99,7 +98,6 @@ async function bootstrap(): Promise<void> {
   console.log("[JS] Theme switcher initialized:", themeSwitcher.getCurrentTheme());
   
   // Add theme switcher UI to icon bar
-  initializeThemeSwitcherIcons();
 
   activateTab("details");
   initializeControls();
