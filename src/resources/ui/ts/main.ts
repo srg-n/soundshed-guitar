@@ -55,11 +55,6 @@ function switchMainPanel(panelId: string): void {
     panel.classList.toggle("active", isPanelMatch);
   });
 
-  // Update performance plot when performance panel is activated
-  if (panelId === "performance") {
-    updateDSPPerformancePlot();
-  }
-
   if (panelId === "settings") {
     initSettingsPanel();
     void ensureTone3000Session().then(() => updateSettingsSessionStatus());

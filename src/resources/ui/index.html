@@ -47,11 +47,6 @@
         </svg>
       </button>-->
 
-      <button class="icon-btn" data-panel="performance" title="Performance">
-        <svg viewBox="0 0 24 24">
-          <path d="M12 2v6m0 0l-4 4m4-4l4 4m-4 4v6" stroke="currentColor" stroke-width="2" fill="none" />
-        </svg>
-      </button>
       <button class="icon-btn" data-panel="library" title="Equipment Library">
         <svg viewBox="0 0 24 24">
           <path d="M4 6h6v14H4zM14 4h6v16h-6z" stroke="currentColor" stroke-width="1.5" fill="none" />
@@ -398,93 +393,6 @@
         </div>
       </div>
 
-      <!-- Performance Panel -->
-      <div class="tab-panel" id="panel-performance">
-        <div class="panel-content">
-          <h2>DSP Performance</h2>
-          <div class="performance-section">
-            <h3>Diagnostics</h3>
-            <div class="settings-row">
-              <label for="signal-diagnostics-toggle">Signal Level Diagnostics</label>
-              <label class="toggle-switch">
-                <input type="checkbox" id="signal-diagnostics-toggle" />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div class="settings-hint">Continuously report signal levels, headroom, and clipping for chain input/output
-              and nodes.</div>
-          </div>
-          <div class="performance-stats">
-            <div class="performance-metric">
-              <span class="metric-label">DSP Load:</span>
-              <span class="metric-value" id="dsp-load-value">0.0%</span>
-            </div>
-            <div class="performance-metric">
-              <span class="metric-label">Peak Load:</span>
-              <span class="metric-value" id="dsp-peak-value">0.0%</span>
-            </div>
-          </div>
-          <div class="performance-details">
-            <h3>Signal Diagnostics <span class="metric-value" id="signal-diagnostics-status">Disabled</span></h3>
-            <div class="signal-diagnostics-summary">
-              <div class="performance-metric">
-                <span class="metric-label">Input Peak:</span>
-                <span class="metric-value" id="signal-input-peak">—</span>
-              </div>
-              <div class="performance-metric">
-                <span class="metric-label">Input RMS:</span>
-                <span class="metric-value" id="signal-input-rms">—</span>
-              </div>
-              <div class="performance-metric">
-                <span class="metric-label">Input Headroom:</span>
-                <span class="metric-value" id="signal-input-headroom">—</span>
-              </div>
-              <div class="performance-metric">
-                <span class="metric-label">Input Clipping:</span>
-                <span class="metric-value signal-clip-status clip-off" id="signal-input-clipping">
-                  <span class="clip-indicator"></span>
-                  —
-                </span>
-              </div>
-              <div class="performance-metric">
-                <span class="metric-label">Output Peak:</span>
-                <span class="metric-value" id="signal-output-peak">—</span>
-              </div>
-              <div class="performance-metric">
-                <span class="metric-label">Output RMS:</span>
-                <span class="metric-value" id="signal-output-rms">—</span>
-              </div>
-              <div class="performance-metric">
-                <span class="metric-label">Output Headroom:</span>
-                <span class="metric-value" id="signal-output-headroom">—</span>
-              </div>
-              <div class="performance-metric">
-                <span class="metric-label">Output Clipping:</span>
-                <span class="metric-value signal-clip-status clip-off" id="signal-output-clipping">
-                  <span class="clip-indicator"></span>
-                  —
-                </span>
-              </div>
-            </div>
-          </div>
-          <div class="performance-plot-container">
-            <canvas id="performance-plot" width="400" height="200"></canvas>
-          </div>
-          <div class="performance-details">
-            <h3>Per-Effect Times (μs)</h3>
-            <div id="performance-details-list">
-              <!-- Per-effect timing details will be populated here -->
-            </div>
-          </div>
-          <div class="performance-details">
-            <h3>Per-Node Levels (dBFS)</h3>
-            <div id="signal-diagnostics-list">
-              <!-- Signal diagnostics details will be populated here -->
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div class="tab-panel" id="panel-library">
         <div class="panel-content">
 
@@ -546,6 +454,11 @@
       </div>
       <div class="tab-panel" id="panel-settings">
         <div class="panel-content settings-panel">
+
+          <div class="equipment-tabs">
+            <button class="equipment-tab-btn active" data-equipment-tab="settings">General</button>
+            <button class="equipment-tab-btn" data-equipment-tab="performance">DSP Performance</button>
+          </div>
 
           <div class="equipment-tab-panel active" id="equipment-tab-settings">
             <h2>Audio</h2>
@@ -622,6 +535,90 @@
                 <button id="tone3000-api-key-clear" class="secondary">Clear</button>
               </div>
               <div class="settings-hint" id="tone3000-session-status">Session not started.</div>
+            </div>
+          </div>
+
+          <div class="equipment-tab-panel" id="equipment-tab-performance">
+            <h2>DSP Performance</h2>
+            <div class="performance-section">
+              <h3>Diagnostics</h3>
+              <div class="settings-row">
+                <label for="signal-diagnostics-toggle">Signal Level Diagnostics</label>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="signal-diagnostics-toggle" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="settings-hint">Continuously report signal levels, headroom, and clipping for chain input/output
+                and nodes.</div>
+            </div>
+            <div class="performance-stats">
+              <div class="performance-metric">
+                <span class="metric-label">DSP Load:</span>
+                <span class="metric-value" id="dsp-load-value">0.0%</span>
+              </div>
+              <div class="performance-metric">
+                <span class="metric-label">Peak Load:</span>
+                <span class="metric-value" id="dsp-peak-value">0.0%</span>
+              </div>
+            </div>
+            <div class="performance-details">
+              <h3>Signal Diagnostics <span class="metric-value" id="signal-diagnostics-status">Disabled</span></h3>
+              <div class="signal-diagnostics-summary">
+                <div class="performance-metric">
+                  <span class="metric-label">Input Peak:</span>
+                  <span class="metric-value" id="signal-input-peak">—</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Input RMS:</span>
+                  <span class="metric-value" id="signal-input-rms">—</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Input Headroom:</span>
+                  <span class="metric-value" id="signal-input-headroom">—</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Input Clipping:</span>
+                  <span class="metric-value signal-clip-status clip-off" id="signal-input-clipping">
+                    <span class="clip-indicator"></span>
+                    —
+                  </span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Output Peak:</span>
+                  <span class="metric-value" id="signal-output-peak">—</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Output RMS:</span>
+                  <span class="metric-value" id="signal-output-rms">—</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Output Headroom:</span>
+                  <span class="metric-value" id="signal-output-headroom">—</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Output Clipping:</span>
+                  <span class="metric-value signal-clip-status clip-off" id="signal-output-clipping">
+                    <span class="clip-indicator"></span>
+                    —
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div class="performance-plot-container">
+              <canvas id="performance-plot" width="400" height="200"></canvas>
+            </div>
+            <div class="performance-details">
+              <h3>Per-Effect Times (μs)</h3>
+              <div id="performance-details-list">
+                <!-- Per-effect timing details will be populated here -->
+              </div>
+            </div>
+            <div class="performance-details">
+              <h3>Per-Node Levels (dBFS)</h3>
+              <div id="signal-diagnostics-list">
+                <!-- Signal diagnostics details will be populated here -->
+              </div>
             </div>
           </div>
 

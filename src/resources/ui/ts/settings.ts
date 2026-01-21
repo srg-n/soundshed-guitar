@@ -3,7 +3,7 @@ import { setAppSetting, postMessage } from "./bridge.js";
 import { appendLog } from "./logging.js";
 import { showNotification } from "./notifications.js";
 import { handleAppSettingUpdate } from "./tone3000.js";
-import { updateSignalDiagnosticsView } from "./views.js";
+import { updateSignalDiagnosticsView, updateDSPPerformancePlot } from "./views.js";
 import { initTone3000Browser } from "./tone3000Browser.js";
 import { getAudioFxLibrary, getIrLibrary } from "./dataLibraries.js";
 import type { AppSettingValue } from "./types.js";
@@ -112,6 +112,10 @@ function activateEquipmentTab(tabId: string): void {
     const isMatch = (panel as HTMLElement).id === `equipment-tab-${tabId}`;
     panel.classList.toggle("active", isMatch);
   });
+
+  if (tabId === "performance") {
+    updateDSPPerformancePlot();
+  }
 }
 
 function initLibraryFilters(): void {

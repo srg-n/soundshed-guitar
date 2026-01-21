@@ -448,8 +448,10 @@ export function renderPresetDetails(
   const performanceLink = presetDetailsElement.querySelector(".signal-chain-performance-link") as HTMLButtonElement | null;
   if (performanceLink) {
     performanceLink.addEventListener("click", () => {
-      const perfButton = document.querySelector(".icon-bar .icon-btn[data-panel=\"performance\"]") as HTMLElement | null;
-      perfButton?.click();
+      const settingsButton = document.querySelector(".icon-bar .icon-btn[data-panel=\"settings\"]") as HTMLElement | null;
+      settingsButton?.click();
+      const performanceTabButton = document.querySelector(".equipment-tab-btn[data-equipment-tab=\"performance\"]") as HTMLElement | null;
+      performanceTabButton?.click();
     });
   }
 
