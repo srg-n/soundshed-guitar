@@ -487,7 +487,7 @@
   flex-direction: column;
   gap: 6px;
   padding: 8px 12px;
-  background: var(--overlay-darker);
+
   border-radius: 6px;
   margin-bottom: 8px;
 }
