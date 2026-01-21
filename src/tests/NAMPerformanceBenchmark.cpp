@@ -188,20 +188,44 @@ BenchmarkResult BenchmarkDirectNAM(const fs::path& modelPath, const std::string&
   
   model->ResetAndPrewarm(config.sampleRate, config.blockSize);
   
+  const int inputChannels = model->NumInputChannels();
+  const int outputChannels = model->NumOutputChannels();
+  if (inputChannels <= 0 || outputChannels <= 0)
+  {
+    std::cerr << "ERROR: Model has invalid channel counts (in=" << inputChannels
+              << ", out=" << outputChannels << ") for: " << modelPath << "\n";
+    return result;
+  }
+
   // Allocate buffers (NAM uses NAM_SAMPLE which is double by default)
-  std::vector<NAM_SAMPLE> input(static_cast<size_t>(config.blockSize));
-  std::vector<NAM_SAMPLE> output(static_cast<size_t>(config.blockSize));
+  std::vector<std::vector<NAM_SAMPLE>> inputBuffers(static_cast<size_t>(inputChannels));
+  std::vector<std::vector<NAM_SAMPLE>> outputBuffers(static_cast<size_t>(outputChannels));
+  for (int ch = 0; ch < inputChannels; ++ch)
+    inputBuffers[static_cast<size_t>(ch)].resize(static_cast<size_t>(config.blockSize));
+  for (int ch = 0; ch < outputChannels; ++ch)
+    outputBuffers[static_cast<size_t>(ch)].resize(static_cast<size_t>(config.blockSize));
+
+  std::vector<NAM_SAMPLE*> inputPtrs(static_cast<size_t>(inputChannels));
+  std::vector<NAM_SAMPLE*> outputPtrs(static_cast<size_t>(outputChannels));
+  for (int ch = 0; ch < inputChannels; ++ch)
+    inputPtrs[static_cast<size_t>(ch)] = inputBuffers[static_cast<size_t>(ch)].data();
+  for (int ch = 0; ch < outputChannels; ++ch)
+    outputPtrs[static_cast<size_t>(ch)] = outputBuffers[static_cast<size_t>(ch)].data();
   
   // Generate input signal
   std::vector<float> floatInput(static_cast<size_t>(config.blockSize));
   GenerateGuitarLikeSignal(floatInput, config.sampleRate);
   for (int i = 0; i < config.blockSize; ++i)
-    input[i] = static_cast<NAM_SAMPLE>(floatInput[i]);
+  {
+    const NAM_SAMPLE sampleValue = static_cast<NAM_SAMPLE>(floatInput[i]);
+    for (int ch = 0; ch < inputChannels; ++ch)
+      inputBuffers[static_cast<size_t>(ch)][static_cast<size_t>(i)] = sampleValue;
+  }
   
   // Warmup
   for (int i = 0; i < config.warmupBlocks; ++i)
   {
-    model->process(input.data(), output.data(), config.blockSize);
+    model->process(inputPtrs.data(), outputPtrs.data(), config.blockSize);
   }
   
   // Measure
@@ -213,7 +237,7 @@ BenchmarkResult BenchmarkDirectNAM(const fs::path& modelPath, const std::string&
   for (int block = 0; block < config.measureBlocks; ++block)
   {
     auto blockStart = std::chrono::high_resolution_clock::now();
-    model->process(input.data(), output.data(), config.blockSize);
+    model->process(inputPtrs.data(), outputPtrs.data(), config.blockSize);
     auto blockEnd = std::chrono::high_resolution_clock::now();
     
     auto blockDuration = std::chrono::duration_cast<std::chrono::nanoseconds>(blockEnd - blockStart);
