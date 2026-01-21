@@ -104,6 +104,10 @@
   pointer-events: none;
 }
 
+.effect-visualization:not(.has-selection) .effect-visualization-placeholder {
+  display: none;
+}
+
 .effect-visualization-placeholder h3 {
   margin: 0 0 8px 0;
   font-size: 18px;
