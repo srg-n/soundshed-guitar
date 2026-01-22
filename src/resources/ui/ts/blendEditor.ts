@@ -4,7 +4,9 @@ import type {
   GraphNode,
   ResourceLibrary,
   LibraryResource,
+  BlendMode,
 } from "./types.js";
+import { uiState } from "./state.js";
 import { postMessage } from "./bridge.js";
 import { buildBlendModelMappingsFromIds, inferParamValueFromName } from "./blendUtils.js";
 import { arrayBufferToBase64, buildArchiveFileName, generateResourceId, requestResourceData, sanitizeFilename } from "./archiveUtils.js";
@@ -52,6 +54,8 @@ export class BlendEditorModal {
   private importBtn = document.getElementById("blend-editor-import") as HTMLButtonElement | null;
   private importInput = document.getElementById("blend-import-input") as HTMLInputElement | null;
   private paramAutoBtn = document.getElementById("blend-parameter-auto-btn") as HTMLButtonElement | null;
+  private matchName = document.getElementById("blend-match-name") as HTMLElement | null;
+  private matchDetails = document.getElementById("blend-match-details") as HTMLElement | null;
 
   constructor(deps: BlendEditorDependencies) {
     this.deps = deps;
@@ -72,6 +76,7 @@ export class BlendEditorModal {
     this.exportBtn?.addEventListener("click", () => void this.exportBlendArchive());
     this.importBtn?.addEventListener("click", () => this.importInput?.click());
     this.importInput?.addEventListener("change", () => void this.importBlendArchive());
+    this.modeSelect?.addEventListener("change", () => this.updateMatchedModel());
 
     if (this.paramSelect) {
       this.paramSelect.innerHTML = PARAM_SPECS.map((spec) => `<option value="${spec.id}">${spec.label}</option>`).join("");
@@ -111,11 +116,12 @@ export class BlendEditorModal {
       this.categorySelect.value = options.includes(category) ? category : "amp";
     }
 
-    this.renderParameterList();
-    this.renderModelList(mappings, category);
-
     this.modal.dataset.blendId = blendId;
     this.modal.dataset.nodeId = node.id;
+
+    this.renderParameterList();
+    this.renderModelList(mappings, category);
+    this.updateMatchedModel();
     this.modal.style.display = "flex";
   }
 
@@ -163,6 +169,7 @@ export class BlendEditorModal {
         }
         this.renderParameterList();
         this.renderModelList(this.collectCurrentMappings(), this.categorySelect?.value ?? "amp");
+        this.updateMatchedModel();
       });
     });
   }
@@ -175,6 +182,7 @@ export class BlendEditorModal {
     this.activeParams = [...this.activeParams, next];
     this.renderParameterList();
     this.renderModelList(this.collectCurrentMappings(), this.categorySelect?.value ?? "amp");
+    this.updateMatchedModel();
   }
 
   private autoMapParameters(): void {
@@ -210,6 +218,7 @@ export class BlendEditorModal {
     this.activeParams = params.length ? params : ["gain"];
     this.renderParameterList();
     this.renderModelList(mappings, this.categorySelect?.value ?? "amp");
+    this.updateMatchedModel();
   }
 
   private async exportBlendArchive(): Promise<void> {
@@ -398,6 +407,7 @@ export class BlendEditorModal {
       .join("");
 
     this.bindModelRowEvents(category);
+    this.updateMatchedModel();
   }
 
   private buildModelOptions(selectedId: string): string {
@@ -461,6 +471,13 @@ export class BlendEditorModal {
       autoBtn?.addEventListener("click", () => applyAuto(true));
       removeBtn?.addEventListener("click", () => {
         row.remove();
+        this.updateMatchedModel();
+      });
+
+      select?.addEventListener("change", () => this.updateMatchedModel());
+      autoBtn?.addEventListener("click", () => this.updateMatchedModel());
+      row.querySelectorAll(".blend-model-param-value").forEach((input) => {
+        input.addEventListener("input", () => this.updateMatchedModel());
       });
     });
   }
@@ -489,6 +506,112 @@ export class BlendEditorModal {
     `;
     this.modelList.appendChild(row);
     this.bindModelRowEvents(category);
+    this.updateMatchedModel();
+  }
+
+  private updateMatchedModel(): void {
+    if (!this.matchName || !this.modal) {
+      return;
+    }
+
+    const nodeId = this.modal.dataset.nodeId ?? "";
+    if (!nodeId) {
+      this.matchName.textContent = "—";
+      if (this.matchDetails) this.matchDetails.textContent = "";
+      return;
+    }
+
+    const presetId = uiState.activePresetId ?? "";
+    const preset = presetId ? uiState.presetCache.get(presetId) : undefined;
+    const node = preset?.graph?.nodes.find((entry) => entry.id === nodeId);
+    if (!node) {
+      this.matchName.textContent = "—";
+      if (this.matchDetails) this.matchDetails.textContent = "";
+      return;
+    }
+
+    const target: Record<string, number> = {};
+    this.activeParams.forEach((paramId) => {
+      const value = node.params[paramId];
+      if (typeof value === "number") {
+        target[paramId] = value;
+      }
+    });
+
+    const mappings: BlendModelMapping[] = this.collectCurrentMappings();
+    if (!Object.keys(target).length || !mappings.length) {
+      this.matchName.textContent = "—";
+      if (this.matchDetails) this.matchDetails.textContent = "";
+      return;
+    }
+
+    const blendMode = (this.modeSelect?.value ?? "interpolate") as BlendMode;
+
+    let bestIndex = -1;
+    let secondIndex = -1;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    let secondDistance = Number.POSITIVE_INFINITY;
+
+    mappings.forEach((mapping: BlendModelMapping, index: number) => {
+      const params = buildParameterMapFromLegacy(mapping);
+      let distance = 0;
+      let matched = false;
+      this.activeParams.forEach((paramId) => {
+        if (!(paramId in target)) {
+          return;
+        }
+        const mappedValue = params[paramId];
+        if (typeof mappedValue !== "number") {
+          distance += 4;
+          return;
+        }
+        const delta = mappedValue - target[paramId];
+        distance += delta * delta;
+        matched = true;
+      });
+      if (!matched) {
+        distance += 9;
+      }
+
+      if (distance < bestDistance) {
+        secondDistance = bestDistance;
+        secondIndex = bestIndex;
+        bestDistance = distance;
+        bestIndex = index;
+      } else if (distance < secondDistance) {
+        secondDistance = distance;
+        secondIndex = index;
+      }
+    });
+
+    if (bestIndex < 0) {
+      this.matchName.textContent = "—";
+      if (this.matchDetails) this.matchDetails.textContent = "";
+      return;
+    }
+
+    const bestMapping = mappings[bestIndex] as BlendModelMapping;
+    const bestResource = getLibraryResource(this.deps.getResourceLibrary(), "nam", bestMapping.id);
+    const bestName = bestResource?.name ?? bestMapping.id;
+    this.matchName.textContent = bestName || "—";
+
+    if (this.matchDetails) {
+      const hasSecond = secondIndex >= 0 && secondIndex !== bestIndex;
+      if (blendMode === "interpolate" && hasSecond) {
+        const secondMapping = mappings[secondIndex] as BlendModelMapping;
+        const secondResource = getLibraryResource(this.deps.getResourceLibrary(), "nam", secondMapping.id);
+        const secondName = secondResource?.name ?? secondMapping.id;
+        const eps = 1e-6;
+        const w1 = 1 / Math.max(bestDistance, eps);
+        const w2 = 1 / Math.max(secondDistance, eps);
+        const denom = Math.max(w1 + w2, eps);
+        const p1 = Math.round((w1 / denom) * 100);
+        const p2 = 100 - p1;
+        this.matchDetails.textContent = `Mix: ${bestName} ${p1}% / ${secondName} ${p2}%`;
+      } else {
+        this.matchDetails.textContent = "";
+      }
+    }
   }
 
   private save(): void {

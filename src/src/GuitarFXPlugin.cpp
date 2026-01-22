@@ -3370,6 +3370,22 @@ namespace guitarfx
           {
             ref.parameterValue = static_cast<double>(i) / static_cast<double>(count - 1);
           }
+
+          if (mapping.contains("parameters") && mapping["parameters"].is_object())
+          {
+            for (const auto& [key, value] : mapping["parameters"].items())
+            {
+              if (value.is_number())
+              {
+                ref.parameters[key] = value.get<double>();
+              }
+            }
+          }
+
+          if (ref.parameters.empty() && !ref.parameterId.empty() && ref.parameterValue.has_value())
+          {
+            ref.parameters[ref.parameterId] = *ref.parameterValue;
+          }
           else
           {
             ref.parameterValue = 0.0;

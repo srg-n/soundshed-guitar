@@ -24,6 +24,14 @@ namespace guitarfx
         json["parameterId"] = ref.parameterId;
       if (ref.parameterValue.has_value())
         json["parameterValue"] = *ref.parameterValue;
+      if (!ref.parameters.empty())
+      {
+        json["parameters"] = nlohmann::json::object();
+        for (const auto& [key, value] : ref.parameters)
+        {
+          json["parameters"][key] = value;
+        }
+      }
       return json;
     }
 
@@ -39,6 +47,16 @@ namespace guitarfx
       if (json.contains("parameterValue") && json["parameterValue"].is_number())
       {
         ref.parameterValue = json["parameterValue"].get<double>();
+      }
+      if (json.contains("parameters") && json["parameters"].is_object())
+      {
+        for (const auto& [key, value] : json["parameters"].items())
+        {
+          if (value.is_number())
+          {
+            ref.parameters[key] = value.get<double>();
+          }
+        }
       }
       return ref;
     }

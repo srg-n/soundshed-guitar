@@ -219,6 +219,23 @@
   font-size: 12px;
 }
 
+.blend-match-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-dark-light);
+  background: var(--bg-dark-secondary);
+  color: var(--text-dark-primary);
+  font-size: 12px;
+}
+
+.blend-match-details {
+  color: var(--text-dark-muted);
+  font-size: 11px;
+}
+
 .blend-model-row .blend-model-remove {
   background: #c84a4a;
   color: #fff;

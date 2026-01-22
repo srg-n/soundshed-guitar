@@ -17,7 +17,9 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <map>
 #include <memory>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -146,13 +148,17 @@ public:
     {
       mUserOutputGain = std::pow(10.0, std::clamp(value, -24.0, 24.0) / 20.0);
     }
-    else if (key == "blend" || key == "gain")
+    else if (key == "blend")
     {
       mBlend = std::clamp(value, 0.0, 1.0);
     }
     else if (key == "enabled")
     {
       mEnabled = value > 0.5;
+    }
+    else if (!key.empty())
+    {
+      mTargetParams[key] = value;
     }
 
     UpdateEffectiveGains();
@@ -187,10 +193,13 @@ public:
       return 20.0 * std::log10(mUserInputGain);
     if (key == "outputGain")
       return 20.0 * std::log10(mUserOutputGain);
-    if (key == "blend" || key == "gain")
+    if (key == "blend")
       return mBlend;
     if (key == "enabled")
       return mEnabled ? 1.0 : 0.0;
+    const auto it = mTargetParams.find(key);
+    if (it != mTargetParams.end())
+      return it->second;
     return 0.0;
   }
 
@@ -198,6 +207,7 @@ public:
                      const std::vector<std::filesystem::path>& paths) override
   {
     mModels.clear();
+    mHasModelParameters = false;
     if (refs.empty() || paths.empty())
       return false;
 
@@ -218,6 +228,15 @@ public:
       instance.path = path;
       instance.parameterId = ref.parameterId;
       instance.parameterValue = ref.parameterValue.value_or(static_cast<double>(i));
+      instance.parameters = ref.parameters;
+      if (instance.parameters.empty() && !ref.parameterId.empty() && ref.parameterValue.has_value())
+      {
+        instance.parameters[ref.parameterId] = *ref.parameterValue;
+      }
+      if (!instance.parameters.empty())
+      {
+        mHasModelParameters = true;
+      }
 
       if (!LoadModelInstance(instance))
       {
@@ -252,6 +271,7 @@ private:
     std::filesystem::path path;
     std::string parameterId;
     double parameterValue = 0.0;
+    std::map<std::string, double> parameters;
 
     std::unique_ptr<nam::OptimizedDSPWrapper> optimized;
     std::unique_ptr<::nam::DSP> fallback;
@@ -284,6 +304,8 @@ private:
   double mInputGain = 1.0;
   double mOutputGain = 1.0;
   double mBlend = 0.0;
+  std::map<std::string, double> mTargetParams;
+  bool mHasModelParameters = false;
   bool mAutoLevelInput = true;
   bool mAutoLevelOutput = true;
   bool mInterfaceCalibrationEnabled = true;
@@ -418,6 +440,99 @@ private:
   }
 
   BlendSelection SelectBlendModels() const
+  {
+    if (ShouldUseParamSelection())
+    {
+      return SelectBlendModelsByParams();
+    }
+
+    return SelectBlendModelsByBlend();
+  }
+
+  bool ShouldUseParamSelection() const
+  {
+    return !mTargetParams.empty() && mHasModelParameters;
+  }
+
+  BlendSelection SelectBlendModelsByParams() const
+  {
+    BlendSelection selection;
+    if (mModels.empty())
+      return selection;
+
+    if (mModels.size() == 1)
+    {
+      selection.lowerIndex = 0;
+      selection.upperIndex = 0;
+      selection.weightLower = 1.0;
+      selection.weightUpper = 0.0;
+      return selection;
+    }
+
+    std::size_t bestIndex = 0;
+    std::size_t secondIndex = 0;
+    double bestDist = std::numeric_limits<double>::infinity();
+    double secondDist = std::numeric_limits<double>::infinity();
+
+    for (std::size_t i = 0; i < mModels.size(); ++i)
+    {
+      const auto& model = mModels[i];
+      double dist = 0.0;
+      bool anyMatched = false;
+      for (const auto& [paramId, targetValue] : mTargetParams)
+      {
+        const auto it = model.parameters.find(paramId);
+        if (it == model.parameters.end())
+        {
+          dist += 4.0;
+          continue;
+        }
+        const double delta = it->second - targetValue;
+        dist += delta * delta;
+        anyMatched = true;
+      }
+
+      if (!anyMatched)
+      {
+        dist += 9.0;
+      }
+
+      if (dist < bestDist)
+      {
+        secondDist = bestDist;
+        secondIndex = bestIndex;
+        bestDist = dist;
+        bestIndex = i;
+      }
+      else if (dist < secondDist)
+      {
+        secondDist = dist;
+        secondIndex = i;
+      }
+    }
+
+    if (mSnapBlend || !std::isfinite(secondDist))
+    {
+      selection.lowerIndex = bestIndex;
+      selection.upperIndex = bestIndex;
+      selection.weightLower = 1.0;
+      selection.weightUpper = 0.0;
+      return selection;
+    }
+
+    const double eps = 1e-6;
+    const double w1 = 1.0 / std::max(bestDist, eps);
+    const double w2 = 1.0 / std::max(secondDist, eps);
+    const double denom = std::max(w1 + w2, eps);
+
+    selection.lowerIndex = bestIndex;
+    selection.upperIndex = secondIndex;
+    selection.weightLower = w1 / denom;
+    selection.weightUpper = w2 / denom;
+    return selection;
+  }
+
+  BlendSelection SelectBlendModelsByBlend() const
   {
     BlendSelection selection;
     if (mModels.empty())

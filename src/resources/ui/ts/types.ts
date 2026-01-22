@@ -92,6 +92,7 @@ export interface ResourceRef {
   embeddedId?: string;
   parameterId?: string;
   parameterValue?: number;
+  parameters?: Record<string, number>;
 }
 
 export interface GraphNode {

@@ -1,5 +1,14 @@
 import { uiState } from "./state.js";
-import type { Preset, GraphNode, GraphEdge, LibraryResource, BlendModelMapping, BlendLibrary } from "./types.js";
+import type {
+  Preset,
+  GraphNode,
+  GraphEdge,
+  LibraryResource,
+  BlendModelMapping,
+  BlendLibrary,
+  BlendDefinition,
+  BlendMode,
+} from "./types.js";
 import { postMessage } from "./bridge.js";
 import { showNotification } from "./notifications.js";
 import { EffectTypeRegistry, type EffectTypeInfo } from "./presetV2.js";
@@ -37,6 +46,163 @@ const EFFECT_VISUAL_BACKGROUNDS: Record<string, string> = {
   reverb: "linear-gradient(145deg, rgba(64, 92, 132, 0.95) 0%, rgba(18, 24, 38, 0.95) 100%)",
   utility: "linear-gradient(145deg, rgba(86, 86, 96, 0.95) 0%, rgba(26, 26, 30, 0.95) 100%)",
 };
+
+type BlendParamSpec = {
+  id: string;
+  label: string;
+  min: number;
+  max: number;
+};
+
+const BLEND_PARAM_SPECS: BlendParamSpec[] = [
+  { id: "gain", label: "Gain", min: 0, max: 10 },
+  { id: "drive", label: "Drive", min: 0, max: 10 },
+  { id: "contour", label: "Contour", min: 0, max: 10 },
+  { id: "treble", label: "Treble", min: 0, max: 10 },
+  { id: "middle", label: "Middle", min: 0, max: 10 },
+  { id: "bass", label: "Bass", min: 0, max: 10 },
+  { id: "presence", label: "Presence", min: 0, max: 10 },
+];
+
+function getBlendParamSpec(paramId: string): BlendParamSpec | null {
+  if (!paramId) {
+    return null;
+  }
+  return BLEND_PARAM_SPECS.find((spec) => spec.id === paramId) ?? null;
+}
+
+function normalizeBlendValue(value: number, spec: BlendParamSpec | null): number {
+  if (!spec) {
+    return value;
+  }
+  if (value < 0) {
+    return value / 10;
+  }
+  const clamped = Math.min(spec.max, Math.max(spec.min, value));
+  const range = spec.max - spec.min;
+  if (range <= 0) {
+    return 0;
+  }
+  return (clamped - spec.min) / range;
+}
+
+function denormalizeBlendValue(value: number, spec: BlendParamSpec | null): number {
+  if (!spec) {
+    return value;
+  }
+  if (value < 0) {
+    return value * 10;
+  }
+  return spec.min + value * (spec.max - spec.min);
+}
+
+function buildParameterMapFromLegacy(mapping: BlendModelMapping): Record<string, number> {
+  if (mapping.parameters) {
+    return mapping.parameters;
+  }
+  if (mapping.parameterId && typeof mapping.parameterValue === "number") {
+    return { [mapping.parameterId]: mapping.parameterValue };
+  }
+  return {};
+}
+
+function resolveBlendActiveParams(blend: BlendDefinition | undefined, mappings: BlendModelMapping[]): string[] {
+  const params = new Set<string>();
+  if (blend?.parameters?.length) {
+    blend.parameters.forEach((param) => params.add(param));
+  }
+  mappings.forEach((mapping) => {
+    const map = buildParameterMapFromLegacy(mapping);
+    Object.keys(map).forEach((param) => params.add(param));
+  });
+  if (!params.size) {
+    params.add("gain");
+  }
+  return Array.from(params);
+}
+
+type BlendParamRange = {
+  min: number;
+  max: number;
+  defaultValue: number;
+  spec: BlendParamSpec | null;
+};
+
+function computeBlendParamRange(
+  paramId: string,
+  mappings: BlendModelMapping[],
+  fallbackValue: number | undefined,
+): BlendParamRange {
+  const spec = getBlendParamSpec(paramId);
+  const values: number[] = [];
+
+  mappings.forEach((mapping) => {
+    const params = buildParameterMapFromLegacy(mapping);
+    const raw = params[paramId];
+    if (typeof raw === "number") {
+      values.push(denormalizeBlendValue(raw, spec));
+    }
+  });
+
+  const fallbackDisplay = typeof fallbackValue === "number"
+    ? denormalizeBlendValue(fallbackValue, spec)
+    : (spec ? spec.min : 0);
+
+  if (!values.length) {
+    return {
+      min: spec ? spec.min : -1,
+      max: spec ? spec.max : 1,
+      defaultValue: fallbackDisplay,
+      spec,
+    };
+  }
+
+  const sorted = values.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  const min = sorted[0];
+  const max = sorted[sorted.length - 1];
+  const defaultValue = typeof fallbackValue === "number" ? fallbackDisplay : median;
+
+  return {
+    min: min === max ? min - 0.5 : min,
+    max: min === max ? max + 0.5 : max,
+    defaultValue,
+    spec,
+  };
+}
+
+type BlendState = {
+  blend: BlendDefinition | undefined;
+  blendMode: BlendMode;
+  mappings: BlendModelMapping[];
+  paramIds: string[];
+};
+
+function getBlendState(node: GraphNode): BlendState | null {
+  if (node.type !== "amp_nam_blend") {
+    return null;
+  }
+
+  const blendId = (node as unknown as { config?: Record<string, string> }).config?.blendId;
+  if (!blendId) {
+    return null;
+  }
+
+  const blend = uiState.blendLibrary?.find((entry) => entry.id === blendId);
+  const mappings = blend?.modelMappings?.length
+    ? blend.modelMappings
+    : buildBlendModelMappingsFromIds(blend?.models ?? [], uiState.resourceLibrary);
+  const paramIds = resolveBlendActiveParams(blend, mappings);
+  const blendMode = (blend?.blendMode ?? "interpolate") as BlendMode;
+
+  return {
+    blend,
+    blendMode,
+    mappings,
+    paramIds,
+  };
+}
 
 function updateEffectVisualization(node?: GraphNode): void {
   if (!effectVisualizationElement) {
@@ -987,22 +1153,56 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
   
   // Get parameter definitions from registry
   const typeInfo = EffectTypeRegistry.get(node.type);
-  const paramDefs = typeInfo?.parameters || [];
+  let paramDefs = typeInfo?.parameters || [];
+
+  const blendState = getBlendState(node);
+  const blendParamRanges = new Map<string, BlendParamRange>();
+  if (blendState) {
+    blendState.paramIds.forEach((paramId) => {
+      const currentValue = node.params[paramId];
+      const range = computeBlendParamRange(paramId, blendState.mappings, currentValue);
+      blendParamRanges.set(paramId, range);
+    });
+
+    const blendParamDefs = blendState.paramIds.map((paramId) => {
+      const range = blendParamRanges.get(paramId);
+      return {
+        key: paramId,
+        name: range?.spec?.label ?? formatParamLabel(paramId),
+        default: range?.defaultValue ?? 0,
+        min: range?.min ?? -1,
+        max: range?.max ?? 1,
+        unit: "amount",
+        step: 0.1,
+      };
+    });
+
+    const nonBlendParams = paramDefs.filter((paramDef) => paramDef.key !== "blend");
+    paramDefs = [...blendParamDefs, ...nonBlendParams];
+  }
   
   const paramControls = paramDefs.map((paramDef) => {
     const key = paramDef.key;
     const rawValue = node.params[key];
-    const value = typeof rawValue === "number" ? rawValue : paramDef.default;
     const label = paramDef.name || formatParamLabel(key);
-    const min = paramDef.min ?? 0;
-    const max = paramDef.max ?? 1;
+    const isBlendParam = blendParamRanges.has(key);
+    const blendRange = blendParamRanges.get(key);
+    const min = blendRange?.min ?? paramDef.min ?? 0;
+    const max = blendRange?.max ?? paramDef.max ?? 1;
     const unit = paramDef.unit || "amount";
-    const defaultValue = paramDef.default ?? value;
+    const defaultValue = blendRange?.defaultValue ?? paramDef.default ?? 0;
+    const normalizedValue = typeof rawValue === "number"
+      ? rawValue
+      : (isBlendParam ? normalizeBlendValue(defaultValue, blendRange?.spec ?? null) : defaultValue);
+    const displayValue = isBlendParam
+      ? denormalizeBlendValue(normalizedValue, blendRange?.spec ?? null)
+      : (typeof normalizedValue === "number" ? normalizedValue : defaultValue);
+    const value = typeof rawValue === "number" ? rawValue : (isBlendParam ? normalizedValue : defaultValue);
     const isToggle = isToggleParam(paramDef);
     const step = typeof paramDef.step === "number" ? paramDef.step : undefined;
     const enumLabels = Array.isArray(paramDef.labels) ? paramDef.labels : [];
     const isEnum = unit === "enum" && enumLabels.length > 0;
-    const labelIndex = Math.round(Math.max(min, Math.min(max, value)));
+    const labelIndex = Math.round(Math.max(min, Math.min(max, displayValue)));
     const enumValueLabel = isEnum ? (enumLabels[labelIndex] ?? `${labelIndex}`) : "";
 
     if (isToggle) {
@@ -1026,17 +1226,18 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
           class="knob node-param-knob" 
           data-node-id="${node.id}" 
           data-param-key="${key}"
-          data-value="${value}"
+          data-value="${displayValue}"
           data-default="${defaultValue}"
           data-min="${min}"
           data-max="${max}"
           data-unit="${unit}"
           ${step !== undefined ? `data-step="${step}"` : ""}
           ${isEnum ? `data-labels="${enumLabels.join("|")}"` : ""}
+          ${isBlendParam ? `data-blend-param="true" data-blend-spec-min="${blendRange?.spec?.min ?? 0}" data-blend-spec-max="${blendRange?.spec?.max ?? 10}" data-blend-mode="${blendState?.blendMode ?? "interpolate"}"` : ""}
         >
           <div class="knob-indicator"></div>
         </div>
-        <span class="node-param-value">${isEnum ? enumValueLabel : `${value.toFixed(2)}${unit}`}</span>
+        <span class="node-param-value">${isEnum ? enumValueLabel : `${displayValue.toFixed(2)}${unit}`}</span>
         ${isEnum ? `
           <div class="node-param-steps">
             ${enumLabels.map((text, idx) => `
@@ -1225,6 +1426,45 @@ function bindNodeParamControls(node: GraphNode, preset: Preset): void {
     return;
   }
 
+  const blendState = getBlendState(node);
+
+  const findClosestBlendMapping = (target: Record<string, number>): BlendModelMapping | null => {
+    if (!blendState) {
+      return null;
+    }
+    let best: BlendModelMapping | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    blendState.mappings.forEach((mapping) => {
+      const params = buildParameterMapFromLegacy(mapping);
+      let distance = 0;
+      let matched = false;
+      blendState.paramIds.forEach((paramId) => {
+        const targetValue = target[paramId];
+        const mappedValue = params[paramId];
+        if (typeof targetValue !== "number") {
+          return;
+        }
+        if (typeof mappedValue !== "number") {
+          distance += 4;
+          return;
+        }
+        const delta = mappedValue - targetValue;
+        distance += delta * delta;
+        matched = true;
+      });
+      if (!matched) {
+        distance += 9;
+      }
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = mapping;
+      }
+    });
+
+    return best;
+  };
+
   knobs.forEach((knobElement) => {
     const knob = knobElement as HTMLElement;
     const valueDisplay = knob.parentElement?.querySelector(".node-param-value") as HTMLElement | null;
@@ -1239,6 +1479,13 @@ function bindNodeParamControls(node: GraphNode, preset: Preset): void {
     const step = knob.dataset.step ? parseFloat(knob.dataset.step) : undefined;
     const labels = (knob.dataset.labels || "").split("|").filter(Boolean);
     const isEnum = unit === "enum" && labels.length > 0;
+    const isBlendParam = knob.dataset.blendParam === "true";
+    const blendSpecMin = knob.dataset.blendSpecMin ? parseFloat(knob.dataset.blendSpecMin) : 0;
+    const blendSpecMax = knob.dataset.blendSpecMax ? parseFloat(knob.dataset.blendSpecMax) : 10;
+    const blendMode = (knob.dataset.blendMode ?? "interpolate") as BlendMode;
+    const blendSpec: BlendParamSpec | null = isBlendParam
+      ? { id: paramKey ?? "", label: paramKey ?? "", min: blendSpecMin, max: blendSpecMax }
+      : null;
 
     const snapValue = (rawValue: number): number => {
       if (!step || step <= 0) return rawValue;
@@ -1250,6 +1497,9 @@ function bindNodeParamControls(node: GraphNode, preset: Preset): void {
       if (isEnum) {
         const index = Math.round(rawValue);
         return labels[index] ?? `${index}`;
+      }
+      if (isBlendParam) {
+        return rawValue.toFixed(1);
       }
       return `${rawValue.toFixed(2)}${unit === "amount" ? "" : unit}`;
     };
@@ -1270,8 +1520,32 @@ function bindNodeParamControls(node: GraphNode, preset: Preset): void {
         if (finalValue !== value) {
           knobInstance.setValue(finalValue);
         }
-        node.params[paramKey] = finalValue;
-        sendSignalPathNodeParamUpdate(nodeId, paramKey, finalValue);
+
+        const normalizedValue = isBlendParam ? normalizeBlendValue(finalValue, blendSpec) : finalValue;
+
+        if (isBlendParam && blendMode === "snap" && blendState) {
+          const target: Record<string, number> = { ...node.params, [paramKey]: normalizedValue };
+          const closest = findClosestBlendMapping(target);
+          if (closest) {
+            const params = buildParameterMapFromLegacy(closest);
+            let updated = false;
+            blendState.paramIds.forEach((paramId) => {
+              const mappedValue = params[paramId];
+              if (typeof mappedValue === "number" && node.params[paramId] !== mappedValue) {
+                node.params[paramId] = mappedValue;
+                sendSignalPathNodeParamUpdate(nodeId, paramId, mappedValue);
+                updated = true;
+              }
+            });
+            if (updated) {
+              showNodeParamsPanel(node, preset);
+            }
+            return;
+          }
+        }
+
+        node.params[paramKey] = normalizedValue;
+        sendSignalPathNodeParamUpdate(nodeId, paramKey, normalizedValue);
         updateEqVisualization(node);
       },
     });
