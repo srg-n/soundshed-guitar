@@ -52,35 +52,12 @@ END
 IDD_DIALOG_MAIN DIALOG 0, 0, 300, 300
 STYLE DS_SETFONT | DS_CENTER | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME
 CAPTION PLUG_NAME
-MENU IDR_MENU1
 FONT 8, "MS Sans Serif"
 BEGIN
 END
 
-IDR_MENU1 MENU
-BEGIN
-    POPUP "&File"
-    BEGIN
-        MENUITEM "&Preferences...\tCtrl+,",     ID_PREFERENCES
-        MENUITEM "&Quit",                       ID_QUIT
-    END
-    POPUP "&Debug"
-    BEGIN
-        MENUITEM "&Live Edit Mode\tCtrl+E",     ID_LIVE_EDIT
-        MENUITEM "&Show Control Bounds\tCtrl+B", ID_SHOW_BOUNDS
-        MENUITEM "&Show Drawn Area\tCtrl+D",    ID_SHOW_DRAWN
-        MENUITEM "&Show FPS\tCtrl+F",           ID_SHOW_FPS
-    END
-    POPUP "&Help"
-    BEGIN
-        MENUITEM "&About",                      ID_ABOUT
-        MENUITEM "&Read Manual",                ID_HELP
-    END
-END
-
 IDR_ACCELERATOR1 ACCELERATORS
 BEGIN
-    VK_OEM_COMMA,   ID_PREFERENCES,         VIRTKEY, CONTROL, NOINVERT
     "B",            ID_SHOW_BOUNDS,         VIRTKEY, CONTROL, NOINVERT
     "D",            ID_SHOW_DRAWN,          VIRTKEY, CONTROL, NOINVERT
     "F",            ID_SHOW_FPS,            VIRTKEY, CONTROL, NOINVERT

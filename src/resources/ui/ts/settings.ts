@@ -19,6 +19,7 @@ const apiKeyInput = document.getElementById("tone3000-api-key-input") as HTMLInp
 const saveButton = document.getElementById("tone3000-api-key-save");
 const clearButton = document.getElementById("tone3000-api-key-clear");
 const sessionStatus = document.getElementById("tone3000-session-status");
+const openAudioPreferencesButton = document.getElementById("open-audio-preferences");
 const diagnosticsToggle = document.getElementById("signal-diagnostics-toggle") as HTMLInputElement | null;
 const interfaceCalibrationToggle = document.getElementById("interface-calibration-toggle") as HTMLInputElement | null;
 const interfaceCalibrationReferenceInput = document.getElementById("interface-calibration-reference") as HTMLInputElement | null;
@@ -47,6 +48,10 @@ export function initSettingsPanel(): void {
   settingsInitialized = true;
   saveButton?.addEventListener("click", () => void saveApiKey());
   clearButton?.addEventListener("click", () => void clearApiKey());
+  openAudioPreferencesButton?.addEventListener("click", () => {
+    postMessage({ type: "openAudioPreferences" });
+    appendLog("openAudioPreferences → requested");
+  });
   initDiagnosticsToggle();
   initInterfaceCalibrationControls();
   initEquipmentTabs();
@@ -72,7 +77,7 @@ function initEquipmentTabs(): void {
   activateEquipmentTab("settings");
 }
 
-function initThemeSelect(): void {
+export function initThemeSelect(): void {
   if (!themeSelect || themeSelectInitialized) {
     return;
   }

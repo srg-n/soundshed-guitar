@@ -416,6 +416,49 @@ body:not(.is-standalone) .main-content .metronome-only {
   color: var(--text-dark-disabled);
 }
 
+.footer-demo-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.footer-demo-select {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-dark-medium);
+  background: var(--bg-dark-secondary);
+  color: var(--text-dark-primary);
+  font-size: 11px;
+  min-width: 150px;
+}
+
+.footer-demo-select:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+
+.footer-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.footer-theme-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.footer-theme-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dark-dimmed);
+}
+
 .bpm-display {
   color: var(--text-dark-secondary);
   font-variant-numeric: tabular-nums;
@@ -482,7 +525,6 @@ body:not(.is-standalone) .main-content .metronome-only {
 }
 
 .footer-hint {
-  margin-left: auto;
   color: var(--text-dark-dimmed);
   font-size: 10px;
 }

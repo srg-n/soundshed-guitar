@@ -29,9 +29,7 @@
       -->
 
       <button class="icon-btn active" data-panel="visualizer" title="Visualizer">
-        <svg viewBox="0 0 24 24">
-          <image href="images/icons/amp.svg" width="24" height="24" />
-        </svg>
+        <span aria-hidden="true" style="display: block; width: 24px; height: 24px; background-color: currentColor; -webkit-mask: url('images/icons/amp.svg') center / contain no-repeat; mask: url('images/icons/amp.svg') center / contain no-repeat;"></span>
       </button>
 
       <button class="icon-btn" data-panel="eq" title="EQ">
@@ -463,6 +461,14 @@
           <div class="equipment-tab-panel active" id="equipment-tab-settings">
             <h2>Audio</h2>
             <div class="settings-section">
+              <h3>Audio Device</h3>
+              <div class="settings-row settings-row-two">
+                <label for="open-audio-preferences">Preferences</label>
+                <button id="open-audio-preferences" type="button">Open Audio Preferences</button>
+              </div>
+              <div class="settings-hint">Opens the native audio/MIDI device settings dialog for the standalone app.</div>
+            </div>
+            <div class="settings-section">
               <h3>Interface Calibration</h3>
               <div class="settings-row">
                 <label for="interface-calibration-toggle">Enabled</label>
@@ -515,15 +521,6 @@
               </div>
             </div>
 
-
-            <h2>Appearance</h2>
-            <div class="settings-section">
-              <h3>Theme</h3>
-              <div class="settings-row settings-row-two">
-                <label for="theme-select">Theme</label>
-                <select id="theme-select" class="themed-select"></select>
-              </div>
-            </div>
 
             <h2>Tone3000</h2>
             <div class="settings-section">
@@ -630,6 +627,9 @@
       <section class="fx-selector-panel" id="fx-selector-panel">
         <div class="fx-selector-header">
           <span class="fx-selector-title">FX Library</span>
+          <button class="fx-selector-toggle" id="fx-selector-toggle" aria-expanded="true" title="Collapse FX Library">
+            <span class="fx-toggle-icon" aria-hidden="true">▾</span>
+          </button>
         </div>
         <div class="fx-selector-content">
           <div class="fx-selector-categories" id="fx-selector-categories">
@@ -675,8 +675,15 @@
       </button>
       <span class="footer-divider">|</span>
       <button class="footer-btn">SETTINGS</button>
-      <span class="footer-hint notification" id="notification-area">[Click] to access the Cab Section · [R Click] or
-        [Double Click] to activate/deactivate.</span>
+      <span class="footer-divider">|</span>
+      <div class="footer-right">
+        <div class="footer-theme-select">
+          <span class="footer-theme-label">THEME</span>
+          <select id="theme-select" class="footer-demo-select themed-select"></select>
+        </div>
+        <span class="footer-hint notification" id="notification-area">[Click] to access the Cab Section · [R Click] or
+          [Double Click] to activate/deactivate.</span>
+      </div>
     </footer>
 
     <!-- Metronome Modal -->

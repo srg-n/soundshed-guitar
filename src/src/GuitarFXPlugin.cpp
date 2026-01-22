@@ -34,6 +34,12 @@
 #include "IPlug_include_in_plug_src.h"
 #include "IPlugPaths.h"
 #include "wdlstring.h"
+#if defined(APP_API)
+#include "IPlugAPP_host.h"
+#endif
+#if defined(APP_API) && defined(OS_WIN)
+#include "../resources/resource.h"
+#endif
 
 #include "presets/PresetStorage.h"
 #include "presets/PresetTypesJson.h"  // For GlobalSignalChainConfig JSON serialization
@@ -2662,6 +2668,10 @@ namespace guitarfx
     {
       HandleBrowseIRRequest();
     }
+    else if (type == "openAudioPreferences")
+    {
+      HandleOpenAudioPreferencesRequest();
+    }
     else if (type == "tuner")
     {
       HandleTunerRequest(payload);
@@ -3680,6 +3690,34 @@ namespace guitarfx
     }
 #else
     ReportErrorToUI("Browse not supported", "File browser is only available on Windows");
+#endif
+  }
+
+  void GuitarFXPlugin::HandleOpenAudioPreferencesRequest()
+  {
+#if defined(APP_API) && defined(OS_WIN)
+    if (!::gHINSTANCE || !::gHWND)
+    {
+      ReportErrorToUI("Audio preferences unavailable", "Standalone host window not ready");
+      return;
+    }
+
+    auto* host = iplug::IPlugAPPHost::sInstance.get();
+    if (!host)
+    {
+      ReportErrorToUI("Audio preferences unavailable", "Standalone host not initialized");
+      return;
+    }
+
+    const INT_PTR result = DialogBox(::gHINSTANCE, MAKEINTRESOURCE(IDD_DIALOG_PREF), ::gHWND, iplug::IPlugAPPHost::PreferencesDlgProc);
+    if (result == IDOK)
+    {
+      host->UpdateINI();
+    }
+#elif defined(APP_API)
+    ReportErrorToUI("Audio preferences unavailable", "Native device dialog is only available on Windows in the standalone app.");
+#else
+    ReportErrorToUI("Audio preferences unavailable", "Only available in the standalone app.");
 #endif
   }
 

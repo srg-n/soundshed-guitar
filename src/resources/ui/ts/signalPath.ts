@@ -27,8 +27,8 @@ let selectedNodeId: string | null = null;
 const DEFAULT_VISUALIZATION_TITLE = "Effect Visualization";
 const DEFAULT_VISUALIZATION_SUBTITLE = "Select a node in the signal chain to edit parameters";
 const EFFECT_VISUAL_BACKGROUNDS: Record<string, string> = {
-  amp: "url('../images/equipment/amp-01.png')",
-  cab: "url('../images/equipment/cab-01.png')",
+  amp: "url('../images/equipment/amps/amp-04.png')",
+  cab: "url('../images/equipment/cabs/cab-02.png')",
   eq: "linear-gradient(145deg, rgba(56, 96, 132, 0.95) 0%, rgba(18, 24, 44, 0.95) 100%)",
   dynamics: "linear-gradient(145deg, rgba(132, 64, 64, 0.95) 0%, rgba(38, 18, 24, 0.95) 100%)",
   modulation: "linear-gradient(145deg, rgba(88, 64, 132, 0.95) 0%, rgba(26, 18, 44, 0.95) 100%)",

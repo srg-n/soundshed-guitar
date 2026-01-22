@@ -15,6 +15,8 @@ const fxSelectorPanel = document.getElementById("fx-selector-panel");
 const fxSelectorCategories = document.getElementById("fx-selector-categories");
 const fxSelectorEffectsList = document.getElementById("fx-selector-effects-list");
 const fxSearchInput = document.getElementById("fx-search-input") as HTMLInputElement | null;
+const fxSelectorToggle = document.getElementById("fx-selector-toggle") as HTMLButtonElement | null;
+const fxSelectorHeader = document.querySelector(".fx-selector-header") as HTMLElement | null;
 
 // State
 let activeCategory = "dynamics"; // Currently selected category tab
@@ -49,6 +51,27 @@ export function initFxSelector(): void {
     console.warn("[fxSelector] Panel element not found");
     return;
   }
+
+  // Toggle collapse/expand
+  fxSelectorToggle?.addEventListener("click", () => {
+    fxSelectorPanel.classList.toggle("collapsed");
+    const isCollapsed = fxSelectorPanel.classList.contains("collapsed");
+    fxSelectorToggle.setAttribute("aria-expanded", String(!isCollapsed));
+    fxSelectorToggle.title = isCollapsed ? "Expand FX Library" : "Collapse FX Library";
+  });
+
+  fxSelectorHeader?.addEventListener("click", (event) => {
+    const target = event.target as HTMLElement;
+    if (target.closest(".fx-selector-toggle")) {
+      return;
+    }
+    fxSelectorPanel.classList.toggle("collapsed");
+    const isCollapsed = fxSelectorPanel.classList.contains("collapsed");
+    fxSelectorToggle?.setAttribute("aria-expanded", String(!isCollapsed));
+    if (fxSelectorToggle) {
+      fxSelectorToggle.title = isCollapsed ? "Expand FX Library" : "Collapse FX Library";
+    }
+  });
 
   // Search input
   fxSearchInput?.addEventListener("input", (e) => {

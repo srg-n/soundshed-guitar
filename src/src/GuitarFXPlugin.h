@@ -159,6 +159,7 @@ namespace guitarfx
     void HandleSavePresetRequest(const nlohmann::json &payload);
     void HandleBrowseModelRequest();
     void HandleBrowseIRRequest();
+    void HandleOpenAudioPreferencesRequest();
     void HandleTunerRequest(const nlohmann::json &payload);
     void HandleSetInputModeRequest(const nlohmann::json &payload);
     void HandleSetAmpCabStateRequest(const nlohmann::json &payload);
