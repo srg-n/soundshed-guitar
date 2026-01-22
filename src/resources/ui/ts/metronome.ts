@@ -6,6 +6,8 @@ import type { EnvironmentState, MetronomeState } from "./types.js";
 const BPM_MIN = 30;
 const BPM_MAX = 300;
 const BPM_STEP = 1;
+const TAP_RESET_MS = 2500;
+const TAP_HISTORY_MAX = 8;
 
 const metronomeState = {
   isOpen: false,
@@ -32,6 +34,7 @@ function getMetronomeElements(): {
   bpmUpButton: HTMLButtonElement | null;
   bpmDownButton: HTMLButtonElement | null;
   footerMetronomeButton: HTMLButtonElement | null;
+  footerTapButton: HTMLButtonElement | null;
   footerBpmButton: HTMLButtonElement | null;
   footerBpmPanel: HTMLElement | null;
   footerBpmInput: HTMLInputElement | null;
@@ -54,6 +57,7 @@ function getMetronomeElements(): {
     bpmUpButton: panel?.querySelector<HTMLButtonElement>("#metronome-bpm-up") ?? null,
     bpmDownButton: panel?.querySelector<HTMLButtonElement>("#metronome-bpm-down") ?? null,
     footerMetronomeButton: document.getElementById("footer-metronome-btn") as HTMLButtonElement | null,
+    footerTapButton: document.getElementById("footer-tap-btn") as HTMLButtonElement | null,
     footerBpmButton: document.getElementById("footer-bpm-btn") as HTMLButtonElement | null,
     footerBpmPanel: footerPanel,
     footerBpmInput: footerPanel?.querySelector<HTMLInputElement>("#footer-bpm-input") ?? null,
@@ -344,6 +348,34 @@ function openMetronome(): void {
   syncMetronomeControls();
 }
 
+const tapTimes: number[] = [];
+
+function handleTapTempo(): void {
+  if (!isEditable()) return;
+
+  const now = performance.now();
+  const lastTap = tapTimes[tapTimes.length - 1];
+  if (lastTap && now - lastTap > TAP_RESET_MS) {
+    tapTimes.length = 0;
+  }
+  tapTimes.push(now);
+  if (tapTimes.length > TAP_HISTORY_MAX) {
+    tapTimes.shift();
+  }
+
+  if (tapTimes.length < 3) return;
+
+  const intervals: number[] = [];
+  for (let i = 1; i < tapTimes.length; i += 1) {
+    intervals.push(tapTimes[i] - tapTimes[i - 1]);
+  }
+  if (!intervals.length) return;
+
+  const avgInterval = intervals.reduce((sum, value) => sum + value, 0) / intervals.length;
+  const bpm = Math.round(60000 / avgInterval);
+  updateBpm(bpm);
+}
+
 function closeMetronome(): void {
   if (!metronomeModal) return;
   metronomeModal.style.display = "none";
@@ -385,6 +417,7 @@ export function initializeMetronome(): void {
     bpmUpButton,
     bpmDownButton,
     footerMetronomeButton,
+    footerTapButton,
     footerBpmButton,
     footerBpmPanel,
     footerBpmInput,
@@ -481,6 +514,12 @@ export function initializeMetronome(): void {
     });
   }
 
+  if (footerTapButton) {
+    footerTapButton.addEventListener("click", () => {
+      handleTapTempo();
+    });
+  }
+
   if (metronomeCloseBtn) {
     metronomeCloseBtn.addEventListener("click", () => closeMetronome());
   }
@@ -496,6 +535,15 @@ export function initializeMetronome(): void {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && metronomeState.isOpen) {
       closeMetronome();
+    }
+    if (event.code === "Space" && !event.repeat) {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase();
+      const isTextInput = tagName === "input" || tagName === "textarea" || target?.isContentEditable;
+      if (!isTextInput) {
+        event.preventDefault();
+        handleTapTempo();
+      }
     }
   });
 
