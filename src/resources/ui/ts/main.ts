@@ -183,6 +183,13 @@ async function bootstrap(): Promise<void> {
   if (signalTestButton) {
     signalTestButton.addEventListener("click", requestSignalPathTest);
   }
+
+  const footerSettingsButton = document.getElementById("footer-settings-btn");
+  if (footerSettingsButton) {
+    footerSettingsButton.addEventListener("click", () => {
+      switchMainPanel("settings");
+    });
+  }
 }
 
 bootstrap();
