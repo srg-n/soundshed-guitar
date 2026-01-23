@@ -361,9 +361,12 @@ bool TestDirectModelProcessing(const fs::path& modelPath)
   PrintSignalStats("Input", AnalyzeBuffer(input));
   PrintSamples("Input", input);
 
+  NAM_SAMPLE* inputPtrs[1] = {input.data()};
+  NAM_SAMPLE* outputPtrs[1] = {output.data()};
+
   try
   {
-    model->process(input.data(), output.data(), kTestBlockSize);
+    model->process(inputPtrs, outputPtrs, kTestBlockSize);
   }
   catch (const std::exception& ex)
   {
@@ -380,7 +383,7 @@ bool TestDirectModelProcessing(const fs::path& modelPath)
   PrintSignalStats("Input", AnalyzeBuffer(input));
   PrintSamples("Input", input);
 
-  model->process(input.data(), output.data(), kTestBlockSize);
+  model->process(inputPtrs, outputPtrs, kTestBlockSize);
   PrintSignalStats("Output", AnalyzeBuffer(output));
   PrintSamples("Output", output);
 
@@ -389,7 +392,7 @@ bool TestDirectModelProcessing(const fs::path& modelPath)
   std::fill(input.begin(), input.end(), static_cast<NAM_SAMPLE>(0.0));
   PrintSignalStats("Input", AnalyzeBuffer(input));
 
-  model->process(input.data(), output.data(), kTestBlockSize);
+  model->process(inputPtrs, outputPtrs, kTestBlockSize);
   PrintSignalStats("Output", AnalyzeBuffer(output));
   PrintSamples("Output", output, 10);
 
@@ -398,7 +401,7 @@ bool TestDirectModelProcessing(const fs::path& modelPath)
   GenerateSineWave(input, 82.0, kTestSampleRate, 0.4);
   PrintSignalStats("Input", AnalyzeBuffer(input));
 
-  model->process(input.data(), output.data(), kTestBlockSize);
+  model->process(inputPtrs, outputPtrs, kTestBlockSize);
   PrintSignalStats("Output", AnalyzeBuffer(output));
 
   // Test 5: Multiple consecutive blocks (check for state issues)
@@ -408,7 +411,7 @@ bool TestDirectModelProcessing(const fs::path& modelPath)
   bool allBlocksOk = true;
   for (int block = 0; block < 10; ++block)
   {
-    model->process(input.data(), output.data(), kTestBlockSize);
+    model->process(inputPtrs, outputPtrs, kTestBlockSize);
     auto stats = AnalyzeBuffer(output);
     
     if (stats.hasNaN || stats.hasInf)
@@ -591,7 +594,9 @@ bool TestDirectVsManager(const fs::path& resourcesDir, const fs::path& modelPath
   GenerateSineWave(managerInputR, 440.0, kTestSampleRate, 0.3);
 
   // Process directly
-  directModel->process(directInput.data(), directOutput.data(), kTestBlockSize);
+  NAM_SAMPLE* directInputPtrs[1] = {directInput.data()};
+  NAM_SAMPLE* directOutputPtrs[1] = {directOutput.data()};
+  directModel->process(directInputPtrs, directOutputPtrs, kTestBlockSize);
 
   // Process through manager
   float* inputs[2] = {managerInputL.data(), managerInputR.data()};
