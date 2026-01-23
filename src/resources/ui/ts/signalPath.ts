@@ -34,8 +34,8 @@ let draggedNodeId: string | null = null;
 let dragOverNodeId: string | null = null;
 let selectedNodeId: string | null = null;
 
-const DEFAULT_VISUALIZATION_TITLE = "Effect Visualization";
-const DEFAULT_VISUALIZATION_SUBTITLE = "Select a node in the signal chain to edit parameters";
+const DEFAULT_VISUALIZATION_TITLE = "";
+const DEFAULT_VISUALIZATION_SUBTITLE = "Select an item in the signal chain to edit";
 const EFFECT_VISUAL_BACKGROUNDS: Record<string, string> = {
   amp: "url('../images/equipment/amps/amp-04.png')",
   cab: "url('../images/equipment/cabs/cab-02.png')",

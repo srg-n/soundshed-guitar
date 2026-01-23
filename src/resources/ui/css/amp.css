@@ -16,13 +16,8 @@
 .visualization-panel {
   width: 100%;
   max-width: 1400px;
-
   border-radius: 16px;
-
-  padding: 20px;
   position: relative;
-
-
 }
 
 .effect-visualization-header {
@@ -57,7 +52,7 @@
   /*border: 2px solid rgba(145, 156, 170, 0.6);*/
   position: relative;
   overflow: hidden;
-  box-shadow: inset 0 8px 18px rgba(0,0,0,0.45);
+  box-shadow: inset 0 8px 18px rgba(0, 0, 0, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -141,9 +136,9 @@
   border-radius: 50%;
   background: linear-gradient(145deg, var(--bg-primary), #e0e4ec);
   border: 3px solid var(--border-lighter);
-  box-shadow: 
-    0 4px 8px rgba(0,0,0,0.15),
-    inset 0 2px 0 rgba(255,255,255,0.5);
+  box-shadow:
+    0 4px 8px rgba(0, 0, 0, 0.15),
+    inset 0 2px 0 rgba(255, 255, 255, 0.5);
   position: relative;
   cursor: pointer;
 }
@@ -192,7 +187,7 @@
   border: 1px solid #b8b0a8;
   position: relative;
   cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .power-indicator {
@@ -247,7 +242,7 @@
   border: 1px solid #b8b0a8;
   position: relative;
   cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .cab-power-switch .power-indicator {
@@ -315,7 +310,7 @@
   top: 25%;
   left: 25%;
   transform: translate(-50%, -50%);
-  box-shadow: 
+  box-shadow:
     20px 0 0 var(--text-primary),
     0 14px 0 var(--text-primary),
     20px 14px 0 var(--text-primary);
