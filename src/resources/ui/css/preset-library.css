@@ -310,6 +310,38 @@
   color: var(--text-tertiary);
 }
 
+.preset-rating {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.preset-rating-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.preset-rating-stars {
+  display: flex;
+  gap: 4px;
+}
+
+.preset-rating-star {
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+
+.preset-rating-star.active {
+  color: var(--color-primary);
+}
+
 .preset-library-empty {
   color: var(--text-tertiary);
   font-size: 12px;

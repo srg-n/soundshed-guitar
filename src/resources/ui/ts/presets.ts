@@ -32,6 +32,7 @@ const PRESET_FOLDER_STORAGE_KEY = "guitarfx_preset_folders";
 const PRESET_FOLDER_SELECTED_KEY = "guitarfx_preset_folder_selected";
 const SETLIST_STORAGE_KEY = "guitarfx_setlists";
 const SETLIST_SELECTED_KEY = "guitarfx_setlist_selected";
+const PRESET_RATINGS_KEY = "guitarfx_preset_ratings";
 const PRESET_FOLDER_ALL_ID = "__all__";
 const PRESET_FOLDER_IMPORTED_NAME = "Imported";
 
@@ -41,6 +42,45 @@ function normalizeFolderName(name: string): string {
 
 function normalizeSetlistName(name: string): string {
   return name.trim();
+}
+
+function loadPresetRatings(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(PRESET_RATINGS_KEY);
+    if (!raw) {
+      return {};
+    }
+    const parsed = JSON.parse(raw) as Record<string, number>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    console.error("Failed to load preset ratings", error);
+    return {};
+  }
+}
+
+function savePresetRatings(ratings: Record<string, number>): void {
+  try {
+    localStorage.setItem(PRESET_RATINGS_KEY, JSON.stringify(ratings));
+  } catch (error) {
+    console.error("Failed to save preset ratings", error);
+  }
+}
+
+function getPresetRating(presetId: string): number | null {
+  const ratings = loadPresetRatings();
+  const rating = ratings[presetId];
+  return typeof rating === "number" && rating >= 1 && rating <= 5 ? rating : null;
+}
+
+function setPresetRating(presetId: string, rating: number | null): void {
+  const ratings = loadPresetRatings();
+  if (rating === null) {
+    delete ratings[presetId];
+  } else {
+    ratings[presetId] = rating;
+  }
+  savePresetRatings(ratings);
+  renderPresetUI(uiState.presetCache.get(uiState.activePresetId ?? "") ?? null);
 }
 
 function openPresetLibraryPopover(): void {
@@ -512,6 +552,8 @@ function renderPresetUI(preset: Preset | null): void {
     activeFolderId: uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID,
     onSelectFolder: setActivePresetFolder,
     onMovePresetToFolder: movePresetToFolder,
+    getRating: getPresetRating,
+    onRate: setPresetRating,
   });
 
   renderPresetDetails(preset, {

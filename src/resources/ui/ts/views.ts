@@ -224,6 +224,8 @@ export function renderPresetList(
     activeFolderId: string | null;
     onSelectFolder: (folderId: string) => void;
     onMovePresetToFolder: (presetId: string, folderId: string) => void;
+    getRating: (presetId: string) => number | null;
+    onRate: (presetId: string, rating: number | null) => void;
   },
 ): void {
   if (!presetListElement) {
@@ -294,15 +296,30 @@ export function renderPresetList(
 
   presetListElement.innerHTML = presets
     .map(
-      (preset) => `
+      (preset) => {
+        const rating = options?.getRating(preset.id) ?? null;
+        const stars = Array.from({ length: 5 }, (_, index) => {
+          const value = index + 1;
+          const active = rating !== null && value <= rating ? "active" : "";
+          return `<button class="preset-rating-star ${active}" data-rating="${value}" type="button">★</button>`;
+        }).join("");
+        const label = rating === null ? "Not Rated" : `${rating}/5`;
+        return `
         <article class="preset-item ${preset.id === activePresetId ? "active" : ""}" data-id="${preset.id}" draggable="true">
           <header>
             <h3>${escapeHtml(preset.name)}</h3>
             <span>${escapeHtml(preset.category ?? "")}</span>
           </header>
           <p>${escapeHtml(preset.description ?? "")}</p>
+          <div class="preset-rating" data-preset-id="${preset.id}">
+            <span class="preset-rating-label">${label}</span>
+            <div class="preset-rating-stars">
+              ${stars}
+            </div>
+          </div>
         </article>
-      `,
+      `;
+      },
     )
     .join("");
 
@@ -320,6 +337,21 @@ export function renderPresetList(
         event.dataTransfer?.setData("text/plain", presetId);
         event.dataTransfer?.setDragImage(element, 20, 20);
       }
+    });
+  });
+
+  presetListElement.querySelectorAll<HTMLButtonElement>(".preset-rating-star").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const wrapper = button.closest<HTMLElement>(".preset-rating");
+      const presetId = wrapper?.dataset.presetId ?? "";
+      const ratingValue = Number(button.dataset.rating ?? 0);
+      if (!presetId || !options) {
+        return;
+      }
+      const current = options.getRating(presetId);
+      const next = current === ratingValue ? null : ratingValue;
+      options.onRate(presetId, next);
     });
   });
 }
