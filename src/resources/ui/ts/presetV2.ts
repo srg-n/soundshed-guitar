@@ -142,6 +142,22 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
+    type: "amp_builtin",
+    displayName: "Heavy American",
+    category: "amp",
+    requiresResource: false,
+    parameters: [
+      { key: "voice", name: "Voice", default: 0, min: 0, max: 1, unit: "toggle" },
+      { key: "gain", name: "Gain", default: 0.45, min: 0, max: 1, unit: "amount" },
+      { key: "bass", name: "Bass", default: 0.5, min: 0, max: 1, unit: "amount" },
+      { key: "middle", name: "Middle", default: 0.5, min: 0, max: 1, unit: "amount" },
+      { key: "treble", name: "Treble", default: 0.5, min: 0, max: 1, unit: "amount" },
+      { key: "contour", name: "Contour", default: 0.2, min: 0, max: 1, unit: "amount" },
+      { key: "presence", name: "Presence", default: 0.5, min: 0, max: 1, unit: "amount" },
+      { key: "output", name: "Output", default: 0, min: -24, max: 24, unit: "dB" }
+    ]
+  },
+  {
     type: "amp_nam",
     displayName: "NAM Amp Model",
     category: "amp",

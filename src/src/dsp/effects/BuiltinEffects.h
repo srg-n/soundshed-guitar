@@ -13,6 +13,7 @@
 #include "dsp/effects/OverdriveEffect.h"
 #include "dsp/effects/DistortionEffect.h"
 #include "dsp/effects/FuzzEffect.h"
+#include "dsp/effects/BuiltinAmpEffect.h"
 #include "dsp/effects/ChorusEffect.h"
 #include "dsp/effects/FlangerEffect.h"
 #include "dsp/effects/PhaserEffect.h"
@@ -68,6 +69,7 @@ namespace guitarfx
     RegisterParametricEQEffect();
 
     // Amp models
+    RegisterBuiltinAmpEffect();
     RegisterNAMAmpEffect();
     RegisterOptimizedNAMAmpEffect();  // SIMD-optimized version
     RegisterMultiModelNAMAmpEffect();  // Multi-model blend
