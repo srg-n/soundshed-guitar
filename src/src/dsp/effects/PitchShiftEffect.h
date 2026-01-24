@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -19,12 +20,18 @@ namespace guitarfx
       mSampleRate = sampleRate;
       mMaxBlockSize = maxBlockSize;
 
-      // Allocate circular buffers (~500ms worth of samples)
-      const size_t bufferSize = static_cast<size_t>(sampleRate * 0.5);
+        // Allocate circular buffers (default ~180ms of audio)
+      const size_t bufferSize = static_cast<size_t>(
+          std::max(1.0, sampleRate * (kDefaultBufferMs / 1000.0)));
       mBufferL.resize(bufferSize, 0.0f);
       mBufferR.resize(bufferSize, 0.0f);
       mShiftedL.resize(static_cast<size_t>(maxBlockSize), 0.0f);
       mShiftedR.resize(static_cast<size_t>(maxBlockSize), 0.0f);
+
+        mDelaySamples = static_cast<std::size_t>(std::clamp(
+          sampleRate * (kDefaultDelayMs / 1000.0),
+          1.0,
+          static_cast<double>(bufferSize > 1 ? bufferSize - 1 : 1)));
 
       UpdatePitchRatio();
       Reset();
@@ -35,7 +42,19 @@ namespace guitarfx
       std::fill(mBufferL.begin(), mBufferL.end(), 0.0f);
       std::fill(mBufferR.begin(), mBufferR.end(), 0.0f);
       mWriteIndex = 0;
-      mReadPhase = 0.0;
+      if (!mBufferL.empty())
+      {
+        const std::size_t bufSize = mBufferL.size();
+        const std::size_t startIndex = (bufSize + mWriteIndex - mDelaySamples) % bufSize;
+        mReadPhaseA = static_cast<double>(startIndex);
+        mReadPhaseB = std::fmod(mReadPhaseA + static_cast<double>(bufSize) * 0.5,
+                                static_cast<double>(bufSize));
+      }
+      else
+      {
+        mReadPhaseA = 0.0;
+        mReadPhaseB = 0.0;
+      }
     }
 
     void Process(float **inputs, float **outputs, int numSamples) override
@@ -68,19 +87,36 @@ namespace guitarfx
       // Read at shifted rate with linear interpolation
       for (int i = 0; i < numSamples; ++i)
       {
-        const double readIdx = std::fmod(mReadPhase, static_cast<double>(bufSize));
-        const std::size_t idx0 = static_cast<std::size_t>(readIdx);
-        const std::size_t idx1 = (idx0 + 1) % bufSize;
-        const double frac = readIdx - static_cast<double>(idx0);
+        const double readIdxA = std::fmod(mReadPhaseA, static_cast<double>(bufSize));
+        const double readIdxB = std::fmod(mReadPhaseB, static_cast<double>(bufSize));
 
-        // Linear interpolation
-        mShiftedL[static_cast<std::size_t>(i)] = static_cast<float>(
-            mBufferL[idx0] * (1.0 - frac) + mBufferL[idx1] * frac);
-        mShiftedR[static_cast<std::size_t>(i)] = static_cast<float>(
-            mBufferR[idx0] * (1.0 - frac) + mBufferR[idx1] * frac);
+        const std::size_t a0 = static_cast<std::size_t>(readIdxA);
+        const std::size_t a1 = (a0 + 1) % bufSize;
+        const double aFrac = readIdxA - static_cast<double>(a0);
+
+        const std::size_t b0 = static_cast<std::size_t>(readIdxB);
+        const std::size_t b1 = (b0 + 1) % bufSize;
+        const double bFrac = readIdxB - static_cast<double>(b0);
+
+        const double phaseA = readIdxA / static_cast<double>(bufSize);
+        const double phaseB = readIdxB / static_cast<double>(bufSize);
+        const double wA = 0.5 - 0.5 * std::cos(kTwoPi * phaseA);
+        const double wB = 0.5 - 0.5 * std::cos(kTwoPi * phaseB);
+        const double wSum = wA + wB;
+        const double wAn = wSum > 0.0 ? (wA / wSum) : 0.5;
+        const double wBn = wSum > 0.0 ? (wB / wSum) : 0.5;
+
+        const float aL = static_cast<float>(mBufferL[a0] * (1.0 - aFrac) + mBufferL[a1] * aFrac);
+        const float aR = static_cast<float>(mBufferR[a0] * (1.0 - aFrac) + mBufferR[a1] * aFrac);
+        const float bL = static_cast<float>(mBufferL[b0] * (1.0 - bFrac) + mBufferL[b1] * bFrac);
+        const float bR = static_cast<float>(mBufferR[b0] * (1.0 - bFrac) + mBufferR[b1] * bFrac);
+
+        mShiftedL[static_cast<std::size_t>(i)] = static_cast<float>(aL * wAn + bL * wBn);
+        mShiftedR[static_cast<std::size_t>(i)] = static_cast<float>(aR * wAn + bR * wBn);
 
         // Advance read phase at pitch-shifted rate
-        mReadPhase = std::fmod(mReadPhase + mPitchRatio, static_cast<double>(bufSize));
+        mReadPhaseA = std::fmod(mReadPhaseA + mPitchRatio, static_cast<double>(bufSize));
+        mReadPhaseB = std::fmod(mReadPhaseB + mPitchRatio, static_cast<double>(bufSize));
       }
 
       // Copy to output
@@ -128,10 +164,16 @@ namespace guitarfx
     double mMix = 1.0;
     double mPitchRatio = 1.0;
 
+    static constexpr double kDefaultBufferMs = 180.0;
+    static constexpr double kDefaultDelayMs = 30.0;
+    static constexpr double kTwoPi = 6.283185307179586;
+
     std::vector<float> mBufferL, mBufferR;
     std::vector<float> mShiftedL, mShiftedR;
     std::size_t mWriteIndex = 0;
-    double mReadPhase = 0.0;
+    std::size_t mDelaySamples = 0;
+    double mReadPhaseA = 0.0;
+    double mReadPhaseB = 0.0;
   };
 
   inline void RegisterPitchShiftEffect()
