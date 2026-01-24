@@ -79,7 +79,7 @@
         "--config",
         "Release",
         "--target",
-        "GuitarFX_Installer"
+        "SoundshedGuitar_Installer"
       ],
       "group": "build",
       "problemMatcher": "$msCompile"

@@ -1,4 +1,4 @@
-; Inno Setup script for GuitarFX
+; Inno Setup script for Soundshed Guitar
 ; Build outputs expected:
 ;  - VST3 bundle: src\build\SoundshedGuitar.vst3
 ;  - Standalone app: src\build\src\platform\app\Release\SoundshedGuitar.exe
@@ -19,7 +19,7 @@ AppPublisher={#AppPublisher}
 AppPublisherURL={#AppURL}
 AppSupportURL={#AppURL}
 AppUpdatesURL={#AppURL}
-DefaultDirName={pf}\{#AppName}
+DefaultDirName={pf}\{#AppPublisher}\{#AppName}
 DefaultGroupName={#AppName}
 AllowNoIcons=yes
 OutputDir=dist
