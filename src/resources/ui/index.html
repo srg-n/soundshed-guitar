@@ -1031,6 +1031,11 @@
           <div class="preset-modal-tab-panel" data-preset-modal-tab-panel="advanced">
             <div class="form-group">
               <label>Preset JSON (read-only)</label>
+              <div class="preset-advanced-actions">
+                <button class="btn btn-secondary" id="preset-json-validate" type="button">Validate</button>
+                <button class="btn btn-secondary" id="preset-json-cleanup" type="button">Clean Up</button>
+              </div>
+              <pre class="preset-json-report" id="preset-json-report"></pre>
               <div class="preset-advanced-json" aria-label="Preset JSON">
                 <pre id="preset-json-view"></pre>
               </div>

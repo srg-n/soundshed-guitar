@@ -176,6 +176,25 @@
   overflow: auto;
 }
 
+.preset-advanced-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.preset-json-report {
+  margin: 0 0 12px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-dark-medium);
+  background: var(--bg-dark-secondary);
+  color: var(--text-dark-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  min-height: 24px;
+}
+
 .preset-advanced-json pre {
   margin: 0;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;

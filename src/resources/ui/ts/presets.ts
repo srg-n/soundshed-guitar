@@ -48,6 +48,143 @@ function normalizeSetlistName(name: string): string {
   return name.trim();
 }
 
+const PRESET_ALLOWED_KEYS = new Set([
+  "id",
+  "name",
+  "category",
+  "description",
+  "attachments",
+  "fxChain",
+  "audioFxModelId",
+  "irId",
+  "customModelPath",
+  "customIrPath",
+  "formatVersion",
+  "graph",
+  "globals",
+  "global",
+  "embeddedResources",
+  "version",
+  "author",
+  "tags",
+  "createdAt",
+  "modifiedAt",
+]);
+
+const PRESET_OPTIONAL_STRING_KEYS = [
+  "category",
+  "description",
+  "customModelPath",
+  "customIrPath",
+  "author",
+];
+
+const PRESET_OPTIONAL_ARRAY_KEYS = [
+  "attachments",
+  "fxChain",
+  "embeddedResources",
+  "tags",
+];
+
+function getPresetForModal(): Preset | null {
+  const activePreset = uiState.presetCache.get(uiState.activePresetId ?? "") ?? null;
+  return activePreset ? clonePreset(activePreset) : null;
+}
+
+function validatePresetForUi(preset: Preset | null): string[] {
+  if (!preset) {
+    return ["No preset loaded."];
+  }
+
+  const issues: string[] = [];
+  const unknownKeys = Object.keys(preset).filter((key) => !PRESET_ALLOWED_KEYS.has(key));
+  if (unknownKeys.length) {
+    issues.push(`Unknown fields: ${unknownKeys.sort().join(", ")}`);
+  }
+
+  if (typeof preset.id !== "string" || !preset.id.trim()) {
+    issues.push("Missing or invalid preset id.");
+  }
+
+  if (typeof preset.name !== "string" || !preset.name.trim()) {
+    issues.push("Missing or invalid preset name.");
+  }
+
+  if (preset.graph) {
+    if (!Array.isArray(preset.graph.nodes)) {
+      issues.push("Preset graph.nodes must be an array.");
+    }
+    if (!Array.isArray(preset.graph.edges)) {
+      issues.push("Preset graph.edges must be an array.");
+    }
+    preset.graph.nodes?.forEach((node, index) => {
+      if (!node || typeof node.id !== "string" || !node.id.trim()) {
+        issues.push(`Graph node #${index + 1} is missing a valid id.`);
+      }
+      if (!node || typeof node.type !== "string" || !node.type.trim()) {
+        issues.push(`Graph node #${index + 1} is missing a valid type.`);
+      }
+    });
+    preset.graph.edges?.forEach((edge, index) => {
+      if (!edge || typeof edge.from !== "string" || typeof edge.to !== "string") {
+        issues.push(`Graph edge #${index + 1} is missing valid endpoints.`);
+      }
+    });
+  }
+
+  return issues;
+}
+
+function cleanupPresetForUi(preset: Preset): { cleaned: Preset; removedKeys: string[] } {
+  const cleaned: Preset = clonePreset(preset);
+  const removedKeys: string[] = [];
+
+  Object.keys(cleaned).forEach((key) => {
+    if (!PRESET_ALLOWED_KEYS.has(key)) {
+      delete (cleaned as Record<string, unknown>)[key];
+      removedKeys.push(key);
+    }
+  });
+
+  PRESET_OPTIONAL_STRING_KEYS.forEach((key) => {
+    const value = cleaned[key] as string | null | undefined;
+    if (typeof value === "string" && value.trim() === "") {
+      delete (cleaned as Record<string, unknown>)[key];
+      removedKeys.push(key);
+    }
+  });
+
+  PRESET_OPTIONAL_ARRAY_KEYS.forEach((key) => {
+    const value = cleaned[key] as unknown;
+    if (Array.isArray(value) && value.length === 0) {
+      delete (cleaned as Record<string, unknown>)[key];
+      removedKeys.push(key);
+    }
+  });
+
+  if (cleaned.audioFxModelId == null || cleaned.audioFxModelId === "") {
+    delete cleaned.audioFxModelId;
+    removedKeys.push("audioFxModelId");
+  }
+
+  if (cleaned.irId == null || cleaned.irId === "") {
+    delete cleaned.irId;
+    removedKeys.push("irId");
+  }
+
+  if (cleaned.customModelPath == null || cleaned.customModelPath === "") {
+    delete cleaned.customModelPath;
+    removedKeys.push("customModelPath");
+  }
+
+  if (cleaned.customIrPath == null || cleaned.customIrPath === "") {
+    delete cleaned.customIrPath;
+    removedKeys.push("customIrPath");
+  }
+
+  return { cleaned, removedKeys: removedKeys.filter((value, index) => removedKeys.indexOf(value) === index) };
+}
+
 function setPresetModalActiveTab(modal: HTMLElement, tabId: string): void {
   const tabButtons = Array.from(modal.querySelectorAll<HTMLElement>(".preset-modal-tab-btn"));
   const tabPanels = Array.from(modal.querySelectorAll<HTMLElement>(".preset-modal-tab-panel"));
@@ -85,6 +222,44 @@ function updatePresetModalJson(preset: Preset | null): void {
     return;
   }
   pre.textContent = preset ? JSON.stringify(preset, null, 2) : "";
+}
+
+function updatePresetModalReport(lines: string[]): void {
+  const report = document.getElementById("preset-json-report") as HTMLPreElement | null;
+  if (!report) {
+    return;
+  }
+  report.textContent = lines.length ? lines.join("\n") : "No issues found.";
+}
+
+function initPresetModalAdvancedActions(modal: HTMLElement): void {
+  if (modal.dataset.advancedBound === "true") {
+    return;
+  }
+  modal.dataset.advancedBound = "true";
+
+  const validateBtn = document.getElementById("preset-json-validate") as HTMLButtonElement | null;
+  const cleanupBtn = document.getElementById("preset-json-cleanup") as HTMLButtonElement | null;
+
+  validateBtn?.addEventListener("click", () => {
+    const preset = getPresetForModal();
+    const issues = validatePresetForUi(preset);
+    updatePresetModalReport(issues);
+  });
+
+  cleanupBtn?.addEventListener("click", () => {
+    const preset = getPresetForModal();
+    if (!preset) {
+      updatePresetModalReport(["No preset loaded."]);
+      return;
+    }
+    const result = cleanupPresetForUi(preset);
+    modal.dataset.cleanedPreset = JSON.stringify(result.cleaned);
+    updatePresetModalJson(result.cleaned);
+    updatePresetModalReport(result.removedKeys.length
+      ? [`Removed fields: ${result.removedKeys.sort().join(", ")}`]
+      : ["No unused fields removed."]);
+  });
 }
 
 function loadFavoritePresetIds(): Set<string> {
@@ -1158,9 +1333,12 @@ export function openSavePresetModal(): void {
   if (descriptionInput) descriptionInput.value = "";
 
   initPresetModalTabs(modal);
+  initPresetModalAdvancedActions(modal);
   setPresetModalActiveTab(modal, "details");
   const activePreset = uiState.presetCache.get(uiState.activePresetId ?? "") ?? null;
   updatePresetModalJson(activePreset);
+  updatePresetModalReport([]);
+  delete modal.dataset.cleanedPreset;
 
   modal.style.display = "flex";
 }
@@ -1171,6 +1349,7 @@ export function closeSavePresetModal(): void {
     modal.style.display = "none";
     // Clear editing state
     delete modal.dataset.editingPresetId;
+    delete modal.dataset.cleanedPreset;
   }
 }
 
@@ -1196,13 +1375,22 @@ export function saveCurrentPreset(): void {
   const selectedFolderId = folderSelect?.value || PRESET_FOLDER_ALL_ID;
   const activePreset = uiState.presetCache.get(uiState.activePresetId ?? "") ?? null;
   const baseAttachments = buildAttachmentsFromPreset(activePreset ?? {} as Preset);
+  let cleanedPreset: Preset | null = null;
+  if (modal?.dataset.cleanedPreset) {
+    try {
+      cleanedPreset = JSON.parse(modal.dataset.cleanedPreset) as Preset;
+    } catch {
+      cleanedPreset = null;
+    }
+  }
 
   if (editingPresetId) {
     // Editing existing preset
     const existingPreset = uiState.presetCache.get(editingPresetId);
     if (existingPreset) {
+      const basePreset = cleanedPreset ?? existingPreset;
       const updatedPreset: Preset = {
-        ...existingPreset,
+        ...basePreset,
         name,
         category,
         description,
@@ -1227,7 +1415,7 @@ export function saveCurrentPreset(): void {
   }
 
   // Creating new preset
-  const basePreset = clonePreset(activePreset ?? ({} as Preset));
+  const basePreset = cleanedPreset ?? clonePreset(activePreset ?? ({} as Preset));
   const newPreset: Preset = {
     ...basePreset,
     id: `${Date.now()}`,
@@ -1744,8 +1932,11 @@ export function openEditPresetModal(): void {
   if (descriptionInput) descriptionInput.value = preset.description || "";
 
   initPresetModalTabs(modal);
+  initPresetModalAdvancedActions(modal);
   setPresetModalActiveTab(modal, "details");
   updatePresetModalJson(preset);
+  updatePresetModalReport([]);
+  delete modal.dataset.cleanedPreset;
 
   // Store that we're editing, not creating
   modal.dataset.editingPresetId = activePresetId;
