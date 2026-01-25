@@ -276,7 +276,7 @@
   /* Background Colors - dark brown main UI */
   --bg-primary: linear-gradient(180deg, #5b3a28 0%, #4a2f22 100%);
   --bg-secondary: linear-gradient(180deg, #6b4530 0%, #5b3a28 100%);
-  --bg-tertiary: linear-gradient(180deg, #704a33 0%, #5b3a28 100%);
+  --bg-tertiary: linear-gradient(180deg, #704a33b0 0%, #5b3a28ae 100%);
   --bg-surface: linear-gradient(180deg, #6b4530 0%, #5b3a28 100%);
   --bg-elevated: linear-gradient(180deg, #7a4f36 0%, #6b4530 100%);
   

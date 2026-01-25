@@ -18,6 +18,18 @@ body {
   font-size: 12px;
 }
 
+body.theme-classic {
+  background-color: #5b3a28;
+  background-image: url("../images/themes/70s.png");
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-blend-mode: multiply;
+  background-attachment: fixed;
+      
+    filter: drop-shadow(2px 4px 6px black);
+}
+
 .prevent-select {
   -webkit-user-select: none; /* Safari */
   -ms-user-select: none; /* IE 10 and IE 11 */
@@ -192,6 +204,10 @@ body:not(.is-standalone) .main-content .metronome-only {
   color-scheme: light;
 }
 
+.theme-classic select {
+  color-scheme: light;
+}
+
 .theme-dark input[type="text"]::placeholder,
 .theme-dark input[type="password"]::placeholder,
 .theme-dark input[type="number"]::placeholder,
@@ -212,6 +228,12 @@ body:not(.is-standalone) .main-content .metronome-only {
 .theme-light select optgroup {
   background: var(--bg-input);
   color: var(--text-primary);
+}
+
+.theme-classic select option,
+.theme-classic select optgroup {
+  background: #f6e9c8;
+  color: var(--color-preset-text);
 }
 
 .themed-checkbox {
