@@ -3952,21 +3952,26 @@ namespace guitarfx
       return;
     }
 
-    bool changed = false;
+    bool stateChanged = false;
+    bool settingsChanged = false;
     if (payload.contains("bpm") && payload["bpm"].is_number())
     {
       const double bpm = ClampValue(payload.value("bpm", kMetronomeDefaultBpm), kMetronomeMinBpm, kMetronomeMaxBpm);
       mMetronomeBpm.store(bpm, std::memory_order_release);
       mAppSettings[kMetronomeBpmSettingKey] = bpm;
-      changed = true;
+      stateChanged = true;
+      settingsChanged = true;
     }
 
     if (payload.contains("enabled") && payload["enabled"].is_boolean())
     {
       const bool enabled = payload.value("enabled", false);
       mMetronomeEnabled.store(enabled, std::memory_order_release);
-      mAppSettings[kMetronomeEnabledSettingKey] = enabled;
-      changed = true;
+      if (mAppSettings.contains(kMetronomeEnabledSettingKey))
+      {
+        mAppSettings.erase(kMetronomeEnabledSettingKey);
+      }
+      stateChanged = true;
     }
 
     if (payload.contains("volumeDb") && payload["volumeDb"].is_number())
@@ -3975,7 +3980,8 @@ namespace guitarfx
       mMetronomeVolumeDb.store(volumeDb, std::memory_order_release);
       mMetronomeVolume.store(ClampValue(LinearFromDb(volumeDb), 0.0, LinearFromDb(kMetronomeMaxVolumeDb)), std::memory_order_release);
       mAppSettings[kMetronomeVolumeDbSettingKey] = volumeDb;
-      changed = true;
+      stateChanged = true;
+      settingsChanged = true;
     }
 
     if (payload.contains("pan") && payload["pan"].is_number())
@@ -3983,7 +3989,8 @@ namespace guitarfx
       const double pan = ClampValue(payload.value("pan", kMetronomeDefaultPan), -1.0, 1.0);
       mMetronomePan.store(pan, std::memory_order_release);
       mAppSettings[kMetronomePanSettingKey] = pan;
-      changed = true;
+      stateChanged = true;
+      settingsChanged = true;
     }
 
     if (payload.contains("clickConfig") && payload["clickConfig"].is_array())
@@ -3991,7 +3998,8 @@ namespace guitarfx
       mAppSettings[kMetronomeClickConfigSettingKey] = payload["clickConfig"];
       UpdateMetronomeClickConfigFromSettings();
       RefreshMetronomeClickSamples();
-      changed = true;
+      stateChanged = true;
+      settingsChanged = true;
     }
 
     if (payload.contains("clickType") && payload["clickType"].is_string())
@@ -4002,15 +4010,20 @@ namespace guitarfx
         mMetronomeClickType = clickType;
         mAppSettings[kMetronomeClickTypeSettingKey] = clickType;
         RefreshMetronomeClickSamples();
-        changed = true;
+        stateChanged = true;
+        settingsChanged = true;
       }
     }
 
-    if (changed)
+    if (stateChanged)
     {
       mMetronomeResetPending.store(true, std::memory_order_release);
-      SaveAppSettings();
       mPendingStateBroadcast = true;
+    }
+
+    if (settingsChanged)
+    {
+      SaveAppSettings();
     }
   }
 
@@ -5649,7 +5662,6 @@ namespace guitarfx
           mMetronomePan.store(kMetronomeDefaultPan, std::memory_order_release);
           mMetronomeClickType = kMetronomeDefaultClickType;
           mAppSettings[kMetronomeBpmSettingKey] = kMetronomeDefaultBpm;
-          mAppSettings[kMetronomeEnabledSettingKey] = false;
           mAppSettings[kMetronomeVolumeDbSettingKey] = kMetronomeDefaultVolumeDb;
           mAppSettings[kMetronomePanSettingKey] = kMetronomeDefaultPan;
           mAppSettings[kMetronomeClickTypeSettingKey] = mMetronomeClickType;
@@ -5738,19 +5750,10 @@ namespace guitarfx
             mMetronomeBpm.store(bpm, std::memory_order_release);
           }
 
-          const auto enabledIt = mAppSettings.find(kMetronomeEnabledSettingKey);
-          if (enabledIt != mAppSettings.end())
+          mMetronomeEnabled.store(false, std::memory_order_release);
+          if (mAppSettings.contains(kMetronomeEnabledSettingKey))
           {
-            bool enabled = false;
-            if (enabledIt->is_boolean())
-            {
-              enabled = enabledIt->get<bool>();
-            }
-            else if (enabledIt->is_number())
-            {
-              enabled = enabledIt->get<double>() != 0.0;
-            }
-            mMetronomeEnabled.store(enabled, std::memory_order_release);
+            mAppSettings.erase(kMetronomeEnabledSettingKey);
           }
 
           const auto volumeIt = mAppSettings.find(kMetronomeVolumeDbSettingKey);
