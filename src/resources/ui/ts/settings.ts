@@ -795,9 +795,8 @@ function renderLibraryItemRow(item: LibraryItem, usedResources: Set<string>): st
   const originLabel = inferResourceOrigin(item.filePath);
   const metadataBadges = buildMetadataBadges(item.metadata);
   const missingBadge = item.fileMissing ? "<span class=\"equipment-library-missing\">Missing File</span>" : "";
-  const missingAction = item.fileMissing
-    ? `<button class="equipment-library-browse" data-resource-type="${escapeHtml(item.type)}" data-resource-id="${escapeHtml(item.id)}">Browse File</button>`
-    : "";
+  const browseLabel = item.fileMissing ? "Browse File" : "Replace File";
+  const browseAction = `<button class="equipment-library-browse" data-resource-type="${escapeHtml(item.type)}" data-resource-id="${escapeHtml(item.id)}">${browseLabel}</button>`;
   const usedKey = `${item.type}:${item.id}`;
   const usedBadge = usedResources.has(usedKey)
     ? `<span class="equipment-library-used" title="Used by preset">${renderIcon("link", "equipment-library-used-icon")}</span>`
@@ -817,7 +816,7 @@ function renderLibraryItemRow(item: LibraryItem, usedResources: Set<string>): st
         <div class="equipment-library-item-path" title="${escapeHtml(item.filePath)}">${escapeHtml(item.filePath || "(no file path)")}</div>
       </div>
       <div class="equipment-library-item-actions">
-        ${missingAction}
+        ${browseAction}
       </div>
     </div>
   `;

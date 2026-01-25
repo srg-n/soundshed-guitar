@@ -137,19 +137,36 @@
 }
 
 .settings-row select,
-.equipment-library-filters select,
 .settings-section select {
   color-scheme: dark;
 }
 
 .settings-row select option,
 .settings-row select optgroup,
-.equipment-library-filters select option,
-.equipment-library-filters select optgroup,
 .settings-section select option,
 .settings-section select optgroup {
   background: var(--bg-dark-secondary);
   color: var(--text-dark-primary);
+}
+
+.theme-dark .equipment-library-filters select {
+  color-scheme: dark;
+}
+
+.theme-light .equipment-library-filters select {
+  color-scheme: light;
+}
+
+.theme-dark .equipment-library-filters select option,
+.theme-dark .equipment-library-filters select optgroup {
+  background: var(--bg-dark-secondary);
+  color: var(--text-primary);
+}
+
+.theme-light .equipment-library-filters select option,
+.theme-light .equipment-library-filters select optgroup {
+  background: var(--bg-input);
+  color: var(--text-primary);
 }
 
 .settings-input-mode {
