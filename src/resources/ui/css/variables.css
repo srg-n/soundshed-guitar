@@ -77,6 +77,12 @@
   --control-bg: linear-gradient(145deg, #f0f2f8, #d8dce4);
   --control-border: #b8bcc8;
   --control-indicator: #4a4a58;
+
+  /* Blend Mapping Indicators */
+  --blend-mapped-point: #6b6b7c;
+  --blend-mapped-point-selectable: var(--color-accent);
+  --blend-mapped-point-active: #50b878;
+  --blend-mapped-point-glow: rgba(232, 136, 80, 0.45);
   
   /* Amp Knob Colors */
   --amp-knob-bg: linear-gradient(145deg, #f8f8fc, #e0e4ec);

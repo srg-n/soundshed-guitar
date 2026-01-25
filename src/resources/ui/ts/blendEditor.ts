@@ -68,6 +68,7 @@ export class BlendEditorModal {
   private testControls = document.getElementById("blend-test-controls") as HTMLElement | null;
 
   private testParams: Record<string, number> = {};
+  private testKnobs: Map<string, GenericKnob> = new Map();
   private activeTab: "settings" | "test" = "settings";
 
   constructor(deps: BlendEditorDependencies) {
@@ -89,7 +90,10 @@ export class BlendEditorModal {
     this.exportBtn?.addEventListener("click", () => void this.exportBlendArchive());
     this.importBtn?.addEventListener("click", () => this.importInput?.click());
     this.importInput?.addEventListener("change", () => void this.importBlendArchive());
-    this.modeSelect?.addEventListener("change", () => this.updateMatchedModel());
+    this.modeSelect?.addEventListener("change", () => {
+      this.updateMatchedModel();
+      this.updateTestMappedIndicators(this.collectCurrentMappings());
+    });
 
     this.tabButtons.forEach((button) => {
       button.addEventListener("click", () => {
@@ -161,6 +165,7 @@ export class BlendEditorModal {
     }
     this.activeParams = [];
     this.testParams = {};
+    this.testKnobs.clear();
   }
 
   private getActiveNode(): GraphNode | null {
@@ -631,6 +636,7 @@ export class BlendEditorModal {
     }
 
     this.syncTestParams(node, mappings);
+    this.testKnobs.clear();
 
     this.testControls.innerHTML = this.activeParams
       .map((paramId) => {
@@ -650,6 +656,7 @@ export class BlendEditorModal {
               data-min="${min}"
               data-max="${max}"
             >
+              <div class="knob-mapped-points"></div>
               <div class="knob-indicator"></div>
             </div>
             <span class="knob-value">${displayValue.toFixed(2)}</span>
@@ -671,7 +678,7 @@ export class BlendEditorModal {
         : Number(this.testParams[paramId] ?? 0);
       const sensitivity = (max - min) / 200;
 
-      new GenericKnob({
+      const knobInstance = new GenericKnob({
         knobElement: knob,
         paramId: `blend_test_${paramId}`,
         minValue: min,
@@ -683,10 +690,71 @@ export class BlendEditorModal {
         sendParameter: false,
         onValueChange: (value) => {
           const normalized = spec ? normalizeValue(value, spec) : value;
+          const blendMode = (this.modeSelect?.value ?? "interpolate") as BlendMode;
+
+          if (blendMode === "snap") {
+            const target: Record<string, number> = { ...this.testParams, [paramId]: normalized };
+            const closest = findClosestBlendMappingForParam(paramId, normalized, mappings, this.activeParams, target);
+            if (closest) {
+              const params = buildParameterMapFromLegacy(closest);
+              this.activeParams.forEach((activeParamId) => {
+                const mappedValue = params[activeParamId];
+                if (typeof mappedValue === "number") {
+                  this.testParams[activeParamId] = mappedValue;
+                }
+              });
+
+              this.activeParams.forEach((activeParamId) => {
+                const targetValue = this.testParams[activeParamId];
+                const targetSpec = getParamSpec(activeParamId);
+                const display = typeof targetValue === "number"
+                  ? (targetSpec ? Number.parseFloat(denormalizeValue(targetValue, targetSpec)) : targetValue)
+                  : 0;
+                this.testKnobs.get(activeParamId)?.setValue(display);
+              });
+
+              this.updateMatchedModel();
+              this.updateTestMappedIndicators(mappings);
+              return;
+            }
+          }
+
           this.testParams[paramId] = normalized;
           this.updateMatchedModel();
+          this.updateTestMappedIndicators(mappings);
         },
       });
+
+      if (paramId) {
+        this.testKnobs.set(paramId, knobInstance);
+      }
+    });
+
+    this.updateTestMappedIndicators(mappings);
+  }
+
+  private updateTestMappedIndicators(mappings: BlendModelMapping[]): void {
+    if (!this.testControls) {
+      return;
+    }
+
+    const target: Record<string, number> = {};
+    this.activeParams.forEach((paramId) => {
+      const value = this.testParams[paramId];
+      if (typeof value === "number") {
+        target[paramId] = value;
+      }
+    });
+
+    const knobElements = this.testControls.querySelectorAll(".blend-test-knob");
+    knobElements.forEach((knobElement) => {
+      const knob = knobElement as HTMLElement;
+      const paramId = knob.dataset.paramId ?? "";
+      const min = knob.dataset.min ? parseFloat(knob.dataset.min) : -1;
+      const max = knob.dataset.max ? parseFloat(knob.dataset.max) : 1;
+      const spec = getParamSpec(paramId);
+      const points = buildBlendMappedPoints(paramId, mappings, this.activeParams, target, spec);
+      renderMappedPointElements(knob, points, min, max);
     });
   }
 
@@ -893,6 +961,170 @@ export class BlendEditorModal {
     });
     return mappings;
   }
+}
+
+const BLEND_MAPPING_EPS = 1e-4;
+
+type BlendMappedPoint = {
+  normalized: number;
+  display: number;
+  isSelectable: boolean;
+  isSelected: boolean;
+};
+
+function hasCloseValue(values: number[], value: number, eps = BLEND_MAPPING_EPS): boolean {
+  return values.some((existing) => Math.abs(existing - value) <= eps);
+}
+
+function addUniqueValue(values: number[], value: number, eps = BLEND_MAPPING_EPS): void {
+  if (!hasCloseValue(values, value, eps)) {
+    values.push(value);
+  }
+}
+
+function buildBlendMappedPoints(
+  paramId: string,
+  mappings: BlendModelMapping[],
+  activeParams: string[],
+  target: Record<string, number>,
+  spec: ParamSpec | null,
+): BlendMappedPoint[] {
+  if (!paramId) {
+    return [];
+  }
+
+  const normalizedValues: number[] = [];
+  const selectableValues: number[] = [];
+
+  mappings.forEach((mapping) => {
+    const params = buildParameterMapFromLegacy(mapping);
+    const mappedValue = params[paramId];
+    if (typeof mappedValue === "number") {
+      addUniqueValue(normalizedValues, mappedValue);
+    }
+  });
+
+  mappings.forEach((mapping) => {
+    const params = buildParameterMapFromLegacy(mapping);
+    const mappedValue = params[paramId];
+    if (typeof mappedValue !== "number") {
+      return;
+    }
+    let matches = true;
+    activeParams.forEach((activeParamId) => {
+      if (activeParamId === paramId) {
+        return;
+      }
+      const targetValue = target[activeParamId];
+      const otherValue = params[activeParamId];
+      if (typeof targetValue !== "number" || typeof otherValue !== "number") {
+        matches = false;
+        return;
+      }
+      if (Math.abs(otherValue - targetValue) > BLEND_MAPPING_EPS) {
+        matches = false;
+      }
+    });
+    if (matches) {
+      addUniqueValue(selectableValues, mappedValue);
+    }
+  });
+
+  const targetValue = target[paramId];
+  return normalizedValues
+    .slice()
+    .sort((a, b) => a - b)
+    .map((value) => {
+      const display = spec ? Number.parseFloat(denormalizeValue(value, spec)) : value;
+      return {
+        normalized: value,
+        display,
+        isSelectable: hasCloseValue(selectableValues, value),
+        isSelected: typeof targetValue === "number" && Math.abs(targetValue - value) <= BLEND_MAPPING_EPS,
+      };
+    });
+}
+
+function findClosestBlendMappingForParam(
+  paramId: string,
+  targetValue: number,
+  mappings: BlendModelMapping[],
+  activeParams: string[],
+  target: Record<string, number>,
+): BlendModelMapping | null {
+  let best: BlendModelMapping | null = null;
+  let bestDelta = Number.POSITIVE_INFINITY;
+  let bestSecondary = Number.POSITIVE_INFINITY;
+
+  mappings.forEach((mapping) => {
+    const params = buildParameterMapFromLegacy(mapping);
+    const mappedValue = params[paramId];
+    if (typeof mappedValue !== "number") {
+      return;
+    }
+
+    const delta = Math.abs(mappedValue - targetValue);
+    let secondary = 0;
+
+    activeParams.forEach((activeParamId) => {
+      if (activeParamId === paramId) {
+        return;
+      }
+      const targetOther = target[activeParamId];
+      const mappedOther = params[activeParamId];
+      if (typeof targetOther !== "number" || typeof mappedOther !== "number") {
+        secondary += 4;
+        return;
+      }
+      const diff = mappedOther - targetOther;
+      secondary += diff * diff;
+    });
+
+    const isBetter = delta < bestDelta - BLEND_MAPPING_EPS
+      || (Math.abs(delta - bestDelta) <= BLEND_MAPPING_EPS && secondary < bestSecondary);
+
+    if (isBetter) {
+      best = mapping;
+      bestDelta = delta;
+      bestSecondary = secondary;
+    }
+  });
+
+  return best;
+}
+
+function renderMappedPointElements(
+  knob: HTMLElement,
+  points: BlendMappedPoint[],
+  min: number,
+  max: number,
+): void {
+  let container = knob.querySelector(".knob-mapped-points") as HTMLElement | null;
+  if (!container) {
+    container = document.createElement("div");
+    container.className = "knob-mapped-points";
+    knob.prepend(container);
+  }
+
+  container.innerHTML = "";
+  const range = max - min;
+  const safeRange = range !== 0 ? range : 1;
+
+  points.forEach((point) => {
+    const angle = ((point.display - min) / safeRange) * 270 - 135;
+    const el = document.createElement("span");
+    el.className = "knob-mapped-point";
+    if (point.isSelectable) {
+      el.classList.add("is-selectable");
+    }
+    if (point.isSelected) {
+      el.classList.add("is-selected");
+    }
+    el.style.setProperty("--mapped-angle", `${angle}deg`);
+    container.appendChild(el);
+  });
+
+  knob.classList.toggle("has-mapped-points", points.length > 0);
 }
 
 function resolveActiveParams(blend: BlendLibrary[number] | undefined, mappings: BlendModelMapping[]): string[] {

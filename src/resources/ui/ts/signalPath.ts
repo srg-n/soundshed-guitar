@@ -96,6 +96,142 @@ function denormalizeBlendValue(value: number, spec: BlendParamSpec | null): numb
   return spec.min + value * (spec.max - spec.min);
 }
 
+const BLEND_MAPPING_EPS = 1e-4;
+
+type BlendMappedPoint = {
+  normalized: number;
+  display: number;
+  isSelectable: boolean;
+  isSelected: boolean;
+};
+
+function hasCloseValue(values: number[], value: number, eps = BLEND_MAPPING_EPS): boolean {
+  return values.some((existing) => Math.abs(existing - value) <= eps);
+}
+
+function addUniqueValue(values: number[], value: number, eps = BLEND_MAPPING_EPS): void {
+  if (!hasCloseValue(values, value, eps)) {
+    values.push(value);
+  }
+}
+
+function buildBlendMappedPointsForParam(
+  paramId: string,
+  blendState: BlendState,
+  target: Record<string, number>,
+): BlendMappedPoint[] {
+  if (!paramId) {
+    return [];
+  }
+
+  const normalizedValues: number[] = [];
+  const selectableValues: number[] = [];
+  const spec = getBlendParamSpec(paramId);
+
+  blendState.mappings.forEach((mapping) => {
+    const params = buildParameterMapFromLegacy(mapping);
+    const mappedValue = params[paramId];
+    if (typeof mappedValue === "number") {
+      addUniqueValue(normalizedValues, mappedValue);
+    }
+  });
+
+  blendState.mappings.forEach((mapping) => {
+    const params = buildParameterMapFromLegacy(mapping);
+    const mappedValue = params[paramId];
+    if (typeof mappedValue !== "number") {
+      return;
+    }
+    let matches = true;
+    blendState.paramIds.forEach((activeParamId) => {
+      if (activeParamId === paramId) {
+        return;
+      }
+      const targetValue = target[activeParamId];
+      const otherValue = params[activeParamId];
+      if (typeof targetValue !== "number" || typeof otherValue !== "number") {
+        matches = false;
+        return;
+      }
+      if (Math.abs(otherValue - targetValue) > BLEND_MAPPING_EPS) {
+        matches = false;
+      }
+    });
+    if (matches) {
+      addUniqueValue(selectableValues, mappedValue);
+    }
+  });
+
+  const targetValue = target[paramId];
+  return normalizedValues
+    .slice()
+    .sort((a, b) => a - b)
+    .map((value) => ({
+      normalized: value,
+      display: denormalizeBlendValue(value, spec),
+      isSelectable: hasCloseValue(selectableValues, value),
+      isSelected: typeof targetValue === "number" && Math.abs(targetValue - value) <= BLEND_MAPPING_EPS,
+    }));
+}
+
+function renderMappedPointElements(
+  knob: HTMLElement,
+  points: BlendMappedPoint[],
+  min: number,
+  max: number,
+): void {
+  let container = knob.querySelector(".knob-mapped-points") as HTMLElement | null;
+  if (!container) {
+    container = document.createElement("div");
+    container.className = "knob-mapped-points";
+    knob.prepend(container);
+  }
+
+  container.innerHTML = "";
+  const range = max - min;
+  const safeRange = range !== 0 ? range : 1;
+
+  points.forEach((point) => {
+    const angle = ((point.display - min) / safeRange) * 270 - 135;
+    const el = document.createElement("span");
+    el.className = "knob-mapped-point";
+    if (point.isSelectable) {
+      el.classList.add("is-selectable");
+    }
+    if (point.isSelected) {
+      el.classList.add("is-selected");
+    }
+    el.style.setProperty("--mapped-angle", `${angle}deg`);
+    container.appendChild(el);
+  });
+
+  knob.classList.toggle("has-mapped-points", points.length > 0);
+}
+
+function updateBlendParamIndicators(node: GraphNode, blendState: BlendState): void {
+  if (!nodeParamsPanelElement) {
+    return;
+  }
+
+  const target: Record<string, number> = {};
+  blendState.paramIds.forEach((paramId) => {
+    const value = node.params[paramId];
+    if (typeof value === "number") {
+      target[paramId] = value;
+    }
+  });
+
+  const knobs = nodeParamsPanelElement.querySelectorAll('.node-param-knob[data-blend-param="true"]');
+  knobs.forEach((knobElement) => {
+    const knob = knobElement as HTMLElement;
+    const paramId = knob.dataset.paramKey ?? "";
+    const min = knob.dataset.min ? parseFloat(knob.dataset.min) : 0;
+    const max = knob.dataset.max ? parseFloat(knob.dataset.max) : 1;
+    const points = buildBlendMappedPointsForParam(paramId, blendState, target);
+    renderMappedPointElements(knob, points, min, max);
+  });
+}
+
 function buildParameterMapFromLegacy(mapping: BlendModelMapping): Record<string, number> {
   if (mapping.parameters) {
     return mapping.parameters;
@@ -1310,6 +1446,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
           ${isEnum ? `data-labels="${enumLabels.join("|")}"` : ""}
           ${isBlendParam ? `data-blend-param="true" data-blend-spec-min="${blendRange?.spec?.min ?? 0}" data-blend-spec-max="${blendRange?.spec?.max ?? 10}" data-blend-mode="${blendState?.blendMode ?? "interpolate"}"` : ""}
         >
+          ${isBlendParam ? `<div class="knob-mapped-points"></div>` : ""}
           <div class="knob-indicator"></div>
         </div>
         <span class="node-param-value">${isEnum ? enumValueLabel : `${displayValue.toFixed(2)}${unit}`}</span>
@@ -1503,37 +1640,49 @@ function bindNodeParamControls(node: GraphNode, preset: Preset): void {
 
   const blendState = getBlendState(node);
 
-  const findClosestBlendMapping = (target: Record<string, number>): BlendModelMapping | null => {
+  const findClosestBlendMappingForParam = (
+    activeParamId: string,
+    targetValue: number,
+    target: Record<string, number>,
+  ): BlendModelMapping | null => {
     if (!blendState) {
       return null;
     }
+
     let best: BlendModelMapping | null = null;
-    let bestDistance = Number.POSITIVE_INFINITY;
+    let bestDelta = Number.POSITIVE_INFINITY;
+    let bestSecondary = Number.POSITIVE_INFINITY;
 
     blendState.mappings.forEach((mapping) => {
       const params = buildParameterMapFromLegacy(mapping);
-      let distance = 0;
-      let matched = false;
-      blendState.paramIds.forEach((paramId) => {
-        const targetValue = target[paramId];
-        const mappedValue = params[paramId];
-        if (typeof targetValue !== "number") {
-          return;
-        }
-        if (typeof mappedValue !== "number") {
-          distance += 4;
-          return;
-        }
-        const delta = mappedValue - targetValue;
-        distance += delta * delta;
-        matched = true;
-      });
-      if (!matched) {
-        distance += 9;
+      const mappedValue = params[activeParamId];
+      if (typeof mappedValue !== "number") {
+        return;
       }
-      if (distance < bestDistance) {
-        bestDistance = distance;
+
+      const delta = Math.abs(mappedValue - targetValue);
+      let secondary = 0;
+
+      blendState.paramIds.forEach((paramId) => {
+        if (paramId === activeParamId) {
+          return;
+        }
+        const targetOther = target[paramId];
+        const mappedOther = params[paramId];
+        if (typeof targetOther !== "number" || typeof mappedOther !== "number") {
+          secondary += 4;
+          return;
+        }
+        const diff = mappedOther - targetOther;
+        secondary += diff * diff;
+      });
+
+      const isBetter = delta < bestDelta - BLEND_MAPPING_EPS
+        || (Math.abs(delta - bestDelta) <= BLEND_MAPPING_EPS && secondary < bestSecondary);
+      if (isBetter) {
         best = mapping;
+        bestDelta = delta;
+        bestSecondary = secondary;
       }
     });
 
@@ -1600,7 +1749,7 @@ function bindNodeParamControls(node: GraphNode, preset: Preset): void {
 
         if (isBlendParam && blendMode === "snap" && blendState) {
           const target: Record<string, number> = { ...node.params, [paramKey]: normalizedValue };
-          const closest = findClosestBlendMapping(target);
+          const closest = findClosestBlendMappingForParam(paramKey, normalizedValue, target);
           if (closest) {
             const params = buildParameterMapFromLegacy(closest);
             let updated = false;
@@ -1622,9 +1771,17 @@ function bindNodeParamControls(node: GraphNode, preset: Preset): void {
         node.params[paramKey] = normalizedValue;
         sendSignalPathNodeParamUpdate(nodeId, paramKey, normalizedValue);
         updateEqVisualization(node);
+
+        if (isBlendParam && blendState) {
+          updateBlendParamIndicators(node, blendState);
+        }
       },
     });
   });
+
+  if (blendState) {
+    updateBlendParamIndicators(node, blendState);
+  }
 }
 
 function updateEqVisualization(node: GraphNode): void {

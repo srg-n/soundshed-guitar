@@ -50,6 +50,37 @@
   transform-origin: center 15px;
 }
 
+.knob-mapped-points {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.knob-mapped-point {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--blend-mapped-point);
+  transform: translate(-50%, -50%) rotate(var(--mapped-angle, 0deg)) translateY(-18px);
+  opacity: 0.7;
+}
+
+.knob-mapped-point.is-selectable {
+  background: var(--blend-mapped-point-selectable);
+  box-shadow: 0 0 6px var(--blend-mapped-point-glow);
+  opacity: 1;
+}
+
+.knob-mapped-point.is-selected {
+  background: var(--blend-mapped-point-active);
+  opacity: 1;
+  transform: translate(-50%, -50%) rotate(var(--mapped-angle, 0deg)) translateY(-18px) scale(1.15);
+}
+
 .knob-value {
   font-size: 10px;
   color: var(--text-tertiary);
