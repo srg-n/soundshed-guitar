@@ -1,8 +1,10 @@
 import { appendLog } from "./logging.js";
 import { setAppSetting } from "./bridge.js";
 import { postMessage, setParameter } from "./bridge.js";
+import { sendGlobalChainParam } from "./messages.js";
 import { uiState } from "./state.js";
 import { drawEqCurve, type EqBand } from "./eqCurve.js";
+import type { GlobalPostChainConfig } from "./types.js";
 
 export interface KnobConfig {
   knobElement: HTMLElement;
@@ -723,6 +725,65 @@ export function syncIRQualityFromState(): void {
 // ===== Parametric EQ Controls =====
 let eqEnabled = false;
 
+type GlobalEqParamBinding = {
+  path: string;
+  read: (postChain: GlobalPostChainConfig) => number;
+  apply: (postChain: GlobalPostChainConfig, value: number) => void;
+};
+
+const GLOBAL_EQ_PARAM_MAP: Record<string, GlobalEqParamBinding> = {
+  eq_low_gain: {
+    path: "postChain.eqLowGain",
+    read: (postChain) => postChain.eqLowGain,
+    apply: (postChain, value) => { postChain.eqLowGain = value; },
+  },
+  eq_low_freq: {
+    path: "postChain.eqLowFreq",
+    read: (postChain) => postChain.eqLowFreq,
+    apply: (postChain, value) => { postChain.eqLowFreq = value; },
+  },
+  eq_lowmid_gain: {
+    path: "postChain.eqLowMidGain",
+    read: (postChain) => postChain.eqLowMidGain,
+    apply: (postChain, value) => { postChain.eqLowMidGain = value; },
+  },
+  eq_lowmid_freq: {
+    path: "postChain.eqLowMidFreq",
+    read: (postChain) => postChain.eqLowMidFreq,
+    apply: (postChain, value) => { postChain.eqLowMidFreq = value; },
+  },
+  eq_lowmid_q: {
+    path: "postChain.eqLowMidQ",
+    read: (postChain) => postChain.eqLowMidQ,
+    apply: (postChain, value) => { postChain.eqLowMidQ = value; },
+  },
+  eq_highmid_gain: {
+    path: "postChain.eqHighMidGain",
+    read: (postChain) => postChain.eqHighMidGain,
+    apply: (postChain, value) => { postChain.eqHighMidGain = value; },
+  },
+  eq_highmid_freq: {
+    path: "postChain.eqHighMidFreq",
+    read: (postChain) => postChain.eqHighMidFreq,
+    apply: (postChain, value) => { postChain.eqHighMidFreq = value; },
+  },
+  eq_highmid_q: {
+    path: "postChain.eqHighMidQ",
+    read: (postChain) => postChain.eqHighMidQ,
+    apply: (postChain, value) => { postChain.eqHighMidQ = value; },
+  },
+  eq_high_gain: {
+    path: "postChain.eqHighGain",
+    read: (postChain) => postChain.eqHighGain,
+    apply: (postChain, value) => { postChain.eqHighGain = value; },
+  },
+  eq_high_freq: {
+    path: "postChain.eqHighFreq",
+    read: (postChain) => postChain.eqHighFreq,
+    apply: (postChain, value) => { postChain.eqHighFreq = value; },
+  },
+};
+
 function updateEQSectionState(): void {
   const sections = document.querySelectorAll(".eq-section");
   sections.forEach((section) => {
@@ -741,11 +802,10 @@ function readEqParamValue(paramId: string, fallback: number): number {
     return knobInstance.getValue();
   }
 
-  if (Array.isArray(uiState.parameters.values)) {
-    const param = uiState.parameters.values.find((entry) => entry.id === paramId);
-    if (param && typeof param.value === "number") {
-      return param.value;
-    }
+  const globalChain = uiState.globalSignalChain?.postChain;
+  const mapping = GLOBAL_EQ_PARAM_MAP[paramId];
+  if (globalChain && mapping) {
+    return mapping.read(globalChain);
   }
 
   return fallback;
@@ -807,8 +867,11 @@ function initializeEQControls(): void {
       eqModalToggle.checked = eqEnabled;
     }
     if (shouldSend) {
-      setParameter("eq_enabled", eqEnabled ? 1.0 : 0.0);
-      appendLog(`eq_enabled → ${eqEnabled ? 1.0 : 0.0}`);
+      sendGlobalChainParam("postChain.eqEnabled", eqEnabled);
+      if (uiState.globalSignalChain?.postChain) {
+        uiState.globalSignalChain.postChain.eqEnabled = eqEnabled;
+      }
+      appendLog(`global postChain.eqEnabled → ${eqEnabled}`);
     }
     updateEQSectionState();
     updateEqModalVisualization();
@@ -827,6 +890,17 @@ function initializeEQControls(): void {
   }
 
   const onEqValueChange = () => updateEqModalVisualization();
+  const onEqValueCommit = (paramId: string, value: number): void => {
+    const mapping = GLOBAL_EQ_PARAM_MAP[paramId];
+    if (!mapping) {
+      return;
+    }
+    sendGlobalChainParam(mapping.path, value);
+    if (uiState.globalSignalChain?.postChain) {
+      mapping.apply(uiState.globalSignalChain.postChain, value);
+    }
+    appendLog(`${mapping.path} → ${value.toFixed(2)}`);
+  };
 
   // Low Shelf Band
   const lowGainKnob = document.querySelector('.eq-knob[data-param="eq_low_gain"]') as HTMLElement | null;
@@ -841,6 +915,8 @@ function initializeEQControls(): void {
       valueDisplayId: "eq-low-gain-value",
       sensitivity: 0.1,
       onValueChange: onEqValueChange,
+      onValueCommit: (value) => onEqValueCommit("eq_low_gain", value),
+      sendParameter: false,
     });
     knobInstances.set("eq_low_gain", knobInstance);
   }
@@ -857,6 +933,8 @@ function initializeEQControls(): void {
       valueDisplayId: "eq-low-freq-value",
       sensitivity: 2.0,
       onValueChange: onEqValueChange,
+      onValueCommit: (value) => onEqValueCommit("eq_low_freq", value),
+      sendParameter: false,
     });
     knobInstances.set("eq_low_freq", knobInstance);
   }
@@ -874,6 +952,8 @@ function initializeEQControls(): void {
       valueDisplayId: "eq-lowmid-gain-value",
       sensitivity: 0.1,
       onValueChange: onEqValueChange,
+      onValueCommit: (value) => onEqValueCommit("eq_lowmid_gain", value),
+      sendParameter: false,
     });
     knobInstances.set("eq_lowmid_gain", knobInstance);
   }
@@ -890,6 +970,8 @@ function initializeEQControls(): void {
       valueDisplayId: "eq-lowmid-freq-value",
       sensitivity: 5.0,
       onValueChange: onEqValueChange,
+      onValueCommit: (value) => onEqValueCommit("eq_lowmid_freq", value),
+      sendParameter: false,
     });
     knobInstances.set("eq_lowmid_freq", knobInstance);
   }
@@ -906,6 +988,8 @@ function initializeEQControls(): void {
       valueDisplayId: "eq-lowmid-q-value",
       sensitivity: 0.05,
       onValueChange: onEqValueChange,
+      onValueCommit: (value) => onEqValueCommit("eq_lowmid_q", value),
+      sendParameter: false,
     });
     knobInstances.set("eq_lowmid_q", knobInstance);
   }
@@ -923,6 +1007,8 @@ function initializeEQControls(): void {
       valueDisplayId: "eq-highmid-gain-value",
       sensitivity: 0.1,
       onValueChange: onEqValueChange,
+      onValueCommit: (value) => onEqValueCommit("eq_highmid_gain", value),
+      sendParameter: false,
     });
     knobInstances.set("eq_highmid_gain", knobInstance);
   }
@@ -939,6 +1025,8 @@ function initializeEQControls(): void {
       valueDisplayId: "eq-highmid-freq-value",
       sensitivity: 20.0,
       onValueChange: onEqValueChange,
+      onValueCommit: (value) => onEqValueCommit("eq_highmid_freq", value),
+      sendParameter: false,
     });
     knobInstances.set("eq_highmid_freq", knobInstance);
   }
@@ -955,6 +1043,8 @@ function initializeEQControls(): void {
       valueDisplayId: "eq-highmid-q-value",
       sensitivity: 0.05,
       onValueChange: onEqValueChange,
+      onValueCommit: (value) => onEqValueCommit("eq_highmid_q", value),
+      sendParameter: false,
     });
     knobInstances.set("eq_highmid_q", knobInstance);
   }
@@ -972,6 +1062,8 @@ function initializeEQControls(): void {
       valueDisplayId: "eq-high-gain-value",
       sensitivity: 0.1,
       onValueChange: onEqValueChange,
+      onValueCommit: (value) => onEqValueCommit("eq_high_gain", value),
+      sendParameter: false,
     });
     knobInstances.set("eq_high_gain", knobInstance);
   }
@@ -988,6 +1080,8 @@ function initializeEQControls(): void {
       valueDisplayId: "eq-high-freq-value",
       sensitivity: 50.0,
       onValueChange: onEqValueChange,
+      onValueCommit: (value) => onEqValueCommit("eq_high_freq", value),
+      sendParameter: false,
     });
     knobInstances.set("eq_high_freq", knobInstance);
   }
@@ -997,24 +1091,31 @@ function initializeEQControls(): void {
 }
 
 export function syncEQControlsFromState(): void {
-  const paramValues: Record<string, number> = {};
-  if (Array.isArray(uiState.parameters.values)) {
-    uiState.parameters.values.forEach((param) => {
-      if (typeof param.value === "number") {
-        paramValues[param.id] = param.value;
+  const postChain = uiState.globalSignalChain?.postChain;
+  const paramValues: Record<string, number> = postChain
+    ? {
+        eq_low_gain: postChain.eqLowGain,
+        eq_low_freq: postChain.eqLowFreq,
+        eq_lowmid_gain: postChain.eqLowMidGain,
+        eq_lowmid_freq: postChain.eqLowMidFreq,
+        eq_lowmid_q: postChain.eqLowMidQ,
+        eq_highmid_gain: postChain.eqHighMidGain,
+        eq_highmid_freq: postChain.eqHighMidFreq,
+        eq_highmid_q: postChain.eqHighMidQ,
+        eq_high_gain: postChain.eqHighGain,
+        eq_high_freq: postChain.eqHighFreq,
       }
-    });
-  }
+    : {};
 
   // Sync toggle
   const eqToggle = document.getElementById("eq-toggle") as HTMLInputElement | null;
   const eqModalToggle = document.getElementById("eq-modal-toggle") as HTMLInputElement | null;
-  if (eqToggle && typeof paramValues.eq_enabled === "number") {
-    eqEnabled = paramValues.eq_enabled > 0.5;
+  if (eqToggle && typeof postChain?.eqEnabled === "boolean") {
+    eqEnabled = postChain.eqEnabled;
     eqToggle.checked = eqEnabled;
     updateEQSectionState();
   }
-  if (eqModalToggle && typeof paramValues.eq_enabled === "number") {
+  if (eqModalToggle && typeof postChain?.eqEnabled === "boolean") {
     eqModalToggle.checked = eqEnabled;
   }
 
