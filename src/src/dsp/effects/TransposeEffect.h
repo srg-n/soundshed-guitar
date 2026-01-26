@@ -25,7 +25,9 @@ namespace guitarfx
       mWetR.assign(static_cast<size_t>(maxBlockSize), 0.0f);
       mZero.assign(static_cast<size_t>(maxBlockSize), 0.0f);
 
-      mStretch.presetDefault(2, static_cast<float>(sampleRate), true);
+      // Latency/quality toggle currently hard-coded to best latency.
+      mStretch.presetCheaper(2, static_cast<float>(sampleRate), false);
+      //      mStretch.presetDefault(2, static_cast<float>(sampleRate), true);
       ApplyTranspose();
       mConfigured = true;
       Reset();
@@ -132,7 +134,7 @@ namespace guitarfx
       mStretch.setTransposeSemitones(static_cast<float>(mSemitones), tonalityLimit);
     }
 
-    static constexpr double kTonalityLimitHz = 8000.0;
+    static constexpr double kTonalityLimitHz = 16000.0; //8000
 
     int mSemitones = 0;
     double mMix = 1.0;
@@ -150,7 +152,7 @@ namespace guitarfx
     info.type = "transpose";
     info.displayName = "Transpose";
     info.category = "modulation";
-    info.description = "High-quality transpose effect using bandlimited resampling";
+    info.description = "High-quality transpose effect";
     info.requiresResource = false;
     info.parameters = {
         {"semitones", "Semitones", 0.0, -36.0, 12.0, "st"},
