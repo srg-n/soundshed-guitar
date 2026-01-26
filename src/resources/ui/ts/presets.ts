@@ -198,11 +198,19 @@ function cleanupPresetForUi(
   if (cleaned.graph?.nodes) {
     cleaned.graph.nodes = cleaned.graph.nodes.map((node) => {
       const nextNode = { ...node };
-      if (nextNode.resource) {
-        nextNode.resource = normalizeRef(nextNode.resource);
+      const legacyResource = (nextNode as { resource?: ResourceRef }).resource;
+      const normalizedResources = Array.isArray(nextNode.resources)
+        ? nextNode.resources.map((ref) => normalizeRef(ref))
+        : [];
+      if (legacyResource && normalizedResources.length === 0) {
+        normalizedResources.push(normalizeRef(legacyResource));
+        removedKeys.push("graph.nodes[].resource");
       }
-      if (Array.isArray(nextNode.resources)) {
-        nextNode.resources = nextNode.resources.map((ref) => normalizeRef(ref));
+      if (normalizedResources.length || Array.isArray(nextNode.resources)) {
+        nextNode.resources = normalizedResources;
+      }
+      if (legacyResource) {
+        delete (nextNode as { resource?: ResourceRef }).resource;
       }
       return nextNode;
     });
@@ -1667,9 +1675,6 @@ function collectPresetResourceRefs(preset: Preset, blendDefs: BlendDefinition[])
 
   if (preset.graph?.nodes) {
     preset.graph.nodes.forEach((node) => {
-      if (node.resource) {
-        addRef(node.resource.type, node.resource.id, node.resource.filePath);
-      }
       if (Array.isArray(node.resources)) {
         node.resources.forEach((res) => addRef(res.type, res.id, res.filePath));
       }
@@ -1869,14 +1874,6 @@ async function importPresetArchive(file: File): Promise<void> {
 
   if (importedPreset.graph?.nodes) {
     importedPreset.graph.nodes.forEach((node) => {
-      if (node.resource) {
-        const resourceId = node.resource.resourceId ?? node.resource.id;
-        if (resourceId) {
-          const mapped = idMap.get(resourceId) ?? resourceId;
-          node.resource.resourceId = mapped;
-          node.resource.id = mapped;
-        }
-      }
       if (Array.isArray(node.resources)) {
         node.resources.forEach((res) => {
           const resourceId = res.resourceId ?? res.id;

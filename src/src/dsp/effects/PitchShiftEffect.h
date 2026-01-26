@@ -187,7 +187,7 @@ namespace guitarfx
     info.type = "pitch_shift";
     info.displayName = "Pitch Shift";
     info.category = "modulation";
-    info.description = "Pitch shift using Signalsmith Stretch with stepped or free-form control";
+    info.description = "Pitch shift with stepped or free-form control";
     info.requiresResource = false;
     info.parameters = {
       {"semitones", "Semitones", 0.0, -1.0, 1.0, "amount"},

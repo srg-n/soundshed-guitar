@@ -1397,7 +1397,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
     paramDefs = [...blendParamDefs, ...nonBlendParams];
   }
   
-  const renderParamControl = (paramDef: ParameterDef): string => {
+  const renderParamControl = (paramDef: EffectTypeInfo["parameters"][number]): string => {
     const key = paramDef.key;
     const rawValue = node.params[key];
     const label = paramDef.name || formatParamLabel(key);
@@ -1457,7 +1457,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
         <span class="node-param-value">${isEnum ? enumValueLabel : `${displayValue.toFixed(2)}${unit}`}</span>
         ${isEnum ? `
           <div class="node-param-steps">
-            ${enumLabels.map((text, idx) => `
+            ${enumLabels.map((text: string, idx: number) => `
               <span class="node-param-step" data-step-index="${idx}">${text}</span>
             `).join("")}
           </div>
