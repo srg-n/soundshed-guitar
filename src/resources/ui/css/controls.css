@@ -646,6 +646,35 @@
   align-items: center;
 }
 
+.resource-picker-btn {
+  padding: 6px 10px;
+  font-size: 11px;
+  border-radius: 4px;
+  border: none;
+  background: var(--bg-dark-tertiary);
+  color: var(--text-dark-primary);
+  cursor: pointer;
+}
+
+.resource-picker-label {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border-dark-medium);
+  background: #3a3a4a;
+  color: var(--text-dark-primary);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.resource-picker-label.is-missing {
+  color: var(--color-warning);
+}
+
 .resource-dropdown {
   flex: 1;
   padding: 6px 10px;

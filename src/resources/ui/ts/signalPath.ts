@@ -1538,21 +1538,45 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
         ? `<option value="__custom__" selected>Custom: ${current.filePath.split("/").pop()}</option>`
         : "";
       const indexAttr = includeIndexAttr ? `data-resource-index="${index}"` : "";
+      const isLibraryPicker = resourceType === "nam" || resourceType === "ir";
+      const displayName = current.id
+        ? getNodeResourceDisplayName(node, index)
+        : resourceType === "ir" ? "No IR selected" : "No model selected";
+      const isMissing = Boolean(current.id)
+        && !current.filePath
+        && !getLibraryResource(resourceType, current.id);
+      const missingClass = isMissing ? "resource-picker-label is-missing" : "resource-picker-label";
 
       return `
         <div class="node-resource-selector">
           <label>${label}</label>
           <div class="resource-controls">
-            <select
-              class="resource-dropdown"
-              data-node-id="${node.id}"
-              data-resource-type="${resourceType}"
-              ${indexAttr}
-            >
-              <option value="">-- Select from Library --</option>
-              ${resourceOptions}
-              ${customOption}
-            </select>
+            ${isLibraryPicker ? `
+              <button
+                class="resource-picker-btn"
+                data-node-id="${node.id}"
+                data-resource-type="${resourceType}"
+                ${indexAttr}
+              >Browse</button>
+              <div
+                class="${missingClass}"
+                data-node-id="${node.id}"
+                data-resource-type="${resourceType}"
+                ${indexAttr}
+                title="${escapeHtml(displayName)}"
+              >${escapeHtml(displayName)}</div>
+            ` : `
+              <select
+                class="resource-dropdown"
+                data-node-id="${node.id}"
+                data-resource-type="${resourceType}"
+                ${indexAttr}
+              >
+                <option value="">-- Select from Library --</option>
+                ${resourceOptions}
+                ${customOption}
+              </select>
+            `}
             <button
               class="resource-browse-btn"
               data-node-id="${node.id}"
@@ -1930,6 +1954,41 @@ function bindResourceControls(node: GraphNode, preset: Preset): void {
       if (nodeId && resourceType && resourceId && resourceId !== "__custom__") {
         sendNodeResourceUpdate(nodeId, resourceType, resourceId, "", resourceIndex);
       }
+    });
+  });
+
+  const resourcePickers = nodeParamsPanelElement?.querySelectorAll(".resource-picker-btn, .resource-picker-label") as NodeListOf<HTMLElement> | null;
+  resourcePickers?.forEach((picker) => {
+    picker.addEventListener("click", () => {
+      const nodeId = picker.dataset.nodeId;
+      const resourceType = picker.dataset.resourceType;
+      const resourceIndex = picker.dataset.resourceIndex ? parseInt(picker.dataset.resourceIndex, 10) : 0;
+      if (!nodeId || !resourceType) {
+        return;
+      }
+
+      const current = getNodeResourceAtIndex(node, resourceIndex);
+      blendEditorModal.openResourceBrowser({
+        resourceType,
+        currentId: current.id,
+        onSelect: (resourceId) => {
+          sendNodeResourceUpdate(nodeId, resourceType, resourceId, "", resourceIndex);
+          const label = getLibraryResourceName(resourceType, resourceId) || resourceId || "";
+          const labelText = label || (resourceType === "ir" ? "No IR selected" : "No model selected");
+          const indexAttr = picker.dataset.resourceIndex !== undefined
+            ? `[data-resource-index="${resourceIndex}"]`
+            : "";
+          const labelEl = nodeParamsPanelElement?.querySelector(
+            `.resource-picker-label[data-node-id="${nodeId}"]${indexAttr}`,
+          ) as HTMLElement | null;
+          if (labelEl) {
+            labelEl.textContent = labelText;
+            labelEl.title = labelText;
+            const missing = Boolean(resourceId) && !getLibraryResource(resourceType, resourceId);
+            labelEl.classList.toggle("is-missing", missing);
+          }
+        },
+      });
     });
   });
   

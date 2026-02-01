@@ -1043,6 +1043,8 @@ async function createBlendFromGroup(group: ToneGroup): Promise<void> {
     models: modelMappings.map((mapping) => mapping.id),
     modelMappings,
     blendMode: snapMode ? "snap" : "interpolate",
+    toneGroupId: group.groupId,
+    toneGroupTitle: group.title,
   };
 
   postMessage({

@@ -67,10 +67,26 @@ export class BlendEditorModal {
   private tabButtons = Array.from(document.querySelectorAll(".blend-tab-btn")) as HTMLButtonElement[];
   private tabPanels = Array.from(document.querySelectorAll(".blend-tab-panel")) as HTMLElement[];
   private testControls = document.getElementById("blend-test-controls") as HTMLElement | null;
+  private modelBrowserModal = document.getElementById("blend-model-browser-modal") as HTMLElement | null;
+  private modelBrowserTitle = document.getElementById("blend-model-browser-title") as HTMLElement | null;
+  private modelBrowserClose = document.getElementById("blend-model-browser-close") as HTMLButtonElement | null;
+  private modelBrowserCancel = document.getElementById("blend-model-browser-cancel") as HTMLButtonElement | null;
+  private modelBrowserSearch = document.getElementById("blend-model-browser-search") as HTMLInputElement | null;
+  private modelBrowserScope = document.getElementById("blend-model-browser-scope") as HTMLSelectElement | null;
+  private modelBrowserCategory = document.getElementById("blend-model-browser-category") as HTMLSelectElement | null;
+  private modelBrowserList = document.getElementById("blend-model-browser-list") as HTMLElement | null;
+  private modelBrowserGroupLabel = document.getElementById("blend-model-browser-group") as HTMLElement | null;
 
   private testParams: Record<string, number> = {};
   private testKnobs: Map<string, GenericKnob> = new Map();
   private activeTab: "settings" | "test" = "settings";
+  private activeToneGroupId: string | null = null;
+  private activeToneGroupTitle: string | null = null;
+  private browserToneGroupId: string | null = null;
+  private browserToneGroupTitle: string | null = null;
+  private browserResourceType: string = "nam";
+  private browserCurrentId: string = "";
+  private browserOnSelect: ((resourceId: string) => void) | null = null;
 
   constructor(deps: BlendEditorDependencies) {
     this.deps = deps;
@@ -96,6 +112,13 @@ export class BlendEditorModal {
       this.updateTestMappedIndicators(this.collectCurrentMappings());
     });
 
+    this.modelBrowserClose?.addEventListener("click", () => this.closeModelBrowser());
+    this.modelBrowserCancel?.addEventListener("click", () => this.closeModelBrowser());
+    this.modelBrowserSearch?.addEventListener("input", () => this.renderModelBrowserList());
+    this.modelBrowserScope?.addEventListener("change", () => this.renderModelBrowserList());
+    this.modelBrowserCategory?.addEventListener("change", () => this.renderModelBrowserList());
+    this.modelBrowserList?.addEventListener("click", (event) => this.handleModelBrowserClick(event));
+
     this.tabButtons.forEach((button) => {
       button.addEventListener("click", () => {
         const tabId = button.dataset.blendTab === "test" ? "test" : "settings";
@@ -110,6 +133,12 @@ export class BlendEditorModal {
     this.modal?.addEventListener("click", (event) => {
       if (event.target === this.modal) {
         this.close();
+      }
+    });
+
+    this.modelBrowserModal?.addEventListener("click", (event) => {
+      if (event.target === this.modelBrowserModal) {
+        this.closeModelBrowser();
       }
     });
   }
@@ -129,6 +158,7 @@ export class BlendEditorModal {
       : buildBlendModelMappingsFromIds(blend?.models ?? [], this.deps.getResourceLibrary());
 
     this.activeParams = resolveActiveParams(blend, mappings);
+    this.setActiveToneGroupFromBlend(blend, mappings);
 
     if (this.nameInput) {
       this.nameInput.value = blend?.name ?? blendId;
@@ -167,6 +197,7 @@ export class BlendEditorModal {
       : buildBlendModelMappingsFromIds(blend.models ?? [], this.deps.getResourceLibrary());
 
     this.activeParams = resolveActiveParams(blend, mappings);
+    this.setActiveToneGroupFromBlend(blend, mappings);
 
     if (this.nameInput) {
       this.nameInput.value = blend.name ?? blend.id;
@@ -212,6 +243,9 @@ export class BlendEditorModal {
     this.activeParams = [];
     this.testParams = {};
     this.testKnobs.clear();
+    this.activeToneGroupId = null;
+    this.activeToneGroupTitle = null;
+    this.closeModelBrowser();
   }
 
   private getActiveNode(): GraphNode | null {
@@ -302,7 +336,7 @@ export class BlendEditorModal {
 
     const rows = Array.from(this.modelList.querySelectorAll(".blend-model-row"));
     const modelIds = rows
-      .map((row) => (row.querySelector(".blend-model-select") as HTMLSelectElement | null)?.value ?? "")
+      .map((row) => this.getRowModelId(row))
       .filter((id) => Boolean(id));
 
     if (!modelIds.length) {
@@ -500,6 +534,249 @@ export class BlendEditorModal {
     });
   }
 
+  private setActiveToneGroupFromBlend(blend: BlendDefinition | undefined, mappings: BlendModelMapping[]): void {
+    const blendGroupId = blend?.toneGroupId?.trim() ?? "";
+    const blendGroupTitle = blend?.toneGroupTitle?.trim() ?? "";
+    if (blendGroupId) {
+      this.activeToneGroupId = blendGroupId;
+      this.activeToneGroupTitle = blendGroupTitle || blendGroupId;
+      return;
+    }
+
+    const inferred = this.inferToneGroupFromMappings(mappings);
+    this.activeToneGroupId = inferred.id;
+    this.activeToneGroupTitle = inferred.title;
+  }
+
+  private inferToneGroupFromMappings(mappings: BlendModelMapping[]): { id: string | null; title: string | null } {
+    const resources = this.deps.getResourceLibrary().nam ?? [];
+    for (const mapping of mappings) {
+      if (!mapping.id) {
+        continue;
+      }
+      const match = resources.find((res) => res.id === mapping.id);
+      const toneId = match?.metadata?.toneId ?? match?.metadata?.groupId ?? "";
+      const toneTitle = match?.metadata?.toneTitle ?? match?.metadata?.groupName ?? "";
+      if (toneId) {
+        return { id: toneId, title: toneTitle || toneId };
+      }
+    }
+    return { id: null, title: null };
+  }
+
+  private updateModelBrowserGroupLabel(): void {
+    if (!this.modelBrowserGroupLabel) {
+      return;
+    }
+    const label = this.browserToneGroupTitle || this.browserToneGroupId || "None";
+    this.modelBrowserGroupLabel.textContent = label;
+  }
+
+  private updateModelBrowserCategoryOptions(): void {
+    if (!this.modelBrowserCategory) {
+      return;
+    }
+    const resources = this.deps.getResourceLibrary()[this.browserResourceType] ?? [];
+    const categories = Array.from(new Set(
+      resources.map((res) => (res.category ?? "").trim() || "Uncategorized"),
+    )).sort((a, b) => a.localeCompare(b));
+
+    const previous = this.modelBrowserCategory.value || "all";
+    const options = ["<option value=\"all\">All types</option>"]
+      .concat(categories.map((category) => `
+        <option value="${escapeHtml(category)}">${escapeHtml(category)}</option>
+      `.trim()))
+      .join("");
+
+    this.modelBrowserCategory.innerHTML = options;
+    if (previous !== "all" && categories.includes(previous)) {
+      this.modelBrowserCategory.value = previous;
+    } else {
+      this.modelBrowserCategory.value = "all";
+    }
+  }
+
+  public openResourceBrowser(options: {
+    resourceType: string;
+    currentId?: string;
+    toneGroupId?: string | null;
+    toneGroupTitle?: string | null;
+    onSelect: (resourceId: string) => void;
+  }): void {
+    this.initialize();
+    if (!this.modelBrowserModal) {
+      return;
+    }
+
+    this.browserResourceType = options.resourceType;
+    this.browserCurrentId = options.currentId ?? "";
+    this.browserOnSelect = options.onSelect;
+    this.browserToneGroupId = options.resourceType === "nam" ? options.toneGroupId ?? null : null;
+    this.browserToneGroupTitle = options.resourceType === "nam" ? options.toneGroupTitle ?? null : null;
+
+    if (this.modelBrowserSearch) {
+      this.modelBrowserSearch.value = "";
+      this.modelBrowserSearch.placeholder = options.resourceType === "ir"
+        ? "Search IRs..."
+        : options.resourceType === "nam"
+          ? "Search models..."
+          : "Search resources...";
+    }
+
+    if (this.modelBrowserTitle) {
+      this.modelBrowserTitle.textContent = options.resourceType === "ir"
+        ? "Select IR"
+        : options.resourceType === "nam"
+          ? "Select Model"
+          : "Select Resource";
+    }
+
+    if (this.modelBrowserScope) {
+      const hasGroup = options.resourceType === "nam" && Boolean(this.browserToneGroupId);
+      this.modelBrowserScope.disabled = !hasGroup;
+      this.modelBrowserScope.value = hasGroup ? "group" : "all";
+    }
+
+    this.updateModelBrowserGroupLabel();
+    this.updateModelBrowserCategoryOptions();
+    this.renderModelBrowserList();
+    this.modelBrowserModal.style.display = "flex";
+  }
+
+  private openModelBrowser(row: HTMLElement): void {
+    this.openResourceBrowser({
+      resourceType: "nam",
+      currentId: this.getRowModelId(row),
+      toneGroupId: this.activeToneGroupId,
+      toneGroupTitle: this.activeToneGroupTitle,
+      onSelect: (resourceId) => {
+        this.setRowModel(row, resourceId);
+        const activeNode = this.getActiveNode();
+        if (activeNode) {
+          this.renderTestControls(activeNode, this.collectCurrentMappings());
+        }
+        this.updateMatchedModel();
+      },
+    });
+  }
+
+  private closeModelBrowser(): void {
+    if (!this.modelBrowserModal) {
+      return;
+    }
+    this.modelBrowserModal.style.display = "none";
+    this.browserOnSelect = null;
+    this.browserCurrentId = "";
+    this.browserToneGroupId = null;
+    this.browserToneGroupTitle = null;
+  }
+
+  private renderModelBrowserList(): void {
+    if (!this.modelBrowserList) {
+      return;
+    }
+
+    const resources = this.deps.getResourceLibrary()[this.browserResourceType] ?? [];
+    const query = (this.modelBrowserSearch?.value ?? "").trim().toLowerCase();
+    const scope = this.modelBrowserScope?.value ?? "group";
+    const category = this.modelBrowserCategory?.value ?? "all";
+    const currentId = this.browserCurrentId;
+
+    let filtered = resources.slice();
+    if (scope === "group" && this.browserResourceType === "nam") {
+      if (!this.browserToneGroupId) {
+        this.modelBrowserList.innerHTML = "<div class=\"blend-model-browser-empty\">No tone group is associated with this selection.</div>";
+        return;
+      }
+      filtered = filtered.filter((res) => {
+        const toneId = res.metadata?.toneId ?? res.metadata?.groupId ?? "";
+        return toneId === this.browserToneGroupId;
+      });
+    }
+
+    if (category !== "all") {
+      filtered = filtered.filter((res) => ((res.category ?? "").trim() || "Uncategorized") === category);
+    }
+
+    if (query) {
+      filtered = filtered.filter((res) => {
+        const haystack = `${res.name} ${res.id} ${res.category} ${res.description} ${res.filePath}`.toLowerCase();
+        return haystack.includes(query);
+      });
+    }
+
+    filtered.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+
+    if (!filtered.length) {
+      this.modelBrowserList.innerHTML = "<div class=\"blend-model-browser-empty\">No models match the current filters.</div>";
+      return;
+    }
+
+    this.modelBrowserList.innerHTML = filtered
+      .map((res) => {
+        const title = res.name?.trim() || res.id;
+        const categoryLabel = (res.category ?? "").trim() || "Uncategorized";
+        const selectedClass = res.id === currentId ? "blend-model-browser-item is-selected" : "blend-model-browser-item";
+        return `
+          <div class="${selectedClass}" data-model-id="${escapeHtml(res.id)}">
+            <div>
+              <div class="item-title">${escapeHtml(title)}</div>
+              <div class="item-meta">
+                <span>${escapeHtml(categoryLabel)}</span>
+                <span>${escapeHtml(res.id)}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  private handleModelBrowserClick(event: Event): void {
+    const target = event.target as HTMLElement | null;
+    if (!target) {
+      return;
+    }
+    const item = target.closest(".blend-model-browser-item") as HTMLElement | null;
+    if (!item) {
+      return;
+    }
+    const modelId = item.dataset.modelId ?? "";
+    if (!modelId) {
+      return;
+    }
+    this.browserOnSelect?.(modelId);
+    this.closeModelBrowser();
+  }
+
+  private getRowModelId(row: Element): string {
+    return (row as HTMLElement).dataset.modelId?.trim() ?? "";
+  }
+
+  private setRowModel(row: HTMLElement, modelId: string): void {
+    row.dataset.modelId = modelId;
+    const labelInfo = this.getModelLabel(modelId);
+    const labelEl = row.querySelector(".blend-model-selected") as HTMLElement | null;
+    if (labelEl) {
+      labelEl.textContent = labelInfo.label;
+      labelEl.title = labelInfo.title;
+      labelEl.classList.toggle("is-missing", labelInfo.isMissing);
+    }
+  }
+
+  private getModelLabel(modelId: string): { label: string; title: string; isMissing: boolean } {
+    if (!modelId) {
+      return { label: "No model selected", title: "No model selected", isMissing: false };
+    }
+    const match = getLibraryResource(this.deps.getResourceLibrary(), "nam", modelId);
+    if (match) {
+      const label = match.name?.trim() || modelId;
+      return { label, title: label, isMissing: false };
+    }
+    const missing = `Missing: ${modelId}`;
+    return { label: missing, title: missing, isMissing: true };
+  }
+
   private renderModelList(mappings: BlendModelMapping[], category: string): void {
     if (!this.modelList) {
       return;
@@ -512,12 +789,13 @@ export class BlendEditorModal {
     this.modelList.innerHTML = mappings
       .map((mapping, index) => {
         const parameters = mapping.parameters ?? buildParameterMapFromLegacy(mapping);
+        const labelInfo = this.getModelLabel(mapping.id);
+        const labelClass = labelInfo.isMissing ? "blend-model-selected is-missing" : "blend-model-selected";
         return `
-          <div class="blend-model-row" data-index="${index}">
+          <div class="blend-model-row" data-index="${index}" data-model-id="${escapeHtml(mapping.id)}">
             <div class="blend-model-header">
-              <select class="blend-model-select themed-select">
-                ${this.buildModelOptions(mapping.id)}
-              </select>
+              <button class="blend-model-browse" type="button">Browse</button>
+              <div class="${labelClass}" title="${escapeHtml(labelInfo.title)}">${escapeHtml(labelInfo.label)}</div>
               <button class="blend-model-auto" type="button">Auto</button>
               <button class="blend-model-remove" type="button">Remove</button>
             </div>
@@ -567,15 +845,16 @@ export class BlendEditorModal {
 
     const rows = this.modelList.querySelectorAll(".blend-model-row");
     rows.forEach((row) => {
-      const select = row.querySelector(".blend-model-select") as HTMLSelectElement | null;
+      const browseBtn = row.querySelector(".blend-model-browse") as HTMLButtonElement | null;
+      const labelBtn = row.querySelector(".blend-model-selected") as HTMLElement | null;
       const autoBtn = row.querySelector(".blend-model-auto") as HTMLButtonElement | null;
       const removeBtn = row.querySelector(".blend-model-remove") as HTMLButtonElement | null;
 
       const applyAuto = (force: boolean) => {
-        if (!select || !select.value) {
+        const currentId = this.getRowModelId(row);
+        if (!currentId) {
           return;
         }
-        const currentId = select.value;
         const match = getLibraryResource(this.deps.getResourceLibrary(), "nam", currentId);
         this.activeParams.forEach((paramId) => {
           const input = row.querySelector(`.blend-model-param-value[data-param-id="${paramId}"]`) as HTMLInputElement | null;
@@ -594,7 +873,8 @@ export class BlendEditorModal {
         });
       };
 
-      select?.addEventListener("change", () => applyAuto(false));
+      browseBtn?.addEventListener("click", () => this.openModelBrowser(row as HTMLElement));
+      labelBtn?.addEventListener("click", () => this.openModelBrowser(row as HTMLElement));
       autoBtn?.addEventListener("click", () => applyAuto(true));
       removeBtn?.addEventListener("click", () => {
         row.remove();
@@ -605,7 +885,6 @@ export class BlendEditorModal {
         this.updateMatchedModel();
       });
 
-      select?.addEventListener("change", () => this.updateMatchedModel());
       autoBtn?.addEventListener("click", () => this.updateMatchedModel());
       row.querySelectorAll(".blend-model-param-value").forEach((input) => {
         input.addEventListener("input", () => this.updateMatchedModel());
@@ -623,11 +902,11 @@ export class BlendEditorModal {
     const row = document.createElement("div");
     row.className = "blend-model-row";
     row.dataset.index = index.toString();
+    row.dataset.modelId = "";
     row.innerHTML = `
       <div class="blend-model-header">
-        <select class="blend-model-select themed-select">
-          ${this.buildModelOptions("")}
-        </select>
+        <button class="blend-model-browse" type="button">Browse</button>
+        <div class="blend-model-selected" title="No model selected">No model selected</div>
         <button class="blend-model-auto" type="button">Auto</button>
         <button class="blend-model-remove" type="button">Remove</button>
       </div>
@@ -927,8 +1206,7 @@ export class BlendEditorModal {
     const modelMappings: BlendModelMapping[] = [];
     const rows = this.modelList?.querySelectorAll(".blend-model-row") ?? [];
     rows.forEach((row) => {
-      const select = row.querySelector(".blend-model-select") as HTMLSelectElement | null;
-      const modelId = select?.value?.trim() ?? "";
+      const modelId = this.getRowModelId(row);
       if (!modelId) {
         return;
       }
@@ -964,17 +1242,21 @@ export class BlendEditorModal {
     });
 
     const models = modelMappings.map((mapping) => mapping.id);
+    const blendPayload: BlendDefinition = {
+      id: blendId,
+      name,
+      category,
+      parameters: this.activeParams.slice(),
+      models,
+      modelMappings,
+      blendMode,
+      toneGroupId: this.activeToneGroupId ?? undefined,
+      toneGroupTitle: this.activeToneGroupTitle ?? undefined,
+    };
+
     postMessage({
       type: "saveBlendDefinition",
-      blend: {
-        id: blendId,
-        name,
-        category,
-        parameters: this.activeParams.slice(),
-        models,
-        modelMappings,
-        blendMode,
-      },
+      blend: blendPayload,
     });
 
     this.close();
@@ -987,8 +1269,7 @@ export class BlendEditorModal {
     const rows = this.modelList.querySelectorAll(".blend-model-row");
     const mappings: BlendModelMapping[] = [];
     rows.forEach((row) => {
-      const select = row.querySelector(".blend-model-select") as HTMLSelectElement | null;
-      const modelId = select?.value?.trim() ?? "";
+      const modelId = this.getRowModelId(row);
       if (!modelId) {
         return;
       }

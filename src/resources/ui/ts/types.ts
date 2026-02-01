@@ -209,6 +209,8 @@ export interface BlendDefinition {
   controlMap?: Record<string, number>;
   modelMappings?: BlendModelMapping[];
   parameters?: string[];
+  toneGroupId?: string;
+  toneGroupTitle?: string;
 }
 
 export type BlendLibrary = BlendDefinition[];
