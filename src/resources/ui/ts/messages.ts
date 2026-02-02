@@ -11,7 +11,7 @@ import { refreshSettingsView } from "./settings.js";
 import { refreshSelectedNodeParams } from "./signalPath.js";
 import { refreshFxSelector } from "./fxSelector.js";
 import { applyEnvironmentState, applyMetronomeState } from "./metronome.js";
-import type { Preset, ResourceRef, UiSettings } from "./types.js";
+import type { GlobalSignalChainConfig, Preset, ResourceRef, UiSettings } from "./types.js";
 import { handleResourceDataMessage } from "./archiveUtils.js";
 
 function normalizeResourceRef(ref?: ResourceRef | null): void {
@@ -43,6 +43,33 @@ function normalizePresetResources(preset?: Preset | null): void {
 
 function presetSignature(preset?: Preset | null): string {
   return preset ? JSON.stringify(preset) : "";
+}
+
+function normalizeGlobalSignalChain(chain?: GlobalSignalChainConfig | null): GlobalSignalChainConfig | null {
+  if (!chain) {
+    return null;
+  }
+  const normalizeGraph = (graph?: { nodes?: Array<Record<string, unknown>> } | null) => {
+    if (!graph?.nodes) {
+      return;
+    }
+    graph.nodes.forEach((node) => {
+      const anyNode = node as { enabled?: boolean; bypassed?: boolean };
+      if (typeof anyNode.bypassed !== "boolean") {
+        if (typeof anyNode.enabled === "boolean") {
+          anyNode.bypassed = !anyNode.enabled;
+        } else {
+          anyNode.bypassed = false;
+        }
+      }
+      if (typeof anyNode.enabled !== "boolean") {
+        anyNode.enabled = !anyNode.bypassed;
+      }
+    });
+  };
+  normalizeGraph(chain.preChainGraph as unknown as { nodes?: Array<Record<string, unknown>> });
+  normalizeGraph(chain.postChainGraph as unknown as { nodes?: Array<Record<string, unknown>> });
+  return chain;
 }
 
 export function handleIncomingMessage(message: string): void {
@@ -95,6 +122,12 @@ export function handleIncomingMessage(message: string): void {
       if (appSettings) {
         uiState.appSettings = appSettings as import("./types.js").AppSettings;
         applyStoredInputChannel();
+      }
+      const globalSignalChain = (payload as { globalSignalChain?: GlobalSignalChainConfig }).globalSignalChain;
+      if (globalSignalChain) {
+        uiState.globalSignalChain = normalizeGlobalSignalChain(globalSignalChain) ?? uiState.globalSignalChain;
+      } else {
+        requestGlobalChainState();
       }
       const uiSettings = (payload as { uiSettings?: UiSettings }).uiSettings;
       if (uiSettings) {
@@ -524,7 +557,7 @@ export function handleIncomingMessage(message: string): void {
     case "globalSignalChainChanged": {
       const chainPayload = payload as { globalSignalChain?: import("./types.js").GlobalSignalChainConfig };
       if (chainPayload.globalSignalChain) {
-        uiState.globalSignalChain = chainPayload.globalSignalChain;
+        uiState.globalSignalChain = normalizeGlobalSignalChain(chainPayload.globalSignalChain) ?? uiState.globalSignalChain;
         appendLog("Global signal chain configuration updated");
         // Sync any UI controls that show global chain state
         syncControlsFromState();
@@ -567,7 +600,7 @@ export function handleMixerStateMessage(message: Record<string, unknown>): void 
 
 /**
  * Send a global signal chain parameter change to the plugin.
- * @param paramPath - Dot-notation path to the parameter (e.g., "preChain.gateEnabled", "postChain.eqLowGain")
+ * @param paramPath - Dot-notation path to the parameter (e.g., "postChainGraph.global_eq.params.lowGain")
  * @param value - The new value for the parameter
  */
 export function sendGlobalChainParam(paramPath: string, value: number | boolean): void {

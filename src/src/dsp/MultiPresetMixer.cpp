@@ -8,6 +8,24 @@ namespace guitarfx
 {
   namespace
   {
+    GraphNode* FindNodeByIdOrType(SignalGraph& graph, const std::string& id, const std::string& type)
+    {
+      if (auto* node = graph.FindNode(id))
+      {
+        return node;
+      }
+
+      for (auto& node : graph.nodes)
+      {
+        if (node.type == type)
+        {
+          return &node;
+        }
+      }
+
+      return nullptr;
+    }
+
     // Note names for pitch detection
     constexpr std::array<const char *, 12> kNoteNames = {
         "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
@@ -263,6 +281,14 @@ namespace guitarfx
   void MultiPresetMixer::SetGlobalChainConfig(const GlobalSignalChainConfig& config)
   {
     mGlobalChainConfig = config;
+    if (mGlobalChainConfig.preChainGraph.nodes.empty() && mGlobalChainConfig.preChainGraph.edges.empty())
+    {
+      mGlobalChainConfig.preChainGraph = GlobalSignalChainConfig::BuildDefaultPreChainGraph();
+    }
+    if (mGlobalChainConfig.postChainGraph.nodes.empty() && mGlobalChainConfig.postChainGraph.edges.empty())
+    {
+      mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
+    }
     mGlobalChainNeedsRebuild = true;
 
     // Apply input/output settings
@@ -277,117 +303,206 @@ namespace guitarfx
 
   void MultiPresetMixer::SetGlobalGateEnabled(bool enabled)
   {
-    mGlobalChainConfig.preChain.gateEnabled = enabled;
-    mPreChainExecutor.SetNodeEnabled("global_gate", enabled);
+    if (mGlobalChainConfig.preChainGraph.nodes.empty() && mGlobalChainConfig.preChainGraph.edges.empty())
+    {
+      mGlobalChainConfig.preChainGraph = GlobalSignalChainConfig::BuildDefaultPreChainGraph();
+    }
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_gate", "dynamics_gate"))
+    {
+      node->enabled = enabled;
+      mPreChainExecutor.SetNodeEnabled(node->id, enabled);
+    }
   }
 
   void MultiPresetMixer::SetGlobalGateThreshold(double thresholdDb)
   {
-    mGlobalChainConfig.preChain.gateThreshold = thresholdDb;
-    mPreChainExecutor.SetNodeParam("global_gate", "threshold", thresholdDb);
+    if (mGlobalChainConfig.preChainGraph.nodes.empty() && mGlobalChainConfig.preChainGraph.edges.empty())
+    {
+      mGlobalChainConfig.preChainGraph = GlobalSignalChainConfig::BuildDefaultPreChainGraph();
+    }
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_gate", "dynamics_gate"))
+    {
+      node->params["threshold"] = thresholdDb;
+      mPreChainExecutor.SetNodeParam(node->id, "threshold", thresholdDb);
+    }
   }
 
   void MultiPresetMixer::SetGlobalGateAttack(double attackMs)
   {
-    mGlobalChainConfig.preChain.gateAttack = attackMs;
-    mPreChainExecutor.SetNodeParam("global_gate", "attack", attackMs);
+    if (mGlobalChainConfig.preChainGraph.nodes.empty() && mGlobalChainConfig.preChainGraph.edges.empty())
+    {
+      mGlobalChainConfig.preChainGraph = GlobalSignalChainConfig::BuildDefaultPreChainGraph();
+    }
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_gate", "dynamics_gate"))
+    {
+      node->params["attack"] = attackMs;
+      mPreChainExecutor.SetNodeParam(node->id, "attack", attackMs);
+    }
   }
 
   void MultiPresetMixer::SetGlobalGateHold(double holdMs)
   {
-    mGlobalChainConfig.preChain.gateHold = holdMs;
-    mPreChainExecutor.SetNodeParam("global_gate", "hold", holdMs);
+    if (mGlobalChainConfig.preChainGraph.nodes.empty() && mGlobalChainConfig.preChainGraph.edges.empty())
+    {
+      mGlobalChainConfig.preChainGraph = GlobalSignalChainConfig::BuildDefaultPreChainGraph();
+    }
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_gate", "dynamics_gate"))
+    {
+      node->params["hold"] = holdMs;
+      mPreChainExecutor.SetNodeParam(node->id, "hold", holdMs);
+    }
   }
 
   void MultiPresetMixer::SetGlobalGateRelease(double releaseMs)
   {
-    mGlobalChainConfig.preChain.gateRelease = releaseMs;
-    mPreChainExecutor.SetNodeParam("global_gate", "release", releaseMs);
+    if (mGlobalChainConfig.preChainGraph.nodes.empty() && mGlobalChainConfig.preChainGraph.edges.empty())
+    {
+      mGlobalChainConfig.preChainGraph = GlobalSignalChainConfig::BuildDefaultPreChainGraph();
+    }
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_gate", "dynamics_gate"))
+    {
+      node->params["release"] = releaseMs;
+      mPreChainExecutor.SetNodeParam(node->id, "release", releaseMs);
+    }
   }
 
   void MultiPresetMixer::SetGlobalTransposeEnabled(bool enabled)
   {
-    mGlobalChainConfig.preChain.transposeEnabled = enabled;
-    mPreChainExecutor.SetNodeEnabled("global_transpose", enabled);
+    if (mGlobalChainConfig.preChainGraph.nodes.empty() && mGlobalChainConfig.preChainGraph.edges.empty())
+    {
+      mGlobalChainConfig.preChainGraph = GlobalSignalChainConfig::BuildDefaultPreChainGraph();
+    }
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_transpose", "transpose"))
+    {
+      node->enabled = enabled;
+      mPreChainExecutor.SetNodeEnabled(node->id, enabled);
+    }
   }
 
   void MultiPresetMixer::SetGlobalTranspose(int semitones)
   {
-    mGlobalChainConfig.preChain.transposeSemitones = std::clamp(semitones, -36, 12);
-    mPreChainExecutor.SetNodeParam("global_transpose", "semitones", static_cast<double>(mGlobalChainConfig.preChain.transposeSemitones));
+    const double value = static_cast<double>(std::clamp(semitones, -36, 12));
+    if (mGlobalChainConfig.preChainGraph.nodes.empty() && mGlobalChainConfig.preChainGraph.edges.empty())
+    {
+      mGlobalChainConfig.preChainGraph = GlobalSignalChainConfig::BuildDefaultPreChainGraph();
+    }
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_transpose", "transpose"))
+    {
+      node->params["semitones"] = value;
+      mPreChainExecutor.SetNodeParam(node->id, "semitones", value);
+    }
   }
 
   void MultiPresetMixer::SetGlobalEQEnabled(bool enabled)
   {
-    mGlobalChainConfig.postChain.eqEnabled = enabled;
-    mPostChainExecutor.SetNodeEnabled("global_eq", enabled);
+    if (mGlobalChainConfig.postChainGraph.nodes.empty() && mGlobalChainConfig.postChainGraph.edges.empty())
+    {
+      mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
+    }
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_eq", "eq_parametric"))
+    {
+      node->enabled = enabled;
+      mPostChainExecutor.SetNodeEnabled(node->id, enabled);
+    }
   }
 
   void MultiPresetMixer::SetGlobalEQBandGain(int band, double dB)
   {
     static const char* kParamNames[] = {"lowGain", "lowMidGain", "highMidGain", "highGain"};
     if (band < 0 || band > 3) return;
-    
-    switch (band)
+    if (mGlobalChainConfig.postChainGraph.nodes.empty() && mGlobalChainConfig.postChainGraph.edges.empty())
     {
-      case 0: mGlobalChainConfig.postChain.eqLowGain = dB; break;
-      case 1: mGlobalChainConfig.postChain.eqLowMidGain = dB; break;
-      case 2: mGlobalChainConfig.postChain.eqHighMidGain = dB; break;
-      case 3: mGlobalChainConfig.postChain.eqHighGain = dB; break;
+      mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
     }
-    mPostChainExecutor.SetNodeParam("global_eq", kParamNames[band], dB);
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_eq", "eq_parametric"))
+    {
+      node->params[kParamNames[band]] = dB;
+      mPostChainExecutor.SetNodeParam(node->id, kParamNames[band], dB);
+    }
   }
 
   void MultiPresetMixer::SetGlobalEQBandFrequency(int band, double freq)
   {
     static const char* kParamNames[] = {"lowFreq", "lowMidFreq", "highMidFreq", "highFreq"};
     if (band < 0 || band > 3) return;
-
-    switch (band)
+    if (mGlobalChainConfig.postChainGraph.nodes.empty() && mGlobalChainConfig.postChainGraph.edges.empty())
     {
-      case 0: mGlobalChainConfig.postChain.eqLowFreq = freq; break;
-      case 1: mGlobalChainConfig.postChain.eqLowMidFreq = freq; break;
-      case 2: mGlobalChainConfig.postChain.eqHighMidFreq = freq; break;
-      case 3: mGlobalChainConfig.postChain.eqHighFreq = freq; break;
+      mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
     }
-    mPostChainExecutor.SetNodeParam("global_eq", kParamNames[band], freq);
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_eq", "eq_parametric"))
+    {
+      node->params[kParamNames[band]] = freq;
+      mPostChainExecutor.SetNodeParam(node->id, kParamNames[band], freq);
+    }
   }
 
   void MultiPresetMixer::SetGlobalEQBandQ(int band, double q)
   {
     static const char* kParamNames[] = {"", "lowMidQ", "highMidQ", ""};
     if (band < 1 || band > 2) return;
-
-    switch (band)
+    if (mGlobalChainConfig.postChainGraph.nodes.empty() && mGlobalChainConfig.postChainGraph.edges.empty())
     {
-      case 1: mGlobalChainConfig.postChain.eqLowMidQ = q; break;
-      case 2: mGlobalChainConfig.postChain.eqHighMidQ = q; break;
+      mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
     }
-    mPostChainExecutor.SetNodeParam("global_eq", kParamNames[band], q);
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_eq", "eq_parametric"))
+    {
+      node->params[kParamNames[band]] = q;
+      mPostChainExecutor.SetNodeParam(node->id, kParamNames[band], q);
+    }
   }
 
   void MultiPresetMixer::SetGlobalDoublerEnabled(bool enabled)
   {
-    mGlobalChainConfig.postChain.doublerEnabled = enabled;
-    mPostChainExecutor.SetNodeEnabled("global_doubler", enabled);
+    if (mGlobalChainConfig.postChainGraph.nodes.empty() && mGlobalChainConfig.postChainGraph.edges.empty())
+    {
+      mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
+    }
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_doubler", "delay_doubler"))
+    {
+      node->enabled = enabled;
+      mPostChainExecutor.SetNodeEnabled(node->id, enabled);
+    }
   }
 
   void MultiPresetMixer::SetGlobalDoublerDelay(double delayMs)
   {
-    mGlobalChainConfig.postChain.doublerDelay = std::clamp(delayMs, 0.5, 100.0);
-    mPostChainExecutor.SetNodeParam("global_doubler", "time", mGlobalChainConfig.postChain.doublerDelay);
+    const double clamped = std::clamp(delayMs, 0.5, 100.0);
+    if (mGlobalChainConfig.postChainGraph.nodes.empty() && mGlobalChainConfig.postChainGraph.edges.empty())
+    {
+      mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
+    }
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_doubler", "delay_doubler"))
+    {
+      node->params["time"] = clamped;
+      mPostChainExecutor.SetNodeParam(node->id, "time", clamped);
+    }
   }
 
   void MultiPresetMixer::SetGlobalDoublerMix(double mix)
   {
-    mGlobalChainConfig.postChain.doublerMix = std::clamp(mix, 0.0, 1.0);
-    mPostChainExecutor.SetNodeParam("global_doubler", "mix", mGlobalChainConfig.postChain.doublerMix);
+    const double clamped = std::clamp(mix, 0.0, 1.0);
+    if (mGlobalChainConfig.postChainGraph.nodes.empty() && mGlobalChainConfig.postChainGraph.edges.empty())
+    {
+      mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
+    }
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_doubler", "delay_doubler"))
+    {
+      node->params["mix"] = clamped;
+      mPostChainExecutor.SetNodeParam(node->id, "mix", clamped);
+    }
   }
 
   void MultiPresetMixer::SetGlobalDoublerDetune(double cents)
   {
-    mGlobalChainConfig.postChain.doublerDetune = cents;
-    mPostChainExecutor.SetNodeParam("global_doubler", "detune", cents);
+    if (mGlobalChainConfig.postChainGraph.nodes.empty() && mGlobalChainConfig.postChainGraph.edges.empty())
+    {
+      mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
+    }
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_doubler", "delay_doubler"))
+    {
+      node->params["detune"] = cents;
+      mPostChainExecutor.SetNodeParam(node->id, "detune", cents);
+    }
   }
 
   void MultiPresetMixer::SetGlobalInputGain(double dB)

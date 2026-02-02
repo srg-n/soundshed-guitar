@@ -4,7 +4,7 @@ import { postMessage, setParameter } from "./bridge.js";
 import { sendGlobalChainParam } from "./messages.js";
 import { uiState } from "./state.js";
 import { drawEqCurve, type EqBand } from "./eqCurve.js";
-import type { GlobalPostChainConfig } from "./types.js";
+import type { GraphNode, SignalGraph } from "./types.js";
 
 export interface KnobConfig {
   knobElement: HTMLElement;
@@ -199,8 +199,12 @@ function initializeDoublerControls(): void {
 
   if (doublerToggle) {
     doublerToggle.addEventListener("change", () => {
-      const enabled = doublerToggle.checked ? 1.0 : 0.0;
-      setParameter("doubler_enabled", enabled);
+      const enabled = doublerToggle.checked;
+      sendGlobalChainParam("postChainGraph.global_doubler.enabled", enabled);
+      const doublerNode = getPostChainDoublerNode();
+      if (doublerNode) {
+        doublerNode.bypassed = !doublerToggle.checked;
+      }
       updateDelayEnabled(doublerToggle.checked);
     });
   }
@@ -217,6 +221,14 @@ function initializeDoublerControls(): void {
       displayFormat: (value) => `${value.toFixed(2)} ms`,
       valueDisplayId: "delay-value",
       sensitivity: 0.5,
+      sendParameter: false,
+      onValueCommit: (value) => {
+        sendGlobalChainParam("postChainGraph.global_doubler.params.time", value);
+        const doublerNode = getPostChainDoublerNode();
+        if (doublerNode) {
+          doublerNode.params.time = value;
+        }
+      },
     });
     knobInstances.set("doubler_delay", delayKnobInstance);
   }
@@ -237,6 +249,18 @@ function initializeInputOutputKnobs(): void {
       displayFormat: (value) => `${value >= 0 ? "+" : ""}${value.toFixed(1)} dB`,
       valueDisplayId: "input-value",
       sensitivity: 0.1,
+      sendParameter: false,
+      onValueChange: (value) => {
+        sendGlobalChainParam("inputGain", value);
+        if (uiState.globalSignalChain) {
+          uiState.globalSignalChain.inputGain = value;
+        }
+      },
+      onValueCommit: (value) => {
+        if (uiState.globalSignalChain) {
+          uiState.globalSignalChain.inputGain = value;
+        }
+      },
     });
     knobInstances.set("input_trim", inputKnobInstance);
   }
@@ -253,6 +277,18 @@ function initializeInputOutputKnobs(): void {
       displayFormat: (value) => `${value >= 0 ? "+" : ""}${value.toFixed(1)} dB`,
       valueDisplayId: "output-value",
       sensitivity: 0.1,
+      sendParameter: false,
+      onValueChange: (value) => {
+        sendGlobalChainParam("outputGain", value);
+        if (uiState.globalSignalChain) {
+          uiState.globalSignalChain.outputGain = value;
+        }
+      },
+      onValueCommit: (value) => {
+        if (uiState.globalSignalChain) {
+          uiState.globalSignalChain.outputGain = value;
+        }
+      },
     });
     knobInstances.set("output_trim", outputKnobInstance);
   }
@@ -272,14 +308,30 @@ function initializeInputOutputKnobs(): void {
       },
       valueDisplayId: "transpose-value",
       sensitivity: 0.1,
+      sendParameter: false,
       onValueChange: (value) => {
         // Snap to integer values for semitones and send to plugin
         const rounded = Math.round(value);
         if (Math.abs(value - rounded) > 0.01) {
           transposeKnobInstance.setValue(rounded);
         }
+        const enabled = rounded !== 0;
         // Always send the rounded integer value to the plugin
-        setParameter("transpose", rounded);
+        sendGlobalChainParam("preChainGraph.global_transpose.params.semitones", rounded);
+        sendGlobalChainParam("preChainGraph.global_transpose.enabled", enabled);
+        const transposeNode = getPreChainTransposeNode();
+        if (transposeNode) {
+          transposeNode.params.semitones = rounded;
+          transposeNode.bypassed = !enabled;
+        }
+      },
+      onValueCommit: (value) => {
+        const rounded = Math.round(value);
+        const transposeNode = getPreChainTransposeNode();
+        if (transposeNode) {
+          transposeNode.params.semitones = rounded;
+          transposeNode.bypassed = rounded === 0;
+        }
       },
     });
     knobInstances.set("transpose", transposeKnobInstance);
@@ -291,9 +343,13 @@ function initializeGateControls(): void {
 
   if (gateToggle) {
     gateToggle.addEventListener("change", () => {
-      const enabled = gateToggle.checked ? 1.0 : 0.0;
-      setParameter("gate_enabled", enabled);
-      appendLog(`gate_enabled → ${enabled}`);
+      const enabled = gateToggle.checked;
+      sendGlobalChainParam("preChainGraph.global_gate.enabled", enabled);
+      const gateNode = getPreChainGateNode();
+      if (gateNode) {
+        gateNode.bypassed = !gateToggle.checked;
+      }
+      appendLog(`preChainGraph.global_gate.enabled → ${enabled}`);
       updateGateThresholdEnabled(gateToggle.checked);
     });
   }
@@ -310,6 +366,14 @@ function initializeGateControls(): void {
       displayFormat: (value) => `${value.toFixed(0)} dB`,
       valueDisplayId: "gate-threshold-value",
       sensitivity: 0.5,
+      sendParameter: false,
+      onValueCommit: (value) => {
+        sendGlobalChainParam("preChainGraph.global_gate.params.threshold", value);
+        const gateNode = getPreChainGateNode();
+        if (gateNode) {
+          gateNode.params.threshold = value;
+        }
+      },
     });
     knobInstances.set("gate_threshold", thresholdKnobInstance);
   }
@@ -328,14 +392,20 @@ export function syncGateControlsFromState(): void {
   }
 
   const gateToggle = document.getElementById("gate-toggle") as HTMLInputElement | null;
-  if (gateToggle && typeof paramValues.gate_enabled === "number") {
+  const gateNode = getPreChainGateNode();
+  if (gateToggle && gateNode) {
+    gateToggle.checked = !gateNode.bypassed;
+    updateGateThresholdEnabled(gateToggle.checked);
+  } else if (gateToggle && typeof paramValues.gate_enabled === "number") {
     gateToggle.checked = paramValues.gate_enabled > 0.5;
     updateGateThresholdEnabled(gateToggle.checked);
   }
 
   // Sync threshold knob
   const thresholdKnobInstance = knobInstances.get("gate_threshold");
-  if (thresholdKnobInstance && typeof paramValues.gate_threshold === "number") {
+  if (thresholdKnobInstance && gateNode && typeof gateNode.params.threshold === "number") {
+    thresholdKnobInstance.setValue(gateNode.params.threshold);
+  } else if (thresholdKnobInstance && typeof paramValues.gate_threshold === "number") {
     thresholdKnobInstance.setValue(paramValues.gate_threshold);
   }
 }
@@ -384,32 +454,45 @@ export function syncDoublerControlsFromState(): void {
   }
 
   const doublerToggle = document.getElementById("doubler-toggle") as HTMLInputElement | null;
-  if (doublerToggle && typeof paramValues.doubler_enabled === "number") {
+  const doublerNode = getPostChainDoublerNode();
+  if (doublerToggle && doublerNode) {
+    doublerToggle.checked = !doublerNode.bypassed;
+    updateDelayEnabled(doublerToggle.checked);
+  } else if (doublerToggle && typeof paramValues.doubler_enabled === "number") {
     doublerToggle.checked = paramValues.doubler_enabled > 0.5;
     updateDelayEnabled(doublerToggle.checked);
   }
 
   // Sync delay knob using GenericKnob instance
   const delayKnobInstance = knobInstances.get("doubler_delay");
-  if (delayKnobInstance && typeof paramValues.doubler_delay === "number") {
+  if (delayKnobInstance && doublerNode && typeof doublerNode.params.time === "number") {
+    delayKnobInstance.setValue(doublerNode.params.time);
+  } else if (delayKnobInstance && typeof paramValues.doubler_delay === "number") {
     delayKnobInstance.setValue(paramValues.doubler_delay);
   }
 
   // Sync input level knob
   const inputKnobInstance = knobInstances.get("input_trim");
-  if (inputKnobInstance && typeof paramValues.input_trim === "number") {
+  if (inputKnobInstance && typeof uiState.globalSignalChain?.inputGain === "number") {
+    inputKnobInstance.setValue(uiState.globalSignalChain.inputGain);
+  } else if (inputKnobInstance && typeof paramValues.input_trim === "number") {
     inputKnobInstance.setValue(paramValues.input_trim);
   }
 
   // Sync output level knob
   const outputKnobInstance = knobInstances.get("output_trim");
-  if (outputKnobInstance && typeof paramValues.output_trim === "number") {
+  if (outputKnobInstance && typeof uiState.globalSignalChain?.outputGain === "number") {
+    outputKnobInstance.setValue(uiState.globalSignalChain.outputGain);
+  } else if (outputKnobInstance && typeof paramValues.output_trim === "number") {
     outputKnobInstance.setValue(paramValues.output_trim);
   }
 
   // Sync transpose knob
   const transposeKnobInstance = knobInstances.get("transpose");
-  if (transposeKnobInstance && typeof paramValues.transpose === "number") {
+  const transposeNode = getPreChainTransposeNode();
+  if (transposeKnobInstance && transposeNode && typeof transposeNode.params.semitones === "number") {
+    transposeKnobInstance.setValue(transposeNode.params.semitones);
+  } else if (transposeKnobInstance && typeof paramValues.transpose === "number") {
     transposeKnobInstance.setValue(paramValues.transpose);
   }
 }
@@ -727,60 +810,83 @@ let eqEnabled = false;
 
 type GlobalEqParamBinding = {
   path: string;
-  read: (postChain: GlobalPostChainConfig) => number;
-  apply: (postChain: GlobalPostChainConfig, value: number) => void;
+  read: (node: GraphNode) => number;
+  apply: (node: GraphNode, value: number) => void;
 };
+
+const findGraphNode = (graph: SignalGraph | undefined, id: string, type: string): GraphNode | undefined => {
+  if (!graph) {
+    return undefined;
+  }
+  const byId = graph.nodes.find((node) => node.id === id);
+  if (byId) {
+    return byId;
+  }
+  return graph.nodes.find((node) => node.type === type);
+};
+
+const getPreChainGateNode = (): GraphNode | undefined =>
+  findGraphNode(uiState.globalSignalChain?.preChainGraph, "global_gate", "dynamics_gate");
+
+const getPreChainTransposeNode = (): GraphNode | undefined =>
+  findGraphNode(uiState.globalSignalChain?.preChainGraph, "global_transpose", "transpose");
+
+const getPostChainDoublerNode = (): GraphNode | undefined =>
+  findGraphNode(uiState.globalSignalChain?.postChainGraph, "global_doubler", "delay_doubler");
+
+const getPostChainEqNode = (): GraphNode | undefined =>
+  findGraphNode(uiState.globalSignalChain?.postChainGraph, "global_eq", "eq_parametric");
 
 const GLOBAL_EQ_PARAM_MAP: Record<string, GlobalEqParamBinding> = {
   eq_low_gain: {
-    path: "postChain.eqLowGain",
-    read: (postChain) => postChain.eqLowGain,
-    apply: (postChain, value) => { postChain.eqLowGain = value; },
+    path: "postChainGraph.global_eq.params.lowGain",
+    read: (node) => node.params.lowGain,
+    apply: (node, value) => { node.params.lowGain = value; },
   },
   eq_low_freq: {
-    path: "postChain.eqLowFreq",
-    read: (postChain) => postChain.eqLowFreq,
-    apply: (postChain, value) => { postChain.eqLowFreq = value; },
+    path: "postChainGraph.global_eq.params.lowFreq",
+    read: (node) => node.params.lowFreq,
+    apply: (node, value) => { node.params.lowFreq = value; },
   },
   eq_lowmid_gain: {
-    path: "postChain.eqLowMidGain",
-    read: (postChain) => postChain.eqLowMidGain,
-    apply: (postChain, value) => { postChain.eqLowMidGain = value; },
+    path: "postChainGraph.global_eq.params.lowMidGain",
+    read: (node) => node.params.lowMidGain,
+    apply: (node, value) => { node.params.lowMidGain = value; },
   },
   eq_lowmid_freq: {
-    path: "postChain.eqLowMidFreq",
-    read: (postChain) => postChain.eqLowMidFreq,
-    apply: (postChain, value) => { postChain.eqLowMidFreq = value; },
+    path: "postChainGraph.global_eq.params.lowMidFreq",
+    read: (node) => node.params.lowMidFreq,
+    apply: (node, value) => { node.params.lowMidFreq = value; },
   },
   eq_lowmid_q: {
-    path: "postChain.eqLowMidQ",
-    read: (postChain) => postChain.eqLowMidQ,
-    apply: (postChain, value) => { postChain.eqLowMidQ = value; },
+    path: "postChainGraph.global_eq.params.lowMidQ",
+    read: (node) => node.params.lowMidQ,
+    apply: (node, value) => { node.params.lowMidQ = value; },
   },
   eq_highmid_gain: {
-    path: "postChain.eqHighMidGain",
-    read: (postChain) => postChain.eqHighMidGain,
-    apply: (postChain, value) => { postChain.eqHighMidGain = value; },
+    path: "postChainGraph.global_eq.params.highMidGain",
+    read: (node) => node.params.highMidGain,
+    apply: (node, value) => { node.params.highMidGain = value; },
   },
   eq_highmid_freq: {
-    path: "postChain.eqHighMidFreq",
-    read: (postChain) => postChain.eqHighMidFreq,
-    apply: (postChain, value) => { postChain.eqHighMidFreq = value; },
+    path: "postChainGraph.global_eq.params.highMidFreq",
+    read: (node) => node.params.highMidFreq,
+    apply: (node, value) => { node.params.highMidFreq = value; },
   },
   eq_highmid_q: {
-    path: "postChain.eqHighMidQ",
-    read: (postChain) => postChain.eqHighMidQ,
-    apply: (postChain, value) => { postChain.eqHighMidQ = value; },
+    path: "postChainGraph.global_eq.params.highMidQ",
+    read: (node) => node.params.highMidQ,
+    apply: (node, value) => { node.params.highMidQ = value; },
   },
   eq_high_gain: {
-    path: "postChain.eqHighGain",
-    read: (postChain) => postChain.eqHighGain,
-    apply: (postChain, value) => { postChain.eqHighGain = value; },
+    path: "postChainGraph.global_eq.params.highGain",
+    read: (node) => node.params.highGain,
+    apply: (node, value) => { node.params.highGain = value; },
   },
   eq_high_freq: {
-    path: "postChain.eqHighFreq",
-    read: (postChain) => postChain.eqHighFreq,
-    apply: (postChain, value) => { postChain.eqHighFreq = value; },
+    path: "postChainGraph.global_eq.params.highFreq",
+    read: (node) => node.params.highFreq,
+    apply: (node, value) => { node.params.highFreq = value; },
   },
 };
 
@@ -802,10 +908,10 @@ function readEqParamValue(paramId: string, fallback: number): number {
     return knobInstance.getValue();
   }
 
-  const globalChain = uiState.globalSignalChain?.postChain;
   const mapping = GLOBAL_EQ_PARAM_MAP[paramId];
-  if (globalChain && mapping) {
-    return mapping.read(globalChain);
+  const eqNode = getPostChainEqNode();
+  if (mapping && eqNode) {
+    return mapping.read(eqNode);
   }
 
   return fallback;
@@ -867,11 +973,12 @@ function initializeEQControls(): void {
       eqModalToggle.checked = eqEnabled;
     }
     if (shouldSend) {
-      sendGlobalChainParam("postChain.eqEnabled", eqEnabled);
-      if (uiState.globalSignalChain?.postChain) {
-        uiState.globalSignalChain.postChain.eqEnabled = eqEnabled;
+      sendGlobalChainParam("postChainGraph.global_eq.enabled", eqEnabled);
+      const eqNode = getPostChainEqNode();
+      if (eqNode) {
+        eqNode.bypassed = !eqEnabled;
       }
-      appendLog(`global postChain.eqEnabled → ${eqEnabled}`);
+      appendLog(`global postChainGraph.global_eq.enabled → ${eqEnabled}`);
     }
     updateEQSectionState();
     updateEqModalVisualization();
@@ -896,8 +1003,9 @@ function initializeEQControls(): void {
       return;
     }
     sendGlobalChainParam(mapping.path, value);
-    if (uiState.globalSignalChain?.postChain) {
-      mapping.apply(uiState.globalSignalChain.postChain, value);
+    const eqNode = getPostChainEqNode();
+    if (eqNode) {
+      mapping.apply(eqNode, value);
     }
     appendLog(`${mapping.path} → ${value.toFixed(2)}`);
   };
@@ -1091,31 +1199,34 @@ function initializeEQControls(): void {
 }
 
 export function syncEQControlsFromState(): void {
-  const postChain = uiState.globalSignalChain?.postChain;
-  const paramValues: Record<string, number> = postChain
+  const eqNode = getPostChainEqNode();
+  const paramValues: Record<string, number> = eqNode
     ? {
-        eq_low_gain: postChain.eqLowGain,
-        eq_low_freq: postChain.eqLowFreq,
-        eq_lowmid_gain: postChain.eqLowMidGain,
-        eq_lowmid_freq: postChain.eqLowMidFreq,
-        eq_lowmid_q: postChain.eqLowMidQ,
-        eq_highmid_gain: postChain.eqHighMidGain,
-        eq_highmid_freq: postChain.eqHighMidFreq,
-        eq_highmid_q: postChain.eqHighMidQ,
-        eq_high_gain: postChain.eqHighGain,
-        eq_high_freq: postChain.eqHighFreq,
+        eq_low_gain: eqNode.params.lowGain,
+        eq_low_freq: eqNode.params.lowFreq,
+        eq_lowmid_gain: eqNode.params.lowMidGain,
+        eq_lowmid_freq: eqNode.params.lowMidFreq,
+        eq_lowmid_q: eqNode.params.lowMidQ,
+        eq_highmid_gain: eqNode.params.highMidGain,
+        eq_highmid_freq: eqNode.params.highMidFreq,
+        eq_highmid_q: eqNode.params.highMidQ,
+        eq_high_gain: eqNode.params.highGain,
+        eq_high_freq: eqNode.params.highFreq,
       }
     : {};
 
   // Sync toggle
   const eqToggle = document.getElementById("eq-toggle") as HTMLInputElement | null;
   const eqModalToggle = document.getElementById("eq-modal-toggle") as HTMLInputElement | null;
-  if (eqToggle && typeof postChain?.eqEnabled === "boolean") {
-    eqEnabled = postChain.eqEnabled;
+  if (eqToggle && eqNode) {
+    const enabled = typeof (eqNode as { enabled?: boolean }).enabled === "boolean"
+      ? (eqNode as { enabled?: boolean }).enabled === true
+      : !eqNode.bypassed;
+    eqEnabled = enabled;
     eqToggle.checked = eqEnabled;
     updateEQSectionState();
   }
-  if (eqModalToggle && typeof postChain?.eqEnabled === "boolean") {
+  if (eqModalToggle && eqNode) {
     eqModalToggle.checked = eqEnabled;
   }
 
@@ -1207,6 +1318,9 @@ function initializeAutoLevelControls(): void {
     autoIn.addEventListener("change", () => {
       autoLevelInputEnabled = autoIn.checked;
       updateActivePresetGlobals({ autoLevelInput: autoLevelInputEnabled });
+      if (uiState.globalSignalChain) {
+        uiState.globalSignalChain.autoLevelInput = autoLevelInputEnabled;
+      }
       sendAutoLevelToPlugin();
       updateAutoLevelKnobStates();
     });
@@ -1216,6 +1330,9 @@ function initializeAutoLevelControls(): void {
     autoOut.addEventListener("change", () => {
       autoLevelOutputEnabled = autoOut.checked;
       updateActivePresetGlobals({ autoLevelOutput: autoLevelOutputEnabled });
+      if (uiState.globalSignalChain) {
+        uiState.globalSignalChain.autoLevelOutput = autoLevelOutputEnabled;
+      }
       sendAutoLevelToPlugin();
       updateAutoLevelKnobStates();
     });
@@ -1223,12 +1340,22 @@ function initializeAutoLevelControls(): void {
 }
 
 export function syncAutoLevelControlsFromState(): void {
-  const globals = readAutoLevelFromPreset();
-  if (typeof globals.input === "boolean") {
-    autoLevelInputEnabled = globals.input;
+  if (typeof uiState.globalSignalChain?.autoLevelInput === "boolean") {
+    autoLevelInputEnabled = uiState.globalSignalChain.autoLevelInput;
+  } else {
+    const globals = readAutoLevelFromPreset();
+    if (typeof globals.input === "boolean") {
+      autoLevelInputEnabled = globals.input;
+    }
   }
-  if (typeof globals.output === "boolean") {
-    autoLevelOutputEnabled = globals.output;
+
+  if (typeof uiState.globalSignalChain?.autoLevelOutput === "boolean") {
+    autoLevelOutputEnabled = uiState.globalSignalChain.autoLevelOutput;
+  } else {
+    const globals = readAutoLevelFromPreset();
+    if (typeof globals.output === "boolean") {
+      autoLevelOutputEnabled = globals.output;
+    }
   }
 
   const autoIn = document.getElementById("auto-level-input-toggle") as HTMLInputElement | null;

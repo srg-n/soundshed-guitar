@@ -163,6 +163,8 @@ namespace guitarfx
     void HandleTunerRequest(const nlohmann::json &payload);
     void HandleSetInputModeRequest(const nlohmann::json &payload);
     void HandleSetAmpCabStateRequest(const nlohmann::json &payload);
+    void HandleSetGlobalChainParamRequest(const nlohmann::json &payload);
+    void SendGlobalChainStateToUI();
     void HandleSetAutoLevelRequest(const nlohmann::json &payload);
     void HandleSetMetronomeRequest(const nlohmann::json &payload);
     void HandleUpdateSignalPathNodeParamRequest(const nlohmann::json &payload);

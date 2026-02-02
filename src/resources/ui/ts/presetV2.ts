@@ -428,8 +428,35 @@ export function createEmptyPresetV2(): Preset {
       autoLevelOutput: false
     },
     graph: {
-      nodes: [],
-      edges: []
+      nodes: [
+        {
+          id: "__input__",
+          type: "input",
+          displayName: "Input",
+          category: "utility",
+          bypassed: false,
+          params: {},
+          config: {}
+        },
+        {
+          id: "__output__",
+          type: "output",
+          displayName: "Output",
+          category: "utility",
+          bypassed: false,
+          params: {},
+          config: {}
+        }
+      ],
+      edges: [
+        {
+          from: "__input__",
+          to: "__output__",
+          fromPort: 0,
+          toPort: 0,
+          gain: 1
+        }
+      ]
     },
     embeddedResources: []
   };

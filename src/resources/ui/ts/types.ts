@@ -223,35 +223,6 @@ export interface MixerPresetState {
   solo: boolean;
 }
 
-// Global Signal Chain Configuration
-export interface GlobalPreChainConfig {
-  gateEnabled: boolean;
-  gateThreshold: number;  // dB
-  gateAttack: number;     // ms
-  gateHold: number;       // ms
-  gateRelease: number;    // ms
-  transposeEnabled: boolean;
-  transposeSemitones: number;  // -36 to +12
-}
-
-export interface GlobalPostChainConfig {
-  eqEnabled: boolean;
-  eqLowGain: number;      // dB
-  eqLowFreq: number;      // Hz
-  eqLowMidGain: number;   // dB
-  eqLowMidFreq: number;   // Hz
-  eqLowMidQ: number;
-  eqHighMidGain: number;  // dB
-  eqHighMidFreq: number;  // Hz
-  eqHighMidQ: number;
-  eqHighGain: number;     // dB
-  eqHighFreq: number;     // Hz
-  doublerEnabled: boolean;
-  doublerDelay: number;   // ms
-  doublerMix: number;     // 0-1
-  doublerDetune: number;  // cents
-}
-
 export interface GlobalSignalChainConfig {
   inputGain: number;      // dB
   monoMode: boolean;
@@ -260,8 +231,8 @@ export interface GlobalSignalChainConfig {
   outputGain: number;     // dB (master volume)
   autoLevelOutput: boolean;
   limiterEnabled: boolean;
-  preChain: GlobalPreChainConfig;
-  postChain: GlobalPostChainConfig;
+  preChainGraph: SignalGraph;
+  postChainGraph: SignalGraph;
 }
 
 export interface MixerState {

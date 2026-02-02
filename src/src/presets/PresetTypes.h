@@ -157,43 +157,9 @@ namespace guitarfx
    */
   struct GlobalSignalChainConfig
   {
-    // Pre-chain settings (applied before preset processing)
-    struct PreChain
-    {
-      // Noise Gate (dynamics_gate)
-      bool gateEnabled = false;
-      double gateThreshold = -40.0;  // dB
-      double gateAttack = 0.5;       // ms
-      double gateHold = 50.0;        // ms
-      double gateRelease = 100.0;    // ms
-
-      // Transpose (transpose)
-      bool transposeEnabled = false;
-      int transposeSemitones = 0;    // -36 to +12
-    };
-
-    // Post-chain settings (applied after preset mixing)
-    struct PostChain
-    {
-      // Parametric EQ (eq_parametric)
-      bool eqEnabled = false;
-      double eqLowGain = 0.0;        // dB
-      double eqLowFreq = 100.0;      // Hz
-      double eqLowMidGain = 0.0;     // dB
-      double eqLowMidFreq = 400.0;   // Hz
-      double eqLowMidQ = 1.0;
-      double eqHighMidGain = 0.0;    // dB
-      double eqHighMidFreq = 2000.0; // Hz
-      double eqHighMidQ = 1.0;
-      double eqHighGain = 0.0;       // dB
-      double eqHighFreq = 8000.0;    // Hz
-
-      // Doubler (delay_doubler)
-      bool doublerEnabled = false;
-      double doublerDelay = 20.0;    // ms
-      double doublerMix = 0.5;       // 0-1
-      double doublerDetune = 5.0;    // cents
-    };
+    // Signal graph definitions for global pre/post chains (preferred over legacy param blocks)
+    SignalGraph preChainGraph;
+    SignalGraph postChainGraph;
 
     // Input stage settings
     double inputGain = 0.0;          // dB
@@ -206,9 +172,6 @@ namespace guitarfx
     bool autoLevelOutput = false;
     bool limiterEnabled = false;
 
-    PreChain preChain;
-    PostChain postChain;
-
     /**
      * Build a SignalGraph for the pre-chain (input → gate → transpose → output).
      */
@@ -218,6 +181,12 @@ namespace guitarfx
      * Build a SignalGraph for the post-chain (input → eq → doubler → output).
      */
     [[nodiscard]] SignalGraph BuildPostChainGraph() const;
+
+    /**
+     * Build default graphs for the global pre/post chain.
+     */
+    [[nodiscard]] static SignalGraph BuildDefaultPreChainGraph();
+    [[nodiscard]] static SignalGraph BuildDefaultPostChainGraph();
 
     /**
      * Create default global chain configuration.

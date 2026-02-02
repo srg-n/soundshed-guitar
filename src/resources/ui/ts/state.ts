@@ -1,4 +1,4 @@
-import type { DemoSample, GlobalSignalChainConfig, Preset, UiState } from "./types.js";
+import type { DemoSample, GlobalSignalChainConfig, Preset, SignalGraph, UiState } from "./types.js";
 
 export const LOG_ENTRY_LIMIT = 200;
 
@@ -30,6 +30,120 @@ export const DEMO_AUDIO_SAMPLES: DemoSample[] = [
   },
 ];
 
+const DEFAULT_PRE_CHAIN_GRAPH: SignalGraph = {
+  nodes: [
+    {
+      id: "__input__",
+      type: "input",
+      displayName: "Input",
+      category: "utility",
+      bypassed: false,
+      params: {},
+      config: {},
+    },
+    {
+      id: "global_gate",
+      type: "dynamics_gate",
+      displayName: "Noise Gate",
+      category: "dynamics",
+      bypassed: true,
+      params: {
+        threshold: -40.0,
+        attack: 0.5,
+        hold: 50.0,
+        release: 100.0,
+      },
+      config: {},
+    },
+    {
+      id: "global_transpose",
+      type: "transpose",
+      displayName: "Transpose",
+      category: "modulation",
+      bypassed: true,
+      params: {
+        semitones: 0.0,
+      },
+      config: {},
+    },
+    {
+      id: "__output__",
+      type: "output",
+      displayName: "Output",
+      category: "utility",
+      bypassed: false,
+      params: {},
+      config: {},
+    },
+  ],
+  edges: [
+    { from: "__input__", to: "global_gate", fromPort: 0, toPort: 0, gain: 1 },
+    { from: "global_gate", to: "global_transpose", fromPort: 0, toPort: 0, gain: 1 },
+    { from: "global_transpose", to: "__output__", fromPort: 0, toPort: 0, gain: 1 },
+  ],
+};
+
+const DEFAULT_POST_CHAIN_GRAPH: SignalGraph = {
+  nodes: [
+    {
+      id: "__input__",
+      type: "input",
+      displayName: "Input",
+      category: "utility",
+      bypassed: false,
+      params: {},
+      config: {},
+    },
+    {
+      id: "global_eq",
+      type: "eq_parametric",
+      displayName: "Global EQ",
+      category: "eq",
+      bypassed: true,
+      params: {
+        lowGain: 0.0,
+        lowFreq: 100.0,
+        lowMidGain: 0.0,
+        lowMidFreq: 400.0,
+        lowMidQ: 1.0,
+        highMidGain: 0.0,
+        highMidFreq: 2000.0,
+        highMidQ: 1.0,
+        highGain: 0.0,
+        highFreq: 8000.0,
+      },
+      config: {},
+    },
+    {
+      id: "global_doubler",
+      type: "delay_doubler",
+      displayName: "Doubler",
+      category: "modulation",
+      bypassed: true,
+      params: {
+        time: 20.0,
+        mix: 0.5,
+        detune: 5.0,
+      },
+      config: {},
+    },
+    {
+      id: "__output__",
+      type: "output",
+      displayName: "Output",
+      category: "utility",
+      bypassed: false,
+      params: {},
+      config: {},
+    },
+  ],
+  edges: [
+    { from: "__input__", to: "global_eq", fromPort: 0, toPort: 0, gain: 1 },
+    { from: "global_eq", to: "global_doubler", fromPort: 0, toPort: 0, gain: 1 },
+    { from: "global_doubler", to: "__output__", fromPort: 0, toPort: 0, gain: 1 },
+  ],
+};
+
 /**
  * Default global signal chain configuration.
  * Signal flow: Input → [Tuner tap] → Gate → Transpose → [Presets] → EQ → Doubler → Output
@@ -42,32 +156,8 @@ export const DEFAULT_GLOBAL_SIGNAL_CHAIN: GlobalSignalChainConfig = {
   outputGain: 0.0,
   autoLevelOutput: false,
   limiterEnabled: false,
-  preChain: {
-    gateEnabled: false,
-    gateThreshold: -40.0,
-    gateAttack: 0.5,
-    gateHold: 50.0,
-    gateRelease: 100.0,
-    transposeEnabled: false,
-    transposeSemitones: 0,
-  },
-  postChain: {
-    eqEnabled: false,
-    eqLowGain: 0.0,
-    eqLowFreq: 100.0,
-    eqLowMidGain: 0.0,
-    eqLowMidFreq: 400.0,
-    eqLowMidQ: 1.0,
-    eqHighMidGain: 0.0,
-    eqHighMidFreq: 2000.0,
-    eqHighMidQ: 1.0,
-    eqHighGain: 0.0,
-    eqHighFreq: 8000.0,
-    doublerEnabled: false,
-    doublerDelay: 20.0,
-    doublerMix: 0.5,
-    doublerDetune: 5.0,
-  },
+  preChainGraph: DEFAULT_PRE_CHAIN_GRAPH,
+  postChainGraph: DEFAULT_POST_CHAIN_GRAPH,
 };
 
 export const uiState: UiState = {

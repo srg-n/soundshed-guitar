@@ -97,7 +97,6 @@ function renderParameterSection(): string {
         <span class="section-icon">${renderIcon("microscope", "section-icon-img")}</span>
         Diagnostics
       </h3>
-      <button id="run-signal-test" class="test-btn">Run Signal Path Test</button>
       ${signalTestSection}
     </div>
   `;
@@ -528,6 +527,7 @@ export function renderPresetDetails(
         <div class="preset-actions">
           <button id="apply-preset" class="apply-btn">Apply Preset</button>
           <button id="add-preset-to-mixer" class="apply-btn" title="Add this preset to the active mixer">Add to Mixer</button>
+          <button id="create-default-preset" class="apply-btn" title="Create a new preset from defaults">New Preset</button>
         </div>
       </div>
 
@@ -581,10 +581,6 @@ export function renderPresetDetails(
     });
   }
 
-  const signalTestButton = document.getElementById("run-signal-test");
-  if (signalTestButton) {
-    signalTestButton.addEventListener("click", hooks.onRequestSignalTest);
-  }
   bindDemoAudioControls();
   hooks.onBindLoadButtons();
 

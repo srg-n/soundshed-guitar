@@ -273,11 +273,43 @@
 }
 
 .save-preset-modal .form-group input,
-.save-preset-modal .form-group textarea,
-.save-preset-modal .form-group select {
+.save-preset-modal .form-group textarea {
   background: var(--bg-dark-tertiary);
   border-color: var(--border-dark-medium);
   color: var(--text-dark-primary);
+}
+
+.save-preset-modal .form-group select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-medium);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.theme-dark .save-preset-modal .form-group select {
+  color-scheme: dark;
+}
+
+.theme-light .save-preset-modal .form-group select,
+.theme-classic .save-preset-modal .form-group select {
+  color-scheme: light;
+}
+
+.theme-dark .save-preset-modal .form-group select option,
+.theme-dark .save-preset-modal .form-group select optgroup {
+  background: var(--bg-dark-secondary);
+  color: var(--text-primary);
+}
+
+.theme-light .save-preset-modal .form-group select option,
+.theme-light .save-preset-modal .form-group select optgroup,
+.theme-classic .save-preset-modal .form-group select option,
+.theme-classic .save-preset-modal .form-group select optgroup {
+  background: var(--bg-input);
+  color: var(--text-primary);
 }
 
 .save-preset-modal .form-group input::placeholder,

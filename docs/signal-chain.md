@@ -5,6 +5,7 @@
 - `src/src/dsp/SignalGraphExecutor.cpp` — Executor implementation
 - `src/src/presets/PresetTypes.h` — `SignalGraph`, `GraphNode`, `GraphEdge` structures
 - `src/src/dsp/effects/NAMAmpEffect.h` — Neural amp model loading and processing
+- `src/src/dsp/MultiPresetMixer.h` — Multi-preset mixing, global chain orchestration
 
 ## Overview
 
@@ -108,17 +109,11 @@ Nodes execute in dependency order via Kahn's algorithm. The executor validates a
 - No allocations during audio processing
 
 ### Processing Loop
-```
-1. Apply inputTrim to host input buffer
-2. Copy input to the input node's buffer
-3. For each node in topological order:
-   - If disabled: pass-through (buffer unchanged)
-   - If mixer: sum all incoming edges with gains
-   - If splitter: downstream nodes read from splitter's buffer
-   - Otherwise: processor.Process(input, output, samples)
-4. Copy output node's buffer to host output
-5. Apply outputTrim
-```
+1. Apply global input processing (mono mode, auto-level, etc.).
+2. Process global pre-chain (e.g., noise gate).
+3. For each preset: Process preset graph, mix outputs with pan/gain.
+4. Process global post-chain (e.g., EQ).
+5. Apply master gain, auto-level output, limiter.
 
 ### Bypass Semantics
 Disabled nodes skip processing; their buffer becomes a pass-through of gathered inputs. The signal path remains connected.
@@ -150,7 +145,13 @@ Applied outside the graph:
 | `inputTrim` | -40..+20 dB | 0.0 | Gain before graph |
 | `outputTrim` | -40..+20 dB | 0.0 | Gain after graph |
 
-## Multi-Preset Mixing (Future)
+Global chains may include additional parameters, but core trims remain, and global effects are now integrated into chains.
+
+## Global Signal Chains
+
+Global pre-chain and post-chain are SignalGraphs that wrap around all presets, referencing GlobalSignalChainConfig, preChainGraph, postChainGraph. Default contents include pre: input → gate; post: EQ → doubler. Configuration via UI enables shared FX across presets.
+
+## Multi-Preset Mixing
 
 Support for running multiple presets in parallel with mix/mute/solo controls:
 - Each preset runs its own signal graph

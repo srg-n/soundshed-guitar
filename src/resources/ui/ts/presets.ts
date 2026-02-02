@@ -6,6 +6,7 @@ import { buildAttachments, buildAttachmentsFromPreset, getDefaultPresets, initia
 import { arrayBufferToBase64, isRemoteUrl, resolveAttachmentUrl, sha256HexFromBase64 } from "./utils.js";
 import { buildArchiveFileName, generateResourceId, requestResourceData, sanitizeFilename } from "./archiveUtils.js";
 import type { Preset, Attachment, BlendDefinition, ResourceRef, LibraryResource, PresetFolder, Setlist, GraphNode } from "./types.js";
+import { createEmptyPresetV2 } from "./presetV2.js";
 import { bindDemoAudioControls } from "./demoAudio.js";
 import { postMessage } from "./bridge.js";
 import { renderSignalPathBar } from "./signalPath.js";
@@ -62,8 +63,7 @@ const PRESET_ALLOWED_KEYS = new Set([
   "customIrPath",
   "formatVersion",
   "graph",
-  "globals",
-  "global",
+  "globalSignalChain",
   "embeddedResources",
   "version",
   "author",
@@ -90,6 +90,22 @@ const PRESET_OPTIONAL_ARRAY_KEYS = [
 function getPresetForModal(): Preset | null {
   const activePreset = uiState.presetCache.get(uiState.activePresetId ?? "") ?? null;
   return activePreset ? clonePreset(activePreset) : null;
+}
+
+function stripLegacyGlobals(preset: Preset): Preset {
+  const cleaned = clonePreset(preset);
+  delete (cleaned as Record<string, unknown>).globals;
+  delete (cleaned as Record<string, unknown>).global;
+  return cleaned;
+}
+
+function cloneDefaultGlobalSignalChain(): import("./types.js").GlobalSignalChainConfig {
+  return JSON.parse(JSON.stringify(DEFAULT_GLOBAL_SIGNAL_CHAIN)) as import("./types.js").GlobalSignalChainConfig;
+}
+
+function resolveGlobalSignalChain(preset: Preset): import("./types.js").GlobalSignalChainConfig {
+  const chain = (preset as Preset & { globalSignalChain?: import("./types.js").GlobalSignalChainConfig }).globalSignalChain;
+  return chain ? JSON.parse(JSON.stringify(chain)) as import("./types.js").GlobalSignalChainConfig : cloneDefaultGlobalSignalChain();
 }
 
 function validatePresetForUi(preset: Preset | null): string[] {
@@ -180,6 +196,15 @@ function cleanupPresetForUi(
     }
   });
 
+  if ("globals" in cleaned) {
+    delete (cleaned as Record<string, unknown>).globals;
+    removedKeys.push("globals");
+  }
+  if ("global" in cleaned) {
+    delete (cleaned as Record<string, unknown>).global;
+    removedKeys.push("global");
+  }
+
   PRESET_OPTIONAL_STRING_KEYS.forEach((key) => {
     const value = cleaned[key] as string | null | undefined;
     if (typeof value === "string" && value.trim() === "") {
@@ -210,7 +235,36 @@ function cleanupPresetForUi(
   }
 
   if (cleaned.graph?.nodes?.length && cleaned.graph?.edges?.length) {
-    const eqDefaults = DEFAULT_GLOBAL_SIGNAL_CHAIN.postChain;
+    const eqDefaults = (() => {
+      const fallback = {
+        lowGain: 0.0,
+        lowFreq: 100.0,
+        lowMidGain: 0.0,
+        lowMidFreq: 400.0,
+        lowMidQ: 1.0,
+        highMidGain: 0.0,
+        highMidFreq: 2000.0,
+        highMidQ: 1.0,
+        highGain: 0.0,
+        highFreq: 8000.0,
+      };
+      const eqNode = DEFAULT_GLOBAL_SIGNAL_CHAIN.postChainGraph.nodes.find((node) => node.id === "global_eq" || node.type === "eq_parametric");
+      if (!eqNode || !eqNode.params) {
+        return fallback;
+      }
+      return {
+        lowGain: eqNode.params.lowGain ?? fallback.lowGain,
+        lowFreq: eqNode.params.lowFreq ?? fallback.lowFreq,
+        lowMidGain: eqNode.params.lowMidGain ?? fallback.lowMidGain,
+        lowMidFreq: eqNode.params.lowMidFreq ?? fallback.lowMidFreq,
+        lowMidQ: eqNode.params.lowMidQ ?? fallback.lowMidQ,
+        highMidGain: eqNode.params.highMidGain ?? fallback.highMidGain,
+        highMidFreq: eqNode.params.highMidFreq ?? fallback.highMidFreq,
+        highMidQ: eqNode.params.highMidQ ?? fallback.highMidQ,
+        highGain: eqNode.params.highGain ?? fallback.highGain,
+        highFreq: eqNode.params.highFreq ?? fallback.highFreq,
+      };
+    })();
     const isDefaultGlobalEqNode = (node: GraphNode): boolean => {
       const anyNode = node as unknown as {
         id?: unknown;
@@ -237,16 +291,16 @@ function cleanupPresetForUi(
       }
       const params = anyNode.params ?? {};
       return (
-        params.lowGain === eqDefaults.eqLowGain
-        && params.lowFreq === eqDefaults.eqLowFreq
-        && params.lowMidGain === eqDefaults.eqLowMidGain
-        && params.lowMidFreq === eqDefaults.eqLowMidFreq
-        && params.lowMidQ === eqDefaults.eqLowMidQ
-        && params.highMidGain === eqDefaults.eqHighMidGain
-        && params.highMidFreq === eqDefaults.eqHighMidFreq
-        && params.highMidQ === eqDefaults.eqHighMidQ
-        && params.highGain === eqDefaults.eqHighGain
-        && params.highFreq === eqDefaults.eqHighFreq
+        params.lowGain === eqDefaults.lowGain
+        && params.lowFreq === eqDefaults.lowFreq
+        && params.lowMidGain === eqDefaults.lowMidGain
+        && params.lowMidFreq === eqDefaults.lowMidFreq
+        && params.lowMidQ === eqDefaults.lowMidQ
+        && params.highMidGain === eqDefaults.highMidGain
+        && params.highMidFreq === eqDefaults.highMidFreq
+        && params.highMidQ === eqDefaults.highMidQ
+        && params.highGain === eqDefaults.highGain
+        && params.highFreq === eqDefaults.highFreq
       );
     };
 
@@ -342,7 +396,13 @@ function updatePresetModalJson(preset: Preset | null): void {
   if (!pre) {
     return;
   }
-  pre.textContent = preset ? JSON.stringify(preset, null, 2) : "";
+  const withGlobalChain = preset
+    ? {
+        ...stripLegacyGlobals(preset),
+        globalSignalChain: (preset as Preset & { globalSignalChain?: unknown }).globalSignalChain ?? uiState.globalSignalChain,
+      }
+    : null;
+  pre.textContent = withGlobalChain ? JSON.stringify(withGlobalChain, null, 2) : "";
 }
 
 function updatePresetModalReport(lines: string[]): void {
@@ -1102,13 +1162,14 @@ export function filterPresets(query: string): void {
 
 async function loadPresetMetadata(presetId: string): Promise<Preset> {
   if (uiState.presetCache.has(presetId)) {
-    return clonePreset(uiState.presetCache.get(presetId) ?? null) as Preset;
+    return stripLegacyGlobals(clonePreset(uiState.presetCache.get(presetId) ?? null) as Preset);
   }
 
   const localPreset = uiState.presets.find((preset) => preset.id === presetId);
   if (localPreset) {
-    uiState.presetCache.set(localPreset.id, localPreset);
-    return clonePreset(localPreset) as Preset;
+    const cleaned = stripLegacyGlobals(localPreset);
+    uiState.presetCache.set(localPreset.id, cleaned);
+    return clonePreset(cleaned) as Preset;
   }
 
   if (!REMOTE_BASE_URL) {
@@ -1127,8 +1188,9 @@ async function loadPresetMetadata(presetId: string): Promise<Preset> {
     throw new Error(`Preset ${presetId} not found`);
   }
 
-  uiState.presetCache.set(preset.id, preset);
-  return clonePreset(preset) as Preset;
+  const cleaned = stripLegacyGlobals(preset as Preset);
+  uiState.presetCache.set(cleaned.id, cleaned);
+  return clonePreset(cleaned) as Preset;
 }
 
 async function enrichAttachment(attachment: Attachment): Promise<Attachment> {
@@ -1162,11 +1224,14 @@ export async function applyPresetFromLibrary(presetId: string): Promise<void> {
     clearNotification();
     const preset = await loadPresetMetadata(presetId);
     const attachments = await Promise.all((preset.attachments ?? []).map(enrichAttachment));
+    const resolvedChain = resolveGlobalSignalChain(preset);
     const presetPayload: Preset = {
-      ...preset,
+      ...stripLegacyGlobals(preset),
       attachments,
+      globalSignalChain: resolvedChain,
     };
 
+    uiState.globalSignalChain = resolvedChain;
     uiState.presetCache.set(presetPayload.id, clonePreset(presetPayload));
     uiState.activePresetId = presetPayload.id;
     setActivePresetSnapshot(presetPayload);
@@ -1189,14 +1254,15 @@ export async function applyPresetFromLibrary(presetId: string): Promise<void> {
 export function savePresetToLocalStorage(preset: Preset): void {
   try {
     const savedPresets = JSON.parse(localStorage.getItem("guitarfx_user_presets") || "[]") as Preset[];
-    const existingIndex = savedPresets.findIndex((p) => p.id === preset.id);
+    const cleanedPreset = stripLegacyGlobals(preset);
+    const existingIndex = savedPresets.findIndex((p) => p.id === cleanedPreset.id);
     if (existingIndex >= 0) {
-      savedPresets[existingIndex] = preset;
+      savedPresets[existingIndex] = cleanedPreset;
     } else {
-      savedPresets.push(preset);
+      savedPresets.push(cleanedPreset);
     }
     localStorage.setItem("guitarfx_user_presets", JSON.stringify(savedPresets));
-    console.log(`Preset '${preset.name}' saved to localStorage`);
+    console.log(`Preset '${cleanedPreset.name}' saved to localStorage`);
   } catch (error) {
     console.error("Failed to save preset to localStorage", error);
   }
@@ -1205,8 +1271,9 @@ export function savePresetToLocalStorage(preset: Preset): void {
 export function loadPresetsFromLocalStorage(): Preset[] {
   try {
     const savedPresets = JSON.parse(localStorage.getItem("guitarfx_user_presets") || "[]") as Preset[];
-    console.log(`Loaded ${savedPresets.length} user presets from localStorage`);
-    return savedPresets;
+    const cleaned = savedPresets.map((preset) => stripLegacyGlobals(preset));
+    console.log(`Loaded ${cleaned.length} user presets from localStorage`);
+    return cleaned;
   } catch (error) {
     console.error("Failed to load presets from localStorage", error);
     return [];
@@ -1492,6 +1559,29 @@ export function closeSavePresetModal(): void {
   }
 }
 
+export function createDefaultPreset(): void {
+  const newPreset = createEmptyPresetV2();
+  (newPreset as Preset & { globalSignalChain?: unknown }).globalSignalChain = uiState.globalSignalChain;
+  const activeFolderId = uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID;
+  const selectedFolderId = activeFolderId === PRESET_FOLDER_FAVORITES_ID ? PRESET_FOLDER_ALL_ID : activeFolderId;
+
+  savePresetToLocalStorage(newPreset);
+  uiState.presets.unshift(newPreset);
+  uiState.filteredPresets = uiState.presets.slice();
+  uiState.presetCache.set(newPreset.id, newPreset);
+  if (selectedFolderId) {
+    movePresetToFolder(newPreset.id, selectedFolderId);
+  }
+  uiState.activePresetId = newPreset.id;
+  populatePresetDropdown();
+  renderPresetUI(clonePreset(newPreset));
+  showNotification("Preset created", newPreset.name);
+  setActivePresetSnapshot(newPreset);
+  setActivePresetDraft(newPreset);
+  setPresetDirty(false);
+  updatePresetActionButtons();
+}
+
 export function saveCurrentPreset(): void {
   const modal = document.getElementById("save-preset-modal");
   const folderSelect = document.getElementById("preset-folder-select") as HTMLSelectElement | null;
@@ -1527,13 +1617,14 @@ export function saveCurrentPreset(): void {
     // Editing existing preset
     const existingPreset = uiState.presetCache.get(editingPresetId);
     if (existingPreset) {
-      const basePreset = cleanedPreset ?? existingPreset;
+      const basePreset = stripLegacyGlobals(cleanedPreset ?? existingPreset);
       const updatedPreset: Preset = {
         ...basePreset,
         name,
         category,
         description,
         attachments: baseAttachments,
+        globalSignalChain: uiState.globalSignalChain,
       };
 
       savePresetToLocalStorage(updatedPreset);
@@ -1557,7 +1648,7 @@ export function saveCurrentPreset(): void {
   }
 
   // Creating new preset
-  const basePreset = cleanedPreset ?? clonePreset(activePreset ?? ({} as Preset));
+  const basePreset = stripLegacyGlobals(cleanedPreset ?? clonePreset(activePreset ?? ({} as Preset)));
   const newPreset: Preset = {
     ...basePreset,
     id: `${Date.now()}`,
@@ -1565,6 +1656,7 @@ export function saveCurrentPreset(): void {
     category,
     description,
     attachments: baseAttachments,
+    globalSignalChain: uiState.globalSignalChain,
   };
 
   savePresetToLocalStorage(newPreset);
@@ -2132,6 +2224,7 @@ document.addEventListener("presetDirtyChanged", () => {
 // Initialize preset action buttons
 export function initializePresetActionButtons(): void {
   const editBtn = document.getElementById("preset-edit-btn");
+  const newBtn = document.getElementById("preset-new-btn");
   const saveBtn = document.getElementById("preset-save-btn");
   const deleteBtn = document.getElementById("preset-delete-btn");
   const exportBtn = document.getElementById("preset-export-btn");
@@ -2140,6 +2233,10 @@ export function initializePresetActionButtons(): void {
 
   if (editBtn) {
     editBtn.addEventListener("click", openEditPresetModal);
+  }
+
+  if (newBtn) {
+    newBtn.addEventListener("click", createDefaultPreset);
   }
 
   if (saveBtn) {

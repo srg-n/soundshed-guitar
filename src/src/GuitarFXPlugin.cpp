@@ -2649,6 +2649,14 @@ namespace guitarfx
     {
       HandleSetParameterRequest(payload);
     }
+    else if (type == "setGlobalChainParam")
+    {
+      HandleSetGlobalChainParamRequest(payload);
+    }
+    else if (type == "getGlobalChain")
+    {
+      SendGlobalChainStateToUI();
+    }
     else if (type == "loadModel")
     {
       HandleLoadModelRequest(payload);
@@ -2971,6 +2979,8 @@ namespace guitarfx
       {"clickTypes", std::move(clickTypes)}
     };
 
+    message["globalSignalChain"] = mPresetMixer.GetGlobalChainConfig();
+
     if (mActivePreset)
     {
       message["preset"] = nlohmann::json::parse(PresetStorage::SerializeToJson(*mActivePreset));
@@ -3089,6 +3099,14 @@ namespace guitarfx
       
       SendMessageToUI(perfMessage.dump());
     }
+  }
+
+  void GuitarFXPlugin::SendGlobalChainStateToUI()
+  {
+    nlohmann::json message;
+    message["type"] = "globalSignalChainChanged";
+    message["globalSignalChain"] = mPresetMixer.GetGlobalChainConfig();
+    SendMessageToUI(message.dump());
   }
 
   void GuitarFXPlugin::SendMetronomeStateToUI()
@@ -3568,6 +3586,132 @@ namespace guitarfx
       // Save settings to persist parameter changes across sessions
       SaveAppSettings();
     }
+  }
+
+  void GuitarFXPlugin::HandleSetGlobalChainParamRequest(const nlohmann::json &payload)
+  {
+    const auto pathIt = payload.find("paramPath");
+    if (pathIt == payload.end() || !pathIt->is_string())
+    {
+      ReportErrorToUI("Invalid global chain update", "Missing paramPath");
+      return;
+    }
+
+    const auto valueIt = payload.find("value");
+    if (valueIt == payload.end() || (!valueIt->is_boolean() && !valueIt->is_number()))
+    {
+      ReportErrorToUI("Invalid global chain update", "Missing value");
+      return;
+    }
+
+    const std::string path = pathIt->get<std::string>();
+    const bool boolValue = valueIt->is_boolean() ? valueIt->get<bool>() : (valueIt->get<double>() != 0.0);
+    const double numValue = valueIt->is_number() ? valueIt->get<double>() : (boolValue ? 1.0 : 0.0);
+
+    if (path == "preChainGraph.global_gate.enabled")
+    {
+      mPresetMixer.SetGlobalGateEnabled(boolValue);
+    }
+    else if (path == "preChainGraph.global_gate.params.threshold")
+    {
+      mPresetMixer.SetGlobalGateThreshold(numValue);
+    }
+    else if (path == "preChainGraph.global_gate.params.attack")
+    {
+      mPresetMixer.SetGlobalGateAttack(numValue);
+    }
+    else if (path == "preChainGraph.global_gate.params.hold")
+    {
+      mPresetMixer.SetGlobalGateHold(numValue);
+    }
+    else if (path == "preChainGraph.global_gate.params.release")
+    {
+      mPresetMixer.SetGlobalGateRelease(numValue);
+    }
+    else if (path == "preChainGraph.global_transpose.enabled")
+    {
+      mPresetMixer.SetGlobalTransposeEnabled(boolValue);
+    }
+    else if (path == "preChainGraph.global_transpose.params.semitones")
+    {
+      mPresetMixer.SetGlobalTranspose(static_cast<int>(std::round(numValue)));
+    }
+    else if (path == "postChainGraph.global_eq.enabled")
+    {
+      mPresetMixer.SetGlobalEQEnabled(boolValue);
+    }
+    else if (path == "postChainGraph.global_eq.params.lowGain")
+    {
+      mPresetMixer.SetGlobalEQBandGain(0, numValue);
+    }
+    else if (path == "postChainGraph.global_eq.params.lowMidGain")
+    {
+      mPresetMixer.SetGlobalEQBandGain(1, numValue);
+    }
+    else if (path == "postChainGraph.global_eq.params.highMidGain")
+    {
+      mPresetMixer.SetGlobalEQBandGain(2, numValue);
+    }
+    else if (path == "postChainGraph.global_eq.params.highGain")
+    {
+      mPresetMixer.SetGlobalEQBandGain(3, numValue);
+    }
+    else if (path == "postChainGraph.global_eq.params.lowFreq")
+    {
+      mPresetMixer.SetGlobalEQBandFrequency(0, numValue);
+    }
+    else if (path == "postChainGraph.global_eq.params.lowMidFreq")
+    {
+      mPresetMixer.SetGlobalEQBandFrequency(1, numValue);
+    }
+    else if (path == "postChainGraph.global_eq.params.highMidFreq")
+    {
+      mPresetMixer.SetGlobalEQBandFrequency(2, numValue);
+    }
+    else if (path == "postChainGraph.global_eq.params.highFreq")
+    {
+      mPresetMixer.SetGlobalEQBandFrequency(3, numValue);
+    }
+    else if (path == "postChainGraph.global_eq.params.lowMidQ")
+    {
+      mPresetMixer.SetGlobalEQBandQ(1, numValue);
+    }
+    else if (path == "postChainGraph.global_eq.params.highMidQ")
+    {
+      mPresetMixer.SetGlobalEQBandQ(2, numValue);
+    }
+    else if (path == "postChainGraph.global_doubler.enabled")
+    {
+      mPresetMixer.SetGlobalDoublerEnabled(boolValue);
+    }
+    else if (path == "postChainGraph.global_doubler.params.time")
+    {
+      mPresetMixer.SetGlobalDoublerDelay(numValue);
+    }
+    else if (path == "postChainGraph.global_doubler.params.mix")
+    {
+      mPresetMixer.SetGlobalDoublerMix(numValue);
+    }
+    else if (path == "postChainGraph.global_doubler.params.detune")
+    {
+      mPresetMixer.SetGlobalDoublerDetune(numValue);
+    }
+    else if (path == "inputGain")
+    {
+      mPresetMixer.SetGlobalInputGain(numValue);
+    }
+    else if (path == "outputGain")
+    {
+      mPresetMixer.SetGlobalOutputGain(numValue);
+    }
+    else
+    {
+      std::cerr << "[GuitarFXPlugin] Unhandled global chain param path: " << path << std::endl;
+      return;
+    }
+
+    SaveAppSettings();
+    SendGlobalChainStateToUI();
   }
 
   void GuitarFXPlugin::HandleSignalTestRequest(const nlohmann::json &payload)

@@ -154,6 +154,13 @@
                 <circle cx="12" cy="12" r="1.5" />
               </svg>
             </button>
+            <button class="preset-action-btn" id="preset-new-btn" title="New Preset from Default">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="4" />
+                <line x1="12" y1="7" x2="12" y2="17" />
+                <line x1="7" y1="12" x2="17" y2="12" />
+              </svg>
+            </button>
             <button class="preset-action-btn" id="preset-edit-btn" title="Edit Preset">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -450,6 +457,10 @@
                 <button id="open-audio-preferences" type="button">Open Audio Preferences</button>
               </div>
               <div class="settings-hint">Opens the native audio/MIDI device settings dialog for the standalone app.</div>
+               <div class="settings-row">
+                <label for="run-signal-test">Signal Path Test</label>
+                <button id="run-signal-test" type="button">Run Signal Path Test</button>
+              </div>
             </div>
             <div class="settings-section">
               <h3>Interface Calibration</h3>
@@ -527,6 +538,7 @@
                   <span class="toggle-slider"></span>
                 </label>
               </div>
+             
               <div class="settings-hint">Continuously report signal levels, headroom, and clipping for chain input/output
                 and nodes.</div>
             </div>

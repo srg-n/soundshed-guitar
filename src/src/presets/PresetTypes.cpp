@@ -1,9 +1,39 @@
 #include "presets/PresetTypes.h"
+#include "dsp/EffectRegistry.h"
 
 namespace guitarfx
 {
+namespace
+{
+  void ApplyDefaultParamsFromRegistry(GraphNode& node)
+  {
+    auto info = EffectRegistry::Instance().GetTypeInfo(node.type);
+    if (!info.has_value())
+    {
+      return;
+    }
+
+    for (const auto& param : info->parameters)
+    {
+      if (node.params.find(param.id) == node.params.end())
+      {
+        node.params[param.id] = param.defaultValue;
+      }
+    }
+  }
+}
 
 SignalGraph GlobalSignalChainConfig::BuildPreChainGraph() const
+{
+  return preChainGraph;
+}
+
+SignalGraph GlobalSignalChainConfig::BuildPostChainGraph() const
+{
+  return postChainGraph;
+}
+
+SignalGraph GlobalSignalChainConfig::BuildDefaultPreChainGraph()
 {
   SignalGraph graph;
 
@@ -20,11 +50,8 @@ SignalGraph GlobalSignalChainConfig::BuildPreChainGraph() const
   gateNode.type = "dynamics_gate";
   gateNode.category = "dynamics";
   gateNode.label = "Noise Gate";
-  gateNode.enabled = preChain.gateEnabled;
-  gateNode.params["threshold"] = preChain.gateThreshold;
-  gateNode.params["attack"] = preChain.gateAttack;
-  gateNode.params["hold"] = preChain.gateHold;
-  gateNode.params["release"] = preChain.gateRelease;
+  gateNode.enabled = false;
+  ApplyDefaultParamsFromRegistry(gateNode);
   graph.nodes.push_back(gateNode);
 
   // Transpose (Resampled)
@@ -33,8 +60,8 @@ SignalGraph GlobalSignalChainConfig::BuildPreChainGraph() const
   transposeNode.type = "transpose";
   transposeNode.category = "modulation";
   transposeNode.label = "Transpose";
-  transposeNode.enabled = preChain.transposeEnabled;
-  transposeNode.params["semitones"] = static_cast<double>(preChain.transposeSemitones);
+  transposeNode.enabled = false;
+  ApplyDefaultParamsFromRegistry(transposeNode);
   graph.nodes.push_back(transposeNode);
 
   // Output node
@@ -52,7 +79,7 @@ SignalGraph GlobalSignalChainConfig::BuildPreChainGraph() const
   return graph;
 }
 
-SignalGraph GlobalSignalChainConfig::BuildPostChainGraph() const
+SignalGraph GlobalSignalChainConfig::BuildDefaultPostChainGraph()
 {
   SignalGraph graph;
 
@@ -69,17 +96,8 @@ SignalGraph GlobalSignalChainConfig::BuildPostChainGraph() const
   eqNode.type = "eq_parametric";
   eqNode.category = "eq";
   eqNode.label = "Global EQ";
-  eqNode.enabled = postChain.eqEnabled;
-  eqNode.params["lowGain"] = postChain.eqLowGain;
-  eqNode.params["lowFreq"] = postChain.eqLowFreq;
-  eqNode.params["lowMidGain"] = postChain.eqLowMidGain;
-  eqNode.params["lowMidFreq"] = postChain.eqLowMidFreq;
-  eqNode.params["lowMidQ"] = postChain.eqLowMidQ;
-  eqNode.params["highMidGain"] = postChain.eqHighMidGain;
-  eqNode.params["highMidFreq"] = postChain.eqHighMidFreq;
-  eqNode.params["highMidQ"] = postChain.eqHighMidQ;
-  eqNode.params["highGain"] = postChain.eqHighGain;
-  eqNode.params["highFreq"] = postChain.eqHighFreq;
+  eqNode.enabled = false;
+  ApplyDefaultParamsFromRegistry(eqNode);
   graph.nodes.push_back(eqNode);
 
   // Doubler
@@ -88,10 +106,8 @@ SignalGraph GlobalSignalChainConfig::BuildPostChainGraph() const
   doublerNode.type = "delay_doubler";
   doublerNode.category = "modulation";
   doublerNode.label = "Doubler";
-  doublerNode.enabled = postChain.doublerEnabled;
-  doublerNode.params["time"] = postChain.doublerDelay;
-  doublerNode.params["mix"] = postChain.doublerMix;
-  doublerNode.params["detune"] = postChain.doublerDetune;
+  doublerNode.enabled = false;
+  ApplyDefaultParamsFromRegistry(doublerNode);
   graph.nodes.push_back(doublerNode);
 
   // Output node
@@ -112,7 +128,8 @@ SignalGraph GlobalSignalChainConfig::BuildPostChainGraph() const
 GlobalSignalChainConfig GlobalSignalChainConfig::CreateDefault()
 {
   GlobalSignalChainConfig config;
-  // All defaults are already set in the struct definition
+  config.preChainGraph = BuildDefaultPreChainGraph();
+  config.postChainGraph = BuildDefaultPostChainGraph();
   return config;
 }
 
