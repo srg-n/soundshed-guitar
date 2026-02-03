@@ -227,6 +227,7 @@ export function renderPresetList(
     onMoveFolder: (folderId: string, targetParentId: string) => void;
     getRating: (presetId: string) => number | null;
     onRate: (presetId: string, rating: number | null) => void;
+    getFolderPath?: (presetId: string) => string | null;
     favoritesCount: number;
     favoritesActive: boolean;
     onSelectFavorites: () => void;
@@ -340,12 +341,23 @@ export function renderPresetList(
           return `<button class="preset-rating-star ${active}" data-rating="${value}" type="button">★</button>`;
         }).join("");
         const label = rating === null ? "Not Rated" : `${rating}/5`;
+        const folderPath = options?.getFolderPath?.(preset.id) ?? "";
+        const category = preset.category ?? "";
+        const metaParts = [
+          category
+            ? `<span class="preset-category-badge">${escapeHtml(category)}</span>`
+            : "",
+          folderPath
+            ? `<span class="preset-folder-path">${escapeHtml(folderPath)}</span>`
+            : "",
+        ].filter(Boolean).join("");
+
         return `
         <article class="preset-item ${preset.id === activePresetId ? "active" : ""}" data-id="${preset.id}" draggable="true">
           <header>
             <h3>${escapeHtml(preset.name)}</h3>
-            <span>${escapeHtml(preset.category ?? "")}</span>
           </header>
+          ${metaParts ? `<div class="preset-item-meta">${metaParts}</div>` : ""}
           <p>${escapeHtml(preset.description ?? "")}</p>
           <div class="preset-rating" data-preset-id="${preset.id}">
             <span class="preset-rating-label">${label}</span>

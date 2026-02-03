@@ -94,6 +94,36 @@
   flex: 1 1 260px;
 }
 
+.preset-library-export-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border-dark);
+  background: var(--overlay-light);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.preset-library-export-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.preset-library-export-btn:hover {
+  transform: translateY(-1px);
+  background: var(--overlay-medium);
+}
+
+.preset-library-export-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
 #preset-folder-name {
   flex: 1 1 180px;
 }
@@ -302,6 +332,29 @@
   margin: 0 0 4px 0;
   font-size: 13px;
   color: var(--text-primary);
+}
+
+.preset-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.preset-category-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--overlay-medium);
+  color: var(--text-secondary);
+}
+
+.preset-folder-path {
+  font-size: 10px;
+  color: var(--text-tertiary);
 }
 
 .preset-list .preset-item p {

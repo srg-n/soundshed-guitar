@@ -22,6 +22,7 @@ const presetSelector = document.getElementById("preset-selector");
 const presetLibraryPopover = document.getElementById("preset-library-popover");
 const presetFolderNameInput = document.getElementById("preset-folder-name") as HTMLInputElement | null;
 const presetFolderAddButton = document.getElementById("preset-folder-add");
+const presetExportFolderButton = document.getElementById("preset-export-folder-btn") as HTMLButtonElement | null;
 const setlistNameInput = document.getElementById("setlist-name-input") as HTMLInputElement | null;
 const setlistBankInput = document.getElementById("setlist-bank-input") as HTMLInputElement | null;
 const setlistAddButton = document.getElementById("setlist-add-btn");
@@ -650,6 +651,30 @@ function findFolderForPreset(folders: PresetFolder[], presetId: string): PresetF
   return undefined;
 }
 
+function findFolderPath(folders: PresetFolder[], targetId: string, trail: string[] = []): string[] | null {
+  for (const folder of folders) {
+    const nextTrail = [...trail, folder.name];
+    if (folder.id === targetId) {
+      return nextTrail;
+    }
+    const childTrail = findFolderPath(folder.children ?? [], targetId, nextTrail);
+    if (childTrail) {
+      return childTrail;
+    }
+  }
+  return null;
+}
+
+function getPresetFolderPath(presetId: string): string | null {
+  const folders = uiState.presetFolders ?? [];
+  const folder = findFolderForPreset(folders, presetId);
+  if (!folder) {
+    return null;
+  }
+  const path = findFolderPath(folders, folder.id);
+  return path ? path.join(" > ") : folder.name;
+}
+
 function populatePresetFolderSelect(select: HTMLSelectElement | null, selectedId?: string | null): void {
   if (!select) return;
 
@@ -999,6 +1024,35 @@ function collectPresetIds(folder: PresetFolder): Set<string> {
   return ids;
 }
 
+function getPresetsForFolderId(folderId: string): Preset[] {
+  let presets = uiState.presets.slice();
+  if (folderId === PRESET_FOLDER_FAVORITES_ID) {
+    const favorites = loadFavoritePresetIds();
+    presets = presets.filter((preset) => favorites.has(preset.id));
+    return presets;
+  }
+  if (folderId !== PRESET_FOLDER_ALL_ID) {
+    const folder = findFolderById(uiState.presetFolders ?? [], folderId);
+    if (!folder) {
+      return [];
+    }
+    const allowedIds = collectPresetIds(folder);
+    presets = presets.filter((preset) => allowedIds.has(preset.id));
+  }
+  return presets;
+}
+
+function getPresetFolderExportName(folderId: string): string {
+  if (folderId === PRESET_FOLDER_ALL_ID) {
+    return "All-Presets";
+  }
+  if (folderId === PRESET_FOLDER_FAVORITES_ID) {
+    return "Favorite-Presets";
+  }
+  const folder = findFolderById(uiState.presetFolders ?? [], folderId);
+  return folder?.name || "Preset-Folder";
+}
+
 function getFilteredPresets(query: string): Preset[] {
   const normalized = query.trim().toLowerCase();
   const activeFolderId = uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID;
@@ -1027,11 +1081,11 @@ function getFilteredPresets(query: string): Preset[] {
   });
 }
 
-function createFolder(name: string, parentId?: string): void {
+function createFolder(name: string, parentId?: string): boolean {
   const trimmed = name.trim();
   if (!trimmed) {
     showNotification("Folder name required", "Enter a folder name to create.");
-    return;
+    return false;
   }
 
   const newFolder: PresetFolder = {
@@ -1055,6 +1109,8 @@ function createFolder(name: string, parentId?: string): void {
 
   persistPresetFolders();
   setActivePresetFolder(newFolder.id);
+  showNotification("Folder created", trimmed);
+  return true;
 }
 
 function addPresetToImportedFolder(presetId: string): void {
@@ -1130,6 +1186,7 @@ function renderPresetUI(preset: Preset | null): void {
     onMoveFolder: movePresetFolder,
     getRating: getPresetRating,
     onRate: setPresetRating,
+    getFolderPath: getPresetFolderPath,
     favoritesCount: loadFavoritePresetIds().size,
     favoritesActive: uiState.activePresetFolderId === PRESET_FOLDER_FAVORITES_ID,
     onSelectFavorites: () => setActivePresetFolder(PRESET_FOLDER_FAVORITES_ID),
@@ -1147,6 +1204,7 @@ function renderPresetUI(preset: Preset | null): void {
   });
   bindDemoAudioControls();
   renderSignalPathBar();
+  updatePresetFolderExportButtons();
 }
 
 export function renderActivePreset(): void {
@@ -1510,13 +1568,20 @@ export function initializePresetControls(): void {
 
   if (presetFolderAddButton) {
     presetFolderAddButton.addEventListener("click", () => {
-      const name = presetFolderNameInput?.value ?? "";
+      let name = presetFolderNameInput?.value ?? "";
+      if (!name.trim()) {
+        name = window.prompt("Folder name", "") ?? "";
+      }
       const parentId = uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID;
-      createFolder(name, parentId);
-      if (presetFolderNameInput) {
+      const created = createFolder(name, parentId);
+      if (created && presetFolderNameInput) {
         presetFolderNameInput.value = "";
       }
     });
+  }
+
+  if (presetExportFolderButton) {
+    presetExportFolderButton.addEventListener("click", () => void exportSelectedPresetCollectionArchive());
   }
 }
 
@@ -1729,6 +1794,14 @@ type PresetArchive = {
   blends?: BlendDefinition[];
 };
 
+type PresetCollectionArchive = {
+  formatVersion: number;
+  createdAt: string;
+  presets: Preset[];
+  resources: PresetArchiveResource[];
+  blends?: BlendDefinition[];
+};
+
 function getLibraryResource(resourceType: string, resourceId: string): LibraryResource | undefined {
   const resources = uiState.resourceLibrary[resourceType] ?? [];
   return resources.find((res) => res.id === resourceId);
@@ -1802,6 +1875,120 @@ function collectPresetResourceRefs(preset: Preset, blendDefs: BlendDefinition[])
   });
 
   return refs;
+}
+
+async function exportPresetCollectionArchive(presets: Preset[], archiveName: string): Promise<void> {
+  if (!presets.length) {
+    showNotification("Export failed", "No presets to export");
+    return;
+  }
+
+  const zipLib = window.JSZip;
+  if (!zipLib) {
+    showNotification("Export failed", "Archive library not available");
+    return;
+  }
+
+  const zip = new zipLib();
+  const resourcesFolder = zip.folder("resources");
+  if (!resourcesFolder) {
+    showNotification("Export failed", "Unable to create archive");
+    return;
+  }
+
+  const blendIds = new Set<string>();
+  presets.forEach((preset) => {
+    collectPresetBlendIds(preset).forEach((id) => blendIds.add(id));
+  });
+  const blendDefs = (uiState.blendLibrary ?? []).filter((blend) => blendIds.has(blend.id));
+  const refMap = new Map<string, ResourceRef>();
+  presets.forEach((preset) => {
+    collectPresetResourceRefs(preset, blendDefs).forEach((ref) => {
+      const resourceType = ref.resourceType ?? ref.type ?? "";
+      const resourceId = ref.resourceId ?? ref.id ?? "";
+      if (!resourceType || !resourceId) {
+        return;
+      }
+      refMap.set(`${resourceType}:${resourceId}`, ref);
+    });
+  });
+
+  const exportResources: PresetArchiveResource[] = [];
+  let missingCount = 0;
+
+  for (const ref of refMap.values()) {
+    const resourceType = ref.resourceType ?? ref.type ?? "";
+    const resourceId = ref.resourceId ?? ref.id ?? "";
+    if (!resourceType || !resourceId) {
+      continue;
+    }
+    const resource = getLibraryResource(resourceType, resourceId);
+    if (!resource) {
+      missingCount += 1;
+      continue;
+    }
+    const fileName = buildArchiveFileName(resource, resourceType);
+    const data = await requestResourceData(resourceType, resourceId);
+    if (!data) {
+      missingCount += 1;
+      continue;
+    }
+    const hash = await sha256HexFromBase64(data);
+    resourcesFolder.file(fileName, data, { base64: true });
+    exportResources.push({
+      id: resource.id,
+      name: resource.name,
+      category: resource.category,
+      type: resourceType,
+      fileName,
+      hash,
+    });
+  }
+
+  const exportPresets = presets.map((preset) => clonePreset(uiState.presetCache.get(preset.id) ?? preset));
+  const archive: PresetCollectionArchive = {
+    formatVersion: 1,
+    createdAt: new Date().toISOString(),
+    presets: exportPresets,
+    resources: exportResources,
+    blends: blendDefs,
+  };
+
+  zip.file("presets.json", JSON.stringify(archive, null, 2));
+  const blob = await zip.generateAsync({ type: "blob" });
+  const buffer = await blob.arrayBuffer();
+  const data = arrayBufferToBase64(buffer);
+
+  if (missingCount > 0) {
+    showNotification("Export warning", `${missingCount} resources could not be read`);
+  }
+
+  postMessage({
+    type: "savePresetArchive",
+    fileName: `${sanitizeFilename(archiveName)}.soundshed.zip`,
+    data,
+  });
+}
+
+async function exportActivePresetFolderArchive(): Promise<void> {
+  const activeFolderId = uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID;
+  const presets = getPresetsForFolderId(activeFolderId);
+  const archiveName = getPresetFolderExportName(activeFolderId);
+  await exportPresetCollectionArchive(presets, archiveName);
+}
+
+async function exportAllPresetsArchive(): Promise<void> {
+  const presets = uiState.presets.slice();
+  await exportPresetCollectionArchive(presets, "All-Presets");
+}
+
+async function exportSelectedPresetCollectionArchive(): Promise<void> {
+  const activeFolderId = uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID;
+  if (activeFolderId === PRESET_FOLDER_ALL_ID) {
+    await exportAllPresetsArchive();
+    return;
+  }
+  await exportActivePresetFolderArchive();
 }
 
 async function exportCurrentPresetArchive(): Promise<void> {
@@ -2214,6 +2401,27 @@ export function updatePresetActionButtons(): void {
   if (exportBtn) {
     exportBtn.disabled = !uiState.activePresetId;
     exportBtn.title = uiState.activePresetId ? "Export Preset" : "No preset to export";
+  }
+}
+
+function updatePresetFolderExportButtons(): void {
+  const activeFolderId = uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID;
+  const folderPresets = getPresetsForFolderId(activeFolderId);
+  const folderName = activeFolderId === PRESET_FOLDER_ALL_ID
+    ? "All Presets"
+    : activeFolderId === PRESET_FOLDER_FAVORITES_ID
+      ? "Favourites"
+      : (findFolderById(uiState.presetFolders ?? [], activeFolderId)?.name ?? "Folder");
+
+  if (presetExportFolderButton) {
+    const isAll = activeFolderId === PRESET_FOLDER_ALL_ID;
+    const count = isAll ? uiState.presets.length : folderPresets.length;
+    const title = count
+      ? (isAll ? `Export all presets (${count})` : `Export ${folderName} (${count})`)
+      : (isAll ? "No presets to export" : `No presets in ${folderName}`);
+    presetExportFolderButton.toggleAttribute("disabled", count === 0);
+    presetExportFolderButton.title = title;
+    presetExportFolderButton.setAttribute("aria-label", title);
   }
 }
 
