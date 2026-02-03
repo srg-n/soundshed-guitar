@@ -391,6 +391,22 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
+    type: "synth_saw",
+    displayName: "Synth Saw",
+    category: "synth",
+    requiresResource: false,
+    parameters: [
+      { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "amount" },
+      { key: "attack", name: "Attack", default: 5, min: 0.1, max: 100, unit: "ms" },
+      { key: "release", name: "Release", default: 100, min: 10, max: 1000, unit: "ms" },
+      { key: "detune", name: "Detune", default: 0, min: -100, max: 100, unit: "cents" },
+      { key: "octaveShift", name: "Octave", default: 0, min: -2, max: 2, unit: "oct", step: 1 },
+      { key: "glide", name: "Glide", default: 20, min: 0, max: 500, unit: "ms" },
+      { key: "outputGain", name: "Output", default: 0, min: -24, max: 12, unit: "dB" },
+      { key: "gate", name: "Gate", default: -60, min: -80, max: 0, unit: "dB" }
+    ]
+  },
+  {
     type: "reverb_room",
     displayName: "Room Reverb",
     category: "reverb",

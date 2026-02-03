@@ -35,6 +35,7 @@ const FX_CATEGORIES: FxCategory[] = [
   { id: "cab", name: "Cabinets", color: "#a86830" },
   { id: "eq", name: "Equalizers", color: "#48a8e0" },
   { id: "modulation", name: "Modulation", color: "#9048e0" },
+  { id: "synth", name: "Synth", color: "#7a8a02" },
   { id: "delay", name: "Delay", color: "#48e0a8" },
   { id: "reverb", name: "Reverb", color: "#4878e0" },
   { id: "utility", name: "Utility", color: "#808080" },
