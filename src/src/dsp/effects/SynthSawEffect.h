@@ -318,7 +318,9 @@ namespace guitarfx
 
           // Clamp frequency to reasonable range to avoid aliasing at high freq
           // and subsonic rumble at low freq
-          freq = std::clamp(freq, kMinFrequency, kMaxFrequency);
+          // Note: kMinOutputFrequency (20 Hz) is lower than kMinFrequency (50 Hz)
+          // to allow octave-down shifting from detected pitches
+          freq = std::clamp(freq, kMinOutputFrequency, kMaxFrequency);
 
           // Phase accumulator: increments by (freq/sampleRate) each sample
           // When phase >= 1.0, it wraps back, creating the sawtooth cycle
@@ -433,8 +435,9 @@ namespace guitarfx
 
   private:
     static constexpr double kPi = 3.14159265358979323846;
-    static constexpr double kMinFrequency = 50.0;    // ~G1
-    static constexpr double kMaxFrequency = 2000.0;  // ~B6
+    static constexpr double kMinFrequency = 50.0;       // ~G1 - minimum for pitch detection
+    static constexpr double kMinOutputFrequency = 20.0; // ~E0 - minimum for synth output (allows -2 octave shift)
+    static constexpr double kMaxFrequency = 2000.0;     // ~B6
     static constexpr float kConfidenceThreshold = 0.7f;
     static constexpr float kOnsetThreshold = 0.15f;  // Envelope rise threshold for onset
     static constexpr size_t kStableFramesForLock = 3; // Frames needed for stable pitch

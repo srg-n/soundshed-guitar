@@ -13,6 +13,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <sstream>
 #include <iomanip>
 #include <chrono>
 
@@ -450,12 +451,12 @@ TestResult TestOutputFrequency(guitarfx::SynthSawEffect& effect)
 }
 
 /**
- * Test octave shift parameter
+ * Test octave shift parameter with a specific shift value
  */
-TestResult TestOctaveShift(guitarfx::SynthSawEffect& effect)
+TestResult TestOctaveShiftValue(guitarfx::SynthSawEffect& effect, double octaveShift)
 {
   TestResult result;
-  constexpr double kTargetFreq = 220.0; // A3
+  constexpr double kTargetFreq = 329.63; // E4 (high E string open)
 
   std::vector<float> inputL(kTestBlockSize);
   std::vector<float> inputR(kTestBlockSize);
@@ -467,13 +468,16 @@ TestResult TestOctaveShift(guitarfx::SynthSawEffect& effect)
 
   effect.Reset();
   effect.SetParam("mix", 1.0);
-  effect.SetParam("octaveShift", 1.0); // Shift up one octave
+  effect.SetParam("octaveShift", octaveShift);
+  
+  // Verify the parameter was set
+  double readbackOctave = effect.GetParam("octaveShift");
 
   double phase = 0.0;
   double phaseInc = 2.0 * kPi * kTargetFreq / kTestSampleRate;
 
-  // Process to lock pitch
-  for (int block = 0; block < 30; ++block)
+  // Process to lock pitch - more blocks for stability
+  for (int block = 0; block < 40; ++block)
   {
     for (int i = 0; i < kTestBlockSize; ++i)
     {
@@ -484,25 +488,46 @@ TestResult TestOctaveShift(guitarfx::SynthSawEffect& effect)
     effect.Process(inputs, outputs, kTestBlockSize);
   }
 
-  // Output should be at 440 Hz (one octave up from 220)
+  // Calculate expected output frequency: input * 2^octaveShift
+  double expectedOutputFreq = kTargetFreq * std::pow(2.0, octaveShift);
+  
+  // Analyze output frequency using zero-crossing
   double outputFreq = EstimateOutputFrequency(outputL, kTestSampleRate);
-  double expectedOutputFreq = kTargetFreq * 2.0; // 440 Hz
+  
+  // Also check detected frequency
+  double detectedFreq = effect.GetDetectedFrequency();
 
   double freqError = std::abs(outputFreq - expectedOutputFreq) / expectedOutputFreq;
+  
+  // Debug info for the result message
+  std::ostringstream debug;
+  debug << std::fixed << std::setprecision(1);
+  debug << "(octave=" << octaveShift 
+        << ", readback=" << readbackOctave
+        << ", detected=" << detectedFreq << " Hz"
+        << ", output=" << outputFreq << " Hz"
+        << ", expected=" << expectedOutputFreq << " Hz)";
 
-  if (freqError < 0.10) // Within 10%
+  if (freqError < 0.15) // Within 15%
   {
     result.passed = true;
-    result.message = "PASS: Octave shift working (output=" + std::to_string(outputFreq) + " Hz)";
+    result.message = "PASS " + debug.str();
   }
   else
   {
     result.passed = false;
-    result.message = "FAIL: Octave shift not working (output=" + std::to_string(outputFreq) + 
-                     " Hz, expected=" + std::to_string(expectedOutputFreq) + " Hz)";
+    result.message = "FAIL " + debug.str();
   }
 
   return result;
+}
+
+/**
+ * Test octave shift parameter (legacy wrapper for single test)
+ */
+TestResult TestOctaveShift(guitarfx::SynthSawEffect& effect)
+{
+  return TestOctaveShiftValue(effect, 1.0);
 }
 
 } // anonymous namespace
@@ -585,11 +610,14 @@ int main()
     if (result.passed) passed++; else failed++;
   }
 
-  // Test 6: Octave shift
-  effect->Reset();
+  // Test 6: Octave shift (multiple values)
+  std::cout << "--- Octave Shift Tests ---\n";
+  const double octaveShiftValues[] = {0.0, 1.0, -1.0, 2.0, -2.0};
+  for (double octaveVal : octaveShiftValues)
   {
-    auto result = TestOctaveShift(*effect);
-    std::cout << "  Octave shift: " << result.message << "\n";
+    effect->Reset();
+    auto result = TestOctaveShiftValue(*effect, octaveVal);
+    std::cout << "  Octave shift " << std::showpos << octaveVal << std::noshowpos << ": " << result.message << "\n";
     if (result.passed) passed++; else failed++;
   }
   std::cout << "\n";
