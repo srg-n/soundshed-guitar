@@ -178,19 +178,19 @@
 .tone3000-details-tag {
   padding: 4px 8px;
   border-radius: 999px;
-  background: var(--bg-dark-tertiary);
-  border: 1px solid var(--border-dark-medium);
+  background: var(--bg-input);
+  border: 1px solid var(--border-medium);
   font-size: 10px;
-  color: var(--text-dark-primary);
+  color: var(--text-primary);
 }
 
 .tone3000-details-tag-empty {
-  color: var(--text-dark-muted);
+  color: var(--text-secondary);
 }
 
 .tone3000-details-status {
   font-size: 11px;
-  color: var(--text-dark-muted);
+  color: var(--text-secondary);
   margin-bottom: 6px;
 }
 
@@ -217,7 +217,7 @@
 
 .tone3000-details-progress {
   font-size: 11px;
-  color: var(--text-dark-muted);
+  color: var(--text-secondary);
   margin-bottom: 6px;
 }
 
@@ -229,7 +229,7 @@
   flex-direction: column;
   gap: 4px;
   font-size: 11px;
-  color: var(--text-dark-secondary);
+  color: var(--text-secondary);
   max-height: 220px;
   overflow-y: auto;
 }
@@ -240,8 +240,8 @@
   gap: 8px;
   padding: 6px 8px;
   border-radius: 6px;
-  background: var(--bg-dark-tertiary);
-  border: 1px solid var(--border-dark-medium);
+  background: var(--bg-input);
+  border: 1px solid var(--border-medium);
   cursor: pointer;
 }
 

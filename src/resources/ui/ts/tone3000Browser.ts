@@ -13,6 +13,7 @@ const PAGE_SIZE = 25;
 const categoryListEl = document.getElementById("tone3000-category-list");
 const resultsEl = document.getElementById("tone3000-results");
 const searchInputEl = document.getElementById("tone3000-search-input") as HTMLInputElement | null;
+const sortSelectEl = document.getElementById("tone3000-sort-select") as HTMLSelectElement | null;
 const searchButtonEl = document.getElementById("tone3000-search-button");
 const paginationEl = document.getElementById("tone3000-pagination");
 const prevButtonEl = document.getElementById("tone3000-prev-btn") as HTMLButtonElement | null;
@@ -41,6 +42,7 @@ interface Tone3000Tone {
   gear?: string;
   platform?: string;
   models_count?: number;
+  downloads_count?: number;
   user?: { username?: string };
   images?: string[];
   tags?: Array<{ name?: string }>;
@@ -153,6 +155,7 @@ export function initTone3000Browser(): void {
       void runSearch();
     }
   });
+  sortSelectEl?.addEventListener("change", () => void runSearch());
 
   prevButtonEl?.addEventListener("click", () => {
     if (currentPage > 1) {
@@ -241,6 +244,16 @@ async function runSearch(page = 1): Promise<void> {
     }
     if (activeCategory.gear) {
       params.set("gear", activeCategory.gear);
+    }
+    const sortValue = sortSelectEl?.value ?? "popular";
+    if (sortValue === "popular") {
+      params.set("sort", "downloads-all-time");
+    } else if (sortValue === "recent") {
+      params.set("sort", "newest");
+    } else if (sortValue === "trending") {
+      params.set("sort", "trending");
+    } else if (sortValue === "name") {
+      params.set("sort", "best-match");
     }
 
     const response = await fetch(`${API_BASE}/tones/search?${params.toString()}`, {
@@ -378,6 +391,7 @@ function renderResults(tones: Tone3000Tone[]): void {
               <span>${escapeHtml(tone.gear ?? "")}</span>
               <span>${escapeHtml(tone.platform ?? "")}</span>
               <span>${modelCount} models</span>
+              <span>${tone.downloads_count ?? 0} downloads</span>
               <span>${escapeHtml(tone.user?.username ?? "")}</span>
               ${statusBadge}
             </div>
