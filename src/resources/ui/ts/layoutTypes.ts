@@ -11,8 +11,8 @@ export interface LayoutImageRef {
   imageId: string;
   /** Original filename for display */
   fileName?: string;
-  /** Full file:// URL for WebView access (set by C++ on import) */
-  fileUrl?: string;
+  /** Base64 data URL for WebView access (data:image/...) */
+  dataUrl?: string;
   /** Image type/category */
   type?: "background" | "knob" | "general";
 }

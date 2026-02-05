@@ -611,7 +611,7 @@ export function handleIncomingMessage(message: string): void {
     }
     case "layoutImageSelected": {
       console.log("[Messages] layoutImageSelected received:", payload);
-      const imgPayload = payload as { purpose?: string; imageId?: string; fileName?: string; fileUrl?: string; layerIndex?: number; paramKey?: string };
+      const imgPayload = payload as { purpose?: string; imageId?: string; fileName?: string; dataUrl?: string; layerIndex?: number; paramKey?: string };
       if (imgPayload.purpose && imgPayload.imageId && imgPayload.fileName) {
         // Add image to layout library so it can be resolved
         if (uiState.layoutLibrary) {
@@ -619,7 +619,7 @@ export function handleIncomingMessage(message: string): void {
           const imageEntry = { 
             imageId: imgPayload.imageId, 
             fileName: imgPayload.fileName, 
-            fileUrl: imgPayload.fileUrl,
+            dataUrl: imgPayload.dataUrl,
             type: imgPayload.purpose as "background" | "knob" | "general" 
           };
           if (existingIdx >= 0) {

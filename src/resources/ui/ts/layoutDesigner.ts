@@ -393,9 +393,9 @@ export class LayoutDesignerModal {
     // Check layout library for image
     const image = uiState.layoutLibrary?.images.find((img) => img.imageId === imageId);
     if (image) {
-      // Prefer file URL for direct access, fall back to relative path
-      if (image.fileUrl) {
-        return image.fileUrl;
+      // Prefer data URL (base64) for WebView access
+      if (image.dataUrl) {
+        return image.dataUrl;
       }
       if (image.fileName) {
         return `layout-images/${image.fileName}`;

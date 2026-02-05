@@ -5975,7 +5975,7 @@ namespace guitarfx
         }
       }
 
-      // Load image references from images subdirectory
+      // Load image references from images subdirectory and base64 encode
       const auto imagesDir = layoutsDir / "images";
       if (std::filesystem::exists(imagesDir))
       {
@@ -5986,10 +5986,28 @@ namespace guitarfx
             const auto ext = entry.path().extension().string();
             if (ext == ".png" || ext == ".jpg" || ext == ".jpeg")
             {
-              nlohmann::json imageRef;
-              imageRef["imageId"] = entry.path().stem().string();
-              imageRef["fileName"] = entry.path().filename().string();
-              library["images"].push_back(imageRef);
+              // Read and base64 encode the image
+              std::ifstream imageFile(entry.path(), std::ios::binary);
+              if (imageFile)
+              {
+                std::vector<std::uint8_t> imageData((std::istreambuf_iterator<char>(imageFile)),
+                                                     std::istreambuf_iterator<char>());
+                imageFile.close();
+
+                const std::string base64Data = EncodeBase64(imageData);
+                std::string mimeType = "image/png";
+                if (ext == ".jpg" || ext == ".jpeg")
+                {
+                  mimeType = "image/jpeg";
+                }
+                const std::string dataUrl = "data:" + mimeType + ";base64," + base64Data;
+
+                nlohmann::json imageRef;
+                imageRef["imageId"] = entry.path().stem().string();
+                imageRef["fileName"] = entry.path().filename().string();
+                imageRef["dataUrl"] = dataUrl;
+                library["images"].push_back(imageRef);
+              }
             }
           }
         }
@@ -6101,8 +6119,29 @@ namespace guitarfx
       std::filesystem::copy_file(selectedPath, destPath, std::filesystem::copy_options::overwrite_existing);
       AppendSessionLog("Layout image copied: " + destPath.generic_string());
 
-      // Build file:// URL for WebView access
-      const std::string fileUrl = "file:///" + destPath.generic_string();
+      // Read image file and base64 encode for WebView
+      std::ifstream imageFile(destPath, std::ios::binary);
+      if (!imageFile)
+      {
+        ReportErrorToUI("Image import failed", "Failed to read copied image file");
+        return;
+      }
+      std::vector<std::uint8_t> imageData((std::istreambuf_iterator<char>(imageFile)),
+                                           std::istreambuf_iterator<char>());
+      imageFile.close();
+
+      const std::string base64Data = EncodeBase64(imageData);
+      
+      // Determine MIME type from extension
+      std::string mimeType = "image/png";
+      const auto ext = selectedPath.extension().string();
+      if (ext == ".jpg" || ext == ".jpeg")
+      {
+        mimeType = "image/jpeg";
+      }
+      
+      // Build data URL for WebView
+      const std::string dataUrl = "data:" + mimeType + ";base64," + base64Data;
 
       // Send image reference back to UI
       SendMessageToUI(nlohmann::json{
@@ -6110,7 +6149,7 @@ namespace guitarfx
         {"purpose", purpose},
         {"imageId", imageId},
         {"fileName", destFilename},
-        {"fileUrl", fileUrl},
+        {"dataUrl", dataUrl},
         {"layerIndex", layerIndex},
         {"paramKey", paramKey}
       }.dump());
