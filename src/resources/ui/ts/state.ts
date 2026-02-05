@@ -1,4 +1,5 @@
 import type { DemoSample, GlobalSignalChainConfig, Preset, SignalGraph, UiState } from "./types.js";
+import { createEmptyLayoutLibrary } from "./layoutTypes.js";
 
 export const LOG_ENTRY_LIMIT = 200;
 
@@ -220,6 +221,7 @@ export const uiState: UiState = {
   environment: { standalone: false },
   namCalibrationStatus: {},
   missingNodeResources: [],
+  layoutLibrary: createEmptyLayoutLibrary(),
   metronome: {
     bpm: 120,
     enabled: false,

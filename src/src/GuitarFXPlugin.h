@@ -188,6 +188,11 @@ namespace guitarfx
     void HandleSaveBlendArchiveRequest(const nlohmann::json &payload);
     void HandleSavePresetArchiveRequest(const nlohmann::json &payload);
     void HandleSaveLibraryArchiveRequest(const nlohmann::json &payload);
+    void HandleSaveEffectLayoutRequest(const nlohmann::json &payload);
+    void HandleExportEffectLayoutRequest(const nlohmann::json &payload);
+    void HandleBrowseLayoutImageRequest(const nlohmann::json &payload);
+    void LoadLayoutLibrary();
+    void SaveLayoutToFile(const std::string& effectType, const nlohmann::json& layoutJson);
     void HandleCleanupResourceLibraryRequest(const nlohmann::json &payload);
     void RefreshMetronomeClickSamples();
     void UpdateMetronomeClickConfigFromSettings();

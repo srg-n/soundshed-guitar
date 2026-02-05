@@ -20,6 +20,8 @@ import { drawEqCurve, type EqBand } from "./eqCurve.js";
 import { buildBlendModelMappingsFromIds } from "./blendUtils.js";
 import { BlendEditorModal } from "./blendEditor.js";
 import { resourceBrowserModal } from "./resourceBrowser.js";
+import { hasCustomLayout, getCustomLayout, renderCustomLayout } from "./layoutRenderer.js";
+import { layoutDesigner } from "./layoutDesigner.js";
 
 const signalPathNodesElement = document.getElementById("signal-path-nodes");
 const nodeParamsPanelElement = document.getElementById("node-params-panel");
@@ -1730,18 +1732,34 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
     }
   }
 
+  // Check for custom layout
+  const customLayout = getCustomLayout(node.type);
+  const customLayoutHtml = customLayout
+    ? renderCustomLayout(node, customLayout, paramDefs)
+    : null;
+
+  // Customize layout button
+  const customizeLayoutBtn = `
+    <button class="node-customize-layout-btn" data-node-id="${node.id}" data-effect-type="${node.type}" title="Customize Layout">
+      ${renderIcon("gear", "customize-layout-icon")} Layout
+    </button>
+  `;
+
   nodeParamsPanelElement.innerHTML = `
     
     <div class="node-params-body">
       ${resourceSelector}
       ${eqVisualizer}
       ${mixerInputControls}
-      <div class="params-controls">
-        ${paramControls}
-      </div>
+      ${customLayoutHtml ? customLayoutHtml : `
+        <div class="params-controls">
+          ${paramControls}
+        </div>
+      `}
       <div class="node-actions">
         ${bypassButton}
         ${recalibrateButton}
+        ${customizeLayoutBtn}
       </div>
     </div>
   `;
@@ -1757,6 +1775,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
   bindCloseButton();
   bindBypassButton(node, preset);
   bindCalibrationButton(node);
+  bindCustomizeLayoutButton(node);
 }
 
 function formatParamLabel(key: string): string {
@@ -2243,6 +2262,19 @@ function bindCalibrationButton(node: GraphNode): void {
       type: "rerunNamCalibration",
       nodeId: node.id,
     });
+  });
+}
+
+function bindCustomizeLayoutButton(node: GraphNode): void {
+  const layoutBtn = nodeParamsPanelElement?.querySelector(".node-customize-layout-btn") as HTMLButtonElement | null;
+  if (!layoutBtn) {
+    return;
+  }
+
+  layoutBtn.addEventListener("click", () => {
+    const effectType = layoutBtn.dataset.effectType || node.type;
+    const existingLayout = getCustomLayout(effectType);
+    layoutDesigner.open(effectType, existingLayout ?? undefined);
   });
 }
 

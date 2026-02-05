@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="css/effects.css" />
   <link rel="stylesheet" href="css/signal-path.css" />
   <link rel="stylesheet" href="css/modals.css" />
+  <link rel="stylesheet" href="css/layout-designer.css" />
   <link rel="stylesheet" href="css/fx-library.css" />
   <link rel="stylesheet" href="css/preset-library.css" />
   <link rel="stylesheet" href="css/settings.css" />
@@ -1227,6 +1228,84 @@
         <div class="modal-footer">
           <button class="btn btn-secondary" id="save-preset-cancel">Cancel</button>
           <button class="btn btn-primary" id="save-preset-confirm">Save Preset</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Layout Designer Modal -->
+    <div id="layout-designer-modal" class="modal" style="display: none;">
+      <div class="modal-content layout-designer-content">
+        <div class="modal-header">
+          <h3 id="layout-designer-title">Layout Designer</h3>
+          <button class="modal-close" id="layout-designer-close">×</button>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="layout-designer-toolbar">
+          <div class="layout-designer-toolbar-group">
+            <span class="layout-designer-toolbar-label">Size:</span>
+            <div class="layout-dimensions-inputs">
+              <label>W<input type="number" id="layout-designer-width" min="200" max="800" step="8"></label>
+              <span class="dimension-separator">×</span>
+              <label>H<input type="number" id="layout-designer-height" min="150" max="600" step="8"></label>
+            </div>
+          </div>
+          <div class="layout-designer-toolbar-group">
+            <button id="layout-designer-grid-toggle" class="active" title="Toggle Grid (G)">
+              <svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              Grid
+            </button>
+            <button id="layout-designer-preview-toggle" title="Preview Mode (P)">
+              <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              Preview
+            </button>
+          </div>
+          <div class="layout-designer-toolbar-group">
+            <button id="layout-designer-add-label" title="Add Text Label">
+              <svg viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              Add Label
+            </button>
+            <button id="layout-designer-add-bg" title="Add Background Image">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="8" cy="9" r="2" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              Background
+            </button>
+          </div>
+          <div class="layout-designer-toolbar-group">
+            <button id="layout-designer-reset" title="Reset to Default Layout">
+              <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M3 3v5h5" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              Reset
+            </button>
+          </div>
+        </div>
+
+        <div class="layout-designer-body">
+          <!-- Canvas Area -->
+          <div class="layout-designer-canvas-container">
+            <div id="layout-designer-canvas" class="layout-designer-canvas">
+              <div id="layout-designer-grid" class="layout-designer-grid grid-visible"></div>
+              <div id="layout-designer-controls" class="layout-designer-controls"></div>
+            </div>
+          </div>
+
+          <!-- Properties Sidebar -->
+          <div id="layout-designer-sidebar" class="layout-designer-sidebar">
+            <div class="layout-designer-sidebar-header">Properties</div>
+            <div id="layout-designer-sidebar-content" class="layout-designer-sidebar-content">
+              <div class="layout-designer-sidebar-empty">
+                Select a control or label to edit its properties
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer layout-designer-footer">
+          <div class="layout-designer-footer-left">
+            <button class="btn btn-secondary" id="layout-designer-export">Export...</button>
+          </div>
+          <div class="layout-designer-footer-right">
+            <button class="btn btn-secondary" id="layout-designer-cancel">Cancel</button>
+            <button class="btn btn-primary" id="layout-designer-save">Save Layout</button>
+          </div>
         </div>
       </div>
     </div>

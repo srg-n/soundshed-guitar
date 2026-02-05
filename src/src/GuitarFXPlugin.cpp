@@ -2867,6 +2867,18 @@ namespace guitarfx
     {
       HandleSaveLibraryArchiveRequest(payload);
     }
+    else if (type == "saveEffectLayout")
+    {
+      HandleSaveEffectLayoutRequest(payload);
+    }
+    else if (type == "exportEffectLayout")
+    {
+      HandleExportEffectLayoutRequest(payload);
+    }
+    else if (type == "browseLayoutImage")
+    {
+      HandleBrowseLayoutImageRequest(payload);
+    }
     else if (type == "cleanupResourceLibrary")
     {
       HandleCleanupResourceLibraryRequest(payload);
@@ -3095,6 +3107,9 @@ namespace guitarfx
 
     SendMessageToUI(message.dump());
     mPendingStateBroadcast = false;
+
+    // Send layout library to UI
+    LoadLayoutLibrary();
 
     // Send a test DSP performance message to verify UI communication
     {
@@ -5860,6 +5875,253 @@ namespace guitarfx
     AppendSessionLog("Library export saved: " + targetPath.generic_string());
 #else
     ReportErrorToUI("Export not supported", "Library export is only available on Windows");
+#endif
+  }
+
+  void GuitarFXPlugin::HandleSaveEffectLayoutRequest(const nlohmann::json &payload)
+  {
+    const std::string effectType = payload.value("effectType", "");
+    const auto layoutIt = payload.find("layout");
+
+    if (effectType.empty() || layoutIt == payload.end() || !layoutIt->is_object())
+    {
+      ReportErrorToUI("Save layout failed", "Missing effect type or layout data");
+      return;
+    }
+
+    SaveLayoutToFile(effectType, *layoutIt);
+
+    // Send confirmation back to UI
+    SendMessageToUI(nlohmann::json{
+      {"type", "layoutSaved"},
+      {"effectType", effectType},
+      {"layout", *layoutIt}
+    }.dump());
+
+    AppendSessionLog("Effect layout saved for: " + effectType);
+  }
+
+  void GuitarFXPlugin::SaveLayoutToFile(const std::string& effectType, const nlohmann::json& layoutJson)
+  {
+    const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
+    const auto layoutsDir = settingsDir / "layouts";
+
+    // Create layouts directory if it doesn't exist
+    if (!std::filesystem::exists(layoutsDir))
+    {
+      std::filesystem::create_directories(layoutsDir);
+    }
+
+    const auto layoutFile = layoutsDir / (effectType + ".layout.json");
+    std::ofstream output(layoutFile);
+    if (output)
+    {
+      output << layoutJson.dump(2);
+      output.close();
+      AppendSessionLog("Layout file saved: " + layoutFile.generic_string());
+    }
+    else
+    {
+      AppendSessionLog("Failed to write layout file: " + layoutFile.generic_string());
+    }
+  }
+
+  void GuitarFXPlugin::LoadLayoutLibrary()
+  {
+    const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
+    const auto layoutsDir = settingsDir / "layouts";
+
+    nlohmann::json library;
+    library["byEffectType"] = nlohmann::json::object();
+    library["defaults"] = nlohmann::json::object();
+    library["images"] = nlohmann::json::array();
+
+    if (std::filesystem::exists(layoutsDir))
+    {
+      // Load all layout.json files
+      for (const auto& entry : std::filesystem::directory_iterator(layoutsDir))
+      {
+        if (entry.is_regular_file() && entry.path().extension() == ".json" &&
+            entry.path().stem().string().ends_with(".layout"))
+        {
+          std::ifstream input(entry.path());
+          if (input)
+          {
+            try
+            {
+              nlohmann::json layoutJson;
+              input >> layoutJson;
+
+              const std::string effectType = layoutJson.value("effectType", "");
+              if (!effectType.empty())
+              {
+                const std::string layoutId = effectType + "-default";
+
+                nlohmann::json layoutEntry;
+                layoutEntry["layout"] = layoutJson;
+                layoutEntry["isDefault"] = true;
+                layoutEntry["layoutId"] = layoutId;
+                layoutEntry["filePath"] = entry.path().generic_string();
+
+                library["byEffectType"][effectType] = nlohmann::json::array({layoutEntry});
+                library["defaults"][effectType] = layoutId;
+              }
+            }
+            catch (const std::exception& e)
+            {
+              AppendSessionLog("Failed to parse layout file " + entry.path().generic_string() + ": " + e.what());
+            }
+          }
+        }
+      }
+
+      // Load image references from images subdirectory
+      const auto imagesDir = layoutsDir / "images";
+      if (std::filesystem::exists(imagesDir))
+      {
+        for (const auto& entry : std::filesystem::directory_iterator(imagesDir))
+        {
+          if (entry.is_regular_file())
+          {
+            const auto ext = entry.path().extension().string();
+            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg")
+            {
+              nlohmann::json imageRef;
+              imageRef["imageId"] = entry.path().stem().string();
+              imageRef["fileName"] = entry.path().filename().string();
+              library["images"].push_back(imageRef);
+            }
+          }
+        }
+      }
+    }
+
+    // Send layout library to UI
+    SendMessageToUI(nlohmann::json{
+      {"type", "layoutLibraryLoaded"},
+      {"layoutLibrary", library}
+    }.dump());
+  }
+
+  void GuitarFXPlugin::HandleExportEffectLayoutRequest(const nlohmann::json &payload)
+  {
+#ifdef _WIN32
+    const std::string effectType = payload.value("effectType", "");
+    const auto layoutIt = payload.find("layout");
+
+    if (effectType.empty() || layoutIt == payload.end())
+    {
+      SendMessageToUI(nlohmann::json{{"type", "layoutExportFailed"}, {"message", "Missing layout data"}}.dump());
+      return;
+    }
+
+    wchar_t filePath[MAX_PATH] = {0};
+    std::wstring defaultName = std::wstring(effectType.begin(), effectType.end()) + L".sgfxlayout.zip";
+    if (defaultName.size() < MAX_PATH)
+    {
+      std::wcsncpy(filePath, defaultName.c_str(), MAX_PATH - 1);
+    }
+
+    OPENFILENAMEW ofn = {0};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = nullptr;
+    ofn.lpstrFilter = L"Effect Layout (*.sgfxlayout.zip)\0*.sgfxlayout.zip\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFile = filePath;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrTitle = L"Export Effect Layout";
+    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+    if (!GetSaveFileNameW(&ofn))
+    {
+      SendMessageToUI(nlohmann::json{{"type", "layoutExportFailed"}, {"message", "Export cancelled"}}.dump());
+      return;
+    }
+
+    // For now, just save the layout JSON (TODO: create zip with images)
+    const std::filesystem::path targetPath{filePath};
+    std::ofstream output(targetPath);
+    if (output)
+    {
+      output << layoutIt->dump(2);
+      output.close();
+      SendMessageToUI(nlohmann::json{{"type", "layoutExportSaved"}, {"path", targetPath.generic_string()}}.dump());
+      AppendSessionLog("Layout exported: " + targetPath.generic_string());
+    }
+    else
+    {
+      SendMessageToUI(nlohmann::json{{"type", "layoutExportFailed"}, {"message", "Failed to write file"}}.dump());
+    }
+#else
+    ReportErrorToUI("Export not supported", "Layout export is only available on Windows");
+#endif
+  }
+
+  void GuitarFXPlugin::HandleBrowseLayoutImageRequest(const nlohmann::json &payload)
+  {
+#ifdef _WIN32
+    const std::string purpose = payload.value("purpose", "");
+    const int layerIndex = payload.value("layerIndex", 0);
+    const std::string paramKey = payload.value("paramKey", "");
+
+    wchar_t filePath[MAX_PATH] = {0};
+
+    OPENFILENAMEW ofn = {0};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = nullptr;
+    ofn.lpstrFilter = L"Image Files (*.png;*.jpg;*.jpeg)\0*.png;*.jpg;*.jpeg\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFile = filePath;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrTitle = L"Select Image";
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+    if (!GetOpenFileNameW(&ofn))
+    {
+      return; // User cancelled
+    }
+
+    const std::filesystem::path selectedPath{filePath};
+    const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
+    const auto imagesDir = settingsDir / "layouts" / "images";
+
+    // Create images directory if it doesn't exist
+    if (!std::filesystem::exists(imagesDir))
+    {
+      std::filesystem::create_directories(imagesDir);
+    }
+
+    // Generate unique image ID based on filename + timestamp
+    const auto timestamp = std::chrono::system_clock::now().time_since_epoch().count();
+    const std::string imageId = selectedPath.stem().string() + "_" + std::to_string(timestamp);
+    const std::string destFilename = imageId + selectedPath.extension().string();
+    const auto destPath = imagesDir / destFilename;
+
+    // Copy image to layout images directory
+    try
+    {
+      std::filesystem::copy_file(selectedPath, destPath, std::filesystem::copy_options::overwrite_existing);
+      AppendSessionLog("Layout image copied: " + destPath.generic_string());
+
+      // Build file:// URL for WebView access
+      const std::string fileUrl = "file:///" + destPath.generic_string();
+
+      // Send image reference back to UI
+      SendMessageToUI(nlohmann::json{
+        {"type", "layoutImageSelected"},
+        {"purpose", purpose},
+        {"imageId", imageId},
+        {"fileName", destFilename},
+        {"fileUrl", fileUrl},
+        {"layerIndex", layerIndex},
+        {"paramKey", paramKey}
+      }.dump());
+    }
+    catch (const std::exception& e)
+    {
+      AppendSessionLog("Failed to copy layout image: " + std::string(e.what()));
+      ReportErrorToUI("Image import failed", "Failed to copy image file");
+    }
+#else
+    ReportErrorToUI("Not supported", "Image selection is only available on Windows");
 #endif
   }
 

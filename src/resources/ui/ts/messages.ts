@@ -13,6 +13,8 @@ import { refreshFxSelector } from "./fxSelector.js";
 import { applyEnvironmentState, applyMetronomeState } from "./metronome.js";
 import type { GlobalSignalChainConfig, Preset, ResourceRef, UiSettings } from "./types.js";
 import { handleResourceDataMessage } from "./archiveUtils.js";
+import { layoutDesigner } from "./layoutDesigner.js";
+import type { LayoutLibrary, EffectLayout } from "./layoutTypes.js";
 
 function normalizeResourceRef(ref?: ResourceRef | null): void {
   if (!ref) return;
@@ -570,6 +572,83 @@ export function handleIncomingMessage(message: string): void {
         // Sync any UI controls that show global chain state
         syncControlsFromState();
       }
+      break;
+    }
+    case "layoutLibraryLoaded": {
+      const libraryPayload = payload as { layoutLibrary?: LayoutLibrary };
+      if (libraryPayload.layoutLibrary) {
+        uiState.layoutLibrary = libraryPayload.layoutLibrary;
+        appendLog("Layout library loaded");
+      }
+      break;
+    }
+    case "layoutSaved": {
+      const savePayload = payload as { effectType?: string; layout?: EffectLayout };
+      if (savePayload.effectType && savePayload.layout && uiState.layoutLibrary) {
+        // Update layout in library
+        if (!uiState.layoutLibrary.byEffectType[savePayload.effectType]) {
+          uiState.layoutLibrary.byEffectType[savePayload.effectType] = [];
+        }
+        const layouts = uiState.layoutLibrary.byEffectType[savePayload.effectType];
+        const existingIdx = layouts.findIndex(e => e.layout.effectType === savePayload.effectType);
+        const entry = {
+          layout: savePayload.layout,
+          isDefault: true,
+          layoutId: savePayload.layout.effectType + "-default",
+        };
+        if (existingIdx >= 0) {
+          layouts[existingIdx] = entry;
+        } else {
+          layouts.push(entry);
+        }
+        uiState.layoutLibrary.defaults[savePayload.effectType] = entry.layoutId;
+        appendLog(`Layout saved for ${savePayload.effectType}`);
+        showNotification("Layout saved", "success");
+        // Refresh signal path view to use new layout
+        renderActivePreset();
+      }
+      break;
+    }
+    case "layoutImageSelected": {
+      console.log("[Messages] layoutImageSelected received:", payload);
+      const imgPayload = payload as { purpose?: string; imageId?: string; fileName?: string; fileUrl?: string; layerIndex?: number; paramKey?: string };
+      if (imgPayload.purpose && imgPayload.imageId && imgPayload.fileName) {
+        // Add image to layout library so it can be resolved
+        if (uiState.layoutLibrary) {
+          const existingIdx = uiState.layoutLibrary.images.findIndex(img => img.imageId === imgPayload.imageId);
+          const imageEntry = { 
+            imageId: imgPayload.imageId, 
+            fileName: imgPayload.fileName, 
+            fileUrl: imgPayload.fileUrl,
+            type: imgPayload.purpose as "background" | "knob" | "general" 
+          };
+          if (existingIdx >= 0) {
+            uiState.layoutLibrary.images[existingIdx] = imageEntry;
+          } else {
+            uiState.layoutLibrary.images.push(imageEntry);
+          }
+        }
+        layoutDesigner.handleImageSelected(
+          imgPayload.purpose,
+          imgPayload.imageId,
+          imgPayload.layerIndex,
+          imgPayload.paramKey
+        );
+      }
+      break;
+    }
+    case "layoutExportSaved": {
+      const exportPayload = payload as { path?: string };
+      if (exportPayload.path) {
+        showNotification(`Layout exported to ${exportPayload.path}`, "success");
+        appendLog(`Layout exported: ${exportPayload.path}`);
+      }
+      break;
+    }
+    case "layoutExportFailed": {
+      const failPayload = payload as { message?: string };
+      showNotification(failPayload.message ?? "Layout export failed", "error");
+      appendLog(`Layout export failed: ${failPayload.message ?? "unknown error"}`);
       break;
     }
     default:

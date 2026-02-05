@@ -1,5 +1,7 @@
 export type AttachmentType = "audiofx" | "ir" | string;
 
+import type { LayoutLibrary } from "./layoutTypes.js";
+
 export interface Attachment {
   type: AttachmentType;
   id?: string;
@@ -327,6 +329,7 @@ export interface UiState {
   metronome?: MetronomeState;
   namCalibrationStatus?: Record<string, "calibrating" | "ready" | "failed">;
   missingNodeResources?: Array<{ nodeId: string; resourceType?: string; resourceId?: string; filePath?: string }>;
+  layoutLibrary?: LayoutLibrary;
 }
 
 declare global {
