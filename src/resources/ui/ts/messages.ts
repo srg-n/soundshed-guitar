@@ -15,6 +15,11 @@ import type { GlobalSignalChainConfig, Preset, ResourceRef, UiSettings } from ".
 import { handleResourceDataMessage } from "./archiveUtils.js";
 import { layoutDesigner } from "./layoutDesigner.js";
 import type { LayoutLibrary, EffectLayout } from "./layoutTypes.js";
+import { layoutLookupKey } from "./layoutTypes.js";
+import { handleCompositeLibrary, handleCompositeDefinitionAdded, handleCompositeDefinitionRemoved } from "./compositeEffects.js";
+import type { CompositeEffectDefinition } from "./compositeTypes.js";
+import { renderCompositeList } from "./compositeEditor.js";
+import { renderLayoutList } from "./layoutManager.js";
 
 function normalizeResourceRef(ref?: ResourceRef | null): void {
   if (!ref) return;
@@ -119,6 +124,12 @@ export function handleIncomingMessage(message: string): void {
       if (Array.isArray(blendLibrary)) {
         uiState.blendLibrary = blendLibrary as import("./types.js").BlendLibrary;
         refreshFxSelector();
+      }
+      const compositeLibrary = (payload as { compositeLibrary?: CompositeEffectDefinition[] }).compositeLibrary;
+      if (Array.isArray(compositeLibrary)) {
+        handleCompositeLibrary(compositeLibrary);
+        refreshFxSelector();
+        renderCompositeList();
       }
       const appSettings = (payload as { appSettings?: Record<string, unknown> }).appSettings;
       if (appSettings) {
@@ -579,30 +590,36 @@ export function handleIncomingMessage(message: string): void {
       if (libraryPayload.layoutLibrary) {
         uiState.layoutLibrary = libraryPayload.layoutLibrary;
         appendLog("Layout library loaded");
+        renderLayoutList();
       }
       break;
     }
     case "layoutSaved": {
-      const savePayload = payload as { effectType?: string; layout?: EffectLayout };
+      const savePayload = payload as { effectType?: string; blendId?: string; lookupKey?: string; layout?: EffectLayout };
       if (savePayload.effectType && savePayload.layout && uiState.layoutLibrary) {
-        // Update layout in library
-        if (!uiState.layoutLibrary.byEffectType[savePayload.effectType]) {
-          uiState.layoutLibrary.byEffectType[savePayload.effectType] = [];
+        // Use the lookup key from the backend, or compute it from effectType + blendId
+        const key = savePayload.lookupKey || layoutLookupKey(savePayload.effectType, savePayload.blendId);
+
+        // Update layout in library using the composite key
+        if (!uiState.layoutLibrary.byEffectType[key]) {
+          uiState.layoutLibrary.byEffectType[key] = [];
         }
-        const layouts = uiState.layoutLibrary.byEffectType[savePayload.effectType];
-        const existingIdx = layouts.findIndex(e => e.layout.effectType === savePayload.effectType);
+        const layouts = uiState.layoutLibrary.byEffectType[key];
+        const existingIdx = layouts.findIndex(e => e.layoutId === key + "-default");
         const entry = {
           layout: savePayload.layout,
           isDefault: true,
-          layoutId: savePayload.layout.effectType + "-default",
+          layoutId: key + "-default",
         };
         if (existingIdx >= 0) {
           layouts[existingIdx] = entry;
         } else {
           layouts.push(entry);
         }
-        uiState.layoutLibrary.defaults[savePayload.effectType] = entry.layoutId;
-        appendLog(`Layout saved for ${savePayload.effectType}`);
+        uiState.layoutLibrary.defaults[key] = entry.layoutId;
+
+        const displayKey = savePayload.blendId ? `${savePayload.effectType} (blend: ${savePayload.blendId})` : savePayload.effectType;
+        appendLog(`Layout saved for ${displayKey}`);
         showNotification("Layout saved", "success");
         // Refresh signal path view to use new layout
         renderActivePreset();
@@ -649,6 +666,32 @@ export function handleIncomingMessage(message: string): void {
       const failPayload = payload as { message?: string };
       showNotification(failPayload.message ?? "Layout export failed", "error");
       appendLog(`Layout export failed: ${failPayload.message ?? "unknown error"}`);
+      break;
+    }
+    case "compositeLibrary": {
+      const compPayload = payload as { definitions?: CompositeEffectDefinition[] };
+      if (compPayload.definitions) {
+        handleCompositeLibrary(compPayload.definitions);
+        refreshFxSelector();
+      }
+      break;
+    }
+    case "compositeDefinitionAdded": {
+      const compAddPayload = payload as { definition?: CompositeEffectDefinition };
+      if (compAddPayload.definition) {
+        handleCompositeDefinitionAdded(compAddPayload.definition);
+        refreshFxSelector();
+        renderCompositeList();
+      }
+      break;
+    }
+    case "compositeDefinitionRemoved": {
+      const compRemovePayload = payload as { id?: string };
+      if (compRemovePayload.id) {
+        handleCompositeDefinitionRemoved(compRemovePayload.id);
+        refreshFxSelector();
+        renderCompositeList();
+      }
       break;
     }
     default:

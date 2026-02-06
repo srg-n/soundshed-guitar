@@ -13,6 +13,8 @@ import { buildBlendModelMappingsFromIds } from "./blendUtils.js";
 import { themeSwitcher, type ThemeName } from "./theme-switcher.js";
 import { renderIcon } from "./iconAssets.js";
 import { showConfirm } from "./dialogs.js";
+import { initCompositeEditor, renderCompositeList } from "./compositeEditor.js";
+import { initLayoutManager, renderLayoutList } from "./layoutManager.js";
 
 const API_KEY_SETTING = "tone3000.apiKey";
 const DIAGNOSTICS_SETTING = "diagnostics.signalLevelsEnabled";
@@ -202,6 +204,41 @@ function activateLibraryTab(tabId: string): void {
   if (tabId === "resources") {
     postMessage({ type: "requestState" });
   }
+
+  if (tabId === "advanced") {
+    initAdvancedSubTabs();
+  }
+}
+
+let advancedSubTabsInitialized = false;
+
+function initAdvancedSubTabs(): void {
+  if (advancedSubTabsInitialized) return;
+  advancedSubTabsInitialized = true;
+
+  initCompositeEditor();
+  initLayoutManager();
+
+  const subTabButtons = Array.from(document.querySelectorAll(".advanced-sub-tab-btn"));
+  const subTabPanels = Array.from(document.querySelectorAll(".advanced-sub-panel"));
+
+  subTabButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const tabId = (button as HTMLElement).dataset.advancedTab ?? "composites";
+      subTabButtons.forEach((b) => {
+        b.classList.toggle("active", (b as HTMLElement).dataset.advancedTab === tabId);
+      });
+      subTabPanels.forEach((p) => {
+        p.classList.toggle("active", (p as HTMLElement).id === `advanced-tab-${tabId}`);
+      });
+
+      if (tabId === "composites") {
+        renderCompositeList();
+      } else if (tabId === "layouts") {
+        renderLayoutList();
+      }
+    });
+  });
 }
 
 export function initDiagnosticsToggle(): void {

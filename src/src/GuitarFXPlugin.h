@@ -26,6 +26,7 @@
 #include "presets/PresetStorage.h"
 #include "resources/ResourceLibrary.h"
 #include "dsp/MultiPresetMixer.h"
+#include "dsp/effects/CompositeEffectProcessor.h"
 #include "util/FileSystem.h"
 
 namespace guitarfx
@@ -195,6 +196,12 @@ namespace guitarfx
     void LoadLayoutLibrary();
     void SaveLayoutToFile(const std::string& effectType, const nlohmann::json& layoutJson);
     void HandleCleanupResourceLibraryRequest(const nlohmann::json &payload);
+
+    // Composite effects
+    void HandleSaveCompositeDefinitionRequest(const nlohmann::json &payload);
+    void HandleDeleteCompositeDefinitionRequest(const nlohmann::json &payload);
+    void LoadCompositeLibrary();
+    void SendCompositeLibraryToUI();
     void RefreshMetronomeClickSamples();
     void UpdateMetronomeClickConfigFromSettings();
     const MetronomeClickTypeConfig* FindMetronomeClickType(const std::string& id) const;
@@ -261,6 +268,7 @@ namespace guitarfx
     MultiPresetMixer mPresetMixer;
     ResourceLibrary mResourceLibrary;
     nlohmann::json mBlendLibrary = nlohmann::json::array();
+    CompositeEffectLibrary mCompositeLibrary;
     FileSystem mFileSystem;
     ModelHasher mHasher;
     std::filesystem::path mResourceRoot;

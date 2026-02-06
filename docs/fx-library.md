@@ -284,3 +284,4 @@ For portable preset sharing, resources can be embedded:
 - [Signal Chain](signal-chain.md) — How effects execute in the graph
 - [Data Models](data-models.md) — ResourceRef and preset schema
 - [User Interface](user-interface.md) — Effect browser UI
+- [Composite Effects](composite-effects.md) — Bundling effects into reusable composites

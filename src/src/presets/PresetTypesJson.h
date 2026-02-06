@@ -272,4 +272,127 @@ namespace guitarfx
       c.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // CompositeEffectDefinition serialization
+  // ─────────────────────────────────────────────────────────────
+
+  inline nlohmann::json SerializeExposedParameter(const ExposedParameter& ep)
+  {
+    nlohmann::json j;
+    j["paramId"] = ep.paramId;
+    j["displayName"] = ep.displayName;
+    j["nodeId"] = ep.nodeId;
+    j["nodeParamKey"] = ep.nodeParamKey;
+    j["minValue"] = ep.minValue;
+    j["maxValue"] = ep.maxValue;
+    j["defaultValue"] = ep.defaultValue;
+    if (!ep.unit.empty())
+      j["unit"] = ep.unit;
+    if (ep.curve != "linear")
+      j["curve"] = ep.curve;
+    return j;
+  }
+
+  inline ExposedParameter DeserializeExposedParameter(const nlohmann::json& j)
+  {
+    ExposedParameter ep;
+    ep.paramId = j.value("paramId", "");
+    ep.displayName = j.value("displayName", "");
+    ep.nodeId = j.value("nodeId", "");
+    ep.nodeParamKey = j.value("nodeParamKey", "");
+    ep.minValue = j.value("minValue", 0.0);
+    ep.maxValue = j.value("maxValue", 1.0);
+    ep.defaultValue = j.value("defaultValue", 0.0);
+    ep.unit = j.value("unit", "");
+    ep.curve = j.value("curve", "linear");
+    return ep;
+  }
+
+  inline nlohmann::json SerializeCompositeEffectDefinition(const CompositeEffectDefinition& def)
+  {
+    nlohmann::json j;
+    j["id"] = def.id;
+    j["name"] = def.name;
+    j["category"] = def.category;
+    if (!def.description.empty())
+      j["description"] = def.description;
+    if (!def.author.empty())
+      j["author"] = def.author;
+    if (!def.tags.empty())
+      j["tags"] = def.tags;
+    j["version"] = def.version;
+
+    j["innerGraph"] = SerializeSignalGraph(def.innerGraph);
+
+    j["exposedParams"] = nlohmann::json::array();
+    for (const auto& ep : def.exposedParams)
+    {
+      j["exposedParams"].push_back(SerializeExposedParameter(ep));
+    }
+
+    if (!def.layoutJson.empty())
+    {
+      try
+      {
+        j["layout"] = nlohmann::json::parse(def.layoutJson);
+      }
+      catch (...)
+      {
+        // If layout JSON is invalid, skip it
+      }
+    }
+
+    if (!def.createdAt.empty())
+      j["createdAt"] = def.createdAt;
+    if (!def.modifiedAt.empty())
+      j["modifiedAt"] = def.modifiedAt;
+
+    return j;
+  }
+
+  inline CompositeEffectDefinition DeserializeCompositeEffectDefinition(const nlohmann::json& j)
+  {
+    CompositeEffectDefinition def;
+    def.id = j.value("id", "");
+    def.name = j.value("name", "");
+    def.category = j.value("category", "");
+    def.description = j.value("description", "");
+    def.author = j.value("author", "");
+    def.version = j.value("version", 1);
+    def.createdAt = j.value("createdAt", "");
+    def.modifiedAt = j.value("modifiedAt", "");
+
+    if (j.contains("tags") && j["tags"].is_array())
+    {
+      for (const auto& tag : j["tags"])
+      {
+        if (tag.is_string())
+          def.tags.push_back(tag.get<std::string>());
+      }
+    }
+
+    if (j.contains("innerGraph") && j["innerGraph"].is_object())
+    {
+      def.innerGraph = DeserializeSignalGraph(j["innerGraph"]);
+    }
+
+    if (j.contains("exposedParams") && j["exposedParams"].is_array())
+    {
+      for (const auto& epJson : j["exposedParams"])
+      {
+        if (epJson.is_object())
+        {
+          def.exposedParams.push_back(DeserializeExposedParameter(epJson));
+        }
+      }
+    }
+
+    if (j.contains("layout"))
+    {
+      def.layoutJson = j["layout"].dump();
+    }
+
+    return def;
+  }
+
 } // namespace guitarfx

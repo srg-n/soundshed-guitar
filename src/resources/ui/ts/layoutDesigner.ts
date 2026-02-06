@@ -46,6 +46,7 @@ interface DragState {
 export class LayoutDesignerModal {
   private initialized = false;
   private effectType = "";
+  private blendId = "";
   private layout: EffectLayout | null = null;
   private paramDefs: ParameterDef[] = [];
 
@@ -213,18 +214,39 @@ export class LayoutDesignerModal {
     });
   }
 
-  open(effectType: string, existingLayout?: EffectLayout): void {
+  /**
+   * Open the layout designer.
+   * @param effectType The effect type to design a layout for
+   * @param existingLayout Optional existing layout to edit
+   * @param options.blendId Optional blend definition ID (for per-blend layouts)
+   * @param options.blendName Optional blend display name for the title
+   * @param options.blendParamDefs Optional override parameter definitions (blend params + base params)
+   */
+  open(
+    effectType: string,
+    existingLayout?: EffectLayout,
+    options?: { blendId?: string; blendName?: string; blendParamDefs?: ParameterDef[] },
+  ): void {
     this.initialize();
 
     if (!this.modal) return;
 
     this.effectType = effectType;
+    this.blendId = options?.blendId || "";
     const typeInfo = EffectTypeRegistry.get(effectType);
-    this.paramDefs = typeInfo?.parameters || [];
 
-    // Set title
+    // Use blend-specific params if provided, otherwise fall back to registry
+    if (options?.blendParamDefs?.length) {
+      this.paramDefs = options.blendParamDefs;
+    } else {
+      this.paramDefs = typeInfo?.parameters || [];
+    }
+
+    // Set title — include blend name when designing a per-blend layout
     if (this.titleEl) {
-      this.titleEl.textContent = `Layout Designer - ${typeInfo?.displayName || effectType}`;
+      const baseName = typeInfo?.displayName || effectType;
+      const blendSuffix = options?.blendName ? ` — ${options.blendName}` : "";
+      this.titleEl.textContent = `Layout Designer - ${baseName}${blendSuffix}`;
     }
 
     // Load or create layout
@@ -232,6 +254,11 @@ export class LayoutDesignerModal {
       this.layout = JSON.parse(JSON.stringify(existingLayout)); // Deep clone
     } else {
       this.layout = this.createDefaultLayout(effectType);
+    }
+
+    // Tag the layout with blendId so it persists across save/load
+    if (this.layout && this.blendId) {
+      this.layout.blendId = this.blendId;
     }
 
     // Reset state
@@ -259,6 +286,7 @@ export class LayoutDesignerModal {
     }
     this.layout = null;
     this.effectType = "";
+    this.blendId = "";
     this.selectedElement = null;
   }
 
@@ -271,10 +299,16 @@ export class LayoutDesignerModal {
 
     this.layout.modifiedAt = new Date().toISOString();
 
-    // Send to plugin for persistence
+    // Ensure blendId is stored in the layout itself
+    if (this.blendId) {
+      this.layout.blendId = this.blendId;
+    }
+
+    // Send to plugin for persistence (include blendId for per-blend file naming)
     postMessage({
       type: "saveEffectLayout",
       effectType: this.effectType,
+      blendId: this.blendId || undefined,
       layout: this.layout,
     });
 
@@ -352,9 +386,10 @@ export class LayoutDesignerModal {
     const data = arrayBufferToBase64(buffer);
 
     const safeName = this.effectType.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const blendSuffix = this.blendId ? `--${this.blendId.replace(/[^a-zA-Z0-9_-]/g, "_")}` : "";
     postMessage({
       type: "exportEffectLayout",
-      fileName: `${safeName}.sgfxlayout.zip`,
+      fileName: `${safeName}${blendSuffix}.sgfxlayout.zip`,
       data,
     });
   }

@@ -30,6 +30,7 @@
 #include "dsp/effects/IRReverbEffect.h"
 #include "dsp/effects/MixerEffect.h"
 #include "dsp/effects/SimpleCabEffect.h"
+#include "dsp/effects/CompositeEffectProcessor.h"
 
 namespace guitarfx
 {
@@ -104,6 +105,9 @@ namespace guitarfx
 
     // Synth effects
     RegisterSynthSawEffect();
+
+    // Note: Composite effects are registered dynamically by CompositeEffectLibrary
+    // after loading definitions from disk. They are not part of static registration.
   }
 
 } // namespace guitarfx

@@ -1,6 +1,7 @@
 export type AttachmentType = "audiofx" | "ir" | string;
 
 import type { LayoutLibrary } from "./layoutTypes.js";
+import type { CompositeEffectDefinition } from "./compositeTypes.js";
 
 export interface Attachment {
   type: AttachmentType;
@@ -330,6 +331,7 @@ export interface UiState {
   namCalibrationStatus?: Record<string, "calibrating" | "ready" | "failed">;
   missingNodeResources?: Array<{ nodeId: string; resourceType?: string; resourceId?: string; filePath?: string }>;
   layoutLibrary?: LayoutLibrary;
+  compositeLibrary?: CompositeEffectDefinition[];
 }
 
 declare global {

@@ -70,6 +70,8 @@ set(_guitarfx_core_sources
   dsp/effects/MultiModelNAMAmpEffect.h
   dsp/effects/IRCabEffect.h
   dsp/effects/SimpleCabEffect.h
+  dsp/effects/CompositeEffectProcessor.h
+  dsp/effects/CompositeEffectProcessor.cpp
   
   # Models
   models/ModelHasher.cpp
@@ -153,6 +155,9 @@ target_compile_definitions(GuitarFXCore
 
 if(WIN32)
   target_compile_definitions(GuitarFXCore PUBLIC _WIN32 WIN32 _WINDOWS)
+  # GuitarFXPlugin.cpp heavily uses nlohmann/json templates which can exceed
+  # the default COFF section limit on MSVC.
+  target_compile_options(GuitarFXCore PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/bigobj>)
 endif()
 
 set_target_properties(GuitarFXCore PROPERTIES

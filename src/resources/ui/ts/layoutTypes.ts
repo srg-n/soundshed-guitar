@@ -99,6 +99,8 @@ export interface LayoutTextLabel {
 export interface EffectLayout {
   /** Effect type this layout applies to (e.g., "delay_digital") */
   effectType: string;
+  /** Blend definition ID for per-blend layouts (amp_nam_blend only) */
+  blendId?: string;
   /** Layout schema version */
   version: number;
   /** Layout display name */
@@ -162,6 +164,18 @@ export const LAYOUT_DIMENSION_LIMITS = {
   minHeight: 150,
   maxHeight: 600,
 };
+
+/**
+ * Build the layout library lookup key.
+ * For blend effects this is "amp_nam_blend::{blendId}",
+ * otherwise just the effectType string.
+ */
+export function layoutLookupKey(effectType: string, blendId?: string): string {
+  if (blendId && effectType === "amp_nam_blend") {
+    return `${effectType}::${blendId}`;
+  }
+  return effectType;
+}
 
 /** Snap a value to the grid */
 export function snapToGrid(value: number, gridSize: number = LAYOUT_GRID_SIZE): number {

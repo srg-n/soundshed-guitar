@@ -198,3 +198,4 @@ V2: {"graph": {"nodes": [input, effect1, effect2, output], "edges": [...]}}
 - [Signal Chain](signal-chain.md) — Graph execution semantics
 - [FX Library](fx-library.md) — Effect types and parameters
 - [Network API](network-api.md) — Remote preset operations
+- [Composite Effects](composite-effects.md) — Composite effect definitions and data model

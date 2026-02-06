@@ -2,6 +2,7 @@
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/effects/MixerEffect.h"
+#include "dsp/effects/CompositeEffectProcessor.h"
 #include "resources/ResourceLibrary.h"
 
 #include <algorithm>
@@ -268,6 +269,16 @@ namespace guitarfx
       {
         // Create from registry
         state.processor = registry.Create(node.type);
+      }
+
+      // If this is a composite effect, pass the resource library to its inner executor
+      if (state.processor && mResourceLibrary)
+      {
+        auto *composite = dynamic_cast<CompositeEffectProcessor *>(state.processor.get());
+        if (composite)
+        {
+          composite->SetResourceLibrary(mResourceLibrary);
+        }
       }
 
       // Apply parameters

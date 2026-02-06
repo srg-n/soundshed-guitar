@@ -141,11 +141,71 @@ namespace guitarfx
     std::vector<EmbeddedResource> embeddedResources;
   };
 
+  /**
+   * Maps a user-facing parameter to an inner node parameter within a composite effect.
+   */
+  struct ExposedParameter
+  {
+    std::string paramId;       // User-facing parameter ID (e.g., "drive")
+    std::string displayName;   // Label shown in UI
+    std::string nodeId;        // Target node ID within the inner graph
+    std::string nodeParamKey;  // Parameter key on the target node
+
+    double minValue = 0.0;     // Override min range
+    double maxValue = 1.0;     // Override max range
+    double defaultValue = 0.0; // Override default value
+    std::string unit;          // Display unit (e.g., "dB", "Hz", "ms")
+    std::string curve = "linear"; // Mapping curve: "linear", "log", "exp"
+  };
+
+  /**
+   * Defines a composite effect — a reusable mini signal path that appears
+   * as a single node in the parent graph. Contains an inner graph of effects
+   * with only selected parameters exposed to the user.
+   */
+  struct CompositeEffectDefinition
+  {
+    std::string id;            // Unique identifier (e.g., "composite-vintage-marshall")
+    std::string name;          // Display name
+    std::string category;      // Effect category for UI grouping (e.g., "channel", "amp")
+    std::string description;   // User-facing description
+    std::string author;        // Creator name
+    std::vector<std::string> tags; // Searchable tags
+    int version = 1;           // Definition schema version
+
+    SignalGraph innerGraph;    // The mini signal graph of inner effects
+    std::vector<ExposedParameter> exposedParams; // Parameters surfaced to the user
+
+    // Optional layout JSON stored as a string (parsed by UI)
+    std::string layoutJson;
+
+    std::string createdAt;     // ISO 8601 timestamp
+    std::string modifiedAt;    // Last modification timestamp
+
+    /**
+     * Get the effect type ID used to register this composite with the EffectRegistry.
+     * Format: "composite:{id}"
+     */
+    [[nodiscard]] std::string GetEffectTypeId() const
+    {
+      return "composite:" + id;
+    }
+
+    /**
+     * Check if this definition has a valid inner graph.
+     */
+    [[nodiscard]] bool IsValid() const
+    {
+      return !id.empty() && !name.empty() && !innerGraph.nodes.empty();
+    }
+  };
+
   // Reserved node types for routing
   constexpr const char* kNodeTypeInput = "input";
   constexpr const char* kNodeTypeOutput = "output";
   constexpr const char* kNodeTypeSplitter = "splitter";
   constexpr const char* kNodeTypeMixer = "mixer";
+  constexpr const char* kNodeTypeCompositePrefix = "composite:";
 
   /**
    * Global signal chain configuration.

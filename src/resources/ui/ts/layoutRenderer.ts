@@ -12,27 +12,32 @@ import type {
   LayoutTextLabel,
   LayoutBackground,
 } from "./layoutTypes.js";
+import { layoutLookupKey } from "./layoutTypes.js";
 import type { GraphNode } from "./types.js";
 
 /**
- * Check if a custom layout exists for an effect type
+ * Check if a custom layout exists for an effect type (and optionally a specific blend).
+ * When blendId is provided, checks for a per-blend layout first.
  */
-export function hasCustomLayout(effectType: string): boolean {
+export function hasCustomLayout(effectType: string, blendId?: string): boolean {
   if (!uiState.layoutLibrary) return false;
-  const defaultId = uiState.layoutLibrary.defaults[effectType];
+  const key = layoutLookupKey(effectType, blendId);
+  const defaultId = uiState.layoutLibrary.defaults[key];
   if (!defaultId) return false;
-  const entries = uiState.layoutLibrary.byEffectType[effectType];
+  const entries = uiState.layoutLibrary.byEffectType[key];
   return entries?.some((e) => e.layoutId === defaultId) ?? false;
 }
 
 /**
- * Get the custom layout for an effect type
+ * Get the custom layout for an effect type (and optionally a specific blend).
+ * When blendId is provided, looks up the per-blend layout.
  */
-export function getCustomLayout(effectType: string): EffectLayout | null {
+export function getCustomLayout(effectType: string, blendId?: string): EffectLayout | null {
   if (!uiState.layoutLibrary) return null;
-  const defaultId = uiState.layoutLibrary.defaults[effectType];
+  const key = layoutLookupKey(effectType, blendId);
+  const defaultId = uiState.layoutLibrary.defaults[key];
   if (!defaultId) return null;
-  const entries = uiState.layoutLibrary.byEffectType[effectType];
+  const entries = uiState.layoutLibrary.byEffectType[key];
   const entry = entries?.find((e) => e.layoutId === defaultId);
   return entry?.layout ?? null;
 }

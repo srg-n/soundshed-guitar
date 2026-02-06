@@ -1152,6 +1152,10 @@ namespace guitarfx
     // Share the plugin's resource library with the multi-preset mixer
     mPresetMixer.SetResourceLibrary(&mResourceLibrary);
 
+    // Load and register composite effect definitions
+    mCompositeLibrary.SetResourceLibrary(&mResourceLibrary);
+    LoadCompositeLibrary();
+
     // Set up tuner callback to forward results to UI
     mPresetMixer.SetTunerCallback([this](const MultiPresetMixer::TunerResult &result) {
       // Store tuner data for sending in OnIdle (thread-safe handoff from audio thread)
@@ -2960,6 +2964,18 @@ namespace guitarfx
       const double gain = payload.value("value", 1.0);
       SetMasterMixGain(gain);
     }
+    else if (type == "saveCompositeDefinition")
+    {
+      HandleSaveCompositeDefinitionRequest(payload);
+    }
+    else if (type == "deleteCompositeDefinition")
+    {
+      HandleDeleteCompositeDefinitionRequest(payload);
+    }
+    else if (type == "requestCompositeLibrary")
+    {
+      SendCompositeLibraryToUI();
+    }
   }
 
   void GuitarFXPlugin::BroadcastState()
@@ -3107,6 +3123,16 @@ namespace guitarfx
     if (mBlendLibrary.is_array())
     {
       message["blendLibrary"] = mBlendLibrary;
+    }
+
+    // Include composite effect library
+    {
+      nlohmann::json compositeArr = nlohmann::json::array();
+      for (const auto& def : mCompositeLibrary.GetAllDefinitions())
+      {
+        compositeArr.push_back(SerializeCompositeEffectDefinition(def));
+      }
+      message["compositeLibrary"] = std::move(compositeArr);
     }
 
     SendMessageToUI(message.dump());
@@ -5885,6 +5911,7 @@ namespace guitarfx
   void GuitarFXPlugin::HandleSaveEffectLayoutRequest(const nlohmann::json &payload)
   {
     const std::string effectType = payload.value("effectType", "");
+    const std::string blendId = payload.value("blendId", "");
     const auto layoutIt = payload.find("layout");
 
     if (effectType.empty() || layoutIt == payload.end() || !layoutIt->is_object())
@@ -5893,16 +5920,23 @@ namespace guitarfx
       return;
     }
 
-    SaveLayoutToFile(effectType, *layoutIt);
+    // Build the storage key: effectType for normal effects, effectType--blendId for blends
+    const std::string storageKey = blendId.empty() ? effectType : (effectType + "--" + blendId);
+    SaveLayoutToFile(storageKey, *layoutIt);
+
+    // Build the lookup key used by the UI layout library
+    const std::string lookupKey = blendId.empty() ? effectType : (effectType + "::" + blendId);
 
     // Send confirmation back to UI
     SendMessageToUI(nlohmann::json{
       {"type", "layoutSaved"},
       {"effectType", effectType},
+      {"blendId", blendId},
+      {"lookupKey", lookupKey},
       {"layout", *layoutIt}
     }.dump());
 
-    AppendSessionLog("Effect layout saved for: " + effectType);
+    AppendSessionLog("Effect layout saved for: " + storageKey);
   }
 
   void GuitarFXPlugin::SaveLayoutToFile(const std::string& effectType, const nlohmann::json& layoutJson)
@@ -5959,7 +5993,10 @@ namespace guitarfx
               const std::string effectType = layoutJson.value("effectType", "");
               if (!effectType.empty())
               {
-                const std::string layoutId = effectType + "-default";
+                // Determine lookup key: use effectType::blendId for blend layouts
+                const std::string blendId = layoutJson.value("blendId", "");
+                const std::string lookupKey = blendId.empty() ? effectType : (effectType + "::" + blendId);
+                const std::string layoutId = lookupKey + "-default";
 
                 nlohmann::json layoutEntry;
                 layoutEntry["layout"] = layoutJson;
@@ -5967,8 +6004,8 @@ namespace guitarfx
                 layoutEntry["layoutId"] = layoutId;
                 layoutEntry["filePath"] = entry.path().generic_string();
 
-                library["byEffectType"][effectType] = nlohmann::json::array({layoutEntry});
-                library["defaults"][effectType] = layoutId;
+                library["byEffectType"][lookupKey] = nlohmann::json::array({layoutEntry});
+                library["defaults"][lookupKey] = layoutId;
               }
             }
             catch (const std::exception& e)
@@ -6999,6 +7036,124 @@ namespace guitarfx
     {
       std::cerr << "[Plugin] Failed to save blend library: " << e.what() << std::endl;
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Composite Effects
+  // ─────────────────────────────────────────────────────────────
+
+  void GuitarFXPlugin::LoadCompositeLibrary()
+  {
+    try
+    {
+      // Load factory definitions from bundled resources
+      const auto factoryDir = mResourceRoot / "composites";
+      if (std::filesystem::exists(factoryDir))
+      {
+        mCompositeLibrary.LoadFromDirectory(factoryDir);
+        std::cout << "[Plugin] Loaded factory composite definitions: "
+                  << mCompositeLibrary.GetAllDefinitions().size() << std::endl;
+      }
+
+      // Load user definitions from settings directory
+      const auto userDir = mFileSystem.ResolveSettingsDirectory() / "composites";
+      if (std::filesystem::exists(userDir))
+      {
+        mCompositeLibrary.LoadFromDirectory(userDir);
+        std::cout << "[Plugin] Composite library total definitions: "
+                  << mCompositeLibrary.GetAllDefinitions().size() << std::endl;
+      }
+    }
+    catch (const std::exception &e)
+    {
+      std::cerr << "[Plugin] Failed to load composite library: " << e.what() << std::endl;
+    }
+  }
+
+  void GuitarFXPlugin::SendCompositeLibraryToUI()
+  {
+    nlohmann::json message;
+    message["type"] = "compositeLibrary";
+
+    nlohmann::json definitions = nlohmann::json::array();
+    for (const auto &def : mCompositeLibrary.GetAllDefinitions())
+    {
+      definitions.push_back(SerializeCompositeEffectDefinition(def));
+    }
+    message["definitions"] = std::move(definitions);
+
+    SendMessageToUI(message.dump());
+  }
+
+  void GuitarFXPlugin::HandleSaveCompositeDefinitionRequest(const nlohmann::json &payload)
+  {
+    const nlohmann::json defJson = payload.value("definition", nlohmann::json::object());
+    if (!defJson.is_object() || defJson.empty())
+    {
+      ReportErrorToUI("Composite save failed", "Missing definition payload");
+      return;
+    }
+
+    CompositeEffectDefinition def;
+    try
+    {
+      def = DeserializeCompositeEffectDefinition(defJson);
+    }
+    catch (const std::exception &e)
+    {
+      ReportErrorToUI("Composite save failed", std::string("Invalid definition: ") + e.what());
+      return;
+    }
+
+    if (!def.IsValid())
+    {
+      ReportErrorToUI("Composite save failed", "Definition is invalid (missing id/name/innerGraph)");
+      return;
+    }
+
+    // Save to user directory
+    const auto userDir = mFileSystem.ResolveSettingsDirectory() / "composites" / "user";
+    if (!mCompositeLibrary.SaveDefinition(def, userDir))
+    {
+      ReportErrorToUI("Composite save failed", "Could not write definition file");
+      return;
+    }
+
+    // Add or update in memory and register with EffectRegistry
+    mCompositeLibrary.AddDefinition(def);
+
+    std::cout << "[Plugin] Saved composite definition: " << def.id << " (" << def.name << ")" << std::endl;
+
+    // Notify UI
+    nlohmann::json response;
+    response["type"] = "compositeDefinitionAdded";
+    response["definition"] = SerializeCompositeEffectDefinition(def);
+    SendMessageToUI(response.dump());
+
+    BroadcastState();
+  }
+
+  void GuitarFXPlugin::HandleDeleteCompositeDefinitionRequest(const nlohmann::json &payload)
+  {
+    const std::string id = payload.value("id", "");
+    if (id.empty())
+    {
+      ReportErrorToUI("Composite delete failed", "Missing definition id");
+      return;
+    }
+
+    // Only allow deleting user definitions (factory ones are read-only)
+    const auto userDir = mFileSystem.ResolveSettingsDirectory() / "composites" / "user";
+    mCompositeLibrary.DeleteDefinition(id, userDir);
+
+    std::cout << "[Plugin] Deleted composite definition: " << id << std::endl;
+
+    nlohmann::json response;
+    response["type"] = "compositeDefinitionRemoved";
+    response["id"] = id;
+    SendMessageToUI(response.dump());
+
+    BroadcastState();
   }
 
   void GuitarFXPlugin::LoadLastSessionState()

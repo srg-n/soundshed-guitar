@@ -48,6 +48,7 @@ const EFFECT_VISUAL_BACKGROUNDS: Record<string, string> = {
   modulation: "linear-gradient(145deg, rgba(88, 64, 132, 0.95) 0%, rgba(26, 18, 44, 0.95) 100%)",
   delay: "linear-gradient(145deg, rgba(64, 132, 112, 0.95) 0%, rgba(18, 34, 38, 0.95) 100%)",
   reverb: "linear-gradient(145deg, rgba(64, 92, 132, 0.95) 0%, rgba(18, 24, 38, 0.95) 100%)",
+  channel: "linear-gradient(145deg, rgba(148, 108, 48, 0.95) 0%, rgba(38, 28, 12, 0.95) 100%)",
   utility: "linear-gradient(145deg, rgba(86, 86, 96, 0.95) 0%, rgba(26, 26, 30, 0.95) 100%)",
 };
 
@@ -398,6 +399,7 @@ function getCategoryClass(category: string): string {
     "pedal": "amp",
     "preamp": "amp",
     "full-rig": "amp",
+    "channel": "amp",
     "cab": "cab",
     "eq": "eq",
     "modulation": "modulation",
@@ -1732,15 +1734,18 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
     }
   }
 
-  // Check for custom layout
-  const customLayout = getCustomLayout(node.type);
+  // Check for custom layout (blend-aware: per-blend first, then fall back to effect type)
+  const nodeBlendId = blendState?.blend?.id || "";
+  const customLayout = nodeBlendId
+    ? (getCustomLayout(node.type, nodeBlendId) ?? getCustomLayout(node.type))
+    : getCustomLayout(node.type);
   const customLayoutHtml = customLayout
     ? renderCustomLayout(node, customLayout, paramDefs)
     : null;
 
-  // Customize layout button
+  // Customize layout button (include blend ID for per-blend layout selection)
   const customizeLayoutBtn = `
-    <button class="node-customize-layout-btn" data-node-id="${node.id}" data-effect-type="${node.type}" title="Customize Layout">
+    <button class="node-customize-layout-btn" data-node-id="${node.id}" data-effect-type="${node.type}" data-blend-id="${nodeBlendId}" title="Customize Layout">
       ${renderIcon("gear", "customize-layout-icon")} Layout
     </button>
   `;
@@ -2304,8 +2309,41 @@ function bindCustomizeLayoutButton(node: GraphNode): void {
 
   layoutBtn.addEventListener("click", () => {
     const effectType = layoutBtn.dataset.effectType || node.type;
-    const existingLayout = getCustomLayout(effectType);
-    layoutDesigner.open(effectType, existingLayout ?? undefined);
+    const blendId = layoutBtn.dataset.blendId || "";
+
+    // For blend effects, try per-blend layout first, then fall back to effect-type layout
+    const existingLayout = blendId
+      ? (getCustomLayout(effectType, blendId) ?? getCustomLayout(effectType))
+      : getCustomLayout(effectType);
+
+    // Resolve blend params so the designer shows all available controls
+    let blendName = "";
+    let blendParamDefs: Array<{ key: string; name: string; default: number; min: number; max: number; unit: string; step?: number }> | undefined;
+    if (blendId) {
+      const blendState = getBlendState(node);
+      if (blendState) {
+        blendName = blendState.blend?.name || blendId;
+        // Include ALL blend param specs so every possible knob is available in the designer
+        const allBlendParams = BLEND_PARAM_SPECS.map((spec) => ({
+          key: spec.id,
+          name: spec.label,
+          default: 0,
+          min: spec.min,
+          max: spec.max,
+          unit: "amount",
+          step: 0.1,
+        }));
+        const typeInfo = EffectTypeRegistry.get(effectType);
+        const baseParams = (typeInfo?.parameters || []).filter((p) => p.key !== "blend");
+        blendParamDefs = [...allBlendParams, ...baseParams];
+      }
+    }
+
+    layoutDesigner.open(effectType, existingLayout ?? undefined, {
+      blendId: blendId || undefined,
+      blendName: blendName || undefined,
+      blendParamDefs,
+    });
   });
 }
 
