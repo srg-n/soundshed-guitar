@@ -8,7 +8,7 @@ import { handleTunerUpdate, handleTunerStarted, handleTunerStopped, handleTunerR
 import { applyUiSettings } from "./windowSettings.js";
 import { updateDSPPerformancePlot, updateSignalDiagnosticsView } from "./views.js";
 import { refreshSettingsView } from "./settings.js";
-import { refreshSelectedNodeParams } from "./signalPath.js";
+import { refreshSelectedNodeParams, renderSignalPathBar } from "./signalPath.js";
 import { refreshFxSelector } from "./fxSelector.js";
 import { applyEnvironmentState, applyMetronomeState } from "./metronome.js";
 import type { GlobalSignalChainConfig, Preset, ResourceRef, UiSettings } from "./types.js";
@@ -18,8 +18,9 @@ import type { LayoutLibrary, EffectLayout } from "./layoutTypes.js";
 import { layoutLookupKey } from "./layoutTypes.js";
 import { handleCompositeLibrary, handleCompositeDefinitionAdded, handleCompositeDefinitionRemoved } from "./compositeEffects.js";
 import type { CompositeEffectDefinition } from "./compositeTypes.js";
-import { renderCompositeList } from "./compositeEditor.js";
+import { renderCompositeList, handleCompositeEditModeExited, handleCompositeEditStateUpdate } from "./compositeEditor.js";
 import { renderLayoutList } from "./layoutManager.js";
+import { enterCompositeEditState, updateCompositeEditState, exitCompositeEditState } from "./state.js";
 
 function normalizeResourceRef(ref?: ResourceRef | null): void {
   if (!ref) return;
@@ -692,6 +693,28 @@ export function handleIncomingMessage(message: string): void {
         refreshFxSelector();
         renderCompositeList();
       }
+      break;
+    }
+    case "compositeEditState": {
+      // C++ broadcasts the composite's current inner graph after each mutation
+      const editPayload = payload as { definition?: CompositeEffectDefinition };
+      if (editPayload.definition) {
+        const isAlreadyEditing = uiState.compositeEditMode;
+        if (isAlreadyEditing) {
+          updateCompositeEditState(editPayload.definition);
+        } else {
+          enterCompositeEditState(editPayload.definition);
+        }
+        renderSignalPathBar();
+        handleCompositeEditStateUpdate();
+      }
+      break;
+    }
+    case "compositeEditModeExited": {
+      // C++ confirms we've left composite edit mode
+      exitCompositeEditState();
+      handleCompositeEditModeExited();
+      renderSignalPathBar();
       break;
     }
     default:

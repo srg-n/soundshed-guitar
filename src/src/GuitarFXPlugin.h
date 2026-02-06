@@ -200,8 +200,15 @@ namespace guitarfx
     // Composite effects
     void HandleSaveCompositeDefinitionRequest(const nlohmann::json &payload);
     void HandleDeleteCompositeDefinitionRequest(const nlohmann::json &payload);
+    void HandleEnterCompositeEditModeRequest(const nlohmann::json &payload);
+    void HandleExitCompositeEditModeRequest(const nlohmann::json &payload);
     void LoadCompositeLibrary();
     void SendCompositeLibraryToUI();
+    void BroadcastCompositeEditState();
+
+    // Composite edit context helpers
+    bool IsCompositeEditMode() const;
+    SignalGraph* ResolveEditTarget();
     void RefreshMetronomeClickSamples();
     void UpdateMetronomeClickConfigFromSettings();
     const MetronomeClickTypeConfig* FindMetronomeClickType(const std::string& id) const;
@@ -269,6 +276,7 @@ namespace guitarfx
     ResourceLibrary mResourceLibrary;
     nlohmann::json mBlendLibrary = nlohmann::json::array();
     CompositeEffectLibrary mCompositeLibrary;
+    std::optional<CompositeEffectDefinition> mEditingComposite;
     FileSystem mFileSystem;
     ModelHasher mHasher;
     std::filesystem::path mResourceRoot;

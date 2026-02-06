@@ -310,6 +310,12 @@
 
     <!-- Signal Path Bar -->
     <section class="signal-path-bar" id="signal-path-bar">
+      <!-- Composite edit mode banner -->
+      <div class="composite-edit-banner" id="composite-edit-banner" style="display: none;">
+        <span class="composite-edit-banner-label">Editing Composite:</span>
+        <span class="composite-edit-banner-name" id="composite-edit-banner-name"></span>
+        <span class="composite-edit-banner-hint">Use the signal chain below to add/remove/configure effects</span>
+      </div>
       <div class="signal-path-scroll">
         <div class="signal-path-nodes" id="signal-path-nodes">
           <!-- Signal path nodes will be rendered here by JavaScript -->
@@ -522,17 +528,13 @@
                       </div>
                     </div>
 
-                    <!-- Inner Signal Graph -->
+                    <!-- Inner Signal Graph — edited via main signal path -->
                     <div class="composite-editor-section">
                       <h4>Inner Signal Path</h4>
-                      <div class="composite-inner-graph" id="composite-inner-graph">
-                        <!-- Inner graph nodes rendered by JS -->
-                      </div>
-                      <div class="composite-inner-graph-actions">
-                        <select id="composite-add-effect-type" class="themed-select"></select>
-                        <button id="composite-add-effect-btn" class="advanced-action-btn">+ Add Effect</button>
-                        <button id="composite-remove-effect-btn" class="advanced-action-btn danger">Remove Selected</button>
-                      </div>
+                      <p class="section-hint">
+                        The signal chain above shows this composite's inner effects.
+                        Use it to add, remove, and configure effects just like a normal preset.
+                      </p>
                     </div>
 
                     <!-- Exposed Parameters -->
@@ -635,6 +637,19 @@
               </div>
             </div>
 
+
+            <h2>User Interface</h2>
+            <div class="settings-section">
+              <h3>Advanced Options</h3>
+              <div class="settings-row">
+                <label for="advanced-options-toggle">Enable Advanced Options</label>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="advanced-options-toggle" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="settings-hint">Shows the Advanced tab in the Library panel and the layout editor for effects.</div>
+            </div>
 
             <h2>Tone3000</h2>
             <div class="settings-section">

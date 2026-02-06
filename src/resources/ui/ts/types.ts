@@ -332,6 +332,12 @@ export interface UiState {
   missingNodeResources?: Array<{ nodeId: string; resourceType?: string; resourceId?: string; filePath?: string }>;
   layoutLibrary?: LayoutLibrary;
   compositeLibrary?: CompositeEffectDefinition[];
+  /** True when the main signal path is showing a composite's inner graph for editing. */
+  compositeEditMode?: boolean;
+  /** The composite definition currently being edited (deep clone from C++ state). */
+  compositeEditDefinition?: CompositeEffectDefinition | null;
+  /** Synthetic preset wrapping the composite's inner graph for signal path rendering. */
+  compositeEditPreset?: Preset | null;
 }
 
 declare global {

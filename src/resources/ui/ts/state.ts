@@ -1,4 +1,5 @@
 import type { DemoSample, GlobalSignalChainConfig, Preset, SignalGraph, UiState } from "./types.js";
+import type { CompositeEffectDefinition } from "./compositeTypes.js";
 import { createEmptyLayoutLibrary } from "./layoutTypes.js";
 
 export const LOG_ENTRY_LIMIT = 200;
@@ -236,6 +237,9 @@ export const uiState: UiState = {
       { id: "electronic", label: "Electronic" },
     ],
   },
+  compositeEditMode: false,
+  compositeEditDefinition: null,
+  compositeEditPreset: null,
 };
 
 export function clonePreset<T extends Preset | null>(preset: T): T {
@@ -243,6 +247,10 @@ export function clonePreset<T extends Preset | null>(preset: T): T {
 }
 
 export function getActivePresetForRender(): Preset | null {
+  // In composite edit mode, render the composite's inner graph as a synthetic preset
+  if (uiState.compositeEditMode && uiState.compositeEditPreset) {
+    return uiState.compositeEditPreset;
+  }
   if (uiState.activePresetDraft) {
     return uiState.activePresetDraft;
   }
@@ -262,8 +270,69 @@ export function setActivePresetDraft(preset: Preset | null): void {
 }
 
 export function setPresetDirty(isDirty: boolean): void {
+  // Don't mark the preset dirty when editing a composite's inner graph
+  if (uiState.compositeEditMode) return;
   uiState.presetDirty = isDirty;
   if (typeof document !== "undefined") {
     document.dispatchEvent(new CustomEvent("presetDirtyChanged"));
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Composite Edit Mode Helpers
+// ─────────────────────────────────────────────────────────────
+
+export function isCompositeEditMode(): boolean {
+  return !!uiState.compositeEditMode;
+}
+
+const ADVANCED_OPTIONS_SETTING = "ui.advancedOptionsEnabled";
+
+export function isAdvancedOptionsEnabled(): boolean {
+  return Boolean(uiState.appSettings?.[ADVANCED_OPTIONS_SETTING]);
+}
+
+export function getCompositeEditDefinition(): CompositeEffectDefinition | null {
+  return uiState.compositeEditDefinition ?? null;
+}
+
+/**
+ * Build a synthetic Preset from a composite's inner graph so the
+ * signal path renderer can display it unchanged.
+ */
+function buildCompositeEditPreset(def: CompositeEffectDefinition): Preset {
+  return {
+    id: `__composite_edit_${def.id}__`,
+    name: def.name,
+    category: def.category,
+    graph: def.innerGraph,
+  };
+}
+
+/**
+ * Enter composite edit mode. Called when the C++ side sends
+ * compositeEditState for the first time (or on explicit enter).
+ */
+export function enterCompositeEditState(def: CompositeEffectDefinition): void {
+  uiState.compositeEditMode = true;
+  uiState.compositeEditDefinition = def;
+  uiState.compositeEditPreset = buildCompositeEditPreset(def);
+}
+
+/**
+ * Update the composite's inner graph during editing (called when C++
+ * broadcasts compositeEditState after a graph mutation).
+ */
+export function updateCompositeEditState(def: CompositeEffectDefinition): void {
+  uiState.compositeEditDefinition = def;
+  uiState.compositeEditPreset = buildCompositeEditPreset(def);
+}
+
+/**
+ * Exit composite edit mode. Restores the normal preset view.
+ */
+export function exitCompositeEditState(): void {
+  uiState.compositeEditMode = false;
+  uiState.compositeEditDefinition = null;
+  uiState.compositeEditPreset = null;
 }

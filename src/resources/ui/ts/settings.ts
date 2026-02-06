@@ -20,6 +20,7 @@ const API_KEY_SETTING = "tone3000.apiKey";
 const DIAGNOSTICS_SETTING = "diagnostics.signalLevelsEnabled";
 const INTERFACE_CALIBRATION_ENABLED_SETTING = "audio.interfaceCalibration.enabled";
 const INTERFACE_CALIBRATION_REFERENCE_SETTING = "audio.interfaceCalibration.referenceDbu";
+const ADVANCED_OPTIONS_SETTING = "ui.advancedOptionsEnabled";
 
 const apiKeyInput = document.getElementById("tone3000-api-key-input") as HTMLInputElement | null;
 const saveButton = document.getElementById("tone3000-api-key-save");
@@ -45,6 +46,8 @@ const libraryTabButtons = Array.from(document.querySelectorAll(".library-tab-btn
 const libraryTabPanels = Array.from(document.querySelectorAll(".library-tab-panel"));
 const libraryExportButton = document.getElementById("library-export-btn");
 const libraryExportResourcesSelect = document.getElementById("library-export-resources") as HTMLSelectElement | null;
+const advancedOptionsToggle = document.getElementById("advanced-options-toggle") as HTMLInputElement | null;
+const advancedTabButton = document.querySelector('.library-tab-btn[data-library-tab="advanced"]') as HTMLElement | null;
 let settingsInitialized = false;
 let libraryFiltersInitialized = false;
 let equipmentTabsInitialized = false;
@@ -65,6 +68,7 @@ export function initSettingsPanel(): void {
   });
   initDiagnosticsToggle();
   initInterfaceCalibrationControls();
+  initAdvancedOptionsToggle();
   initEquipmentTabs();
   initLibraryFilters();
   initLibraryCleanup();
@@ -241,6 +245,28 @@ function initAdvancedSubTabs(): void {
   });
 }
 
+function initAdvancedOptionsToggle(): void {
+  if (!advancedOptionsToggle || advancedOptionsToggle.dataset.bound === "true") return;
+  advancedOptionsToggle.dataset.bound = "true";
+  advancedOptionsToggle.addEventListener("change", () => {
+    const enabled = Boolean(advancedOptionsToggle.checked);
+    uiState.appSettings[ADVANCED_OPTIONS_SETTING] = enabled;
+    setAppSetting(ADVANCED_OPTIONS_SETTING, enabled);
+    updateAdvancedTabVisibility();
+  });
+}
+
+function updateAdvancedTabVisibility(): void {
+  const enabled = Boolean(getSettingValue(ADVANCED_OPTIONS_SETTING));
+  if (advancedTabButton) {
+    advancedTabButton.style.display = enabled ? "" : "none";
+  }
+  // If advanced tab was active but now hidden, switch to first tab
+  if (!enabled && advancedTabButton?.classList.contains("active")) {
+    activateLibraryTab("tone3000");
+  }
+}
+
 export function initDiagnosticsToggle(): void {
   if (!diagnosticsToggle) {
     return;
@@ -277,6 +303,10 @@ export function refreshSettingsView(): void {
   if (themeSelect) {
     themeSelect.value = themeSwitcher.getCurrentTheme();
   }
+  if (advancedOptionsToggle) {
+    advancedOptionsToggle.checked = Boolean(getSettingValue(ADVANCED_OPTIONS_SETTING));
+  }
+  updateAdvancedTabVisibility();
   updateSessionStatus();
   updateSignalDiagnosticsView();
   renderLibraryView();

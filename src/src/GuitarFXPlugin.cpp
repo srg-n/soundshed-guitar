@@ -2976,6 +2976,14 @@ namespace guitarfx
     {
       SendCompositeLibraryToUI();
     }
+    else if (type == "enterCompositeEditMode")
+    {
+      HandleEnterCompositeEditModeRequest(payload);
+    }
+    else if (type == "exitCompositeEditMode")
+    {
+      HandleExitCompositeEditModeRequest(payload);
+    }
   }
 
   void GuitarFXPlugin::BroadcastState()
@@ -4243,27 +4251,38 @@ namespace guitarfx
       return;
     }
 
-    // Update the parameter in the active preset's graph
-    if (mActivePreset)
+    SignalGraph* targetGraph = ResolveEditTarget();
+    if (!targetGraph)
     {
-      GraphNode* node = mActivePreset->graph.FindNode(nodeId);
-      if (node)
+      return;
+    }
+
+    GraphNode* node = targetGraph->FindNode(nodeId);
+    if (!node)
+    {
+      return;
+    }
+
+    node->params[paramKey] = value;
+
+    if (IsCompositeEditMode())
+    {
+      BroadcastCompositeEditState();
+    }
+    else if (mActivePreset)
+    {
+      // Re-serialize the preset JSON to reflect the change
+      mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+      
+      // Apply just the changed parameter based on node type (without full preset reload)
+      const bool handled = ApplyNodeParameter(*node, paramKey, value);
+      if (!handled)
       {
-        node->params[paramKey] = value;
-        
-        // Re-serialize the preset JSON to reflect the change
-        mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
-        
-        // Apply just the changed parameter based on node type (without full preset reload)
-        const bool handled = ApplyNodeParameter(*node, paramKey, value);
-        if (!handled)
-        {
-          // Fallback: re-apply the preset so new node param values take effect immediately.
-          ApplyPreset(*mActivePreset);
-        }
-        
-        // Don't broadcast state on every param change during drag - too noisy
+        // Fallback: re-apply the preset so new node param values take effect immediately.
+        ApplyPreset(*mActivePreset);
       }
+      
+      // Don't broadcast state on every param change during drag - too noisy
     }
   }
 
@@ -4802,23 +4821,34 @@ namespace guitarfx
       return;
     }
 
-    // Update the bypass state in the active preset's graph
-    if (mActivePreset)
+    SignalGraph* targetGraph = ResolveEditTarget();
+    if (!targetGraph)
     {
-      GraphNode* node = mActivePreset->graph.FindNode(nodeId);
-      if (node)
-      {
-        node->enabled = !bypassed;
-        
-        // Re-serialize the preset JSON to reflect the change
-        mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
-        
-        // Apply the updated preset to DSP
-        ApplyPreset(*mActivePreset);
-        
-        // Broadcast state change to UI
-        mPendingStateBroadcast = true;
-      }
+      return;
+    }
+
+    GraphNode* node = targetGraph->FindNode(nodeId);
+    if (!node)
+    {
+      return;
+    }
+
+    node->enabled = !bypassed;
+
+    if (IsCompositeEditMode())
+    {
+      BroadcastCompositeEditState();
+    }
+    else if (mActivePreset)
+    {
+      // Re-serialize the preset JSON to reflect the change
+      mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+      
+      // Apply the updated preset to DSP
+      ApplyPreset(*mActivePreset);
+      
+      // Broadcast state change to UI
+      mPendingStateBroadcast = true;
     }
   }
 
@@ -4859,13 +4889,18 @@ namespace guitarfx
 
     if (resourceIndex >= 0)
     {
-      EnsureBasicGraph();
-      if (!mActivePreset)
+      if (!IsCompositeEditMode())
+      {
+        EnsureBasicGraph();
+      }
+
+      SignalGraph* targetGraph = ResolveEditTarget();
+      if (!targetGraph)
       {
         return;
       }
 
-      GraphNode* target = mActivePreset->graph.FindNode(nodeId);
+      GraphNode* target = targetGraph->FindNode(nodeId);
       if (!target)
       {
         return;
@@ -4895,12 +4930,20 @@ namespace guitarfx
       if (ref.parameterValue.has_value())
         slot.parameterValue = ref.parameterValue;
 
-      mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
-      ApplyPreset(*mActivePreset);
-      mPendingStateBroadcast = true;
+      if (IsCompositeEditMode())
+      {
+        BroadcastCompositeEditState();
+      }
+      else if (mActivePreset)
+      {
+        mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+        ApplyPreset(*mActivePreset);
+        mPendingStateBroadcast = true;
+      }
       
-      // Queue NAM calibration if this is a NAM node
-      if ((target->type == "amp_nam" || target->type == "amp_nam_optimized")
+      // Queue NAM calibration if this is a NAM node (only for real presets)
+      if (!IsCompositeEditMode()
+          && (target->type == "amp_nam" || target->type == "amp_nam_optimized")
           && !target->resources.empty()
           && target->resources.front().IsValid())
       {
@@ -4909,20 +4952,29 @@ namespace guitarfx
       return;
     }
 
-    if (!filePath.empty() && mActivePreset)
+    if (!filePath.empty())
     {
-      GraphNode* node = mActivePreset->graph.FindNode(nodeId);
+      SignalGraph* fpGraph = ResolveEditTarget();
+      GraphNode* node = fpGraph ? fpGraph->FindNode(nodeId) : nullptr;
       if (node && !node->resources.empty())
       {
         node->resources.clear();
         node->resources.push_back(ref);
 
-        mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
-        ApplyPreset(*mActivePreset);
-        mPendingStateBroadcast = true;
+        if (IsCompositeEditMode())
+        {
+          BroadcastCompositeEditState();
+        }
+        else if (mActivePreset)
+        {
+          mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+          ApplyPreset(*mActivePreset);
+          mPendingStateBroadcast = true;
+        }
         
-        // Queue NAM calibration if this is a NAM node
-        if ((node->type == "amp_nam" || node->type == "amp_nam_optimized")
+        // Queue NAM calibration if this is a NAM node (only for real presets)
+        if (!IsCompositeEditMode()
+            && (node->type == "amp_nam" || node->type == "amp_nam_optimized")
             && !node->resources.empty()
             && node->resources.front().IsValid())
         {
@@ -7156,6 +7208,170 @@ namespace guitarfx
     BroadcastState();
   }
 
+  // ── Composite Edit Mode ──────────────────────────────────────────────
+
+  bool GuitarFXPlugin::IsCompositeEditMode() const
+  {
+    return mEditingComposite.has_value();
+  }
+
+  SignalGraph* GuitarFXPlugin::ResolveEditTarget()
+  {
+    if (mEditingComposite)
+    {
+      return &mEditingComposite->innerGraph;
+    }
+    if (mActivePreset)
+    {
+      return &mActivePreset->graph;
+    }
+    return nullptr;
+  }
+
+  void GuitarFXPlugin::HandleEnterCompositeEditModeRequest(const nlohmann::json &payload)
+  {
+    const std::string compositeId = payload.value("compositeId", "");
+    if (compositeId.empty())
+    {
+      ReportErrorToUI("Enter composite edit failed", "Missing compositeId");
+      return;
+    }
+
+    const auto* def = mCompositeLibrary.GetDefinition(compositeId);
+    if (!def)
+    {
+      ReportErrorToUI("Enter composite edit failed", "Composite not found: " + compositeId);
+      return;
+    }
+
+    // Clone the definition for editing
+    mEditingComposite = *def;
+
+    std::cout << "[Plugin] Entered composite edit mode: " << compositeId
+              << " (" << def->name << ")" << std::endl;
+
+    BroadcastCompositeEditState();
+  }
+
+  void GuitarFXPlugin::HandleExitCompositeEditModeRequest(const nlohmann::json &payload)
+  {
+    const bool save = payload.value("save", false);
+
+    if (save && mEditingComposite)
+    {
+      // Save the edited definition
+      const auto userDir = mFileSystem.ResolveSettingsDirectory() / "composites" / "user";
+      if (mCompositeLibrary.SaveDefinition(*mEditingComposite, userDir))
+      {
+        mCompositeLibrary.AddDefinition(*mEditingComposite);
+
+        nlohmann::json response;
+        response["type"] = "compositeDefinitionAdded";
+        response["definition"] = SerializeCompositeEffectDefinition(*mEditingComposite);
+        SendMessageToUI(response.dump());
+
+        std::cout << "[Plugin] Saved composite from edit mode: " << mEditingComposite->id << std::endl;
+      }
+      else
+      {
+        ReportErrorToUI("Composite save failed", "Could not write definition file on exit");
+      }
+    }
+
+    const std::string exitId = mEditingComposite ? mEditingComposite->id : "";
+    mEditingComposite.reset();
+
+    std::cout << "[Plugin] Exited composite edit mode" << (save ? " (saved)" : " (cancelled)") << std::endl;
+
+    // Send exit confirmation to UI
+    nlohmann::json exitMsg;
+    exitMsg["type"] = "compositeEditModeExited";
+    exitMsg["compositeId"] = exitId;
+    exitMsg["saved"] = save;
+    SendMessageToUI(exitMsg.dump());
+
+    // Broadcast normal preset state to restore main view
+    BroadcastState();
+  }
+
+  void GuitarFXPlugin::BroadcastCompositeEditState()
+  {
+    if (!mEditingComposite)
+    {
+      return;
+    }
+
+    // Wrap the composite's inner graph as a synthetic preset-like structure
+    // so the UI signal path renderer can display it
+    nlohmann::json msg;
+    msg["type"] = "compositeEditState";
+    msg["compositeId"] = mEditingComposite->id;
+    msg["name"] = mEditingComposite->name;
+    msg["category"] = mEditingComposite->category;
+    msg["description"] = mEditingComposite->description;
+    msg["author"] = mEditingComposite->author;
+    msg["tags"] = mEditingComposite->tags;
+    msg["definition"] = SerializeCompositeEffectDefinition(*mEditingComposite);
+
+    // Also send the inner graph as a flat preset graph so the signal path renderer works
+    nlohmann::json graphJson;
+    nlohmann::json nodesArr = nlohmann::json::array();
+    for (const auto& node : mEditingComposite->innerGraph.nodes)
+    {
+      nlohmann::json nj;
+      nj["id"] = node.id;
+      nj["type"] = node.type;
+      nj["displayName"] = node.label;
+      nj["category"] = node.category;
+      nj["bypassed"] = !node.enabled;
+      nj["params"] = nlohmann::json::object();
+      for (const auto& [k, v] : node.params)
+      {
+        nj["params"][k] = v;
+      }
+      nj["config"] = nlohmann::json::object();
+      for (const auto& [k, v] : node.config)
+      {
+        nj["config"][k] = v;
+      }
+      if (!node.resources.empty())
+      {
+        nlohmann::json resArr = nlohmann::json::array();
+        for (const auto& res : node.resources)
+        {
+          nlohmann::json rj;
+          rj["resourceType"] = res.resourceType;
+          rj["resourceId"] = res.resourceId;
+          rj["filePath"] = res.filePath;
+          rj["embeddedId"] = res.embeddedId;
+          rj["parameterId"] = res.parameterId;
+          rj["parameterValue"] = res.parameterValue;
+          resArr.push_back(rj);
+        }
+        nj["resources"] = resArr;
+      }
+      nodesArr.push_back(nj);
+    }
+    graphJson["nodes"] = nodesArr;
+
+    nlohmann::json edgesArr = nlohmann::json::array();
+    for (const auto& edge : mEditingComposite->innerGraph.edges)
+    {
+      nlohmann::json ej;
+      ej["from"] = edge.from;
+      ej["to"] = edge.to;
+      ej["fromPort"] = edge.fromPort;
+      ej["toPort"] = edge.toPort;
+      ej["gain"] = edge.gain;
+      edgesArr.push_back(ej);
+    }
+    graphJson["edges"] = edgesArr;
+
+    msg["graph"] = graphJson;
+
+    SendMessageToUI(msg.dump());
+  }
+
   void GuitarFXPlugin::LoadLastSessionState()
   {
     LoadAppSettings();
@@ -7227,13 +7443,14 @@ namespace guitarfx
       return;
     }
 
-    if (!mActivePreset)
+    SignalGraph* targetGraph = ResolveEditTarget();
+    if (!targetGraph)
     {
-      ReportErrorToUI("Add node failed", "No active preset");
+      ReportErrorToUI("Add node failed", "No active preset or composite");
       return;
     }
 
-    auto& edges = mActivePreset->graph.edges;
+    auto& edges = targetGraph->edges;
     auto chosenEdgeIt = edges.end();
 
     if (!edgeFrom.empty() && !edgeTo.empty())
@@ -7273,7 +7490,7 @@ namespace guitarfx
 
     if (effectType == "splitter")
     {
-      auto& graph = mActivePreset->graph;
+      auto& graph = *targetGraph;
 
       const std::string splitterId = MakeUniqueNodeId(graph, "split");
       const std::string mixerId = MakeUniqueNodeId(graph, "mix");
@@ -7331,9 +7548,16 @@ namespace guitarfx
       graph.nodes.push_back(splitter);
       graph.nodes.push_back(mixer);
 
-      mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
-      ApplyPreset(*mActivePreset);
-      BroadcastState();
+      if (IsCompositeEditMode())
+      {
+        BroadcastCompositeEditState();
+      }
+      else if (mActivePreset)
+      {
+        mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+        ApplyPreset(*mActivePreset);
+        BroadcastState();
+      }
 
       std::cout << "[Plugin] Inserted Splitter on edge " << chosenEdgeIt->from << " -> " << nextNodeId
                 << " via " << splitterId << "/" << mixerId << std::endl;
@@ -7409,21 +7633,29 @@ namespace guitarfx
     edges.push_back(newEdge);
 
     // Add the node
-    mActivePreset->graph.nodes.push_back(newNode);
+    targetGraph->nodes.push_back(newNode);
 
     // Re-serialize and broadcast
-    mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
-    ApplyPreset(*mActivePreset);
-    BroadcastState();
+    if (IsCompositeEditMode())
+    {
+      BroadcastCompositeEditState();
+    }
+    else if (mActivePreset)
+    {
+      mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+      ApplyPreset(*mActivePreset);
+      BroadcastState();
+    }
 
     std::cout << "[Plugin] Added node: " << newNode.id << " (" << effectType << ") after " << insertAfter << std::endl;
   }
 
   void GuitarFXPlugin::HandleSplitSignalPathEdgeRequest(const nlohmann::json &payload)
   {
-    if (!mActivePreset)
+    SignalGraph* targetGraph = ResolveEditTarget();
+    if (!targetGraph)
     {
-      ReportErrorToUI("Split failed", "No active preset");
+      ReportErrorToUI("Split failed", "No active preset or composite");
       return;
     }
 
@@ -7445,7 +7677,7 @@ namespace guitarfx
       return;
     }
 
-    auto& graph = mActivePreset->graph;
+    auto& graph = *targetGraph;
     auto& edges = graph.edges;
 
     auto targetEdgeIt = std::find_if(edges.begin(), edges.end(),
@@ -7516,18 +7748,26 @@ namespace guitarfx
     graph.nodes.push_back(splitter);
     graph.nodes.push_back(mixer);
 
-    mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
-    ApplyPreset(*mActivePreset);
-    BroadcastState();
+    if (IsCompositeEditMode())
+    {
+      BroadcastCompositeEditState();
+    }
+    else if (mActivePreset)
+    {
+      mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+      ApplyPreset(*mActivePreset);
+      BroadcastState();
+    }
 
     std::cout << "[Plugin] Split edge " << from << " -> " << to << " into parallel via " << splitterId << "/" << mixerId << std::endl;
   }
 
   void GuitarFXPlugin::HandleCollapseSignalPathSplitRequest(const nlohmann::json &payload)
   {
-    if (!mActivePreset)
+    SignalGraph* targetGraph = ResolveEditTarget();
+    if (!targetGraph)
     {
-      ReportErrorToUI("Collapse split failed", "No active preset");
+      ReportErrorToUI("Collapse split failed", "No active preset or composite");
       return;
     }
 
@@ -7539,7 +7779,7 @@ namespace guitarfx
       return;
     }
 
-    auto& graph = mActivePreset->graph;
+    auto& graph = *targetGraph;
     auto& edges = graph.edges;
 
     // Only support collapsing when branches are empty (splitter connects directly to mixer)
@@ -7597,9 +7837,16 @@ namespace guitarfx
         return n.id == splitterId || n.id == mixerId;
       }), graph.nodes.end());
 
-    mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
-    ApplyPreset(*mActivePreset);
-    BroadcastState();
+    if (IsCompositeEditMode())
+    {
+      BroadcastCompositeEditState();
+    }
+    else if (mActivePreset)
+    {
+      mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+      ApplyPreset(*mActivePreset);
+      BroadcastState();
+    }
 
     std::cout << "[Plugin] Collapsed empty split " << splitterId << "/" << mixerId << std::endl;
   }
@@ -7618,14 +7865,15 @@ namespace guitarfx
       return;
     }
 
-    if (!mActivePreset)
+    SignalGraph* targetGraph = ResolveEditTarget();
+    if (!targetGraph)
     {
-      ReportErrorToUI("Replace node failed", "No active preset");
+      ReportErrorToUI("Replace node failed", "No active preset or composite");
       return;
     }
 
     // Find the node
-    GraphNode* node = mActivePreset->graph.FindNode(nodeId);
+    GraphNode* node = targetGraph->FindNode(nodeId);
     if (!node)
     {
       ReportErrorToUI("Replace node failed", "Node not found: " + nodeId);
@@ -7688,9 +7936,16 @@ namespace guitarfx
     }
 
     // Re-serialize and broadcast
-    mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
-    ApplyPreset(*mActivePreset);
-    BroadcastState();
+    if (IsCompositeEditMode())
+    {
+      BroadcastCompositeEditState();
+    }
+    else if (mActivePreset)
+    {
+      mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+      ApplyPreset(*mActivePreset);
+      BroadcastState();
+    }
 
     std::cout << "[Plugin] Replaced node: " << nodeId << " with " << newEffectType << std::endl;
   }
@@ -7719,14 +7974,15 @@ namespace guitarfx
       return;
     }
 
-    if (!mActivePreset)
+    SignalGraph* targetGraph = ResolveEditTarget();
+    if (!targetGraph)
     {
-      ReportErrorToUI("Reorder node failed", "No active preset");
+      ReportErrorToUI("Reorder node failed", "No active preset or composite");
       return;
     }
 
     // Find moving node
-    const GraphNode* node = mActivePreset->graph.FindNode(nodeId);
+    const GraphNode* node = targetGraph->FindNode(nodeId);
     if (!node)
     {
       ReportErrorToUI("Reorder node failed", "Node not found");
@@ -7739,7 +7995,7 @@ namespace guitarfx
       return;
     }
 
-    auto& edges = mActivePreset->graph.edges;
+    auto& edges = targetGraph->edges;
 
     // Find edges connected to the moving node (expect single in/out)
     auto incomingEdgeIt = std::find_if(edges.begin(), edges.end(),
@@ -7803,7 +8059,7 @@ namespace guitarfx
     else
     {
       // Find edge after target node
-      const GraphNode* targetNode = mActivePreset->graph.FindNode(targetNodeId);
+      const GraphNode* targetNode = targetGraph->FindNode(targetNodeId);
       if (!targetNode)
       {
         ReportErrorToUI("Reorder node failed", "Target node not found");
@@ -7838,9 +8094,16 @@ namespace guitarfx
     }
 
     // Re-serialize and broadcast
-    mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
-    ApplyPreset(*mActivePreset);
-    BroadcastState();
+    if (IsCompositeEditMode())
+    {
+      BroadcastCompositeEditState();
+    }
+    else if (mActivePreset)
+    {
+      mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+      ApplyPreset(*mActivePreset);
+      BroadcastState();
+    }
 
     std::cout << "[Plugin] Reordered node: " << nodeId << " after " << targetNodeId << std::endl;
   }
@@ -7854,22 +8117,23 @@ namespace guitarfx
       return;
     }
 
-    if (!mActivePreset)
+    SignalGraph* targetGraph = ResolveEditTarget();
+    if (!targetGraph)
     {
-      ReportErrorToUI("Delete node failed", "No active preset");
+      ReportErrorToUI("Delete node failed", "No active preset or composite");
       return;
     }
 
     // Find the node
-    const GraphNode* node = mActivePreset->graph.FindNode(nodeId);
+    const GraphNode* node = targetGraph->FindNode(nodeId);
     if (!node)
     {
       ReportErrorToUI("Delete node failed", "Node not found: " + nodeId);
       return;
     }
 
-    auto& edges = mActivePreset->graph.edges;
-    auto& nodes = mActivePreset->graph.nodes;
+    auto& edges = targetGraph->edges;
+    auto& nodes = targetGraph->nodes;
 
     // Find incoming and outgoing edges
     auto incomingEdgeIt = std::find_if(edges.begin(), edges.end(),
@@ -7893,9 +8157,16 @@ namespace guitarfx
       [&nodeId](const GraphNode& n) { return n.id == nodeId; }), nodes.end());
 
     // Re-serialize and broadcast
-    mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
-    ApplyPreset(*mActivePreset);
-    BroadcastState();
+    if (IsCompositeEditMode())
+    {
+      BroadcastCompositeEditState();
+    }
+    else if (mActivePreset)
+    {
+      mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+      ApplyPreset(*mActivePreset);
+      BroadcastState();
+    }
 
     std::cout << "[Plugin] Deleted node: " << nodeId << std::endl;
   }

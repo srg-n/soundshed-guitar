@@ -3,12 +3,16 @@
  *
  * Provides UI for listing, creating, editing, and saving composite effect
  * definitions within the Advanced tab of the library panel.
+ *
+ * The composite's inner signal graph is edited via the main signal path
+ * area (reusing the same rendering, drag-drop, knobs, and param editing).
+ * This module manages: the definition list, metadata form, exposed params,
+ * and the enter/exit of composite edit mode on the C++ side.
  */
 
 import {
   getCompositeLibrary,
   getCompositeDefinition,
-  saveCompositeDefinition,
   deleteCompositeDefinition,
   createEmptyCompositeDefinition,
 } from "./compositeEffects.js";
@@ -16,10 +20,14 @@ import type {
   CompositeEffectDefinition,
   ExposedParameter,
 } from "./compositeTypes.js";
-import { EffectTypeRegistry, BUILTIN_EFFECTS, type ParameterDef } from "./presetV2.js";
-import type { GraphNode, GraphEdge } from "./types.js";
+import { EffectTypeRegistry } from "./presetV2.js";
+import { postMessage } from "./bridge.js";
 import { showNotification } from "./notifications.js";
 import { appendLog } from "./logging.js";
+import {
+  isCompositeEditMode,
+  getCompositeEditDefinition,
+} from "./state.js";
 
 // ─────────────────────────────────────────────────────────────
 // DOM References
@@ -41,12 +49,6 @@ const editDescription = document.getElementById("composite-edit-description") as
 const editAuthor = document.getElementById("composite-edit-author") as HTMLInputElement | null;
 const editTags = document.getElementById("composite-edit-tags") as HTMLInputElement | null;
 
-// Inner graph
-const innerGraphEl = document.getElementById("composite-inner-graph");
-const addEffectTypeSelect = document.getElementById("composite-add-effect-type") as HTMLSelectElement | null;
-const addEffectBtn = document.getElementById("composite-add-effect-btn");
-const removeEffectBtn = document.getElementById("composite-remove-effect-btn");
-
 // Exposed params
 const exposedParamsEl = document.getElementById("composite-exposed-params");
 const addParamBtn = document.getElementById("composite-add-param-btn");
@@ -58,12 +60,10 @@ const addParamBtn = document.getElementById("composite-add-param-btn");
 let initialized = false;
 let searchFilter = "";
 
-/** The definition currently being edited (deep clone). null = list mode. */
+/** The definition being edited — metadata is local; graph is kept in sync with C++. */
 let editingDef: CompositeEffectDefinition | null = null;
 /** Whether this is a new (unsaved) definition. */
 let isNewDefinition = false;
-/** Selected inner graph node ID. */
-let selectedInnerNodeId: string | null = null;
 
 // ─────────────────────────────────────────────────────────────
 // Initialization
@@ -91,22 +91,13 @@ export function initCompositeEditor(): void {
   });
 
   compositeCancelBtn?.addEventListener("click", () => {
-    closeEditor();
-  });
-
-  addEffectBtn?.addEventListener("click", () => {
-    addInnerEffect();
-  });
-
-  removeEffectBtn?.addEventListener("click", () => {
-    removeSelectedInnerEffect();
+    cancelEditor();
   });
 
   addParamBtn?.addEventListener("click", () => {
     addExposedParam();
   });
 
-  populateEffectTypeSelect();
   renderCompositeList();
 }
 
@@ -185,6 +176,8 @@ function startNewComposite(): void {
   editingDef = createEmptyCompositeDefinition();
   isNewDefinition = true;
   showEditor("New Composite Effect");
+  // Tell C++ to enter composite edit mode with the new empty definition
+  postMessage({ type: "enterCompositeEditMode", compositeId: editingDef.id, definition: editingDef });
 }
 
 function openEditor(id: string): void {
@@ -193,10 +186,13 @@ function openEditor(id: string): void {
     showNotification("Composite not found", "error");
     return;
   }
-  // Deep clone
+  // Deep clone for local metadata editing
   editingDef = JSON.parse(JSON.stringify(src));
   isNewDefinition = false;
   showEditor(`Edit: ${editingDef!.name}`);
+  // Tell C++ to enter composite edit mode — C++ will clone the definition and
+  // broadcast compositeEditState which sets up the signal path rendering
+  postMessage({ type: "enterCompositeEditMode", compositeId: id });
 }
 
 function cloneComposite(id: string): void {
@@ -209,6 +205,7 @@ function cloneComposite(id: string): void {
   editingDef!.modifiedAt = new Date().toISOString();
   isNewDefinition = true;
   showEditor(`Clone: ${editingDef!.name}`);
+  postMessage({ type: "enterCompositeEditMode", compositeId: editingDef!.id, definition: editingDef });
 }
 
 function showEditor(title: string): void {
@@ -228,22 +225,45 @@ function showEditor(title: string): void {
     compositeSaveAsBtn.style.display = isNewDefinition ? "none" : "";
   }
 
-  selectedInnerNodeId = null;
-  renderInnerGraph();
   renderExposedParams();
   compositeEditor.style.display = "";
   compositeList?.parentElement?.querySelector(".advanced-toolbar")?.classList.add("hidden");
   if (compositeList) compositeList.style.display = "none";
 }
 
-function closeEditor(): void {
+function cancelEditor(): void {
+  // Tell C++ to exit composite edit mode without saving
+  postMessage({ type: "exitCompositeEditMode", save: false });
+  closeEditorUI();
+}
+
+function closeEditorUI(): void {
   editingDef = null;
   isNewDefinition = false;
-  selectedInnerNodeId = null;
   if (compositeEditor) compositeEditor.style.display = "none";
   compositeList?.parentElement?.querySelector(".advanced-toolbar")?.classList.remove("hidden");
   if (compositeList) compositeList.style.display = "";
   renderCompositeList();
+}
+
+/**
+ * Called when the C++ side confirms exit from composite edit mode.
+ * Resets the editor UI.
+ */
+export function handleCompositeEditModeExited(): void {
+  closeEditorUI();
+}
+
+/**
+ * Called when C++ broadcasts compositeEditState. Keeps the local
+ * exposed-params editor in sync with the live inner graph.
+ */
+export function handleCompositeEditStateUpdate(): void {
+  const liveDef = getCompositeEditDefinition();
+  if (!liveDef || !editingDef) return;
+  // Keep the inner graph in sync (for exposed params node references)
+  editingDef.innerGraph = JSON.parse(JSON.stringify(liveDef.innerGraph));
+  renderExposedParams();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -268,10 +288,25 @@ function saveCurrentComposite(saveAsNew: boolean): void {
     editingDef.createdAt = new Date().toISOString();
   }
 
-  saveCompositeDefinition(editingDef);
+  // Tell C++ to exit composite edit mode with save=true.
+  // C++ will persist the current inner graph along with our metadata.
+  postMessage({
+    type: "exitCompositeEditMode",
+    save: true,
+    metadata: {
+      id: editingDef.id,
+      name: editingDef.name,
+      category: editingDef.category,
+      description: editingDef.description,
+      author: editingDef.author,
+      tags: editingDef.tags,
+      exposedParams: editingDef.exposedParams,
+    },
+  });
+
   showNotification(`Composite "${editingDef.name}" saved`, "success");
   appendLog(`Composite saved: ${editingDef.id}`);
-  closeEditor();
+  closeEditorUI();
 }
 
 function confirmDeleteComposite(id: string): void {
@@ -281,151 +316,6 @@ function confirmDeleteComposite(id: string): void {
     deleteCompositeDefinition(id);
     renderCompositeList();
   }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Inner Graph Rendering
-// ─────────────────────────────────────────────────────────────
-
-function renderInnerGraph(): void {
-  if (!innerGraphEl || !editingDef) return;
-
-  const effectNodes = editingDef.innerGraph.nodes.filter(
-    (n) => n.type !== "input" && n.type !== "output"
-  );
-
-  if (effectNodes.length === 0) {
-    innerGraphEl.innerHTML = `<div class="composite-empty">No effects in the inner graph. Add effects below.</div>`;
-    return;
-  }
-
-  innerGraphEl.innerHTML = effectNodes
-    .map((node, index) => {
-      const typeInfo = EffectTypeRegistry.get(node.type);
-      const displayName = node.displayName || typeInfo?.displayName || node.type;
-      const isSelected = selectedInnerNodeId === node.id;
-      return `
-      <div class="inner-graph-node ${isSelected ? "selected" : ""}" data-node-id="${node.id}" data-node-index="${index}">
-        <span class="inner-node-order">${index + 1}</span>
-        <span class="inner-node-name">${escHtml(displayName)}</span>
-        <span class="inner-node-type">${node.type}</span>
-        ${node.bypassed ? '<span class="inner-node-bypassed">BYPASSED</span>' : ""}
-      </div>`;
-    })
-    .join('<div class="inner-graph-arrow">→</div>');
-
-  // Bind click to select
-  innerGraphEl.querySelectorAll(".inner-graph-node").forEach((el) => {
-    el.addEventListener("click", () => {
-      selectedInnerNodeId = (el as HTMLElement).dataset.nodeId ?? null;
-      renderInnerGraph();
-      renderExposedParams();
-    });
-  });
-}
-
-function populateEffectTypeSelect(): void {
-  if (!addEffectTypeSelect) return;
-
-  // Group by category
-  const categories = new Map<string, { type: string; name: string }[]>();
-  for (const effect of BUILTIN_EFFECTS) {
-    if (effect.type === "input" || effect.type === "output") continue;
-    const cat = effect.category;
-    if (!categories.has(cat)) categories.set(cat, []);
-    categories.get(cat)!.push({ type: effect.type, name: effect.displayName });
-  }
-
-  let html = "";
-  for (const [cat, effects] of categories) {
-    html += `<optgroup label="${cat.toUpperCase()}">`;
-    for (const e of effects) {
-      html += `<option value="${e.type}">${e.name}</option>`;
-    }
-    html += `</optgroup>`;
-  }
-
-  addEffectTypeSelect.innerHTML = html;
-}
-
-function addInnerEffect(): void {
-  if (!editingDef || !addEffectTypeSelect) return;
-
-  const effectType = addEffectTypeSelect.value;
-  if (!effectType) return;
-
-  const typeInfo = EffectTypeRegistry.get(effectType);
-  const nodeId = `${effectType.replace(/_/g, "-")}-${Date.now().toString(36)}`;
-
-  const newNode: GraphNode = {
-    id: nodeId,
-    type: effectType,
-    displayName: typeInfo?.displayName || effectType,
-    category: typeInfo?.category || "utility",
-    bypassed: false,
-    params: Object.fromEntries(
-      (typeInfo?.parameters ?? []).map((p) => [p.key, p.default])
-    ),
-    config: {},
-  };
-
-  // Insert before output node
-  const outputIdx = editingDef.innerGraph.nodes.findIndex((n) => n.type === "output");
-  if (outputIdx >= 0) {
-    editingDef.innerGraph.nodes.splice(outputIdx, 0, newNode);
-  } else {
-    editingDef.innerGraph.nodes.push(newNode);
-  }
-
-  // Rebuild edges as a linear chain
-  rebuildInnerEdges();
-  renderInnerGraph();
-  renderExposedParams();
-}
-
-function removeSelectedInnerEffect(): void {
-  if (!editingDef || !selectedInnerNodeId) return;
-
-  // Don't remove input/output
-  const node = editingDef.innerGraph.nodes.find((n) => n.id === selectedInnerNodeId);
-  if (!node || node.type === "input" || node.type === "output") {
-    showNotification("Cannot remove input/output nodes", "error");
-    return;
-  }
-
-  // Remove any exposed params referencing this node
-  editingDef.exposedParams = editingDef.exposedParams.filter(
-    (ep) => ep.nodeId !== selectedInnerNodeId
-  );
-
-  editingDef.innerGraph.nodes = editingDef.innerGraph.nodes.filter(
-    (n) => n.id !== selectedInnerNodeId
-  );
-
-  selectedInnerNodeId = null;
-  rebuildInnerEdges();
-  renderInnerGraph();
-  renderExposedParams();
-}
-
-/** Rebuild edges as a simple linear chain from input → effects → output. */
-function rebuildInnerEdges(): void {
-  if (!editingDef) return;
-
-  const nodes = editingDef.innerGraph.nodes;
-  const edges: GraphEdge[] = [];
-
-  for (let i = 0; i < nodes.length - 1; i++) {
-    edges.push({
-      from: nodes[i].id,
-      to: nodes[i + 1].id,
-      fromPort: 0,
-      toPort: 0,
-      gain: 1.0,
-    });
-  }
-
-  editingDef.innerGraph.edges = edges;
 }
 
 // ─────────────────────────────────────────────────────────────

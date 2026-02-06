@@ -1,4 +1,4 @@
-import { uiState, getActivePresetForRender, setPresetDirty } from "./state.js";
+import { uiState, getActivePresetForRender, setPresetDirty, isCompositeEditMode, isAdvancedOptionsEnabled } from "./state.js";
 import type {
   Preset,
   GraphNode,
@@ -602,6 +602,9 @@ export function renderSignalPathBar(): void {
   if (!signalPathNodesElement) {
     return;
   }
+
+  // Show/hide composite edit mode banner
+  updateCompositeEditBanner();
 
   const activePresetId = uiState.activePresetId;
   const activePreset = getActivePresetForRender() ?? undefined;
@@ -1744,11 +1747,12 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
     : null;
 
   // Customize layout button (include blend ID for per-blend layout selection)
-  const customizeLayoutBtn = `
+  // Only shown when advanced options are enabled
+  const customizeLayoutBtn = isAdvancedOptionsEnabled() ? `
     <button class="node-customize-layout-btn" data-node-id="${node.id}" data-effect-type="${node.type}" data-blend-id="${nodeBlendId}" title="Customize Layout">
       ${renderIcon("gear", "customize-layout-icon")} Layout
     </button>
-  `;
+  ` : "";
 
   nodeParamsPanelElement.innerHTML = `
     
@@ -2444,6 +2448,23 @@ function sendCollapseParallelSplit(splitterId: string, mixerId: string): void {
     mixerId,
   });
   setPresetDirty(true);
+}
+
+/**
+ * Show/hide the composite edit mode banner in the signal path area.
+ */
+function updateCompositeEditBanner(): void {
+  const banner = document.getElementById("composite-edit-banner");
+  if (!banner) return;
+
+  if (isCompositeEditMode()) {
+    const def = uiState.compositeEditDefinition;
+    const nameEl = document.getElementById("composite-edit-banner-name");
+    if (nameEl && def) nameEl.textContent = def.name;
+    banner.style.display = "";
+  } else {
+    banner.style.display = "none";
+  }
 }
 
 /**
