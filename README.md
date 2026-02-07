@@ -16,6 +16,7 @@ See [docs/](docs/) for architecture and reference documentation:
 
 | Document | Description |
 |----------|-------------|
+| [Agent Quickstart](docs/agent-quickstart.md) | Minimal, high-signal guide for AI agents |
 | [Architecture Overview](docs/architecture-overview.md) | System layers, design principles, performance targets |
 | [Signal Chain](docs/signal-chain.md) | Graph model, execution, buffer management |
 | [FX Library](docs/fx-library.md) | Effect types, registry, resource configuration |
@@ -24,6 +25,18 @@ See [docs/](docs/) for architecture and reference documentation:
 | [Network API](docs/network-api.md) | REST API, client, plugin formats |
 | [Theme System](docs/theme-system.md) | CSS theming |
 | [PRD](docs/prd/PRD.md) | Product requirements |
+
+## Agent Context Bundle
+
+For minimal context with high coverage, load these files:
+
+- docs/agent-quickstart.md
+- docs/architecture-overview.md
+- docs/signal-chain.md
+- docs/fx-library.md
+- docs/data-models.md
+- docs/user-interface.md
+- .github/copilot-instructions.md
 
 ## Quick Start
 

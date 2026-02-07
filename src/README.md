@@ -1,4 +1,4 @@
-# GuitarFX
+# Soundshed Guitar (GuitarFX)
 
 GuitarFX is a cross-format audio plugin (VST3/AU/AAX) powered by iPlug2 and the Neural Amp Modeler (NAM) DSP core. It delivers a flexible guitar processing chain that combines Neural Amp models, cabinet impulse responses, and supporting FX in a web-based user interface.
 
@@ -7,7 +7,7 @@ GuitarFX is a cross-format audio plugin (VST3/AU/AAX) powered by iPlug2 and the 
 - Neural Amp Modeler integration with per-channel processing and automatic prewarm
 - Configurable FX chain with noise gate, soft-saturation drive, and spectral tilt tone shaping
 - Convolution-based cabinet section powered by user-supplied impulse responses
-- Categorised preset system with JSON persistence and FNV-1a attachment hashing for caching
+- Categorised preset system with JSON persistence and content-addressed resource deduplication
 - Remote preset search/download client with HTTP integration via cpp-httplib
 - WebView-driven UI (HTML/JS/CSS) with live parameter synchronisation and preset browsing
 
@@ -17,7 +17,7 @@ GuitarFX is a cross-format audio plugin (VST3/AU/AAX) powered by iPlug2 and the 
 CMakeLists.txt
 cmake/FetchDependencies.cmake   # Dependency bootstrap (iPlug2, NAM Core, httplib, nlohmann::json)
 config/GuitarFXConfig.h        # Plug-in metadata shared by all formats
-resources/ui/                   # WebView UI bundle (HTML/JS/CSS)
+resources/ui/                   # WebView UI bundle (HTML/JS/CSS) and TypeScript source
 src/                            # Shared plug-in code
   GuitarFXPlugin.*              # Main iPlug2 plug-in implementation
   dsp/                          # Neural Amp + FX processing
@@ -53,11 +53,11 @@ Format targets are generated beneath `src/platform` and link against the common 
 e.g. `cmake --build build --config Release --target SoundshedGuitar_App`
 ## Preset Workflow
 
-Presets are stored as JSON (`presets/local_presets.json`) and embed:
+Presets are stored as JSON in the user data folder (`~/.guitarfx/`) and embed:
 
 - Category metadata and descriptive text
 - Parameter snapshots keyed by stable IDs (`input_trim`, `drive`, `tone`, etc.)
-- Optional attachment metadata for `.nam` models and impulse response files, hashed with 64-bit FNV-1a for cache lookups
+- Optional attachment metadata for `.nam` models and impulse response files, content-addressed by SHA-256
 
 Remote presets can be searched via the HTTP client (`PresetServiceClient`). Configure the service endpoint by adjusting `mRemoteApiBaseUrl` inside `GuitarFXPlugin.cpp` or by extending the preset manager to read from user preferences.
 
@@ -70,7 +70,11 @@ The WebView bridge exchanges JSON messages between the HTML UI and the plug-in r
 - `presetLoaded` notifies the UI when a preset is loaded or downloaded
 - UI-originated messages include `search`, `downloadPreset`, and `loadPreset`
 
-The JavaScript client (`resources/ui/main.js`) registers `window.IPlugReceiveData` to render incoming updates and uses `window.NAMBridge.postMessage` to push user actions back into the engine.
+The TypeScript client (`resources/ui/ts/messages.ts`) registers `window.IPlugReceiveData` to render incoming updates and uses `window.NAMBridge.postMessage` to push user actions back into the engine.
+
+## Agent Quickstart
+
+For a minimal, high-signal overview, start with docs/agent-quickstart.md.
 
 ## Next Steps
 
