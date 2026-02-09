@@ -92,7 +92,18 @@ void MessageDispatcher::Dispatch(PluginController& c, const std::string& jsonMes
     }
     else if (type == "uiSettingsChanged")
     {
-        // UI visual settings (zoom, theme) — store in app settings
+        // UI visual settings (zoom, bounds, theme) — store in app settings
+        if (msg.contains("settings") && msg["settings"].is_object())
+        {
+            c.mUiSettings = msg["settings"];
+            c.mAppSettings["uiSettings"] = c.mUiSettings;
+            if (c.mUiSettings.contains("zoom"))
+                c.mAppSettings["uiZoom"] = c.mUiSettings["zoom"];
+            if (c.mUiSettings.contains("bounds"))
+                c.mAppSettings["uiBounds"] = c.mUiSettings["bounds"];
+            c.SaveAppSettings();
+            return;
+        }
         if (msg.contains("zoom"))
             c.mAppSettings["uiZoom"] = msg["zoom"];
         if (msg.contains("theme"))

@@ -418,6 +418,7 @@ void PluginController::Initialize()
     LoadAppSettings();
     ApplyMetronomeSettingsFromAppSettings();
     ApplyDiagnosticsSettingsFromAppSettings();
+    ApplyUiSettingsFromAppSettings();
     LoadResourceLibraries();
     LoadBlendLibrary();
     LoadCompositeLibrary();
@@ -875,6 +876,36 @@ void PluginController::ApplyDiagnosticsSettingsFromAppSettings()
 
     mSignalDiagnosticsEnabled.store(enabled, std::memory_order_release);
     mPresetMixer.SetSignalDiagnosticsEnabled(enabled);
+}
+
+void PluginController::ApplyUiSettingsFromAppSettings()
+{
+    mUiSettings = nlohmann::json::object();
+
+    const auto it = mAppSettings.find("uiSettings");
+    if (it != mAppSettings.end() && it->is_object())
+    {
+        mUiSettings = *it;
+        return;
+    }
+
+    bool hasLegacy = false;
+    nlohmann::json legacy = nlohmann::json::object();
+    const auto zoomIt = mAppSettings.find("uiZoom");
+    if (zoomIt != mAppSettings.end())
+    {
+        legacy["zoom"] = *zoomIt;
+        hasLegacy = true;
+    }
+    const auto boundsIt = mAppSettings.find("uiBounds");
+    if (boundsIt != mAppSettings.end())
+    {
+        legacy["bounds"] = *boundsIt;
+        hasLegacy = true;
+    }
+
+    if (hasLegacy)
+        mUiSettings = legacy;
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -2828,6 +2859,9 @@ void PluginController::BroadcastState()
     // App settings — UI reads "appSettings"
     state["appSettings"] = mAppSettings;
 
+    // UI settings — UI reads "uiSettings"
+    state["uiSettings"] = mUiSettings;
+
     // Global chain — UI reads "globalSignalChain"
     auto chainConfig = mPresetMixer.GetGlobalChainConfig();
     state["globalSignalChain"] = chainConfig;
@@ -3525,6 +3559,7 @@ void PluginController::LoadLastSessionState()
     LoadAppSettings();
     ApplyMetronomeSettingsFromAppSettings();
     ApplyDiagnosticsSettingsFromAppSettings();
+    ApplyUiSettingsFromAppSettings();
 
     // Restore preset from JSON if available
     if (!mActivePresetJson.empty() && nlohmann::json::accept(mActivePresetJson))
