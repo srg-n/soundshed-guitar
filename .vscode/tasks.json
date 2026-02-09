@@ -19,6 +19,7 @@
       },
       "problemMatcher": "$msCompile"
     },
+     
     {
       "label": "Build SoundshedGuitar App Release",
       "dependsOn": [
@@ -164,6 +165,37 @@
       },
       "group": "test",
       "problemMatcher": []
+    },
+    {
+      "label": "Build SoundshedGuitar (JUCE) Debug",
+      "type": "shell",
+      "command": "cmake",
+      "args": [
+        "--build",
+        "${workspaceFolder}/juce/build",
+        "--config",
+        "Debug",
+        "--target",
+        "SoundshedGuitar_Standalone"
+      ],
+      "group": "build",
+      "problemMatcher": "$msCompile"
+    },
+     {
+      "label": "Build SoundshedGuitar (JUCE) Release",
+      "type": "shell",
+      "command": "cmake",
+      "args": [
+        "--build",
+        "${workspaceFolder}/juce/build",
+        "--config",
+        "Release",
+        "--target",
+        "SoundshedGuitar_Standalone",
+        "--parallel"
+      ],
+      "group": "build",
+      "problemMatcher": "$msCompile"
     }
   ]
 }

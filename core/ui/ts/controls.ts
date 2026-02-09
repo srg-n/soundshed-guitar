@@ -200,7 +200,7 @@ function initializeDoublerControls(): void {
   if (doublerToggle) {
     doublerToggle.addEventListener("change", () => {
       const enabled = doublerToggle.checked;
-      sendGlobalChainParam("postChainGraph.global_doubler.enabled", enabled);
+      sendGlobalChainParam("doubler.enabled", enabled);
       const doublerNode = getPostChainDoublerNode();
       if (doublerNode) {
         doublerNode.bypassed = !doublerToggle.checked;
@@ -223,7 +223,7 @@ function initializeDoublerControls(): void {
       sensitivity: 0.5,
       sendParameter: false,
       onValueCommit: (value) => {
-        sendGlobalChainParam("postChainGraph.global_doubler.params.time", value);
+        sendGlobalChainParam("doubler.delay", value);
         const doublerNode = getPostChainDoublerNode();
         if (doublerNode) {
           doublerNode.params.time = value;
@@ -251,7 +251,7 @@ function initializeInputOutputKnobs(): void {
       sensitivity: 0.1,
       sendParameter: false,
       onValueChange: (value) => {
-        sendGlobalChainParam("inputGain", value);
+        sendGlobalChainParam("input.gain", value);
         if (uiState.globalSignalChain) {
           uiState.globalSignalChain.inputGain = value;
         }
@@ -279,7 +279,7 @@ function initializeInputOutputKnobs(): void {
       sensitivity: 0.1,
       sendParameter: false,
       onValueChange: (value) => {
-        sendGlobalChainParam("outputGain", value);
+        sendGlobalChainParam("output.gain", value);
         if (uiState.globalSignalChain) {
           uiState.globalSignalChain.outputGain = value;
         }
@@ -317,8 +317,8 @@ function initializeInputOutputKnobs(): void {
         }
         const enabled = rounded !== 0;
         // Always send the rounded integer value to the plugin
-        sendGlobalChainParam("preChainGraph.global_transpose.params.semitones", rounded);
-        sendGlobalChainParam("preChainGraph.global_transpose.enabled", enabled);
+        sendGlobalChainParam("transpose.semitones", rounded);
+        sendGlobalChainParam("transpose.enabled", enabled);
         const transposeNode = getPreChainTransposeNode();
         if (transposeNode) {
           transposeNode.params.semitones = rounded;
@@ -344,7 +344,7 @@ function initializeGateControls(): void {
   if (gateToggle) {
     gateToggle.addEventListener("change", () => {
       const enabled = gateToggle.checked;
-      sendGlobalChainParam("preChainGraph.global_gate.enabled", enabled);
+      sendGlobalChainParam("gate.enabled", enabled);
       const gateNode = getPreChainGateNode();
       if (gateNode) {
         gateNode.bypassed = !gateToggle.checked;
@@ -368,7 +368,7 @@ function initializeGateControls(): void {
       sensitivity: 0.5,
       sendParameter: false,
       onValueCommit: (value) => {
-        sendGlobalChainParam("preChainGraph.global_gate.params.threshold", value);
+        sendGlobalChainParam("gate.threshold", value);
         const gateNode = getPreChainGateNode();
         if (gateNode) {
           gateNode.params.threshold = value;
@@ -839,52 +839,52 @@ const getPostChainEqNode = (): GraphNode | undefined =>
 
 const GLOBAL_EQ_PARAM_MAP: Record<string, GlobalEqParamBinding> = {
   eq_low_gain: {
-    path: "postChainGraph.global_eq.params.lowGain",
+    path: "eq.band0.gain",
     read: (node) => node.params.lowGain,
     apply: (node, value) => { node.params.lowGain = value; },
   },
   eq_low_freq: {
-    path: "postChainGraph.global_eq.params.lowFreq",
+    path: "eq.band0.frequency",
     read: (node) => node.params.lowFreq,
     apply: (node, value) => { node.params.lowFreq = value; },
   },
   eq_lowmid_gain: {
-    path: "postChainGraph.global_eq.params.lowMidGain",
+    path: "eq.band1.gain",
     read: (node) => node.params.lowMidGain,
     apply: (node, value) => { node.params.lowMidGain = value; },
   },
   eq_lowmid_freq: {
-    path: "postChainGraph.global_eq.params.lowMidFreq",
+    path: "eq.band1.frequency",
     read: (node) => node.params.lowMidFreq,
     apply: (node, value) => { node.params.lowMidFreq = value; },
   },
   eq_lowmid_q: {
-    path: "postChainGraph.global_eq.params.lowMidQ",
+    path: "eq.band1.q",
     read: (node) => node.params.lowMidQ,
     apply: (node, value) => { node.params.lowMidQ = value; },
   },
   eq_highmid_gain: {
-    path: "postChainGraph.global_eq.params.highMidGain",
+    path: "eq.band2.gain",
     read: (node) => node.params.highMidGain,
     apply: (node, value) => { node.params.highMidGain = value; },
   },
   eq_highmid_freq: {
-    path: "postChainGraph.global_eq.params.highMidFreq",
+    path: "eq.band2.frequency",
     read: (node) => node.params.highMidFreq,
     apply: (node, value) => { node.params.highMidFreq = value; },
   },
   eq_highmid_q: {
-    path: "postChainGraph.global_eq.params.highMidQ",
+    path: "eq.band2.q",
     read: (node) => node.params.highMidQ,
     apply: (node, value) => { node.params.highMidQ = value; },
   },
   eq_high_gain: {
-    path: "postChainGraph.global_eq.params.highGain",
+    path: "eq.band3.gain",
     read: (node) => node.params.highGain,
     apply: (node, value) => { node.params.highGain = value; },
   },
   eq_high_freq: {
-    path: "postChainGraph.global_eq.params.highFreq",
+    path: "eq.band3.frequency",
     read: (node) => node.params.highFreq,
     apply: (node, value) => { node.params.highFreq = value; },
   },
@@ -973,12 +973,12 @@ function initializeEQControls(): void {
       eqModalToggle.checked = eqEnabled;
     }
     if (shouldSend) {
-      sendGlobalChainParam("postChainGraph.global_eq.enabled", eqEnabled);
+      sendGlobalChainParam("eq.enabled", eqEnabled);
       const eqNode = getPostChainEqNode();
       if (eqNode) {
         eqNode.bypassed = !eqEnabled;
       }
-      appendLog(`global postChainGraph.global_eq.enabled → ${eqEnabled}`);
+      appendLog(`eq.enabled → ${eqEnabled}`);
     }
     updateEQSectionState();
     updateEqModalVisualization();

@@ -3,8 +3,9 @@
   "configurations": [
 
 
+
     {
-      "name": "Debug SoundshedGuitar App",
+      "name": "Debug SoundshedGuitar App (iplug)",
       "type": "cppvsdbg",
       "request": "launch",
       "program": "${workspaceFolder}/iplug2/src/build/src/platform/app/Debug/SoundshedGuitar.exe",
@@ -16,7 +17,7 @@
       "preLaunchTask": "Build SoundshedGuitar Debug"
     },
         {
-      "name": "Run SoundshedGuitar App Release",
+      "name": "Run App (iplug) Release",
       "type": "cppvsdbg",
       "request": "launch",
       "program": "${workspaceFolder}/iplug2/src/build/src/platform/app/Release/SoundshedGuitar.exe",
@@ -26,6 +27,17 @@
       "environment": [],
       "console": "integratedTerminal",
       "preLaunchTask": "Build SoundshedGuitar App Release"
+    },  {
+      "name": "Run App (JUCE) Release",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/juce/build/SoundshedGuitar_artefacts/Release/Standalone/SoundshedGuitar.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/juce/build/SoundshedGuitar_artefacts/Release/Standalone",
+      "environment": [],
+      "console": "integratedTerminal",
+      "preLaunchTask": "Build SoundshedGuitar (JUCE) Release"
     },
      {
       "name": "Debug SoundshedGuitar VST Host",
@@ -66,6 +78,18 @@
       "cwd": "${workspaceFolder}/iplug2/src/build/src/platform/app/Release",
       "environment": [],
       "console": "integratedTerminal"
+    },
+    {
+      "name": "Debug SoundshedGuitar Standalone (JUCE Debug)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/juce/build/SoundshedGuitar_artefacts/Debug/Standalone/SoundshedGuitar.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/juce/build/SoundshedGuitar_artefacts/Debug/Standalone",
+      "environment": [],
+      "console": "integratedTerminal",
+       "preLaunchTask": "Build SoundshedGuitar (JUCE) Debug"
     }
   ]
 }

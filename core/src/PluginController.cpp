@@ -772,6 +772,18 @@ void PluginController::HandlePresetLoadRequest(const nlohmann::json& payload)
         mActivePresetJson = PresetStorage::SerializeToJson(preset);
         mPendingStateBroadcast = true;
 
+        // Send explicit "presetLoaded" confirmation to the UI
+        {
+            nlohmann::json loaded;
+            loaded["type"] = "presetLoaded";
+            loaded["preset"] = nlohmann::json::parse(mActivePresetJson);
+            nlohmann::json activeIds = nlohmann::json::array();
+            for (const auto& id : mPresetMixer.GetActivePresetIds())
+                activeIds.push_back(id);
+            loaded["activePresetIds"] = activeIds;
+            SendMessageToUI(loaded.dump());
+        }
+
         // Persist last loaded preset
         mAppSettings["lastPresetId"] = mActivePresetId;
         SaveAppSettings();
@@ -2323,31 +2335,54 @@ void PluginController::BroadcastState()
     if (mActivePreset)
     {
         state["preset"] = nlohmann::json::parse(PresetStorage::SerializeToJson(*mActivePreset));
-        state["presetId"] = mActivePresetId;
+        state["activePresetId"] = mActivePresetId;
     }
 
-    // App settings
-    state["settings"] = mAppSettings;
+    // App settings — UI reads "appSettings"
+    state["appSettings"] = mAppSettings;
 
-    // Global chain
+    // Global chain — UI reads "globalSignalChain"
     auto chainConfig = mPresetMixer.GetGlobalChainConfig();
-    state["globalChain"] = chainConfig;
+    state["globalSignalChain"] = chainConfig;
 
-    // Resource library summary
-    nlohmann::json libraryInfo;
+    // Resource library summary + per-type entries for UI rendering
+    nlohmann::json libraryInfo = nlohmann::json::object();
     auto allResources = mResourceLibrary.GetAllResources();
     libraryInfo["totalCount"] = allResources.size();
+
+    for (const auto& resource : allResources)
+    {
+        const std::string type = resource.type;
+        if (!libraryInfo.contains(type) || !libraryInfo[type].is_array())
+        {
+            libraryInfo[type] = nlohmann::json::array();
+        }
+
+        nlohmann::json entry;
+        entry["id"] = resource.id;
+        entry["name"] = resource.name;
+        entry["category"] = resource.category;
+        entry["description"] = resource.description;
+        entry["filePath"] = resource.filePath.empty() ? "" : resource.filePath.string();
+        entry["hash"] = resource.hash;
+        if (!resource.metadata.empty())
+        {
+            entry["metadata"] = resource.metadata;
+        }
+        const bool hasPath = !resource.filePath.empty();
+        const bool exists = hasPath && std::filesystem::exists(resource.filePath);
+        entry["fileMissing"] = !(hasPath && exists);
+
+        libraryInfo[type].push_back(entry);
+    }
+
     state["resourceLibrary"] = libraryInfo;
 
-    // Active preset instances
-    nlohmann::json presetInstances = nlohmann::json::array();
+    // Active preset IDs — UI reads "activePresetIds" as string array
+    nlohmann::json activePresetIds = nlohmann::json::array();
     for (const auto& id : mPresetMixer.GetActivePresetIds())
-    {
-        nlohmann::json inst;
-        inst["id"] = id;
-        presetInstances.push_back(inst);
-    }
-    state["activePresets"] = presetInstances;
+        activePresetIds.push_back(id);
+    state["activePresetIds"] = activePresetIds;
 
     // Metronome
     nlohmann::json metronome;
@@ -3330,10 +3365,18 @@ void PluginController::SendSignalDiagnosticsToUI()
 void PluginController::SendPerformanceStatsToUI()
 {
     auto stats = mPresetMixer.GetPerformanceStats();
+    nlohmann::json statsJson;
+    statsJson["totalProcessingTimeUs"] = stats.totalProcessingTimeUs;
+    statsJson["realTimeUs"] = stats.realTimeUs;
+    statsJson["dspLoadPercent"] = stats.dspLoadPercent;
+    nlohmann::json nodeTimes = nlohmann::json::object();
+    for (const auto& [nodeId, timeUs] : stats.nodeProcessingTimesUs)
+        nodeTimes[nodeId] = timeUs;
+    statsJson["nodeProcessingTimesUs"] = nodeTimes;
+
     nlohmann::json msg;
-    msg["type"] = "performanceStats";
-    msg["totalProcessTimeUs"] = stats.totalProcessingTimeUs;
-    msg["dspLoadPercent"] = stats.dspLoadPercent;
+    msg["type"] = "dspPerformance";
+    msg["stats"] = statsJson;
     msg["sampleRate"] = mHost.GetSampleRate();
     msg["blockSize"] = mHost.GetBlockSize();
     SendMessageToUI(msg.dump());

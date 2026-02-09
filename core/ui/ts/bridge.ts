@@ -28,7 +28,7 @@ export function setAppSetting(key: string, value: unknown): void {
 export function setParameter(id: string, value: number): void {
   postMessage({
     type: "setParameter",
-    id,
+    name: id,
     value,
   });
   appendLog(`${id} → ${value}`);

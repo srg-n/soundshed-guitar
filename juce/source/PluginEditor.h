@@ -13,7 +13,8 @@ public:
 };
 
 //==============================================================================
-class PluginEditor : public juce::AudioProcessorEditor
+class PluginEditor : public juce::AudioProcessorEditor,
+                     private juce::Timer
 {
 public:
     explicit PluginEditor (PluginProcessorAdapter&);
@@ -24,6 +25,8 @@ public:
     void resized() override;
 
 private:
+    void timerCallback() override;
+
     PluginProcessorAdapter& processorRef;
 
     juce::File resourceRoot;

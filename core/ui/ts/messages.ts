@@ -21,6 +21,7 @@ import type { CompositeEffectDefinition } from "./compositeTypes.js";
 import { renderCompositeList, handleCompositeEditModeExited, handleCompositeEditStateUpdate } from "./compositeEditor.js";
 import { renderLayoutList } from "./layoutManager.js";
 import { enterCompositeEditState, updateCompositeEditState, exitCompositeEditState } from "./state.js";
+import { EffectTypeRegistry } from "./presetV2.js";
 
 function normalizeResourceRef(ref?: ResourceRef | null): void {
   if (!ref) return;
@@ -314,7 +315,8 @@ export function handleIncomingMessage(message: string): void {
       showNotification("Playing demo audio", (payload as { title?: string }).title ?? "Demo");
       break;
     }
-    case "previewComplete": {
+    case "previewComplete":
+    case "previewDemoAudioComplete": {
       appendLog(`preview complete ← ${(payload as { title?: string; id?: string }).title ?? (payload as { id?: string }).id ?? "demo"}`);
       onDemoAudioStopped();
       if (uiState.demoAudioRepeat) {
@@ -576,6 +578,15 @@ export function handleIncomingMessage(message: string): void {
       }
       break;
     }
+    case "globalChain": {
+      const chainPayload = payload as { config?: import("./types.js").GlobalSignalChainConfig };
+      if (chainPayload.config) {
+        uiState.globalSignalChain = normalizeGlobalSignalChain(chainPayload.config) ?? uiState.globalSignalChain;
+        appendLog("Global signal chain configuration loaded");
+        syncControlsFromState();
+      }
+      break;
+    }
     case "globalSignalChainChanged": {
       const chainPayload = payload as { globalSignalChain?: import("./types.js").GlobalSignalChainConfig };
       if (chainPayload.globalSignalChain) {
@@ -677,6 +688,68 @@ export function handleIncomingMessage(message: string): void {
       }
       break;
     }
+    case "effectCatalog": {
+      const catalogPayload = payload as { catalog?: Array<Record<string, unknown>> };
+      if (Array.isArray(catalogPayload.catalog)) {
+        for (const entry of catalogPayload.catalog) {
+          if (!entry || typeof entry !== "object") {
+            continue;
+          }
+          const effect = entry as {
+            type?: unknown;
+            name?: unknown;
+            category?: unknown;
+            parameters?: unknown;
+            requiresResource?: unknown;
+            resourceType?: unknown;
+          };
+          const type = typeof effect.type === "string" ? effect.type : "";
+          if (!type) {
+            continue;
+          }
+          const existing = EffectTypeRegistry.get(type);
+          const displayName = typeof effect.name === "string" ? effect.name : existing?.displayName ?? type;
+          const category = typeof effect.category === "string" ? effect.category : existing?.category ?? "utility";
+          const requiresResource =
+            typeof effect.requiresResource === "boolean" ? effect.requiresResource : existing?.requiresResource ?? false;
+          const resourceType = typeof effect.resourceType === "string" ? effect.resourceType : existing?.resourceType;
+          const parameters = Array.isArray(effect.parameters)
+            ? effect.parameters
+                .filter((param) => param && typeof param === "object")
+                .map((param) => {
+                  const p = param as {
+                    key?: unknown;
+                    name?: unknown;
+                    default?: unknown;
+                    min?: unknown;
+                    max?: unknown;
+                    unit?: unknown;
+                  };
+                  return {
+                    key: typeof p.key === "string" ? p.key : "",
+                    name: typeof p.name === "string" ? p.name : "",
+                    default: typeof p.default === "number" ? p.default : 0,
+                    min: typeof p.min === "number" ? p.min : 0,
+                    max: typeof p.max === "number" ? p.max : 1,
+                    unit: typeof p.unit === "string" ? p.unit : "",
+                  };
+                })
+                .filter((param) => param.key !== "")
+            : existing?.parameters ?? [];
+
+          EffectTypeRegistry.register(type, {
+            type,
+            displayName,
+            category,
+            requiresResource,
+            resourceType,
+            parameters,
+          });
+        }
+        refreshFxSelector();
+      }
+      break;
+    }
     case "compositeDefinitionAdded": {
       const compAddPayload = payload as { definition?: CompositeEffectDefinition };
       if (compAddPayload.definition) {
@@ -759,7 +832,7 @@ export function handleMixerStateMessage(message: Record<string, unknown>): void 
 export function sendGlobalChainParam(paramPath: string, value: number | boolean): void {
   window.NAMBridge?.postMessage({
     type: "setGlobalChainParam",
-    paramPath,
+    path: paramPath,
     value,
   });
 }

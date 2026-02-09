@@ -136,11 +136,21 @@ PluginEditor::PluginEditor (PluginProcessorAdapter& p)
     setResizable (true, true);
     setResizeLimits (1024, 768, 4096, 3072);
     setSize (1600, 1200);
+
+    // Start periodic idle timer (~60 fps) to match iPlug2's OnIdle() cadence.
+    // This drives state broadcasts, DSP performance updates, tuner data, etc.
+    startTimerHz (60);
 }
 
 PluginEditor::~PluginEditor()
 {
+    stopTimer();
     processorRef.setWebMessageCallback (nullptr);
+}
+
+void PluginEditor::timerCallback()
+{
+    processorRef.getController().OnIdle();
 }
 
 std::optional<juce::WebBrowserComponent::Resource> PluginEditor::getResource (const juce::String& url)

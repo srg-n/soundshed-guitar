@@ -13,6 +13,7 @@
 Build release
  
  `cmake --build build --config Release --target SoundshedGuitar_Standalone --parallel`
+ `cmake --build build --config Debug --target SoundshedGuitar_Standalone --parallel`
 
  Find exe output in 
  `build\SoundshedGuitar_artefacts\Release`
