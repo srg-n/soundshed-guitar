@@ -87,6 +87,11 @@ void MessageDispatcher::Dispatch(PluginController& c, const std::string& jsonMes
                 return;
             }
             c.mAppSettings[key] = msg["value"];
+            if (key == "audio.interfaceCalibration.enabled"
+                || key == "audio.interfaceCalibration.referenceDbu")
+            {
+                c.ApplyInterfaceCalibrationSettingsFromAppSettings();
+            }
             c.SaveAppSettings();
         }
     }

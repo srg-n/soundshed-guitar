@@ -252,6 +252,7 @@ private:
     void ApplyBlendDefinitions(Preset& preset);
     bool ApplyNodeParameter(const GraphNode& node, const std::string& paramKey, double value);
     void ApplyDiagnosticsSettingsFromAppSettings();
+    void ApplyInterfaceCalibrationSettingsFromAppSettings();
     void ApplyUiSettingsFromAppSettings();
     void SendMessageToUI(const std::string& jsonMessage);
     void ReportErrorToUI(const std::string& message, const std::string& detail = {});

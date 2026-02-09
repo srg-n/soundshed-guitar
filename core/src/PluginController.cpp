@@ -24,6 +24,7 @@
 #include <deque>
 #include <fstream>
 #include <future>
+#include <iomanip>
 #include <iostream>
 #include <numeric>
 #include <sstream>
@@ -38,8 +39,8 @@ namespace
 
     constexpr const char* kNamCalibrationFileName = "model-calibration.json";
     constexpr double kNamCalibrationDurationSeconds = 1.0;
-    constexpr double kNamCalibrationFrequencyHz = 440.0;
-    constexpr double kMinLinear = 1e-12;
+    constexpr double kNamCalibrationFrequencyHz = 1000.0;
+    constexpr double kMinLinear = 1e-6;
 
     // ── Metronome constants ─────────────────────────────────────────
 
@@ -66,12 +67,31 @@ namespace
     constexpr double kMetronomeClickFrequencyHz = 1800.0;
     constexpr double kTwoPi = 6.28318530717958647692;
     constexpr const char* kSignalDiagnosticsSettingKey = "diagnostics.signalLevelsEnabled";
+    constexpr const char* kInterfaceCalibrationEnabledSettingKey = "audio.interfaceCalibration.enabled";
+    constexpr const char* kInterfaceCalibrationReferenceDbuSettingKey = "audio.interfaceCalibration.referenceDbu";
+    constexpr double kInterfaceCalibrationDefaultReferenceDbu = 12.0;
+    constexpr const char* kSessionLogFileName = "session-log.txt";
 
     double ToDbFS(double linear)
     {
         if (linear <= kMinLinear) return -120.0;
         return 20.0 * std::log10(linear);
     }
+
+        std::string FormatTimestamp()
+        {
+        const auto now = std::chrono::system_clock::now();
+        const auto tt = std::chrono::system_clock::to_time_t(now);
+        std::tm localTime{};
+    #ifdef _WIN32
+        localtime_s(&localTime, &tt);
+    #else
+        localtime_r(&tt, &localTime);
+    #endif
+        std::ostringstream oss;
+        oss << std::put_time(&localTime, "%Y-%m-%d %H:%M:%S");
+        return oss.str();
+        }
 
     std::optional<guitarfx::PluginController::NamCalibrationData>
     RunNamCalibration(const std::filesystem::path& modelPath,
@@ -418,6 +438,7 @@ void PluginController::Initialize()
     LoadAppSettings();
     ApplyMetronomeSettingsFromAppSettings();
     ApplyDiagnosticsSettingsFromAppSettings();
+    ApplyInterfaceCalibrationSettingsFromAppSettings();
     ApplyUiSettingsFromAppSettings();
     LoadResourceLibraries();
     LoadBlendLibrary();
@@ -878,6 +899,27 @@ void PluginController::ApplyDiagnosticsSettingsFromAppSettings()
     mPresetMixer.SetSignalDiagnosticsEnabled(enabled);
 }
 
+void PluginController::ApplyInterfaceCalibrationSettingsFromAppSettings()
+{
+    bool enabled = true;
+    double referenceDbu = kInterfaceCalibrationDefaultReferenceDbu;
+
+    const auto enabledIt = mAppSettings.find(kInterfaceCalibrationEnabledSettingKey);
+    if (enabledIt != mAppSettings.end())
+    {
+        if (enabledIt->is_boolean())
+            enabled = enabledIt->get<bool>();
+        else if (enabledIt->is_number())
+            enabled = enabledIt->get<double>() != 0.0;
+    }
+
+    const auto referenceIt = mAppSettings.find(kInterfaceCalibrationReferenceDbuSettingKey);
+    if (referenceIt != mAppSettings.end() && referenceIt->is_number())
+        referenceDbu = referenceIt->get<double>();
+
+    mPresetMixer.SetNamInterfaceCalibration(enabled, referenceDbu);
+}
+
 void PluginController::ApplyUiSettingsFromAppSettings()
 {
     mUiSettings = nlohmann::json::object();
@@ -1194,8 +1236,18 @@ void PluginController::ReportErrorToUI(const std::string& message, const std::st
 
 void PluginController::AppendSessionLog(const std::string& message)
 {
-    // TODO: implement session logging to file if desired
-    (void)message;
+    if (message.empty())
+        return;
+
+    const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
+    (void)mFileSystem.EnsureDirectory(settingsDir);
+    const auto logPath = settingsDir / kSessionLogFileName;
+
+    std::ofstream output(logPath, std::ios::app);
+    if (!output)
+        return;
+
+    output << FormatTimestamp() << " " << message << "\n";
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -3559,6 +3611,7 @@ void PluginController::LoadLastSessionState()
     LoadAppSettings();
     ApplyMetronomeSettingsFromAppSettings();
     ApplyDiagnosticsSettingsFromAppSettings();
+    ApplyInterfaceCalibrationSettingsFromAppSettings();
     ApplyUiSettingsFromAppSettings();
 
     // Restore preset from JSON if available
