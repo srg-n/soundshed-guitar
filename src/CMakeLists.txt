@@ -23,6 +23,11 @@ option(GUITARFX_ENABLE_TESTS "Build the test suite (Debug only)" ON)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(FetchDependencies)
 
+# Shared core library (framework-agnostic DSP, presets, resources, controller)
+set(GUITARFX_CORE_FETCH_DEPS ON CACHE BOOL "" FORCE)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../soundshed-guitar-core
+                 ${CMAKE_BINARY_DIR}/soundshed-guitar-core)
+
 add_subdirectory(src)
 
 # Debug tools

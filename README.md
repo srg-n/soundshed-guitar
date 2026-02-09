@@ -53,6 +53,18 @@ For minimal context with high coverage, load these files:
    cmake --build build --config RelWithDebInfo
    ```
 
+Clean and refetch-deps (/src):
+
+`Remove-Item -Recurse -Force .\build`
+Copy the vst3sdk content to `src/build/_deps/iplug2-src/Dependencies/IPlug/VST3_SDK`
+-- `cmake -S . -B build -DGUITARFX_FETCH_DEPENDENCIES=ON`
+
+Configure cmake:
+` cmake -S . -B build -G "Visual Studio 18 2026`
+Run configured release build (under /src):
+`cmake --build build --config Release`
+`cmake --build build --config Release --target SoundshedGuitar_App`
+
 3. **Install**
    - **Windows VST3**: Copy `.vst3` from `build/SoundshedGuitar.vst3` to `C:\Program Files\Common Files\VST3\`
    - **macOS VST3**: Copy to `~/Library/Audio/Plug-Ins/VST3/`

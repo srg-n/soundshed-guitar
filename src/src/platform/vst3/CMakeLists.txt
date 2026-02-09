@@ -71,7 +71,7 @@ set(_webview_sources
 
 set(_nam_vst3_sources
   GuitarFX_VST3.cpp
-  ../../GuitarFXPlugin.cpp
+  ../../GuitarFXPluginAdapter.cpp
   ${_vst3_sdk_sources}
   ${_iplug2_core_sources}
   ${_iplug2_vst3_sources}
@@ -152,7 +152,7 @@ add_custom_command(TARGET SoundshedGuitar_VST3 POST_BUILD
   COMMAND ${CMAKE_COMMAND}
     -D SOURCE_DLL="$<TARGET_FILE:SoundshedGuitar_VST3>"
     -D DEST_BUNDLE_DIR="${VST3_BUNDLE_DIR}"
-    -D RESOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../resources/"
+    -D RESOURCE_DIR="${CMAKE_SOURCE_DIR}/../../soundshed-guitar-core/ui"
     -P "${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake/CopyVst3Bundle.cmake"
   COMMENT "Updating VST3 bundle structure"
 )

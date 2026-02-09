@@ -8,4 +8,11 @@ endif()
 
 file(MAKE_DIRECTORY "${DEST_DIR}")
 
-file(COPY "${SOURCE_DIR}/" DESTINATION "${DEST_DIR}")
+file(MAKE_DIRECTORY "${DEST_DIR}/ui")
+file(COPY "${SOURCE_DIR}/" DESTINATION "${DEST_DIR}/ui"
+  PATTERN "node_modules" EXCLUDE
+  PATTERN "ts" EXCLUDE
+  PATTERN "package.json" EXCLUDE
+  PATTERN "package-lock.json" EXCLUDE
+  PATTERN "tsconfig.json" EXCLUDE
+)

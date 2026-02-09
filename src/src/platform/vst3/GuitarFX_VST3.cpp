@@ -2,7 +2,7 @@
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
 #include "pluginterfaces/vst/ivstcomponent.h"
 
-#include "GuitarFXPlugin.h"
+#include "GuitarFXPluginAdapter.h"
 
 // This translation unit intentionally remains lightweight. By including the
 // plugin header we ensure the VST3 module inherits the same preprocessor

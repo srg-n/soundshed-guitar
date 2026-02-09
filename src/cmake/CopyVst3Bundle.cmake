@@ -18,11 +18,11 @@ if(NOT copy_result EQUAL 0)
   message(WARNING "Failed to copy VST3 binary to bundle (likely in use). Skipping bundle update.")
 endif()
 
-execute_process(
-  COMMAND "${CMAKE_COMMAND}" -E copy_directory "${RESOURCE_DIR}" "${res_dir}"
-  RESULT_VARIABLE res_result
+file(MAKE_DIRECTORY "${res_dir}/ui")
+file(COPY "${RESOURCE_DIR}/" DESTINATION "${res_dir}/ui"
+  PATTERN "node_modules" EXCLUDE
+  PATTERN "ts" EXCLUDE
+  PATTERN "package.json" EXCLUDE
+  PATTERN "package-lock.json" EXCLUDE
+  PATTERN "tsconfig.json" EXCLUDE
 )
-
-if(NOT res_result EQUAL 0)
-  message(WARNING "Failed to copy VST3 resources to bundle (likely in use).")
-endif()

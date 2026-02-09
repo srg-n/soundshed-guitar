@@ -1,7 +1,7 @@
 include(FetchContent)
 
 if(GUITARFX_FETCH_DEPENDENCIES)
-  message(STATUS "Fetching iPlug2 and NeuralAmpModelerCore dependencies")
+  message(STATUS "Fetching iPlug2 dependencies")
 
   # Check for local iPlug2 copy first (with VST3_SDK included)
   set(_local_iplug2 "${CMAKE_CURRENT_SOURCE_DIR}/_deps/iplug2-src")
@@ -34,6 +34,27 @@ if(GUITARFX_FETCH_DEPENDENCIES)
     message(FATAL_ERROR "iPlug2 dependency not found at ${iPlug2_SOURCE_DIR}. Ensure git access is available or set iPlug2_SOURCE_DIR to a local iPlug2 checkout with VST3_SDK included.")
   endif()
 
+  # Ensure VST3 SDK is available for VST3 builds (clone into iPlug2 dependency tree if missing).
+  set(_vst3_sdk_dir "${iPlug2_SOURCE_DIR}/Dependencies/IPlug/VST3_SDK")
+  if(NOT EXISTS "${_vst3_sdk_dir}/base/source/baseiids.cpp")
+    find_program(GIT_EXECUTABLE git)
+    if(GIT_EXECUTABLE)
+      if(EXISTS "${_vst3_sdk_dir}")
+        file(REMOVE_RECURSE "${_vst3_sdk_dir}")
+      endif()
+      message(STATUS "Fetching VST3 SDK into ${_vst3_sdk_dir}")
+      execute_process(
+        COMMAND "${GIT_EXECUTABLE}" clone https://github.com/steinbergmedia/vst3sdk.git "${_vst3_sdk_dir}"
+        RESULT_VARIABLE _vst3_git_result
+      )
+      if(NOT _vst3_git_result EQUAL 0)
+        message(WARNING "Failed to clone VST3 SDK. Clone https://github.com/steinbergmedia/vst3sdk.git into ${_vst3_sdk_dir} manually.")
+      endif()
+    else()
+      message(WARNING "git not found; cannot auto-fetch VST3 SDK. Clone https://github.com/steinbergmedia/vst3sdk.git into ${_vst3_sdk_dir} manually.")
+    endif()
+  endif()
+
   # Patch iPlug2 WebView scaling to avoid DPI issues on Windows.
   set(_iplug2_webview_win "${iPlug2_SOURCE_DIR}/IPlug/Extras/WebView/IPlugWebView_win.cpp")
   if(EXISTS "${_iplug2_webview_win}")
@@ -45,33 +66,7 @@ if(GUITARFX_FETCH_DEPENDENCIES)
     endif()
   endif()
 
-  if(NOT TARGET NeuralAmpModelerCore)
-    FetchContent_Declare(
-      NeuralAmpModelerCore
-      GIT_REPOSITORY https://github.com/sdatkinson/NeuralAmpModelerCore.git
-      GIT_TAG main
-      CMAKE_ARGS -DNAM_BUILD_TOOLS=OFF
-    )
-    FetchContent_MakeAvailable(NeuralAmpModelerCore)
-    FetchContent_GetProperties(NeuralAmpModelerCore SOURCE_DIR NAM_SOURCE_DIR)
-    if(NOT DEFINED NeuralAmpModelerCore_SOURCE_DIR)
-      set(NeuralAmpModelerCore_SOURCE_DIR "${NAM_SOURCE_DIR}")
-    endif()
-    if(MSVC AND EXISTS "${NeuralAmpModelerCore_SOURCE_DIR}/NAM/dsp.cpp")
-      set_source_files_properties("${NeuralAmpModelerCore_SOURCE_DIR}/NAM/dsp.cpp" PROPERTIES COMPILE_FLAGS "")
-      foreach(_tool benchmodel loadmodel run_tests)
-        if(TARGET ${_tool})
-          set_property(TARGET ${_tool} PROPERTY COMPILE_OPTIONS "")
-        endif()
-      endforeach()
-      foreach(_target benchmodel loadmodel run_tests tools)
-        if(TARGET ${_target})
-          set_property(TARGET ${_target} PROPERTY EXCLUDE_FROM_ALL TRUE)
-          set_property(TARGET ${_target} PROPERTY EXCLUDE_FROM_DEFAULT_BUILD TRUE)
-        endif()
-      endforeach()
-    endif()
-  endif()
+
 
   if(NOT TARGET nlohmann_json)
     FetchContent_Declare(

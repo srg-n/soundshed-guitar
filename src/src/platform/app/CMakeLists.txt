@@ -7,9 +7,8 @@ if(NOT DEFINED iPlug2_SOURCE_DIR)
 endif()
 
 set(_nam_app_sources
-  ../../GuitarFXPlugin.cpp
-  ../../../resources/main.rc
-  ../../../resources/app.manifest
+  ../../GuitarFXPluginAdapter.cpp
+  resources/main.rc
   ${iPlug2_SOURCE_DIR}/IPlug/APP/IPlugAPP.cpp
   ${iPlug2_SOURCE_DIR}/IPlug/APP/IPlugAPP_dialog.cpp
   ${iPlug2_SOURCE_DIR}/IPlug/APP/IPlugAPP_host.cpp
@@ -37,7 +36,7 @@ add_executable(SoundshedGuitar_App WIN32 ${_nam_app_sources})
 
 target_include_directories(SoundshedGuitar_App
   PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../resources
+    ${CMAKE_CURRENT_LIST_DIR}/resources
     ${iPlug2_SOURCE_DIR}/Dependencies/IPlug/RTAudio
     ${iPlug2_SOURCE_DIR}/Dependencies/IPlug/RTAudio/include
     ${iPlug2_SOURCE_DIR}/Dependencies/IPlug/RTMidi
@@ -86,7 +85,7 @@ set_target_properties(SoundshedGuitar_App PROPERTIES
 
 add_custom_command(TARGET SoundshedGuitar_App POST_BUILD
   COMMAND ${CMAKE_COMMAND}
-    -D SOURCE_DIR="${CMAKE_SOURCE_DIR}/resources"
+    -D SOURCE_DIR="${CMAKE_SOURCE_DIR}/../../soundshed-guitar-core/ui"
     -D DEST_DIR="$<TARGET_FILE_DIR:SoundshedGuitar_App>/resources"
     -P "${CMAKE_SOURCE_DIR}/cmake/CopyAppResources.cmake"
   COMMENT "Copying resource assets into the standalone bundle")
