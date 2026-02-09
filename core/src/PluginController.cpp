@@ -65,6 +65,7 @@ namespace
     constexpr double kMetronomeClickSeconds = 0.02;
     constexpr double kMetronomeClickFrequencyHz = 1800.0;
     constexpr double kTwoPi = 6.28318530717958647692;
+    constexpr const char* kSignalDiagnosticsSettingKey = "diagnostics.signalLevelsEnabled";
 
     double ToDbFS(double linear)
     {
@@ -416,6 +417,7 @@ void PluginController::Initialize()
 
     LoadAppSettings();
     ApplyMetronomeSettingsFromAppSettings();
+    ApplyDiagnosticsSettingsFromAppSettings();
     LoadResourceLibraries();
     LoadBlendLibrary();
     LoadCompositeLibrary();
@@ -857,6 +859,22 @@ void PluginController::RefreshMetronomeClickSamples(double sampleRate)
 
     auto samples = BuildMetronomeClickSamples(*config, sampleRate);
     mMetronomeClickSamples.store(samples, std::memory_order_release);
+}
+
+void PluginController::ApplyDiagnosticsSettingsFromAppSettings()
+{
+    const auto it = mAppSettings.find(kSignalDiagnosticsSettingKey);
+    if (it == mAppSettings.end())
+        return;
+
+    bool enabled = false;
+    if (it->is_boolean())
+        enabled = it->get<bool>();
+    else if (it->is_number())
+        enabled = it->get<double>() != 0.0;
+
+    mSignalDiagnosticsEnabled.store(enabled, std::memory_order_release);
+    mPresetMixer.SetSignalDiagnosticsEnabled(enabled);
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -2718,6 +2736,8 @@ void PluginController::HandleSetSignalDiagnosticsEnabledRequest(const nlohmann::
     bool enabled = payload.value("enabled", false);
     mSignalDiagnosticsEnabled.store(enabled, std::memory_order_release);
     mPresetMixer.SetSignalDiagnosticsEnabled(enabled);
+    mAppSettings[kSignalDiagnosticsSettingKey] = enabled;
+    SaveAppSettings();
 }
 
 void PluginController::HandleGetEffectCatalogRequest()
@@ -3504,6 +3524,7 @@ void PluginController::LoadLastSessionState()
 {
     LoadAppSettings();
     ApplyMetronomeSettingsFromAppSettings();
+    ApplyDiagnosticsSettingsFromAppSettings();
 
     // Restore preset from JSON if available
     if (!mActivePresetJson.empty() && nlohmann::json::accept(mActivePresetJson))
@@ -3811,7 +3832,7 @@ void PluginController::SendSignalDiagnosticsToUI()
 {
     auto snapshot = mPresetMixer.GetSignalDiagnosticsSnapshot();
     nlohmann::json msg;
-    msg["type"] = "signalDiagnostics";
+    msg["type"] = "signalLevelDiagnostics";
     msg["input"]["peak"] = snapshot.input.peak;
     msg["input"]["rms"] = snapshot.input.rms;
     msg["input"]["clipCount"] = snapshot.input.clipCount;

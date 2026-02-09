@@ -79,6 +79,13 @@ void MessageDispatcher::Dispatch(PluginController& c, const std::string& jsonMes
         std::string key = msg.value("key", "");
         if (!key.empty() && msg.contains("value"))
         {
+            if (key == "diagnostics.signalLevelsEnabled")
+            {
+                nlohmann::json payload;
+                payload["enabled"] = msg["value"];
+                c.HandleSetSignalDiagnosticsEnabledRequest(payload);
+                return;
+            }
             c.mAppSettings[key] = msg["value"];
             c.SaveAppSettings();
         }
