@@ -309,6 +309,8 @@ export interface UiState {
   presetDirty?: boolean;
   presetFolders?: PresetFolder[];
   activePresetFolderId?: string | null;
+  presetFavorites?: Set<string>;
+  presetRatings?: Record<string, number>;
   setlists?: Setlist[];
   activeSetlistId?: string | null;
   parameters: ParametersState;

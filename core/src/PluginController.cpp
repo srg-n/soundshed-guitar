@@ -1774,6 +1774,60 @@ void PluginController::HandleSavePresetRequest(const nlohmann::json& payload)
     }
 }
 
+void PluginController::HandleDeletePresetRequest(const nlohmann::json& payload)
+{
+    const std::string presetId = payload.value("presetId", "");
+    if (presetId.empty())
+        return;
+
+    if (mUserPresetsPath.empty())
+        mUserPresetsPath = mResourceRoot / "presets" / "user";
+
+    const auto presetPath = mUserPresetsPath / (presetId + ".json");
+    if (!std::filesystem::exists(presetPath))
+    {
+        ReportErrorToUI("Preset not found", presetId);
+        return;
+    }
+
+    std::error_code ec;
+    std::filesystem::remove(presetPath, ec);
+    if (ec)
+    {
+        ReportErrorToUI("Failed to delete preset", presetId);
+    }
+}
+
+void PluginController::HandleGetPresetByIdRequest(const nlohmann::json& payload)
+{
+    const std::string presetId = payload.value("presetId", "");
+    if (presetId.empty())
+        return;
+
+    if (mUserPresetsPath.empty())
+        mUserPresetsPath = mResourceRoot / "presets" / "user";
+
+    const auto userPath = mUserPresetsPath / (presetId + ".json");
+    const auto factoryPath = mResourceRoot / "presets" / "factory" / (presetId + ".json");
+
+    std::optional<Preset> presetOpt;
+    if (std::filesystem::exists(userPath))
+        presetOpt = PresetStorage::LoadFromFile(userPath);
+    if (!presetOpt && std::filesystem::exists(factoryPath))
+        presetOpt = PresetStorage::LoadFromFile(factoryPath);
+
+    if (!presetOpt)
+    {
+        ReportErrorToUI("Preset not found", presetId);
+        return;
+    }
+
+    nlohmann::json msg;
+    msg["type"] = "presetData";
+    msg["preset"] = nlohmann::json::parse(PresetStorage::SerializeToJson(*presetOpt));
+    SendMessageToUI(msg.dump());
+}
+
 // ── Signal path editing handlers ───────────────────────────────────
 // These handlers manipulate the signal graph nodes and edges.
 // They will be ported from GuitarFXPlugin.cpp as the next step.
@@ -3142,6 +3196,90 @@ void PluginController::HandleGetPresetListRequest()
     SendPresetListToUI();
 }
 
+void PluginController::HandleGetPresetFoldersRequest()
+{
+    const auto payload = LoadUiStorageJson("preset-folders.json", nlohmann::json::object());
+    nlohmann::json msg;
+    msg["type"] = "presetFolders";
+    msg["folders"] = payload.value("folders", nlohmann::json::array());
+    msg["activeFolderId"] = payload.value("activeFolderId", "__all__");
+    SendMessageToUI(msg.dump());
+}
+
+void PluginController::HandleSetPresetFoldersRequest(const nlohmann::json& payload)
+{
+    nlohmann::json toStore = nlohmann::json::object();
+    toStore["folders"] = payload.value("folders", nlohmann::json::array());
+    toStore["activeFolderId"] = payload.value("activeFolderId", "__all__");
+    SaveUiStorageJson("preset-folders.json", toStore);
+}
+
+void PluginController::HandleGetPresetFavoritesRequest()
+{
+    const auto payload = LoadUiStorageJson("preset-favorites.json", nlohmann::json::object());
+    nlohmann::json msg;
+    msg["type"] = "presetFavorites";
+    msg["favorites"] = payload.value("favorites", nlohmann::json::array());
+    SendMessageToUI(msg.dump());
+}
+
+void PluginController::HandleSetPresetFavoritesRequest(const nlohmann::json& payload)
+{
+    nlohmann::json toStore = nlohmann::json::object();
+    toStore["favorites"] = payload.value("favorites", nlohmann::json::array());
+    SaveUiStorageJson("preset-favorites.json", toStore);
+}
+
+void PluginController::HandleGetPresetRatingsRequest()
+{
+    const auto payload = LoadUiStorageJson("preset-ratings.json", nlohmann::json::object());
+    nlohmann::json msg;
+    msg["type"] = "presetRatings";
+    msg["ratings"] = payload.value("ratings", nlohmann::json::object());
+    SendMessageToUI(msg.dump());
+}
+
+void PluginController::HandleSetPresetRatingsRequest(const nlohmann::json& payload)
+{
+    nlohmann::json toStore = nlohmann::json::object();
+    toStore["ratings"] = payload.value("ratings", nlohmann::json::object());
+    SaveUiStorageJson("preset-ratings.json", toStore);
+}
+
+void PluginController::HandleGetSetlistsRequest()
+{
+    const auto payload = LoadUiStorageJson("setlists.json", nlohmann::json::object());
+    nlohmann::json msg;
+    msg["type"] = "setlists";
+    msg["setlists"] = payload.value("setlists", nlohmann::json::array());
+    msg["activeSetlistId"] = payload.value("activeSetlistId", "");
+    SendMessageToUI(msg.dump());
+}
+
+void PluginController::HandleSetSetlistsRequest(const nlohmann::json& payload)
+{
+    nlohmann::json toStore = nlohmann::json::object();
+    toStore["setlists"] = payload.value("setlists", nlohmann::json::array());
+    toStore["activeSetlistId"] = payload.value("activeSetlistId", "");
+    SaveUiStorageJson("setlists.json", toStore);
+}
+
+void PluginController::HandleGetThemeRequest()
+{
+    const auto payload = LoadUiStorageJson("theme.json", nlohmann::json::object());
+    nlohmann::json msg;
+    msg["type"] = "theme";
+    msg["theme"] = payload.value("theme", "dark");
+    SendMessageToUI(msg.dump());
+}
+
+void PluginController::HandleSetThemeRequest(const nlohmann::json& payload)
+{
+    nlohmann::json toStore = nlohmann::json::object();
+    toStore["theme"] = payload.value("theme", "dark");
+    SaveUiStorageJson("theme.json", toStore);
+}
+
 void PluginController::HandleGetGlobalChainRequest()
 {
     SendGlobalChainStateToUI();
@@ -4127,6 +4265,46 @@ void PluginController::SaveLayoutToFile(const std::string& effectType, const nlo
     {
         AppendSessionLog("Failed to write layout file: " + layoutFile.generic_string());
     }
+}
+
+std::filesystem::path PluginController::ResolveUiStoragePath(const std::string& filename) const
+{
+    const auto dir = mFileSystem.ResolveSettingsDirectory() / "ui";
+    mFileSystem.EnsureDirectory(dir);
+    return dir / filename;
+}
+
+nlohmann::json PluginController::LoadUiStorageJson(const std::string& filename, const nlohmann::json& fallback) const
+{
+    const auto path = ResolveUiStoragePath(filename);
+    if (path.empty() || !std::filesystem::exists(path))
+        return fallback;
+
+    try
+    {
+        std::ifstream ifs(path);
+        if (ifs.is_open())
+            return nlohmann::json::parse(ifs);
+    }
+    catch (const std::exception&) {}
+
+    return fallback;
+}
+
+void PluginController::SaveUiStorageJson(const std::string& filename, const nlohmann::json& payload) const
+{
+    const auto path = ResolveUiStoragePath(filename);
+    if (path.empty())
+        return;
+
+    try
+    {
+        mFileSystem.EnsureDirectory(path.parent_path());
+        std::ofstream ofs(path);
+        if (ofs.is_open())
+            ofs << payload.dump(2);
+    }
+    catch (const std::exception&) {}
 }
 
 // ── Messaging helpers ──────────────────────────────────────────────

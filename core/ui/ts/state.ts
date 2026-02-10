@@ -172,6 +172,8 @@ export const uiState: UiState = {
   presetDirty: false,
   presetFolders: [],
   activePresetFolderId: "__all__",
+  presetFavorites: new Set<string>(),
+  presetRatings: {},
   setlists: [],
   activeSetlistId: null,
   parameters: {

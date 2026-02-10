@@ -53,6 +53,50 @@ void MessageDispatcher::Dispatch(PluginController& c, const std::string& jsonMes
     {
         c.HandleGetPresetListRequest();
     }
+    else if (type == "getPresetById")
+    {
+        c.HandleGetPresetByIdRequest(msg);
+    }
+    else if (type == "getPresetFolders")
+    {
+        c.HandleGetPresetFoldersRequest();
+    }
+    else if (type == "setPresetFolders")
+    {
+        c.HandleSetPresetFoldersRequest(msg);
+    }
+    else if (type == "getPresetFavorites")
+    {
+        c.HandleGetPresetFavoritesRequest();
+    }
+    else if (type == "setPresetFavorites")
+    {
+        c.HandleSetPresetFavoritesRequest(msg);
+    }
+    else if (type == "getPresetRatings")
+    {
+        c.HandleGetPresetRatingsRequest();
+    }
+    else if (type == "setPresetRatings")
+    {
+        c.HandleSetPresetRatingsRequest(msg);
+    }
+    else if (type == "getSetlists")
+    {
+        c.HandleGetSetlistsRequest();
+    }
+    else if (type == "setSetlists")
+    {
+        c.HandleSetSetlistsRequest(msg);
+    }
+    else if (type == "getTheme")
+    {
+        c.HandleGetThemeRequest();
+    }
+    else if (type == "setTheme")
+    {
+        c.HandleSetThemeRequest(msg);
+    }
     else if (type == "getSignalDiagnostics")
     {
         c.HandleGetSignalDiagnosticsRequest();
@@ -135,6 +179,10 @@ void MessageDispatcher::Dispatch(PluginController& c, const std::string& jsonMes
     else if (type == "savePreset")
     {
         c.HandleSavePresetRequest(msg);
+    }
+    else if (type == "deletePreset")
+    {
+        c.HandleDeletePresetRequest(msg);
     }
 
     // ── Resource loading ───────────────────────────────────────────

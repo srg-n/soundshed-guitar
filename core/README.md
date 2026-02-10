@@ -76,3 +76,7 @@ cmake --build build --parallel
 
 ctest --test-dir build
 ```
+
+
+Test Core:
+ `ctest --build-config Debug --output-on-failure`

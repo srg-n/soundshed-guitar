@@ -1,5 +1,5 @@
 import { uiState, clonePreset, getActivePresetForRender, setActivePresetDraft, setActivePresetSnapshot, setPresetDirty } from "./state.js";
-import { renderActivePreset, applyPresetFromLibrary, populatePresetDropdown, updatePresetDropdownSelection, savePresetToLocalStorage, updatePresetActionButtons } from "./presets.js";
+import { renderActivePreset, applyPresetFromLibrary, populatePresetDropdown, updatePresetDropdownSelection, cachePresetInMemory, updatePresetActionButtons, applyPresetFoldersFromBackend, applyPresetFavoritesFromBackend, applyPresetRatingsFromBackend, applySetlistsFromBackend, handlePresetDataMessage } from "./presets.js";
 import { syncControlsFromState, handleInputModeChanged, handleAmpCabStateChanged, syncAutoLevelControlsFromState, applyStoredInputChannel } from "./controls.js";
 import { showNotification } from "./notifications.js";
 import { appendLog } from "./logging.js";
@@ -11,7 +11,7 @@ import { refreshSettingsView } from "./settings.js";
 import { refreshSelectedNodeParams, renderSignalPathBar } from "./signalPath.js";
 import { refreshFxSelector } from "./fxSelector.js";
 import { applyEnvironmentState, applyMetronomeState } from "./metronome.js";
-import type { GlobalSignalChainConfig, Preset, ResourceRef, UiSettings } from "./types.js";
+import type { GlobalSignalChainConfig, Preset, PresetFolder, ResourceRef, Setlist, UiSettings } from "./types.js";
 import { handleResourceDataMessage } from "./archiveUtils.js";
 import { layoutDesigner } from "./layoutDesigner.js";
 import type { LayoutLibrary, EffectLayout } from "./layoutTypes.js";
@@ -22,6 +22,7 @@ import { renderCompositeList, handleCompositeEditModeExited, handleCompositeEdit
 import { renderLayoutList } from "./layoutManager.js";
 import { enterCompositeEditState, updateCompositeEditState, exitCompositeEditState } from "./state.js";
 import { EffectTypeRegistry } from "./presetV2.js";
+import { themeSwitcher } from "./theme-switcher.js";
 
 function normalizeResourceRef(ref?: ResourceRef | null): void {
   if (!ref) return;
@@ -455,7 +456,7 @@ export function handleIncomingMessage(message: string): void {
       appendLog(`preset saved ← ${(payload as { preset?: Preset }).preset?.name ?? "unknown"}`);
       const savedPreset = (payload as { preset?: Preset }).preset;
       if (savedPreset) {
-        savePresetToLocalStorage(savedPreset);
+        cachePresetInMemory(savedPreset);
         uiState.activePresetId = savedPreset.id;
         uiState.presetCache.set(savedPreset.id, clonePreset(savedPreset));
         setActivePresetSnapshot(savedPreset);
@@ -489,6 +490,39 @@ export function handleIncomingMessage(message: string): void {
         populatePresetDropdown();
         renderActivePreset();
       }
+      break;
+    }
+    case "presetData": {
+      const presetPayload = payload as { preset?: Preset };
+      if (presetPayload.preset) {
+        handlePresetDataMessage(presetPayload.preset);
+      }
+      break;
+    }
+    case "presetFolders": {
+      const foldersPayload = payload as { folders?: PresetFolder[]; activeFolderId?: string | null };
+      applyPresetFoldersFromBackend(foldersPayload.folders ?? [], foldersPayload.activeFolderId ?? null);
+      break;
+    }
+    case "presetFavorites": {
+      const favoritesPayload = payload as { favorites?: string[] };
+      applyPresetFavoritesFromBackend(Array.isArray(favoritesPayload.favorites) ? favoritesPayload.favorites : []);
+      break;
+    }
+    case "presetRatings": {
+      const ratingsPayload = payload as { ratings?: Record<string, number> };
+      applyPresetRatingsFromBackend(ratingsPayload.ratings ?? {});
+      break;
+    }
+    case "setlists": {
+      const setlistsPayload = payload as { setlists?: Setlist[]; activeSetlistId?: string | null };
+      applySetlistsFromBackend(setlistsPayload.setlists ?? [], setlistsPayload.activeSetlistId ?? null);
+      break;
+    }
+    case "theme": {
+      const themePayload = payload as { theme?: string };
+      const theme = themePayload.theme === "light" || themePayload.theme === "classic" ? themePayload.theme : "dark";
+      themeSwitcher.applyTheme(theme);
       break;
     }
     case "tunerUpdate": {

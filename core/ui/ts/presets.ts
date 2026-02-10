@@ -33,15 +33,16 @@ const setlistCollapsible = document.getElementById("setlist-collapsible");
 const setlistToggle = document.getElementById("setlist-toggle");
 const setlistPanel = document.getElementById("setlist-panel");
 
-const PRESET_FOLDER_STORAGE_KEY = "guitarfx_preset_folders";
-const PRESET_FOLDER_SELECTED_KEY = "guitarfx_preset_folder_selected";
-const SETLIST_STORAGE_KEY = "guitarfx_setlists";
-const SETLIST_SELECTED_KEY = "guitarfx_setlist_selected";
-const PRESET_RATINGS_KEY = "guitarfx_preset_ratings";
-const PRESET_FAVORITES_KEY = "guitarfx_preset_favorites";
 const PRESET_FOLDER_ALL_ID = "__all__";
 const PRESET_FOLDER_FAVORITES_ID = "__favorites__";
 const PRESET_FOLDER_IMPORTED_NAME = "Imported";
+const PRESET_REQUEST_TIMEOUT_MS = 5000;
+
+const pendingPresetRequests = new Map<string, {
+  resolve: (preset: Preset) => void;
+  reject: (error: Error) => void;
+  timeoutId: number;
+}>();
 
 function normalizeFolderName(name: string): string {
   return name.trim().toLowerCase();
@@ -453,25 +454,12 @@ function initPresetModalAdvancedActions(modal: HTMLElement): void {
 }
 
 function loadFavoritePresetIds(): Set<string> {
-  try {
-    const raw = localStorage.getItem(PRESET_FAVORITES_KEY);
-    if (!raw) {
-      return new Set();
-    }
-    const parsed = JSON.parse(raw) as string[];
-    return new Set(Array.isArray(parsed) ? parsed : []);
-  } catch (error) {
-    console.error("Failed to load preset favorites", error);
-    return new Set();
-  }
+  return uiState.presetFavorites ? new Set(uiState.presetFavorites) : new Set();
 }
 
 function saveFavoritePresetIds(ids: Set<string>): void {
-  try {
-    localStorage.setItem(PRESET_FAVORITES_KEY, JSON.stringify(Array.from(ids)));
-  } catch (error) {
-    console.error("Failed to save preset favorites", error);
-  }
+  uiState.presetFavorites = new Set(ids);
+  postMessage({ type: "setPresetFavorites", favorites: Array.from(ids) });
 }
 
 function isPresetFavorite(presetId: string): boolean {
@@ -502,25 +490,12 @@ function toggleFavoritePreset(presetId: string): void {
 }
 
 function loadPresetRatings(): Record<string, number> {
-  try {
-    const raw = localStorage.getItem(PRESET_RATINGS_KEY);
-    if (!raw) {
-      return {};
-    }
-    const parsed = JSON.parse(raw) as Record<string, number>;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch (error) {
-    console.error("Failed to load preset ratings", error);
-    return {};
-  }
+  return uiState.presetRatings ? { ...uiState.presetRatings } : {};
 }
 
 function savePresetRatings(ratings: Record<string, number>): void {
-  try {
-    localStorage.setItem(PRESET_RATINGS_KEY, JSON.stringify(ratings));
-  } catch (error) {
-    console.error("Failed to save preset ratings", error);
-  }
+  uiState.presetRatings = { ...ratings };
+  postMessage({ type: "setPresetRatings", ratings });
 }
 
 function getPresetRating(presetId: string): number | null {
@@ -537,6 +512,16 @@ function setPresetRating(presetId: string, rating: number | null): void {
     ratings[presetId] = rating;
   }
   savePresetRatings(ratings);
+  renderPresetUI(uiState.presetCache.get(uiState.activePresetId ?? "") ?? null);
+}
+
+export function applyPresetFavoritesFromBackend(favorites: string[]): void {
+  uiState.presetFavorites = new Set(favorites);
+  setFavoriteToggleState(uiState.activePresetId);
+}
+
+export function applyPresetRatingsFromBackend(ratings: Record<string, number>): void {
+  uiState.presetRatings = { ...ratings };
   renderPresetUI(uiState.presetCache.get(uiState.activePresetId ?? "") ?? null);
 }
 
@@ -569,26 +554,16 @@ function togglePresetLibraryPopover(): void {
   }
 }
 
-function loadPresetFoldersFromLocalStorage(): PresetFolder[] {
-  try {
-    const raw = localStorage.getItem(PRESET_FOLDER_STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw) as PresetFolder[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.error("Failed to load preset folders", error);
-    return [];
-  }
+function loadPresetFoldersFromState(): PresetFolder[] {
+  return uiState.presetFolders ? [...uiState.presetFolders] : [];
 }
 
-function savePresetFoldersToLocalStorage(folders: PresetFolder[]): void {
-  try {
-    localStorage.setItem(PRESET_FOLDER_STORAGE_KEY, JSON.stringify(folders));
-  } catch (error) {
-    console.error("Failed to save preset folders", error);
-  }
+function savePresetFoldersToBackend(folders: PresetFolder[], activeFolderId?: string | null): void {
+  postMessage({
+    type: "setPresetFolders",
+    folders,
+    activeFolderId: activeFolderId ?? uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID,
+  });
 }
 
 function findFolderById(folders: PresetFolder[], folderId: string): PresetFolder | undefined {
@@ -704,7 +679,8 @@ function populatePresetFolderSelect(select: HTMLSelectElement | null, selectedId
 }
 
 function ensurePresetFolders(): void {
-  const stored = loadPresetFoldersFromLocalStorage();
+  const stored = loadPresetFoldersFromState();
+  let didModify = false;
   const importedFolder = findFolderByName(stored, PRESET_FOLDER_IMPORTED_NAME);
   if (!importedFolder) {
     stored.push({
@@ -713,58 +689,53 @@ function ensurePresetFolders(): void {
       children: [],
       presetIds: [],
     });
+    didModify = true;
   }
   uiState.presetFolders = stored;
 
-  const storedActive = localStorage.getItem(PRESET_FOLDER_SELECTED_KEY);
-  const resolvedActive = storedActive && storedActive !== PRESET_FOLDER_ALL_ID
-    ? findFolderById(stored, storedActive)?.id
-    : storedActive;
+  const resolvedActive = uiState.activePresetFolderId && uiState.activePresetFolderId !== PRESET_FOLDER_ALL_ID
+    ? findFolderById(stored, uiState.activePresetFolderId)?.id
+    : uiState.activePresetFolderId;
   uiState.activePresetFolderId = resolvedActive || PRESET_FOLDER_ALL_ID;
+
+  if (didModify) {
+    savePresetFoldersToBackend(uiState.presetFolders ?? [], uiState.activePresetFolderId);
+  }
 }
 
 function persistPresetFolders(): void {
-  savePresetFoldersToLocalStorage(uiState.presetFolders ?? []);
+  savePresetFoldersToBackend(uiState.presetFolders ?? [], uiState.activePresetFolderId);
 }
 
-function loadSetlistsFromLocalStorage(): Setlist[] {
-  try {
-    const raw = localStorage.getItem(SETLIST_STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw) as Setlist[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.error("Failed to load setlists", error);
-    return [];
-  }
-}
-
-function saveSetlistsToLocalStorage(setlists: Setlist[]): void {
-  try {
-    localStorage.setItem(SETLIST_STORAGE_KEY, JSON.stringify(setlists));
-  } catch (error) {
-    console.error("Failed to save setlists", error);
-  }
+export function applyPresetFoldersFromBackend(folders: PresetFolder[], activeFolderId?: string | null): void {
+  uiState.presetFolders = Array.isArray(folders) ? folders : [];
+  uiState.activePresetFolderId = activeFolderId ?? PRESET_FOLDER_ALL_ID;
+  ensurePresetFolders();
+  filterPresets(presetSearchElement?.value ?? "");
 }
 
 function ensureSetlists(): void {
-  const stored = loadSetlistsFromLocalStorage();
-  uiState.setlists = stored;
-  const storedActive = localStorage.getItem(SETLIST_SELECTED_KEY);
-  uiState.activeSetlistId = storedActive || (stored[0]?.id ?? null);
+  const stored = uiState.setlists ?? [];
+  uiState.activeSetlistId = uiState.activeSetlistId || (stored[0]?.id ?? null);
 }
 
 function persistSetlists(): void {
-  saveSetlistsToLocalStorage(uiState.setlists ?? []);
+  postMessage({
+    type: "setSetlists",
+    setlists: uiState.setlists ?? [],
+    activeSetlistId: uiState.activeSetlistId ?? "",
+  });
 }
 
 function setActiveSetlist(id: string | null): void {
   uiState.activeSetlistId = id;
-  if (id) {
-    localStorage.setItem(SETLIST_SELECTED_KEY, id);
-  }
+  persistSetlists();
+  renderSetlistPanel();
+}
+
+export function applySetlistsFromBackend(setlists: Setlist[], activeSetlistId?: string | null): void {
+  uiState.setlists = Array.isArray(setlists) ? setlists : [];
+  uiState.activeSetlistId = activeSetlistId ?? (uiState.setlists[0]?.id ?? null);
   renderSetlistPanel();
 }
 
@@ -933,7 +904,7 @@ function setSetlistExpanded(expanded: boolean): void {
 
 function setActivePresetFolder(folderId: string): void {
   uiState.activePresetFolderId = folderId;
-  localStorage.setItem(PRESET_FOLDER_SELECTED_KEY, folderId);
+  persistPresetFolders();
   filterPresets(presetSearchElement?.value ?? "");
 }
 
@@ -1218,6 +1189,55 @@ export function filterPresets(query: string): void {
   renderPresetUI(uiState.presetCache.get(uiState.activePresetId ?? "") ?? null);
 }
 
+function requestPresetFromBackend(presetId: string): Promise<Preset> {
+  const existing = pendingPresetRequests.get(presetId);
+  if (existing) {
+    return new Promise((resolve, reject) => {
+      const chainedResolve = (preset: Preset) => {
+        existing.resolve(preset);
+        resolve(preset);
+      };
+      const chainedReject = (error: Error) => {
+        existing.reject(error);
+        reject(error);
+      };
+      pendingPresetRequests.set(presetId, {
+        resolve: chainedResolve,
+        reject: chainedReject,
+        timeoutId: existing.timeoutId,
+      });
+    });
+  }
+
+  postMessage({ type: "getPresetById", presetId });
+
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      pendingPresetRequests.delete(presetId);
+      reject(new Error(`Preset ${presetId} request timed out`));
+    }, PRESET_REQUEST_TIMEOUT_MS);
+
+    pendingPresetRequests.set(presetId, { resolve, reject, timeoutId });
+  });
+}
+
+export function handlePresetDataMessage(preset: Preset): void {
+  if (!preset?.id) return;
+  const pending = pendingPresetRequests.get(preset.id);
+  if (pending) {
+    window.clearTimeout(pending.timeoutId);
+    pendingPresetRequests.delete(preset.id);
+    pending.resolve(preset);
+  }
+  uiState.presetCache.set(preset.id, clonePreset(preset));
+  const index = uiState.presets.findIndex((p) => p.id === preset.id);
+  if (index >= 0) {
+    uiState.presets[index] = clonePreset(preset);
+  } else {
+    uiState.presets.push(clonePreset(preset));
+  }
+}
+
 async function loadPresetMetadata(presetId: string): Promise<Preset> {
   if (uiState.presetCache.has(presetId)) {
     return stripLegacyGlobals(clonePreset(uiState.presetCache.get(presetId) ?? null) as Preset);
@@ -1227,6 +1247,12 @@ async function loadPresetMetadata(presetId: string): Promise<Preset> {
   if (localPreset) {
     const cleaned = stripLegacyGlobals(localPreset);
     uiState.presetCache.set(localPreset.id, cleaned);
+    if (!cleaned.graph || !Array.isArray(cleaned.graph.nodes) || cleaned.graph.nodes.length === 0) {
+      const backendPreset = await requestPresetFromBackend(presetId);
+      const resolved = stripLegacyGlobals(backendPreset);
+      uiState.presetCache.set(resolved.id, resolved);
+      return clonePreset(resolved) as Preset;
+    }
     return clonePreset(cleaned) as Preset;
   }
 
@@ -1309,32 +1335,11 @@ export async function applyPresetFromLibrary(presetId: string): Promise<void> {
   }
 }
 
-export function savePresetToLocalStorage(preset: Preset): void {
-  try {
-    const savedPresets = JSON.parse(localStorage.getItem("guitarfx_user_presets") || "[]") as Preset[];
-    const cleanedPreset = stripLegacyGlobals(preset);
-    const existingIndex = savedPresets.findIndex((p) => p.id === cleanedPreset.id);
-    if (existingIndex >= 0) {
-      savedPresets[existingIndex] = cleanedPreset;
-    } else {
-      savedPresets.push(cleanedPreset);
-    }
-    localStorage.setItem("guitarfx_user_presets", JSON.stringify(savedPresets));
-    console.log(`Preset '${cleanedPreset.name}' saved to localStorage`);
-  } catch (error) {
-    console.error("Failed to save preset to localStorage", error);
-  }
-}
-
-export function loadPresetsFromLocalStorage(): Preset[] {
-  try {
-    const savedPresets = JSON.parse(localStorage.getItem("guitarfx_user_presets") || "[]") as Preset[];
-    const cleaned = savedPresets.map((preset) => stripLegacyGlobals(preset));
-    console.log(`Loaded ${cleaned.length} user presets from localStorage`);
-    return cleaned;
-  } catch (error) {
-    console.error("Failed to load presets from localStorage", error);
-    return [];
+export function cachePresetInMemory(preset: Preset): void {
+  const cleanedPreset = stripLegacyGlobals(preset);
+  uiState.presetCache.set(cleanedPreset.id, cleanedPreset);
+  if (!uiState.presets.some((p) => p.id === cleanedPreset.id)) {
+    uiState.presets.push(cleanedPreset);
   }
 }
 
@@ -1352,8 +1357,7 @@ export async function loadPresetIndex(): Promise<void> {
     const data = await response.json();
     const presets = Array.isArray(data) ? data : data.presets ?? [];
     const basePresets = presets.length ? presets : getDefaultPresets();
-    const userPresets = loadPresetsFromLocalStorage();
-    uiState.presets = [...basePresets, ...userPresets];
+    uiState.presets = [...basePresets];
     uiState.filteredPresets = uiState.presets.slice();
     uiState.presets.forEach((preset) => {
       uiState.presetCache.set(preset.id, preset);
@@ -1362,8 +1366,7 @@ export async function loadPresetIndex(): Promise<void> {
   } catch (error) {
     console.error("Failed to load preset index", error);
     const basePresets = getDefaultPresets();
-    const userPresets = loadPresetsFromLocalStorage();
-    uiState.presets = [...basePresets, ...userPresets];
+    uiState.presets = [...basePresets];
     uiState.filteredPresets = uiState.presets.slice();
     uiState.presets.forEach((preset) => {
       uiState.presetCache.set(preset.id, preset);
@@ -1379,12 +1382,18 @@ export async function initializePresets(): Promise<void> {
     await loadPresetIndex();
   } else {
     const basePresets = getDefaultPresets();
-    const userPresets = loadPresetsFromLocalStorage();
-    uiState.presets = [...basePresets, ...userPresets];
+    uiState.presets = [...basePresets];
     uiState.filteredPresets = uiState.presets.slice();
     uiState.presets.forEach((preset) => uiState.presetCache.set(preset.id, preset));
     renderPresetUI(uiState.presetCache.get(uiState.activePresetId ?? "") ?? null);
   }
+
+  // Backend-backed user data
+  postMessage({ type: "getPresetList" });
+  postMessage({ type: "getPresetFolders" });
+  postMessage({ type: "getPresetFavorites" });
+  postMessage({ type: "getPresetRatings" });
+  postMessage({ type: "getSetlists" });
 
   ensurePresetFolders();
   ensureSetlists();
@@ -1630,7 +1639,7 @@ export function createDefaultPreset(): void {
   const activeFolderId = uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID;
   const selectedFolderId = activeFolderId === PRESET_FOLDER_FAVORITES_ID ? PRESET_FOLDER_ALL_ID : activeFolderId;
 
-  savePresetToLocalStorage(newPreset);
+  cachePresetInMemory(newPreset);
   uiState.presets.unshift(newPreset);
   uiState.filteredPresets = uiState.presets.slice();
   uiState.presetCache.set(newPreset.id, newPreset);
@@ -1692,7 +1701,7 @@ export function saveCurrentPreset(): void {
         globalSignalChain: uiState.globalSignalChain,
       };
 
-      savePresetToLocalStorage(updatedPreset);
+      cachePresetInMemory(updatedPreset);
       // Also persist to disk via the C++ backend
       postMessage({ type: "savePreset", name: updatedPreset.name, category: updatedPreset.category, description: updatedPreset.description });
       uiState.presetCache.set(editingPresetId, updatedPreset);
@@ -1726,7 +1735,7 @@ export function saveCurrentPreset(): void {
     globalSignalChain: uiState.globalSignalChain,
   };
 
-  savePresetToLocalStorage(newPreset);
+  cachePresetInMemory(newPreset);
   // Also persist to disk via the C++ backend
   postMessage({ type: "savePreset", name: newPreset.name, category: newPreset.category, description: newPreset.description });
   uiState.presets.unshift(newPreset);
@@ -2196,7 +2205,7 @@ async function importPresetArchive(file: File): Promise<void> {
     }));
   }
 
-  savePresetToLocalStorage(importedPreset);
+  cachePresetInMemory(importedPreset);
   uiState.presets.unshift(importedPreset);
   addPresetToImportedFolder(importedPreset.id);
   uiState.filteredPresets = getFilteredPresets(presetSearchElement?.value ?? "");
@@ -2209,22 +2218,11 @@ async function importPresetArchive(file: File): Promise<void> {
   updatePresetActionButtons();
 }
 
-// Delete preset from localStorage
-export function deletePresetFromLocalStorage(presetId: string): boolean {
-  try {
-    const savedPresets = JSON.parse(localStorage.getItem("guitarfx_user_presets") || "[]") as Preset[];
-    const index = savedPresets.findIndex((p) => p.id === presetId);
-    if (index >= 0) {
-      savedPresets.splice(index, 1);
-      localStorage.setItem("guitarfx_user_presets", JSON.stringify(savedPresets));
-      console.log(`Preset '${presetId}' deleted from localStorage`);
-      return true;
-    }
-    return false;
-  } catch (error) {
-    console.error("Failed to delete preset from localStorage", error);
-    return false;
-  }
+// Delete preset via backend storage
+export function deletePresetFromBackend(presetId: string): boolean {
+  if (!presetId) return false;
+  postMessage({ type: "deletePreset", presetId });
+  return true;
 }
 
 // Check if preset is a user preset (can be edited/deleted)
@@ -2257,7 +2255,7 @@ export async function deleteCurrentPreset(): Promise<void> {
     return;
   }
 
-  if (deletePresetFromLocalStorage(activePresetId)) {
+  if (deletePresetFromBackend(activePresetId)) {
     // Remove from UI state
     const index = uiState.presets.findIndex((p) => p.id === activePresetId);
     if (index >= 0) {
@@ -2315,8 +2313,15 @@ export function saveOverwriteCurrentPreset(): void {
     attachments: baseAttachments,
   };
 
-  // Save to localStorage
-  savePresetToLocalStorage(updatedPreset);
+  cachePresetInMemory(updatedPreset);
+  // Persist to disk via the C++ backend
+  postMessage({
+    type: "savePreset",
+    presetId: updatedPreset.id,
+    name: updatedPreset.name,
+    category: updatedPreset.category,
+    description: updatedPreset.description,
+  });
 
   // Update cache
   uiState.presetCache.set(activePresetId, updatedPreset);

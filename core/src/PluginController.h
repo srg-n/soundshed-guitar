@@ -194,6 +194,8 @@ private:
     void HandleLoadModelRequest(const nlohmann::json& payload);
     void HandleLoadIRRequest(const nlohmann::json& payload);
     void HandleSavePresetRequest(const nlohmann::json& payload);
+    void HandleDeletePresetRequest(const nlohmann::json& payload);
+    void HandleGetPresetByIdRequest(const nlohmann::json& payload);
     void HandleBrowseModelRequest();
     void HandleBrowseIRRequest();
     void HandleOpenAudioPreferencesRequest();
@@ -240,6 +242,16 @@ private:
     void HandleSetSignalDiagnosticsEnabledRequest(const nlohmann::json& payload);
     void HandleGetEffectCatalogRequest();
     void HandleGetPresetListRequest();
+    void HandleGetPresetFoldersRequest();
+    void HandleSetPresetFoldersRequest(const nlohmann::json& payload);
+    void HandleGetPresetFavoritesRequest();
+    void HandleSetPresetFavoritesRequest(const nlohmann::json& payload);
+    void HandleGetPresetRatingsRequest();
+    void HandleSetPresetRatingsRequest(const nlohmann::json& payload);
+    void HandleGetSetlistsRequest();
+    void HandleSetSetlistsRequest(const nlohmann::json& payload);
+    void HandleGetThemeRequest();
+    void HandleSetThemeRequest(const nlohmann::json& payload);
     void HandleGetGlobalChainRequest();
     void HandleSetGlobalChainRequest(const nlohmann::json& payload);
     void HandleSetNodeEnabledRequest(const nlohmann::json& payload);
@@ -307,6 +319,9 @@ private:
     void LoadCompositeLibrary();
     void LoadLayoutLibrary();
     void SaveLayoutToFile(const std::string& effectType, const nlohmann::json& layoutJson);
+    [[nodiscard]] std::filesystem::path ResolveUiStoragePath(const std::string& filename) const;
+    [[nodiscard]] nlohmann::json LoadUiStorageJson(const std::string& filename, const nlohmann::json& fallback) const;
+    void SaveUiStorageJson(const std::string& filename, const nlohmann::json& payload) const;
 
     // Encoding helpers
     [[nodiscard]] static std::vector<std::uint8_t> DecodeBase64(const std::string& encoded);

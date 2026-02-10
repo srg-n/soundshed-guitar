@@ -17,13 +17,7 @@ export class ThemeSwitcher {
 
   constructor() {
     this.body = document.body;
-    // Load saved theme from localStorage
-    const saved = localStorage.getItem('guitarfx-theme');
-    if (saved) {
-      this.setTheme(this.normalizeTheme(saved));
-    } else {
-      this.setTheme(this.currentTheme);
-    }
+    this.setTheme(this.currentTheme, false);
   }
 
   private normalizeTheme(theme: string): ThemeName {
@@ -36,7 +30,7 @@ export class ThemeSwitcher {
   /**
    * Set the active theme
    */
-  setTheme(theme: ThemeName): void {
+  setTheme(theme: ThemeName, persist: boolean = true): void {
     // Remove all theme classes
     this.body.classList.remove('theme-light', 'theme-dark', 'theme-classic');
     
@@ -44,12 +38,20 @@ export class ThemeSwitcher {
     this.body.classList.add(`theme-${theme}`);
     
     this.currentTheme = theme;
-    
-    // Save to localStorage
-    localStorage.setItem('guitarfx-theme', theme);
+
+    if (persist) {
+      // Persist via backend
+      import('./bridge.js').then(({ postMessage }) => {
+        postMessage({ type: 'setTheme', theme });
+      }).catch(() => {});
+    }
     
     // Dispatch event for other components to react
     window.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme } }));
+  }
+
+  applyTheme(theme: ThemeName): void {
+    this.setTheme(theme, false);
   }
 
   /**
