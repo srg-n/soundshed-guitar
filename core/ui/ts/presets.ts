@@ -1693,6 +1693,8 @@ export function saveCurrentPreset(): void {
       };
 
       savePresetToLocalStorage(updatedPreset);
+      // Also persist to disk via the C++ backend
+      postMessage({ type: "savePreset", name: updatedPreset.name, category: updatedPreset.category, description: updatedPreset.description });
       uiState.presetCache.set(editingPresetId, updatedPreset);
       const index = uiState.presets.findIndex((p) => p.id === editingPresetId);
       if (index >= 0) {
@@ -1725,6 +1727,8 @@ export function saveCurrentPreset(): void {
   };
 
   savePresetToLocalStorage(newPreset);
+  // Also persist to disk via the C++ backend
+  postMessage({ type: "savePreset", name: newPreset.name, category: newPreset.category, description: newPreset.description });
   uiState.presets.unshift(newPreset);
   uiState.filteredPresets = uiState.presets.slice();
   uiState.presetCache.set(newPreset.id, newPreset);

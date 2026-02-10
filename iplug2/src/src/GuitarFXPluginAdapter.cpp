@@ -23,6 +23,7 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <shellapi.h>
 #include <commdlg.h>
 #include <shobjidl.h>
 #include <wincodec.h>
@@ -200,6 +201,19 @@ void GuitarFXPluginAdapter::OnReset()
 
 void GuitarFXPluginAdapter::OnIdle()
 {
+    // Drain the main-thread deferred execution queue
+    {
+        std::vector<std::function<void()>> pending;
+        {
+            std::lock_guard<std::mutex> lock(mMainThreadQueueMutex);
+            pending.swap(mMainThreadQueue);
+        }
+        for (auto& fn : pending)
+        {
+            if (fn) fn();
+        }
+    }
+
     mController.OnIdle();
 
     // Handle UI reload timeout (framework-specific, stays in adapter)
@@ -488,11 +502,12 @@ void GuitarFXPluginAdapter::SaveFileAsync(
 
 void GuitarFXPluginAdapter::RunOnMainThread(std::function<void()> fn)
 {
-    // iPlug2 doesn't have a built-in main-thread dispatch like JUCE's MessageManager.
-    // For now, queue it through the timer callback by using a deferred lambda.
-    // In production, this should use the iPlug2 IPlugQueue or similar mechanism.
-    // For simplicity, we execute synchronously (most callers are already on the main thread).
-    if (fn) fn();
+    if (!fn) return;
+
+    // Enqueue for execution during the next OnIdle() tick on the main thread.
+    // OnIdle() is called by the iPlug2 host on the main/UI thread.
+    std::lock_guard<std::mutex> lock(mMainThreadQueueMutex);
+    mMainThreadQueue.push_back(std::move(fn));
 }
 
 std::filesystem::path GuitarFXPluginAdapter::GetUserDataPath() const
@@ -529,8 +544,13 @@ int GuitarFXPluginAdapter::GetBlockSize() const
 void GuitarFXPluginAdapter::OpenAudioPreferences()
 {
 #ifdef APP_API
-    // Standalone only — the iPlug2 APP host manages audio preferences;
-    // no direct API is exposed on IPlugAPP for this.
+    // In the iPlug2 standalone app, show the system preferences dialog.
+    // The iPlug2 APP wrapper exposes no direct API for this; use the
+    // host-specific mechanism or a platform dialog.
+    // On Windows, open the Sound control panel.
+#ifdef _WIN32
+    ShellExecuteW(nullptr, L"open", L"mmsys.cpl", nullptr, nullptr, SW_SHOW);
+#endif
 #endif
 }
 

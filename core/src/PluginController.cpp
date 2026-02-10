@@ -1096,7 +1096,7 @@ void PluginController::OnIdle()
         if (buf)
         {
             nlohmann::json msg;
-            msg["type"] = "previewDemoAudioComplete";
+            msg["type"] = "previewComplete";
             msg["id"] = buf->id;
             msg["title"] = buf->title;
             SendMessageToUI(msg.dump());
@@ -1166,6 +1166,37 @@ bool PluginController::AddActivePreset(const Preset& preset, const std::string& 
 {
     std::lock_guard<std::mutex> lock(mDSPMutex);
     return mPresetMixer.AddActivePreset(preset, presetId, name);
+}
+
+bool PluginController::AddActivePresetById(const std::string& presetId)
+{
+    // If the active preset matches, use it directly
+    if (mActivePreset && mActivePreset->id == presetId)
+    {
+        return AddActivePreset(*mActivePreset, presetId, mActivePreset->name);
+    }
+
+    // Try loading from user presets directory
+    if (!mUserPresetsPath.empty())
+    {
+        auto userPath = mUserPresetsPath / (presetId + ".json");
+        auto presetOpt = PresetStorage::LoadFromFile(userPath);
+        if (presetOpt)
+        {
+            return AddActivePreset(*presetOpt, presetId, presetOpt->name);
+        }
+    }
+
+    // Try loading from factory presets directory
+    auto factoryPath = mResourceRoot / "presets" / "factory" / (presetId + ".json");
+    auto presetOpt = PresetStorage::LoadFromFile(factoryPath);
+    if (presetOpt)
+    {
+        return AddActivePreset(*presetOpt, presetId, presetOpt->name);
+    }
+
+    ReportErrorToUI("Cannot add preset to mixer", "Preset '" + presetId + "' not found");
+    return false;
 }
 
 void PluginController::RemoveActivePreset(const std::string& presetId)
@@ -1261,11 +1292,7 @@ void PluginController::AppendSessionLog(const std::string& message)
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Handler stubs — to be filled with logic moved from GuitarFXPlugin.cpp
-//
-// Each handler below corresponds to an existing Handle*Request method
-// in GuitarFXPlugin.cpp. The implementation will be ported by replacing
-// iPlug2/JUCE-specific calls with IPluginHost interface calls.
+// Request handlers
 // ════════════════════════════════════════════════════════════════════
 
 void PluginController::HandleStateRequest()
@@ -1687,6 +1714,7 @@ void PluginController::HandleSavePresetRequest(const nlohmann::json& payload)
     const std::string presetName = payload.value("name", "");
     const std::string presetCategory = payload.value("category", "User");
     const std::string presetDescription = payload.value("description", "");
+    const std::string presetIdOverride = payload.value("presetId", "");
 
     if (presetName.empty())
     {
@@ -1704,7 +1732,9 @@ void PluginController::HandleSavePresetRequest(const nlohmann::json& payload)
     try
     {
         Preset newPreset = *mActivePreset;
-        newPreset.id = "user-" + std::to_string(std::time(nullptr));
+        newPreset.id = presetIdOverride.empty()
+            ? "user-" + std::to_string(std::time(nullptr))
+            : presetIdOverride;
         newPreset.name = presetName;
         newPreset.category = presetCategory;
         newPreset.description = presetDescription;
@@ -3061,6 +3091,13 @@ void PluginController::HandlePreviewDemoRequest(const nlohmann::json& payload)
         mDemoAudioBuffer = buffer;
         mDemoAudioActive.store(true, std::memory_order_release);
     }
+
+    // Notify UI that demo preview playback has started
+    nlohmann::json startMsg;
+    startMsg["type"] = "previewStarted";
+    startMsg["id"] = buffer->id;
+    startMsg["title"] = buffer->title;
+    SendMessageToUI(startMsg.dump());
 }
 
 void PluginController::HandleStopDemoRequest()
@@ -3070,7 +3107,7 @@ void PluginController::HandleStopDemoRequest()
         mDemoAudioActive.store(false, std::memory_order_release);
     }
     nlohmann::json msg;
-    msg["type"] = "previewDemoAudioStopped";
+    msg["type"] = "previewStopped";
     SendMessageToUI(msg.dump());
 }
 

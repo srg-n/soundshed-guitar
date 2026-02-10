@@ -56,28 +56,79 @@ The UI is a web-based single-page application (SPA) hosted in a native WebView. 
 | Type | Payload | Description |
 |------|---------|-------------|
 | `state` | Full state object | Complete sync on startup/major changes |
-| `parameterChanged` | `{id, value}` | Single parameter update |
-| `presetLoaded` | `{id, name, success}` | Preset load notification |
-| `presetSearchResults` | `{query, total, results}` | Remote search results |
-| `downloadProgress` | `{id, progress}` | Resource download progress |
-| `resourceLoaded` | `{type, id}` | Resource load complete |
-| `error` | `{code, message, details}` | Error notification |
+| `presetLoaded` | `{preset, activePresetIds, parameters}` | Preset load notification |
+| `presetSaved` | `{preset}` | Preset saved to disk confirmation |
+| `presetList` | `{presets: [{id, name, category, source}]}` | Factory/user presets from disk |
+| `error` | `{message, detail}` | Error notification |
+| `signalPathTestResult` | `{frequency, duration, elapsed, ...}` | Signal test completed |
+| `previewStarted` | `{id, title}` | Demo audio playback started |
+| `previewComplete` | `{id, title}` | Demo audio playback finished |
+| `previewStopped` | `{id?, title?}` | Demo audio playback stopped by user |
+| `tunerUpdate` | `{note, cents, frequency, ...}` | Tuner pitch detection update |
+| `tunerStarted` | `{}` | Tuner activated |
+| `tunerStopped` | `{}` | Tuner deactivated |
+| `modelLoaded` | `{path}` | NAM model loaded |
+| `irLoaded` | `{path}` | IR cab loaded |
+| `namCalibrationStatus` | `{status, ...}` | NAM calibration progress |
+| `namCalibrationApplied` | `{...}` | NAM calibration applied |
+| `resourceImported` | `{...}` | Remote resource imported |
+| `resourceImportFailed` | `{message}` | Remote resource import failed |
+| `globalChain` | `{config}` | Global signal chain configuration |
+| `effectCatalog` | `{effects: [...]}` | Available effect types |
+| `dspPerformance` | `{...}` | DSP performance statistics |
+| `signalLevelDiagnostics` | `{input, output}` | Signal level meters |
+| `metronomeState` | `{bpm, enabled, ...}` | Metronome state |
+| `layoutSaved` | `{...}` | Effect layout saved |
+| `layoutLibraryLoaded` | `{layoutLibrary}` | Layout library loaded |
+| `compositeLibrary` | `{...}` | Composite effect library |
+| `compositeDefinitionAdded` | `{...}` | Composite effect added |
+| `compositeDefinitionRemoved` | `{...}` | Composite effect removed |
+| `compositeEditState` | `{...}` | Composite edit mode state |
+| `compositeEditModeExited` | `{}` | Exited composite edit mode |
 
 ### UI → Engine Messages
 
 | Type | Payload | Description |
 |------|---------|-------------|
-| `setParameter` | `{id, value}` | Update parameter value |
-| `loadPreset` | `{id}` | Load preset by ID |
-| `savePreset` | `{preset}` | Save current state as preset |
-| `deletePreset` | `{id}` | Delete preset |
-| `search` | `{query, category, tags, page}` | Search remote presets |
-| `downloadPreset` | `{id}` | Download remote preset |
-| `loadResource` | `{type, ref}` | Load NAM/IR resource |
+| `uiReady` | `{}` | WebView loaded and ready |
 | `requestState` | `{}` | Request full state sync |
+| `setParameter` | `{name, value}` | Update parameter value |
+| `loadPreset` | `{preset}` | Load preset with full object |
+| `savePreset` | `{name, category, description}` | Save current state as preset to disk |
+| `loadModel` | `{filePath}` | Load NAM model by path |
+| `loadIR` | `{filePath}` | Load IR cab by path |
+| `browseModel` | `{}` | Open model file browser |
+| `browseIR` | `{}` | Open IR file browser |
 | `addSignalPathNode` | `{node, afterNodeId}` | Add effect to graph |
-| `removeSignalPathNode` | `{nodeId}` | Remove effect from graph |
+| `deleteSignalPathNode` | `{nodeId}` | Remove effect from graph |
 | `replaceSignalPathNode` | `{nodeId, newNode}` | Replace effect in graph |
+| `reorderSignalPathNode` | `{nodeId, newIndex}` | Reorder effect in graph |
+| `updateSignalPathNodeParam` | `{nodeId, paramId, value}` | Update effect parameter |
+| `updateSignalPathNodeBypass` | `{nodeId, bypassed}` | Bypass/enable effect |
+| `updateNodeResource` | `{nodeId, resource}` | Change node resource |
+| `browseNodeResource` | `{nodeId}` | Browse for node resource |
+| `addActivePreset` | `{presetId}` | Add preset to multi-mixer |
+| `removeActivePreset` | `{presetId}` | Remove preset from mixer |
+| `setPresetMix` | `{presetId, mix}` | Set mixer preset level |
+| `setPresetPan` | `{presetId, pan}` | Set mixer preset pan |
+| `setPresetMute` | `{presetId, mute}` | Mute mixer preset |
+| `setPresetSolo` | `{presetId, solo}` | Solo mixer preset |
+| `setMasterGain` | `{gain}` | Set master output gain |
+| `setLimiterEnabled` | `{enabled}` | Enable/disable limiter |
+| `setInputMode` | `{mode}` | Set input mode (mono/stereo) |
+| `setAmpCabState` | `{...}` | Set amp/cab enable state |
+| `setAutoLevel` | `{...}` | Set auto-level configuration |
+| `setMetronome` | `{bpm?, enabled?, ...}` | Update metronome settings |
+| `tuner` | `{action}` | Start/stop/configure tuner |
+| `runSignalPathTest` | `{}` | Run signal path diagnostic |
+| `previewDemoAudio` | `{audio}` | Preview demo audio clip |
+| `stopDemoAudio` | `{}` | Stop demo audio playback |
+| `importRemoteResource` | `{...}` | Import resource from remote |
+| `setGlobalChainParam` | `{param, value}` | Set global chain parameter |
+| `getGlobalChain` | `{}` | Request global chain state |
+| `getEffectCatalog` | `{}` | Request effect catalog |
+| `getPresetList` | `{}` | Request preset list from disk |
+| `openAudioPreferences` | `{}` | Open audio device settings |
 
 ## State Object
 
@@ -140,17 +191,16 @@ UI changes parameter:
 2. UI updates local state immediately (optimistic)
 3. UI sends setParameter message (debounced 50ms)
 4. Engine updates parameter
-5. Engine broadcasts parameterChanged
-6. UI receives confirmation
+5. Engine includes update in next state broadcast
 
 Engine changes parameter (automation):
 1. DAW writes automation value
-2. Engine sends parameterChanged
+2. Engine includes in state broadcast
 3. UI updates display
 ```
 
 ### Conflict Resolution
-Engine value is authoritative. If UI receives `parameterChanged` with a different value than it sent, it adopts the engine value.
+Engine value is authoritative. If UI receives a state broadcast with a different value than it sent, it adopts the engine value.
 
 ## UI Views
 

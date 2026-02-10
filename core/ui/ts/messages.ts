@@ -51,7 +51,24 @@ function normalizePresetResources(preset?: Preset | null): void {
 }
 
 function presetSignature(preset?: Preset | null): string {
-  return preset ? JSON.stringify(preset) : "";
+  if (!preset) return "";
+
+  const normalize = (value: unknown): unknown => {
+    if (Array.isArray(value)) {
+      return value.map(normalize);
+    }
+    if (value && typeof value === "object") {
+      const obj = value as Record<string, unknown>;
+      const sorted: Record<string, unknown> = {};
+      Object.keys(obj).sort().forEach((key) => {
+        sorted[key] = normalize(obj[key]);
+      });
+      return sorted;
+    }
+    return value;
+  };
+
+  return JSON.stringify(normalize(preset));
 }
 
 function normalizeGlobalSignalChain(chain?: GlobalSignalChainConfig | null): GlobalSignalChainConfig | null {
@@ -315,8 +332,7 @@ export function handleIncomingMessage(message: string): void {
       showNotification("Playing demo audio", (payload as { title?: string }).title ?? "Demo");
       break;
     }
-    case "previewComplete":
-    case "previewDemoAudioComplete": {
+    case "previewComplete": {
       appendLog(`preview complete ← ${(payload as { title?: string; id?: string }).title ?? (payload as { id?: string }).id ?? "demo"}`);
       onDemoAudioStopped();
       if (uiState.demoAudioRepeat) {
@@ -456,6 +472,25 @@ export function handleIncomingMessage(message: string): void {
       showNotification("Preset saved", (payload as { path?: string }).path ?? savedPreset?.name ?? "");
       break;
     }
+    case "presetList": {
+      const presetListPayload = payload as { presets?: Array<{ id: string; name: string; category?: string; source?: string }> };
+      if (Array.isArray(presetListPayload.presets)) {
+        appendLog(`preset list received ← ${presetListPayload.presets.length} presets`);
+        for (const p of presetListPayload.presets) {
+          if (!uiState.presetCache.has(p.id)) {
+            const stub: Preset = { id: p.id, name: p.name, category: p.category ?? "Factory" } as Preset;
+            uiState.presetCache.set(p.id, stub);
+            if (!uiState.presets.some((existing) => existing.id === p.id)) {
+              uiState.presets.push(stub);
+            }
+          }
+        }
+        uiState.filteredPresets = uiState.presets.slice();
+        populatePresetDropdown();
+        renderActivePreset();
+      }
+      break;
+    }
     case "tunerUpdate": {
       const tunerPayload = payload as { 
         detected?: boolean; 
@@ -578,21 +613,13 @@ export function handleIncomingMessage(message: string): void {
       }
       break;
     }
+    case "globalSignalChainChanged":
     case "globalChain": {
-      const chainPayload = payload as { config?: import("./types.js").GlobalSignalChainConfig };
-      if (chainPayload.config) {
-        uiState.globalSignalChain = normalizeGlobalSignalChain(chainPayload.config) ?? uiState.globalSignalChain;
+      const chainPayload = payload as { config?: import("./types.js").GlobalSignalChainConfig; globalSignalChain?: import("./types.js").GlobalSignalChainConfig };
+      const chainConfig = chainPayload.config ?? chainPayload.globalSignalChain;
+      if (chainConfig) {
+        uiState.globalSignalChain = normalizeGlobalSignalChain(chainConfig) ?? uiState.globalSignalChain;
         appendLog("Global signal chain configuration loaded");
-        syncControlsFromState();
-      }
-      break;
-    }
-    case "globalSignalChainChanged": {
-      const chainPayload = payload as { globalSignalChain?: import("./types.js").GlobalSignalChainConfig };
-      if (chainPayload.globalSignalChain) {
-        uiState.globalSignalChain = normalizeGlobalSignalChain(chainPayload.globalSignalChain) ?? uiState.globalSignalChain;
-        appendLog("Global signal chain configuration updated");
-        // Sync any UI controls that show global chain state
         syncControlsFromState();
       }
       break;

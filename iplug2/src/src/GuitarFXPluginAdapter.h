@@ -14,6 +14,7 @@
 #include "PluginController.h"
 
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -133,6 +134,10 @@ private:
     void* mWindowIconSmall = nullptr;
     bool mWindowIconApplied = false;
 #endif
+
+    // Main-thread deferred execution queue (drained in OnIdle)
+    std::mutex mMainThreadQueueMutex;
+    std::vector<std::function<void()>> mMainThreadQueue;
 };
 
 } // namespace guitarfx

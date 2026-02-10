@@ -284,8 +284,9 @@ int PluginProcessorAdapter::GetBlockSize() const
 
 void PluginProcessorAdapter::OpenAudioPreferences()
 {
-    // JUCE standalone wrapper handles this via AudioDeviceSelectorComponent
-    // No-op for plugin formats
+    // In standalone builds, the JUCE standalone wrapper provides audio
+    // preferences in its own menu bar. No additional action needed here.
+    // For plugin formats (VST3, AU), this is a no-op.
 }
 
 void PluginProcessorAdapter::NotifyStateChanged()
@@ -318,7 +319,7 @@ bool PluginProcessorAdapter::IsHostPlaying() const
 
 bool PluginProcessorAdapter::IsStandalone() const
 {
-    return false;
+    return wrapperType == wrapperType_Standalone;
 }
 
 // ════════════════════════════════════════════════════════════════════════

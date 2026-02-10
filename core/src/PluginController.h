@@ -135,6 +135,7 @@ public:
 
     // ── Multi-preset mixer controls ────────────────────────────────
     bool AddActivePreset(const Preset& preset, const std::string& presetId, const std::string& name);
+    bool AddActivePresetById(const std::string& presetId);
     void RemoveActivePreset(const std::string& presetId);
     void SetActivePresetMix(const std::string& presetId, double value);
     void SetActivePresetPan(const std::string& presetId, double pan);

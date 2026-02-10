@@ -17,3 +17,4 @@ Build release
 
  Find exe output in 
  `build\SoundshedGuitar_artefacts\Release`
+

@@ -221,13 +221,26 @@ void MessageDispatcher::Dispatch(PluginController& c, const std::string& jsonMes
         try
         {
             auto presetJson = msg.value("preset", nlohmann::json());
-            auto presetOpt = PresetStorage::DeserializeFromJson(presetJson.dump());
-            if (presetOpt)
+            if (!presetJson.is_null() && presetJson.is_object())
             {
-                Preset preset = std::move(*presetOpt);
-                std::string presetId = msg.value("presetId", preset.id);
-                std::string name = msg.value("name", preset.name);
-                c.AddActivePreset(preset, presetId, name);
+                // Full preset object provided
+                auto presetOpt = PresetStorage::DeserializeFromJson(presetJson.dump());
+                if (presetOpt)
+                {
+                    Preset preset = std::move(*presetOpt);
+                    std::string presetId = msg.value("presetId", preset.id);
+                    std::string name = msg.value("name", preset.name);
+                    c.AddActivePreset(preset, presetId, name);
+                }
+            }
+            else
+            {
+                // Only presetId provided — look up the active preset or load from disk
+                std::string presetId = msg.value("presetId", "");
+                if (!presetId.empty())
+                {
+                    c.AddActivePresetById(presetId);
+                }
             }
         }
         catch (...) {}
