@@ -128,6 +128,8 @@ set(GUITARFX_CORE_SOURCES
     src/IPluginHost.h
     src/UiBridge.h
     src/UiBridge.cpp
+    src/controller/DemoPreviewService.h
+    src/controller/DemoPreviewService.cpp
 
     # DSP core
     src/dsp/EffectProcessor.h

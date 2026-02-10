@@ -41,6 +41,8 @@
 namespace guitarfx
 {
 
+class DemoPreviewService;
+
 /**
  * Shared plugin controller — all business logic lives here.
  *
@@ -447,18 +449,7 @@ private:
     std::vector<MetronomeClickTypeConfig> mMetronomeClickConfig;
     std::atomic<std::shared_ptr<MetronomeClickSamples>> mMetronomeClickSamples{nullptr};
 
-    // Demo audio preview
-    struct DemoAudioBuffer
-    {
-        std::string id;
-        std::string title;
-        double sampleRate = 0.0;
-        int channels = 0;
-        std::vector<std::vector<float>> channelSamples;
-    };
-    std::atomic<std::shared_ptr<DemoAudioBuffer>> mDemoAudioBuffer{nullptr};
-    std::atomic<size_t> mDemoAudioCursor{0};
-    std::atomic<bool> mDemoAudioActive{false};
+    std::unique_ptr<DemoPreviewService> mDemoPreview;
 
     // Resource preview state (for temp loading from Tone3000)
     struct PreviewState

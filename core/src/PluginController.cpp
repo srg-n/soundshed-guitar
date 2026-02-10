@@ -13,6 +13,7 @@
 
 #include "PluginController.h"
 #include "MessageDispatcher.h"
+#include "controller/DemoPreviewService.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/effects/BuiltinEffects.h"
 #include "util/Base64.h"
@@ -202,6 +203,13 @@ PluginController::PluginController(IPluginHost& host)
 {
     mParamValues.fill(0.0);
     RegisterAllEffects();
+    mDemoPreview = std::make_unique<DemoPreviewService>(
+        mHost,
+        mPresetMixer,
+        mDSPMutex,
+        mSignalTestActive,
+        [this](const std::string& message, const std::string& detail) { ReportErrorToUI(message, detail); },
+        [this](const std::string& jsonMessage) { SendMessageToUI(jsonMessage); });
 }
 
 PluginController::~PluginController() = default;
@@ -262,25 +270,8 @@ bool PluginController::ProcessAudio(float** inputs, float** outputs, int numSamp
         return false; // Caller should output silence
 
     // Mix in demo audio preview if active
-    if (mDemoAudioActive.load(std::memory_order_acquire))
-    {
-        auto buf = mDemoAudioBuffer.load(std::memory_order_acquire);
-        if (buf && buf->channels >= 1)
-        {
-            size_t cursor = mDemoAudioCursor.load(std::memory_order_relaxed);
-            size_t totalSamples = buf->channelSamples[0].size();
-            for (int i = 0; i < numSamples && cursor < totalSamples; ++i, ++cursor)
-            {
-                float sL = buf->channelSamples[0][cursor];
-                float sR = (buf->channels > 1) ? buf->channelSamples[1][cursor] : sL;
-                inputs[0][i] += sL;
-                inputs[1][i] += sR;
-            }
-            mDemoAudioCursor.store(cursor, std::memory_order_relaxed);
-            if (cursor >= totalSamples)
-                mDemoAudioActive.store(false, std::memory_order_release);
-        }
-    }
+    if (mDemoPreview)
+        mDemoPreview->MixIntoInput(inputs, numSamples);
 
     // Signal path test tone injection
     if (mSignalTestActive.load(std::memory_order_acquire))
@@ -866,20 +857,8 @@ void PluginController::OnIdle()
         }
     }
 
-    // Demo audio completion notification
-    auto demoBuffer = mDemoAudioBuffer.load(std::memory_order_acquire);
-    if (demoBuffer && !mDemoAudioActive.load(std::memory_order_acquire))
-    {
-        if (demoBuffer)
-        {
-            nlohmann::json msg;
-            msg["type"] = "previewComplete";
-            msg["id"] = demoBuffer->id;
-            msg["title"] = demoBuffer->title;
-            SendMessageToUI(msg.dump());
-            mDemoAudioBuffer.store(nullptr, std::memory_order_release);
-        }
-    }
+    if (mDemoPreview)
+        mDemoPreview->OnIdle();
 }
 
 void PluginController::OnWebContentLoaded()
@@ -2838,110 +2817,14 @@ void PluginController::HandleExitCompositeEditModeRequest(const nlohmann::json& 
 
 void PluginController::HandlePreviewDemoRequest(const nlohmann::json& payload)
 {
-    if (mSignalTestActive.load(std::memory_order_acquire))
-    {
-        ReportErrorToUI("Demo preview unavailable", "Signal path test is currently running");
-        return;
-    }
-
-    const auto audioIter = payload.find("audio");
-    if (audioIter == payload.end() || !audioIter->is_object())
-    {
-        ReportErrorToUI("Demo preview unavailable", "Audio payload is missing");
-        return;
-    }
-
-    const std::string dataEncoded = audioIter->value("data", "");
-    if (dataEncoded.empty())
-    {
-        ReportErrorToUI("Demo preview unavailable", "Audio payload did not include data");
-        return;
-    }
-
-    const auto decodedBytes = util::DecodeBase64(dataEncoded);
-    if (decodedBytes.empty())
-    {
-        ReportErrorToUI("Demo preview unavailable", "Unable to decode audio data");
-        return;
-    }
-
-    const auto wavData = util::DecodePcmWav(decodedBytes);
-    if (!wavData)
-    {
-        ReportErrorToUI("Demo preview unavailable", "Unsupported WAV format");
-        return;
-    }
-
-    const double hostSampleRate = mHost.GetSampleRate();
-    const double targetSampleRate = hostSampleRate > 0.0 ? hostSampleRate : wavData->sampleRate;
-    if (targetSampleRate <= 0.0)
-    {
-        ReportErrorToUI("Demo preview unavailable", "Target sample rate is invalid");
-        return;
-    }
-
-    auto resampled = util::ConvertToSampleRate(*wavData, targetSampleRate);
-    if (resampled.empty() || resampled.front().empty())
-    {
-        ReportErrorToUI("Demo preview unavailable", "Audio buffer is empty");
-        return;
-    }
-
-    std::size_t minFrames = resampled.front().size();
-    for (const auto& channel : resampled)
-    {
-        if (channel.empty())
-        {
-            ReportErrorToUI("Demo preview unavailable", "Audio buffer is empty");
-            return;
-        }
-        minFrames = std::min(minFrames, channel.size());
-    }
-    if (minFrames == 0)
-    {
-        ReportErrorToUI("Demo preview unavailable", "Audio buffer is empty");
-        return;
-    }
-    for (auto& channel : resampled)
-    {
-        if (channel.size() > minFrames) channel.resize(minFrames);
-    }
-
-    auto buffer = std::make_shared<DemoAudioBuffer>();
-    buffer->id = audioIter->value("id", "");
-    buffer->title = audioIter->value("title", buffer->id);
-    buffer->sampleRate = targetSampleRate;
-    buffer->channels = static_cast<int>(resampled.size());
-    buffer->channelSamples = std::move(resampled);
-
-    {
-        std::lock_guard<std::mutex> lock(mDSPMutex);
-        mPresetMixer.Reset();
-        mDemoAudioCursor.store(0, std::memory_order_release);
-        mDemoAudioBuffer.store(buffer, std::memory_order_release);
-        mDemoAudioActive.store(true, std::memory_order_release);
-    }
-
-    // Notify UI that demo preview playback has started
-    nlohmann::json startMsg;
-    startMsg["type"] = "previewStarted";
-    startMsg["id"] = buffer->id;
-    startMsg["title"] = buffer->title;
-    SendMessageToUI(startMsg.dump());
+    if (mDemoPreview)
+        mDemoPreview->StartPreview(payload);
 }
 
 void PluginController::HandleStopDemoRequest()
 {
-    mDemoAudioActive.store(false, std::memory_order_release);
-    auto stopped = mDemoAudioBuffer.exchange(nullptr, std::memory_order_acq_rel);
-    nlohmann::json msg;
-    msg["type"] = "previewStopped";
-    if (stopped)
-    {
-        msg["id"] = stopped->id;
-        msg["title"] = stopped->title;
-    }
-    SendMessageToUI(msg.dump());
+    if (mDemoPreview)
+        mDemoPreview->StopPreview();
 }
 
 // ── Additional message handlers (from JUCE version) ────────────────
