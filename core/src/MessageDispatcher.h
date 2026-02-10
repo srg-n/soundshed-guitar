@@ -14,6 +14,8 @@
 
 #include <string>
 
+#include <nlohmann/json.hpp>
+
 namespace guitarfx
 {
 
@@ -30,6 +32,29 @@ public:
      * may acquire mDSPMutex when modifying DSP state.
      */
     static void Dispatch(PluginController& controller, const std::string& jsonMessage);
+
+private:
+    static bool DispatchStateAndLists(PluginController& controller,
+                                      const nlohmann::json& msg,
+                                      const std::string& type);
+    static bool DispatchSettings(PluginController& controller,
+                                 const nlohmann::json& msg,
+                                 const std::string& type);
+    static bool DispatchParameters(PluginController& controller,
+                                   const nlohmann::json& msg,
+                                   const std::string& type);
+    static bool DispatchPresetsAndResources(PluginController& controller,
+                                            const nlohmann::json& msg,
+                                            const std::string& type);
+    static bool DispatchSignalPath(PluginController& controller,
+                                   const nlohmann::json& msg,
+                                   const std::string& type);
+    static bool DispatchMixerAndMonitoring(PluginController& controller,
+                                           const nlohmann::json& msg,
+                                           const std::string& type);
+    static bool DispatchLibraryAndComposite(PluginController& controller,
+                                            const nlohmann::json& msg,
+                                            const std::string& type);
 };
 
 } // namespace guitarfx

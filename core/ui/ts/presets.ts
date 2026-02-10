@@ -107,7 +107,13 @@ function cloneDefaultGlobalSignalChain(): import("./types.js").GlobalSignalChain
 
 function resolveGlobalSignalChain(preset: Preset): import("./types.js").GlobalSignalChainConfig {
   const chain = (preset as Preset & { globalSignalChain?: import("./types.js").GlobalSignalChainConfig }).globalSignalChain;
-  return chain ? JSON.parse(JSON.stringify(chain)) as import("./types.js").GlobalSignalChainConfig : cloneDefaultGlobalSignalChain();
+  if (chain) {
+    return JSON.parse(JSON.stringify(chain)) as import("./types.js").GlobalSignalChainConfig;
+  }
+  if (uiState.globalSignalChain) {
+    return JSON.parse(JSON.stringify(uiState.globalSignalChain)) as import("./types.js").GlobalSignalChainConfig;
+  }
+  return cloneDefaultGlobalSignalChain();
 }
 
 function validatePresetForUi(preset: Preset | null): string[] {
@@ -1603,6 +1609,7 @@ export function openSavePresetModal(): void {
   const nameInput = document.getElementById("preset-name-input") as HTMLInputElement | null;
   const categoryInput = document.getElementById("preset-category-input") as HTMLInputElement | null;
   const descriptionInput = document.getElementById("preset-description-input") as HTMLTextAreaElement | null;
+  const includeGlobalFxInput = document.getElementById("preset-include-global-fx") as HTMLInputElement | null;
 
   const activeFolderId = uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID;
   const defaultFolderId = activeFolderId === PRESET_FOLDER_FAVORITES_ID ? PRESET_FOLDER_ALL_ID : activeFolderId;
@@ -1611,6 +1618,11 @@ export function openSavePresetModal(): void {
   if (nameInput) nameInput.value = "";
   if (categoryInput) categoryInput.value = "User";
   if (descriptionInput) descriptionInput.value = "";
+  if (includeGlobalFxInput) {
+    const activePreset = getActivePresetForRender();
+    const hasGlobalFx = Boolean((activePreset as Preset & { globalSignalChain?: unknown })?.globalSignalChain);
+    includeGlobalFxInput.checked = activePreset ? hasGlobalFx : true;
+  }
 
   initPresetModalTabs(modal);
   initPresetModalAdvancedActions(modal);
@@ -1647,12 +1659,12 @@ export function createDefaultPreset(): void {
     movePresetToFolder(newPreset.id, selectedFolderId);
   }
   uiState.activePresetId = newPreset.id;
-  populatePresetDropdown();
-  renderPresetUI(clonePreset(newPreset));
-  showNotification("Preset created", newPreset.name);
   setActivePresetSnapshot(newPreset);
   setActivePresetDraft(newPreset);
   setPresetDirty(false);
+  populatePresetDropdown();
+  renderPresetUI(clonePreset(newPreset));
+  showNotification("Preset created", newPreset.name);
   updatePresetActionButtons();
 }
 
@@ -1662,6 +1674,7 @@ export function saveCurrentPreset(): void {
   const nameInput = document.getElementById("preset-name-input") as HTMLInputElement | null;
   const categoryInput = document.getElementById("preset-category-input") as HTMLInputElement | null;
   const descriptionInput = document.getElementById("preset-description-input") as HTMLTextAreaElement | null;
+  const includeGlobalFxInput = document.getElementById("preset-include-global-fx") as HTMLInputElement | null;
 
   const name = nameInput?.value?.trim() || "";
   const category = categoryInput?.value?.trim() || "User";
@@ -1678,6 +1691,7 @@ export function saveCurrentPreset(): void {
   const selectedFolderId = folderSelect?.value || PRESET_FOLDER_ALL_ID;
   const activePreset = getActivePresetForRender();
   const baseAttachments = buildAttachmentsFromPreset(activePreset ?? {} as Preset);
+  const includeGlobalFx = includeGlobalFxInput ? includeGlobalFxInput.checked : true;
   let cleanedPreset: Preset | null = null;
   if (modal?.dataset.cleanedPreset) {
     try {
@@ -1698,12 +1712,27 @@ export function saveCurrentPreset(): void {
         category,
         description,
         attachments: baseAttachments,
-        globalSignalChain: uiState.globalSignalChain,
       };
+      if (includeGlobalFx) {
+        updatedPreset.globalSignalChain = uiState.globalSignalChain;
+      } else {
+        delete (updatedPreset as Record<string, unknown>).globalSignalChain;
+      }
 
       cachePresetInMemory(updatedPreset);
       // Also persist to disk via the C++ backend
-      postMessage({ type: "savePreset", name: updatedPreset.name, category: updatedPreset.category, description: updatedPreset.description });
+      const savePayload: Record<string, unknown> = {
+        type: "savePreset",
+        presetId: updatedPreset.id,
+        name: updatedPreset.name,
+        category: updatedPreset.category,
+        description: updatedPreset.description,
+        includeGlobalSignalChain: includeGlobalFx,
+      };
+      if (includeGlobalFx) {
+        savePayload.globalSignalChain = uiState.globalSignalChain;
+      }
+      postMessage(savePayload);
       uiState.presetCache.set(editingPresetId, updatedPreset);
       const index = uiState.presets.findIndex((p) => p.id === editingPresetId);
       if (index >= 0) {
@@ -1725,19 +1754,36 @@ export function saveCurrentPreset(): void {
 
   // Creating new preset
   const basePreset = stripLegacyGlobals(cleanedPreset ?? clonePreset(activePreset ?? ({} as Preset)));
+  const fallbackId = `user-${Date.now()}`;
+  const newPresetId = activePreset?.id && isUserPreset(activePreset.id) ? activePreset.id : fallbackId;
   const newPreset: Preset = {
     ...basePreset,
-    id: `${Date.now()}`,
+    id: newPresetId,
     name,
     category,
     description,
     attachments: baseAttachments,
-    globalSignalChain: uiState.globalSignalChain,
   };
+  if (includeGlobalFx) {
+    newPreset.globalSignalChain = uiState.globalSignalChain;
+  } else {
+    delete (newPreset as Record<string, unknown>).globalSignalChain;
+  }
 
   cachePresetInMemory(newPreset);
   // Also persist to disk via the C++ backend
-  postMessage({ type: "savePreset", name: newPreset.name, category: newPreset.category, description: newPreset.description });
+  const savePayload: Record<string, unknown> = {
+    type: "savePreset",
+    presetId: newPreset.id,
+    name: newPreset.name,
+    category: newPreset.category,
+    description: newPreset.description,
+    includeGlobalSignalChain: includeGlobalFx,
+  };
+  if (includeGlobalFx) {
+    savePayload.globalSignalChain = uiState.globalSignalChain;
+  }
+  postMessage(savePayload);
   uiState.presets.unshift(newPreset);
   uiState.filteredPresets = uiState.presets.slice();
   uiState.presetCache.set(newPreset.id, newPreset);
@@ -2230,8 +2276,10 @@ export function isUserPreset(presetId: string | null): boolean {
   if (!presetId) return false;
   const preset = uiState.presetCache.get(presetId);
   if (!preset) return false;
-  // User presets have numeric IDs (timestamps) or start with "user-"
-  return /^\d+$/.test(presetId) || presetId.startsWith("user-");
+  // User presets have numeric IDs (timestamps), start with "user-", or use UUIDs
+  return /^\d+$/.test(presetId)
+    || presetId.startsWith("user-")
+    || /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(presetId);
 }
 
 // Delete current preset
@@ -2307,21 +2355,32 @@ export function saveOverwriteCurrentPreset(): void {
 
   // Build updated preset with current parameters from graph nodes
   const baseAttachments = buildAttachmentsFromPreset(existingPreset);
+  const includeGlobalFx = Boolean((existingPreset as Preset & { globalSignalChain?: unknown }).globalSignalChain);
 
   const updatedPreset: Preset = {
     ...existingPreset,
     attachments: baseAttachments,
   };
+  if (includeGlobalFx) {
+    updatedPreset.globalSignalChain = uiState.globalSignalChain;
+  } else {
+    delete (updatedPreset as Record<string, unknown>).globalSignalChain;
+  }
 
   cachePresetInMemory(updatedPreset);
   // Persist to disk via the C++ backend
-  postMessage({
+  const savePayload: Record<string, unknown> = {
     type: "savePreset",
     presetId: updatedPreset.id,
     name: updatedPreset.name,
     category: updatedPreset.category,
     description: updatedPreset.description,
-  });
+    includeGlobalSignalChain: includeGlobalFx,
+  };
+  if (includeGlobalFx) {
+    savePayload.globalSignalChain = uiState.globalSignalChain;
+  }
+  postMessage(savePayload);
 
   // Update cache
   uiState.presetCache.set(activePresetId, updatedPreset);
@@ -2367,10 +2426,14 @@ export function openEditPresetModal(): void {
   const nameInput = document.getElementById("preset-name-input") as HTMLInputElement | null;
   const categoryInput = document.getElementById("preset-category-input") as HTMLInputElement | null;
   const descriptionInput = document.getElementById("preset-description-input") as HTMLTextAreaElement | null;
+  const includeGlobalFxInput = document.getElementById("preset-include-global-fx") as HTMLInputElement | null;
 
   if (nameInput) nameInput.value = preset.name;
   if (categoryInput) categoryInput.value = preset.category || "User";
   if (descriptionInput) descriptionInput.value = preset.description || "";
+  if (includeGlobalFxInput) {
+    includeGlobalFxInput.checked = Boolean((preset as Preset & { globalSignalChain?: unknown }).globalSignalChain);
+  }
 
   initPresetModalTabs(modal);
   initPresetModalAdvancedActions(modal);

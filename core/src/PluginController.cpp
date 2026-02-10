@@ -1071,6 +1071,11 @@ void PluginController::HandlePresetLoadRequest(const nlohmann::json& payload)
 
         ApplyBlendDefinitions(preset);
 
+        if (preset.globalSignalChain.has_value())
+        {
+            mPresetMixer.SetGlobalChainConfig(*preset.globalSignalChain);
+        }
+
         mActivePresetId = payload.value("presetId", preset.id);
         ApplyPreset(preset);
 
@@ -1470,6 +1475,7 @@ void PluginController::HandleSavePresetRequest(const nlohmann::json& payload)
     const std::string presetCategory = payload.value("category", "User");
     const std::string presetDescription = payload.value("description", "");
     const std::string presetIdOverride = payload.value("presetId", "");
+    const bool includeGlobalSignalChain = payload.value("includeGlobalSignalChain", payload.contains("globalSignalChain"));
 
     if (presetName.empty())
     {
@@ -1500,6 +1506,22 @@ void PluginController::HandleSavePresetRequest(const nlohmann::json& payload)
         newPreset.global.transpose = static_cast<int>(mParamValues[kParamTranspose]);
         newPreset.global.autoLevelInput = mPresetMixer.GetAutoLevelInput();
         newPreset.global.autoLevelOutput = mPresetMixer.GetAutoLevelOutput();
+
+        if (includeGlobalSignalChain)
+        {
+            if (payload.contains("globalSignalChain") && payload["globalSignalChain"].is_object())
+            {
+                newPreset.globalSignalChain = payload["globalSignalChain"].get<GlobalSignalChainConfig>();
+            }
+            else
+            {
+                newPreset.globalSignalChain = mPresetMixer.GetGlobalChainConfig();
+            }
+        }
+        else
+        {
+            newPreset.globalSignalChain.reset();
+        }
 
         if (mUserPresetsPath.empty())
             mUserPresetsPath = mResourceRoot / "presets" / "user";

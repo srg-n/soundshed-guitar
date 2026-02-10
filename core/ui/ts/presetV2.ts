@@ -450,9 +450,17 @@ BUILTIN_EFFECTS.forEach(effect => EffectTypeRegistry.register(effect.type, effec
 /**
  * Create a new empty preset V2 structure
  */
+function generateUserPresetId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `user-${crypto.randomUUID()}`;
+  }
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `user-${Date.now()}-${rand}`;
+}
+
 export function createEmptyPresetV2(): Preset {
   return {
-    id: crypto.randomUUID(),
+    id: generateUserPresetId(),
     formatVersion: 2,
     name: "New Preset",
     category: "User",

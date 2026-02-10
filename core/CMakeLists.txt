@@ -128,6 +128,13 @@ set(GUITARFX_CORE_SOURCES
     src/IPluginHost.h
     src/UiBridge.h
     src/UiBridge.cpp
+    src/dispatcher/MessageDispatchState.cpp
+    src/dispatcher/MessageDispatchSettings.cpp
+    src/dispatcher/MessageDispatchParameters.cpp
+    src/dispatcher/MessageDispatchPresetsResources.cpp
+    src/dispatcher/MessageDispatchSignalPath.cpp
+    src/dispatcher/MessageDispatchMixer.cpp
+    src/dispatcher/MessageDispatchLibraryComposite.cpp
     src/controller/DemoPreviewService.h
     src/controller/DemoPreviewService.cpp
 

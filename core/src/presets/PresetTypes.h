@@ -116,6 +116,53 @@ namespace guitarfx
   };
 
   /**
+   * Global signal chain configuration.
+   * Developer-only: defines global effects applied before and after preset processing.
+   * 
+   * Signal flow:
+   *   Input → [Pre-chain: Tuner tap → Noise Gate → Transpose] → 
+   *   [Preset Mixer] → [Post-chain: EQ → Doubler] → Output
+   */
+  struct GlobalSignalChainConfig
+  {
+    // Signal graph definitions for global pre/post chains (preferred over legacy param blocks)
+    SignalGraph preChainGraph;
+    SignalGraph postChainGraph;
+
+    // Input stage settings
+    double inputGain = 0.0;          // dB
+    bool monoMode = false;
+    int inputChannel = 0;            // 0=left, 1=right (when mono)
+    bool autoLevelInput = false;
+
+    // Output stage settings
+    double outputGain = 0.0;         // dB (master volume)
+    bool autoLevelOutput = false;
+    bool limiterEnabled = false;
+
+    /**
+     * Build a SignalGraph for the pre-chain (input → gate → transpose → output).
+     */
+    [[nodiscard]] SignalGraph BuildPreChainGraph() const;
+
+    /**
+     * Build a SignalGraph for the post-chain (input → eq → doubler → output).
+     */
+    [[nodiscard]] SignalGraph BuildPostChainGraph() const;
+
+    /**
+     * Build default graphs for the global pre/post chain.
+     */
+    [[nodiscard]] static SignalGraph BuildDefaultPreChainGraph();
+    [[nodiscard]] static SignalGraph BuildDefaultPostChainGraph();
+
+    /**
+     * Create default global chain configuration.
+     */
+    [[nodiscard]] static GlobalSignalChainConfig CreateDefault();
+  };
+
+  /**
    * Preset data model with flexible signal graph.
    */
   struct Preset
@@ -133,6 +180,7 @@ namespace guitarfx
 
     // Settings
     GlobalSettings global;
+    std::optional<GlobalSignalChainConfig> globalSignalChain;
 
     // Signal graph
     SignalGraph graph;
@@ -206,52 +254,5 @@ namespace guitarfx
   constexpr const char* kNodeTypeSplitter = "splitter";
   constexpr const char* kNodeTypeMixer = "mixer";
   constexpr const char* kNodeTypeCompositePrefix = "composite:";
-
-  /**
-   * Global signal chain configuration.
-   * Developer-only: defines global effects applied before and after preset processing.
-   * 
-   * Signal flow:
-   *   Input → [Pre-chain: Tuner tap → Noise Gate → Transpose] → 
-   *   [Preset Mixer] → [Post-chain: EQ → Doubler] → Output
-   */
-  struct GlobalSignalChainConfig
-  {
-    // Signal graph definitions for global pre/post chains (preferred over legacy param blocks)
-    SignalGraph preChainGraph;
-    SignalGraph postChainGraph;
-
-    // Input stage settings
-    double inputGain = 0.0;          // dB
-    bool monoMode = false;
-    int inputChannel = 0;            // 0=left, 1=right (when mono)
-    bool autoLevelInput = false;
-
-    // Output stage settings
-    double outputGain = 0.0;         // dB (master volume)
-    bool autoLevelOutput = false;
-    bool limiterEnabled = false;
-
-    /**
-     * Build a SignalGraph for the pre-chain (input → gate → transpose → output).
-     */
-    [[nodiscard]] SignalGraph BuildPreChainGraph() const;
-
-    /**
-     * Build a SignalGraph for the post-chain (input → eq → doubler → output).
-     */
-    [[nodiscard]] SignalGraph BuildPostChainGraph() const;
-
-    /**
-     * Build default graphs for the global pre/post chain.
-     */
-    [[nodiscard]] static SignalGraph BuildDefaultPreChainGraph();
-    [[nodiscard]] static SignalGraph BuildDefaultPostChainGraph();
-
-    /**
-     * Create default global chain configuration.
-     */
-    [[nodiscard]] static GlobalSignalChainConfig CreateDefault();
-  };
 
 } // namespace guitarfx

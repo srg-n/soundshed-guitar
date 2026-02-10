@@ -1,5 +1,5 @@
 #include "presets/PresetStorage.h"
-
+#include "presets/PresetTypesJson.h"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <iostream>
@@ -9,7 +9,7 @@ namespace guitarfx
 {
   namespace
   {
-    nlohmann::json SerializeResourceRef(const ResourceRef& ref)
+    nlohmann::json SerializePresetResourceRef(const ResourceRef& ref)
     {
       nlohmann::json json;
       if (!ref.resourceType.empty())
@@ -35,7 +35,7 @@ namespace guitarfx
       return json;
     }
 
-    ResourceRef DeserializeResourceRef(const nlohmann::json& json)
+    ResourceRef DeserializePresetResourceRef(const nlohmann::json& json)
     {
       ResourceRef ref;
       // Support both long-form (resourceType/resourceId) and short-form (type/id)
@@ -61,7 +61,7 @@ namespace guitarfx
       return ref;
     }
 
-    nlohmann::json SerializeNode(const GraphNode& node)
+    nlohmann::json SerializeGraphNode(const GraphNode& node)
     {
       nlohmann::json json;
       json["id"] = node.id;
@@ -100,15 +100,14 @@ namespace guitarfx
         {
           if (res.IsValid())
           {
-            json["resources"].push_back(SerializeResourceRef(res));
+            json["resources"].push_back(SerializePresetResourceRef(res));
           }
         }
       }
-
       return json;
     }
 
-    GraphNode DeserializeNode(const nlohmann::json& json)
+    GraphNode DeserializeGraphNode(const nlohmann::json& json)
     {
       GraphNode node;
       node.id = json.value("id", "");
@@ -158,15 +157,14 @@ namespace guitarfx
         {
           if (resJson.is_object())
           {
-            node.resources.push_back(DeserializeResourceRef(resJson));
+            node.resources.push_back(DeserializePresetResourceRef(resJson));
           }
         }
       }
-
       return node;
     }
 
-    nlohmann::json SerializeEdge(const GraphEdge& edge)
+    nlohmann::json SerializeGraphEdge(const GraphEdge& edge)
     {
       nlohmann::json json;
       json["from"] = edge.from;
@@ -180,7 +178,7 @@ namespace guitarfx
       return json;
     }
 
-    GraphEdge DeserializeEdge(const nlohmann::json& json)
+    GraphEdge DeserializeGraphEdge(const nlohmann::json& json)
     {
       GraphEdge edge;
       edge.from = json.value("from", "");
@@ -250,17 +248,20 @@ namespace guitarfx
     global["transpose"] = preset.global.transpose;
     json["global"] = global;
 
+    if (preset.globalSignalChain.has_value())
+      json["globalSignalChain"] = *preset.globalSignalChain;
+
     // Signal graph
     nlohmann::json graph;
     graph["nodes"] = nlohmann::json::array();
     for (const auto& node : preset.graph.nodes)
     {
-      graph["nodes"].push_back(SerializeNode(node));
+      graph["nodes"].push_back(SerializeGraphNode(node));
     }
     graph["edges"] = nlohmann::json::array();
     for (const auto& edge : preset.graph.edges)
     {
-      graph["edges"].push_back(SerializeEdge(edge));
+      graph["edges"].push_back(SerializeGraphEdge(edge));
     }
     json["graph"] = graph;
 
@@ -341,6 +342,11 @@ namespace guitarfx
         preset.global.transpose = globalJson.value("transpose", 0);
       }
 
+      if (json.contains("globalSignalChain") && json["globalSignalChain"].is_object())
+      {
+        preset.globalSignalChain = json["globalSignalChain"].get<GlobalSignalChainConfig>();
+      }
+
       // Signal graph
       if (json.contains("graph") && json["graph"].is_object())
       {
@@ -350,7 +356,7 @@ namespace guitarfx
         {
           for (const auto& nodeJson : graph["nodes"])
           {
-            preset.graph.nodes.push_back(DeserializeNode(nodeJson));
+            preset.graph.nodes.push_back(DeserializeGraphNode(nodeJson));
           }
         }
 
@@ -358,7 +364,7 @@ namespace guitarfx
         {
           for (const auto& edgeJson : graph["edges"])
           {
-            preset.graph.edges.push_back(DeserializeEdge(edgeJson));
+            preset.graph.edges.push_back(DeserializeGraphEdge(edgeJson));
           }
         }
       }
