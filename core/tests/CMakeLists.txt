@@ -69,4 +69,9 @@ foreach(test_source IN LISTS TEST_SOURCES)
     target_precompile_headers(${test_name} REUSE_FROM SoundshedGuitarCore)
 
     add_test(NAME ${test_name} COMMAND ${test_name})
+
+    # Label slow benchmarks so they are excluded from default test runs
+    if(test_name STREQUAL "NAMPerformanceBenchmark" OR test_name STREQUAL "DSPPerformanceTests")
+        set_tests_properties(${test_name} PROPERTIES LABELS "benchmark")
+    endif()
 endforeach()

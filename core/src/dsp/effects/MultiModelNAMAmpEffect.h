@@ -67,6 +67,9 @@ public:
 
   void Process(float** inputs, float** outputs, int numSamples) override
   {
+    // Clamp to allocated buffer size to prevent out-of-bounds writes
+    numSamples = std::min(numSamples, mMaxBlockSize);
+
     if (!inputs[0] && !inputs[1])
     {
       if (outputs[0])

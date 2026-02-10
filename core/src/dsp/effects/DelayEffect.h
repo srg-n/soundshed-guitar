@@ -36,6 +36,10 @@ namespace guitarfx
 
     void Process(float **inputs, float **outputs, int numSamples) override
     {
+      // Guard against processing before Prepare() is called
+      if (mBufferL.empty())
+        return;
+
       const float feedback = static_cast<float>(mFeedback);
       const float wet = static_cast<float>(mMix);
       const float dry = 1.0f - wet;

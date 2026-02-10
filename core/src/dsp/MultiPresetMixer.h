@@ -245,7 +245,7 @@ namespace guitarfx
     GlobalSignalChainConfig mGlobalChainConfig;
     SignalGraphExecutor mPreChainExecutor;   // input → gate → transpose
     SignalGraphExecutor mPostChainExecutor;  // eq → doubler → output
-    bool mGlobalChainNeedsRebuild = true;
+    std::atomic<bool> mGlobalChainNeedsRebuild{true};
 
     // Tuner state
     bool mTunerEnabled = false;

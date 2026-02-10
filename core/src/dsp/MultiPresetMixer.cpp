@@ -152,7 +152,7 @@ namespace guitarfx
     mGlobalChainConfig = std::move(other.mGlobalChainConfig);
     mPreChainExecutor = std::move(other.mPreChainExecutor);
     mPostChainExecutor = std::move(other.mPostChainExecutor);
-    mGlobalChainNeedsRebuild = other.mGlobalChainNeedsRebuild;
+    mGlobalChainNeedsRebuild.store(other.mGlobalChainNeedsRebuild.load(std::memory_order_acquire), std::memory_order_release);
     mTunerEnabled = other.mTunerEnabled;
     mLiveTunerMode = other.mLiveTunerMode;
     mTunerReferenceFrequency = other.mTunerReferenceFrequency;
@@ -275,12 +275,12 @@ namespace guitarfx
 
     mMasterGain = std::pow(10.0, mGlobalChainConfig.outputGain / 20.0);
 
-    mGlobalChainNeedsRebuild = false;
+    mGlobalChainNeedsRebuild.store(false, std::memory_order_release);
   }
 
   void MultiPresetMixer::EnsureGlobalChainsUpToDate()
   {
-    if (mPrepared && mGlobalChainNeedsRebuild)
+    if (mPrepared && mGlobalChainNeedsRebuild.load(std::memory_order_acquire))
     {
       RebuildGlobalChains();
     }
@@ -301,7 +301,7 @@ namespace guitarfx
     {
       mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
     }
-    mGlobalChainNeedsRebuild = true;
+    mGlobalChainNeedsRebuild.store(true, std::memory_order_release);
 
     // Apply input/output settings
     mAutoLevelInput = config.autoLevelInput;
@@ -687,7 +687,7 @@ namespace guitarfx
     mPostChainOutR.resize(static_cast<size_t>(maxBlockSize), 0.0f);
 
     // Build and prepare global signal chains based on current config
-    mGlobalChainNeedsRebuild = true;
+    mGlobalChainNeedsRebuild.store(true, std::memory_order_release);
     EnsureGlobalChainsUpToDate();
 
     AllocateBuffers(maxBlockSize);
@@ -714,9 +714,15 @@ namespace guitarfx
     if (!outputs || numSamples <= 0)
       return;
 
+    // Clamp to allocated buffer size to prevent out-of-bounds writes
+    if (mPrepared && mMaxBlockSize > 0)
+      numSamples = std::min(numSamples, mMaxBlockSize);
+
     const bool diagnosticsEnabled = mSignalDiagnosticsEnabled.load(std::memory_order_acquire);
 
-    EnsureGlobalChainsUpToDate();
+    // NOTE: Do NOT call EnsureGlobalChainsUpToDate() here.
+    // Rebuilding global chains allocates memory which is unsafe on the audio thread.
+    // The chains are rebuilt from Prepare() and SetGlobalChainConfig() on the UI/main thread.
 
     // Safety check: ensure we're prepared before processing
     if (!mPrepared || mInstances.empty())

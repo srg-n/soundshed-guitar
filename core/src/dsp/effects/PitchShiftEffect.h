@@ -44,6 +44,9 @@ namespace guitarfx
       if (!inputs || !outputs)
         return;
 
+      // Clamp to allocated buffer size to prevent out-of-bounds writes
+      numSamples = std::min(numSamples, mMaxBlockSize);
+
       if (GetMappedSemitones() == 0.0 && mMix >= 1.0)
       {
         for (int ch = 0; ch < 2; ++ch)

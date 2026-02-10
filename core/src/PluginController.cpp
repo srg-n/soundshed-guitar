@@ -327,14 +327,17 @@ bool PluginController::ProcessAudio(float** inputs, float** outputs, int numSamp
     if (mSignalTestActive.load(std::memory_order_acquire))
     {
         auto& st = mSignalTestState;
-        for (int i = 0; i < numSamples && st.samplesRemaining > 0; ++i, --st.samplesRemaining)
+        if (inputs && inputs[0] && inputs[1])
         {
-            float sample = static_cast<float>(std::sin(st.phase * 2.0 * 3.14159265358979323846));
-            st.phase += st.phaseIncrement;
-            if (st.phase >= 1.0) st.phase -= 1.0;
-            inputs[0][i] = sample;
-            inputs[1][i] = sample;
-            st.inputSumSquares += static_cast<double>(sample) * sample;
+            for (int i = 0; i < numSamples && st.samplesRemaining > 0; ++i, --st.samplesRemaining)
+            {
+                float sample = static_cast<float>(std::sin(st.phase * 2.0 * 3.14159265358979323846));
+                st.phase += st.phaseIncrement;
+                if (st.phase >= 1.0) st.phase -= 1.0;
+                inputs[0][i] = sample;
+                inputs[1][i] = sample;
+                st.inputSumSquares += static_cast<double>(sample) * sample;
+            }
         }
         if (st.samplesRemaining <= 0)
         {
@@ -354,8 +357,10 @@ bool PluginController::ProcessAudio(float** inputs, float** outputs, int numSamp
     {
         for (int i = 0; i < numSamples; ++i)
         {
-            mSignalTestState.outputSumSquares[0] += static_cast<double>(outputs[0][i]) * outputs[0][i];
-            mSignalTestState.outputSumSquares[1] += static_cast<double>(outputs[1][i]) * outputs[1][i];
+            if (outputs && outputs[0])
+                mSignalTestState.outputSumSquares[0] += static_cast<double>(outputs[0][i]) * outputs[0][i];
+            if (outputs && outputs[1])
+                mSignalTestState.outputSumSquares[1] += static_cast<double>(outputs[1][i]) * outputs[1][i];
         }
     }
 

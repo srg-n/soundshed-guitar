@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include <algorithm>
 #include <cmath>
 
 namespace guitarfx
@@ -26,6 +27,15 @@ namespace guitarfx
 
     void Process(float **inputs, float **outputs, int numSamples) override
     {
+      // Guard against div-by-zero if Prepare() not yet called
+      if (mSampleRate <= 0.0)
+      {
+        for (int ch = 0; ch < 2; ++ch)
+          if (inputs[ch] && outputs[ch])
+            std::copy(inputs[ch], inputs[ch] + numSamples, outputs[ch]);
+        return;
+      }
+
       const float threshold = static_cast<float>(std::pow(10.0, mThresholdDb / 20.0));
       const float attackCoef = static_cast<float>(std::exp(-1.0 / (mSampleRate * mAttackMs * 0.001)));
       const float releaseCoef = static_cast<float>(std::exp(-1.0 / (mSampleRate * mReleaseMs * 0.001)));

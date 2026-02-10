@@ -50,13 +50,28 @@ namespace guitarfx
 
     void Process(float **inputs, float **outputs, int numSamples) override
     {
+      // Clamp to allocated buffer size to prevent out-of-bounds writes
+      numSamples = std::min(numSamples, mMaxBlockSize);
+
       if (!mEnabled || !mConvolverL.IsInitialized())
       {
-        // Bypass
-        if (outputs[0] && inputs[0])
-          std::copy_n(inputs[0], numSamples, outputs[0]);
-        if (outputs[1] && inputs[1])
-          std::copy_n(inputs[1], numSamples, outputs[1]);
+        // Bypass: copy input to output, falling back L→R if R is null
+        if (outputs[0])
+        {
+          if (inputs[0])
+            std::copy_n(inputs[0], numSamples, outputs[0]);
+          else
+            std::fill_n(outputs[0], numSamples, 0.0f);
+        }
+        if (outputs[1])
+        {
+          if (inputs[1])
+            std::copy_n(inputs[1], numSamples, outputs[1]);
+          else if (inputs[0])
+            std::copy_n(inputs[0], numSamples, outputs[1]);
+          else
+            std::fill_n(outputs[1], numSamples, 0.0f);
+        }
         return;
       }
 

@@ -388,6 +388,9 @@ namespace guitarfx
 
     const bool diagnosticsEnabled = mSignalDiagnosticsEnabled.load(std::memory_order_acquire);
 
+    // Clamp to allocated buffer size to prevent out-of-bounds writes
+    numSamples = std::min(numSamples, mMaxBlockSize);
+
     if (!mIsValid || !mPrepared || !inputs || !outputs)
     {
       // Output silence if not ready

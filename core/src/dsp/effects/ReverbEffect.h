@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include <algorithm>
 #include <cmath>
 #include <vector>
 #include <array>
@@ -78,6 +79,15 @@ namespace guitarfx
 
     void Process(float **inputs, float **outputs, int numSamples) override
     {
+      // Guard against processing before Prepare() is called (avoids empty buffer % 0)
+      if (mCombBufferL[0].empty())
+      {
+        for (int ch = 0; ch < 2; ++ch)
+          if (inputs[ch] && outputs[ch])
+            std::copy(inputs[ch], inputs[ch] + numSamples, outputs[ch]);
+        return;
+      }
+
       const float wet = static_cast<float>(mMix);
       const float dry = 1.0f - wet;
 
