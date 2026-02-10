@@ -685,7 +685,7 @@ function populatePresetFolderSelect(select: HTMLSelectElement | null, selectedId
   select.value = resolved || PRESET_FOLDER_ALL_ID;
 }
 
-function ensurePresetFolders(): void {
+function ensurePresetFolders(persistChanges: boolean = true): void {
   const stored = loadPresetFoldersFromState();
   let didModify = false;
   const importedFolder = findFolderByName(stored, PRESET_FOLDER_IMPORTED_NAME);
@@ -705,7 +705,7 @@ function ensurePresetFolders(): void {
     : uiState.activePresetFolderId;
   uiState.activePresetFolderId = resolvedActive || PRESET_FOLDER_ALL_ID;
 
-  if (didModify) {
+  if (didModify && persistChanges) {
     savePresetFoldersToBackend(uiState.presetFolders ?? [], uiState.activePresetFolderId);
   }
 }
@@ -1408,7 +1408,7 @@ export async function initializePresets(): Promise<void> {
   postMessage({ type: "getPresetRatings" });
   postMessage({ type: "getSetlists" });
 
-  ensurePresetFolders();
+  ensurePresetFolders(false);  // Don't persist — backend response will arrive with saved data
   ensureSetlists();
   uiState.filteredPresets = getFilteredPresets(presetSearchElement?.value ?? "");
   renderPresetUI(uiState.presetCache.get(uiState.activePresetId ?? "") ?? null);

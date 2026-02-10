@@ -521,9 +521,14 @@ std::filesystem::path GuitarFXPluginAdapter::GetUserDataPath() const
         return path;
     }
 #endif
-    // Fallback: use user home
+    // Fallback: use user home (match FileSystem::ResolveSettingsDirectory layout)
+#ifdef __APPLE__
+    auto home = std::filesystem::path(std::getenv("HOME") ? std::getenv("HOME") : ".");
+    return home / ".config" / "SoundshedGuitar";
+#else
     auto home = std::filesystem::path(std::getenv("USERPROFILE") ? std::getenv("USERPROFILE") : ".");
-    return home / ".soundshed-guitar";
+    return home / ".config" / "SoundshedGuitar";
+#endif
 }
 
 std::filesystem::path GuitarFXPluginAdapter::GetBundledAssetsPath() const

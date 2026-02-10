@@ -269,6 +269,14 @@ void PluginController::Initialize()
     mResourceRoot = mHost.GetUserDataPath();
     mUserPresetsPath = mResourceRoot / "presets" / "user";
 
+    std::cout << "[Plugin] Initializing. Resource root: " << mResourceRoot.string() << std::endl;
+
+    // Ensure essential directories exist on first launch
+    mFileSystem.EnsureDirectory(mResourceRoot);
+    mFileSystem.EnsureDirectory(mUserPresetsPath);
+    mFileSystem.EnsureDirectory(mResourceRoot / "presets" / "factory");
+    mFileSystem.EnsureDirectory(mResourceRoot / "resources");
+
     mPresetMixer.SetResourceLibrary(&mResourceLibrary);
 
     LoadAppSettings();
@@ -3815,50 +3823,80 @@ void PluginController::SaveAppSettings() const
 void PluginController::LoadAppSettings()
 {
     auto settingsPath = mFileSystem.ResolveSettingsFile();
-    if (settingsPath.empty() || !std::filesystem::exists(settingsPath)) return;
+    if (settingsPath.empty())
+    {
+        std::cerr << "[Plugin] Settings file path is empty" << std::endl;
+        return;
+    }
+
+    if (!std::filesystem::exists(settingsPath))
+    {
+        std::cout << "[Plugin] No settings file found at " << settingsPath.string()
+                  << ", using defaults" << std::endl;
+        mAppSettings = nlohmann::json::object();
+        return;
+    }
 
     try
     {
         std::ifstream ifs(settingsPath);
         if (ifs.is_open())
+        {
             mAppSettings = nlohmann::json::parse(ifs);
+            std::cout << "[Plugin] Loaded app settings from " << settingsPath.string() << std::endl;
+        }
     }
-    catch (const std::exception&)
+    catch (const std::exception& e)
     {
+        std::cerr << "[Plugin] Failed to parse settings: " << e.what() << std::endl;
         mAppSettings = nlohmann::json::object();
     }
 }
 
 void PluginController::LoadLastSessionState()
 {
-    LoadAppSettings();
-    ApplyMetronomeSettingsFromAppSettings();
-    ApplyDiagnosticsSettingsFromAppSettings();
-    ApplyInterfaceCalibrationSettingsFromAppSettings();
-    ApplyUiSettingsFromAppSettings();
-
-    // Restore preset from JSON if available
-    if (!mActivePresetJson.empty() && nlohmann::json::accept(mActivePresetJson))
+    // Restore last-used preset from settings if available
+    std::string lastPresetId;
+    if (mAppSettings.contains("lastPresetId") && mAppSettings["lastPresetId"].is_string())
     {
-        try
-        {
-            auto presetOpt = PresetStorage::DeserializeFromJson(mActivePresetJson);
-            if (presetOpt)
-            {
-                mActivePreset = *presetOpt;
-                mActivePresetJson = PresetStorage::SerializeToJson(*presetOpt);
-            }
-        }
-        catch (...)
-        {
-            mActivePresetJson.clear();
-        }
+        lastPresetId = mAppSettings["lastPresetId"].get<std::string>();
     }
 
-    if (mActivePreset)
+    if (!lastPresetId.empty())
     {
-        ApplyPreset(*mActivePreset);
-        mPendingStateBroadcast = true;
+        std::cout << "[Plugin] Restoring last preset: " << lastPresetId << std::endl;
+        try
+        {
+            // Try user presets first, then factory
+            std::optional<Preset> presetOpt;
+            if (!mUserPresetsPath.empty())
+            {
+                auto userPath = mUserPresetsPath / (lastPresetId + ".json");
+                presetOpt = PresetStorage::LoadFromFile(userPath);
+            }
+            if (!presetOpt)
+            {
+                auto factoryPath = mResourceRoot / "presets" / "factory" / (lastPresetId + ".json");
+                presetOpt = PresetStorage::LoadFromFile(factoryPath);
+            }
+
+            if (presetOpt)
+            {
+                mActivePresetId = lastPresetId;
+                mActivePreset = *presetOpt;
+                mActivePresetJson = PresetStorage::SerializeToJson(*presetOpt);
+                ApplyPreset(*presetOpt);
+                std::cout << "[Plugin] Restored preset: " << presetOpt->name << std::endl;
+            }
+            else
+            {
+                std::cerr << "[Plugin] Last preset not found on disk: " << lastPresetId << std::endl;
+            }
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << "[Plugin] Failed to restore last preset: " << e.what() << std::endl;
+        }
     }
 
     mPendingStateBroadcast = true;
@@ -3870,7 +3908,14 @@ void PluginController::LoadResourceLibraries()
     // Load resource libraries from the resource root
     auto libraryPath = mResourceRoot / "resources";
     if (std::filesystem::exists(libraryPath))
+    {
         mResourceLibrary.LoadFromDirectory(libraryPath);
+        std::cout << "[Plugin] Loaded resource library from " << libraryPath.string() << std::endl;
+    }
+    else
+    {
+        std::cout << "[Plugin] Resource library directory not found: " << libraryPath.string() << std::endl;
+    }
 }
 
 void PluginController::LoadBlendLibrary()
