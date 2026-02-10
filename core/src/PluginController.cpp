@@ -189,6 +189,56 @@ namespace
         return candidate;
     }
 
+    bool IsGraphAcyclic(const guitarfx::SignalGraph& graph)
+    {
+        std::unordered_map<std::string, int> indegree;
+        std::unordered_map<std::string, std::vector<std::string>> outgoing;
+
+        for (const auto& node : graph.nodes)
+        {
+            indegree.emplace(node.id, 0);
+        }
+
+        for (const auto& edge : graph.edges)
+        {
+            indegree.try_emplace(edge.from, 0);
+            indegree.try_emplace(edge.to, 0);
+            outgoing[edge.from].push_back(edge.to);
+            indegree[edge.to] += 1;
+        }
+
+        std::deque<std::string> queue;
+        for (const auto& [id, count] : indegree)
+        {
+            if (count == 0)
+                queue.push_back(id);
+        }
+
+        size_t visited = 0;
+        while (!queue.empty())
+        {
+            const std::string nodeId = queue.front();
+            queue.pop_front();
+            visited += 1;
+
+            const auto outIt = outgoing.find(nodeId);
+            if (outIt == outgoing.end())
+                continue;
+
+            for (const auto& nextId : outIt->second)
+            {
+                auto indegreeIt = indegree.find(nextId);
+                if (indegreeIt == indegree.end())
+                    continue;
+                indegreeIt->second -= 1;
+                if (indegreeIt->second == 0)
+                    queue.push_back(nextId);
+            }
+        }
+
+        return visited == indegree.size();
+    }
+
 } // anonymous namespace
 
 namespace guitarfx
@@ -1477,22 +1527,31 @@ void PluginController::HandleSavePresetRequest(const nlohmann::json& payload)
     const std::string presetIdOverride = payload.value("presetId", "");
     const bool includeGlobalSignalChain = payload.value("includeGlobalSignalChain", payload.contains("globalSignalChain"));
 
+    std::optional<Preset> payloadPreset;
+    if (payload.contains("preset") && payload["preset"].is_object())
+    {
+        payloadPreset = PresetStorage::DeserializeFromJson(payload["preset"].dump());
+    }
+
     if (presetName.empty())
     {
         ReportErrorToUI("Cannot save preset", "Preset name is required");
         return;
     }
 
-    EnsureBasicGraph();
-    if (!mActivePreset)
+    if (!payloadPreset)
     {
-        ReportErrorToUI("Cannot save preset", "No active preset to save");
-        return;
+        EnsureBasicGraph();
+        if (!mActivePreset)
+        {
+            ReportErrorToUI("Cannot save preset", "No active preset to save");
+            return;
+        }
     }
 
     try
     {
-        Preset newPreset = *mActivePreset;
+        Preset newPreset = payloadPreset ? *payloadPreset : *mActivePreset;
         newPreset.id = presetIdOverride.empty()
             ? "user-" + std::to_string(std::time(nullptr))
             : presetIdOverride;
@@ -1512,6 +1571,10 @@ void PluginController::HandleSavePresetRequest(const nlohmann::json& payload)
             if (payload.contains("globalSignalChain") && payload["globalSignalChain"].is_object())
             {
                 newPreset.globalSignalChain = payload["globalSignalChain"].get<GlobalSignalChainConfig>();
+            }
+            else if (newPreset.globalSignalChain.has_value())
+            {
+                newPreset.globalSignalChain = newPreset.globalSignalChain.value();
             }
             else
             {
@@ -1842,6 +1905,7 @@ void PluginController::HandleAddSignalPathNodeRequest(const nlohmann::json& payl
     }
 
     auto& edges = targetGraph->edges;
+    const auto originalEdges = edges;
     auto chosenEdgeIt = edges.end();
 
     if (!edgeFrom.empty() && !edgeTo.empty())
@@ -1926,6 +1990,13 @@ void PluginController::HandleAddSignalPathNodeRequest(const nlohmann::json& payl
     GraphEdge newEdge; newEdge.from = newNode.id; newEdge.to = nextNodeId; newEdge.fromPort = 0; newEdge.toPort = preservedToPort; newEdge.gain = preservedGain;
     edges.push_back(newEdge);
     targetGraph->nodes.push_back(newNode);
+
+    if (!IsGraphAcyclic(*targetGraph))
+    {
+        edges = originalEdges;
+        ReportErrorToUI("Reorder node failed", "Operation would create a cycle");
+        return;
+    }
 
     if (IsCompositeEditMode()) BroadcastCompositeEditState();
     else if (mActivePreset) { mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset); ApplyPreset(*mActivePreset); BroadcastState(); }
@@ -2150,12 +2221,28 @@ void PluginController::HandleDeleteSignalPathNodeRequest(const nlohmann::json& p
     auto& edges = targetGraph->edges;
     auto& nodes = targetGraph->nodes;
 
-    auto inIt = std::find_if(edges.begin(), edges.end(), [&](const GraphEdge& e) { return e.to == nodeId; });
-    auto outIt = std::find_if(edges.begin(), edges.end(), [&](const GraphEdge& e) { return e.from == nodeId; });
-    if (inIt == edges.end() || outIt == edges.end()) { ReportErrorToUI("Delete node failed", "Missing edges"); return; }
+    std::vector<GraphEdge*> incomingEdges;
+    std::vector<GraphEdge*> outgoingEdges;
+    for (auto& edge : edges)
+    {
+        if (edge.to == nodeId)
+            incomingEdges.push_back(&edge);
+        if (edge.from == nodeId)
+            outgoingEdges.push_back(&edge);
+    }
 
-    inIt->to = outIt->to;
-    edges.erase(outIt);
+    if (incomingEdges.size() != 1 || outgoingEdges.size() != 1)
+    {
+        ReportErrorToUI("Delete node failed", "Node has multiple connections. Remove branch effects first.");
+        return;
+    }
+
+    GraphEdge* inEdge = incomingEdges.front();
+    GraphEdge* outEdge = outgoingEdges.front();
+    inEdge->to = outEdge->to;
+    inEdge->toPort = outEdge->toPort;
+    inEdge->gain = outEdge->gain;
+    edges.erase(std::remove_if(edges.begin(), edges.end(), [&](const GraphEdge& e) { return e.from == nodeId; }), edges.end());
     nodes.erase(std::remove_if(nodes.begin(), nodes.end(), [&](const GraphNode& n) { return n.id == nodeId; }), nodes.end());
 
     if (IsCompositeEditMode()) BroadcastCompositeEditState();

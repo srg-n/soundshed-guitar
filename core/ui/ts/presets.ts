@@ -1314,14 +1314,20 @@ export async function applyPresetFromLibrary(presetId: string): Promise<void> {
     clearNotification();
     const preset = await loadPresetMetadata(presetId);
     const attachments = await Promise.all((preset.attachments ?? []).map(enrichAttachment));
-    const resolvedChain = resolveGlobalSignalChain(preset);
+    const presetWithGlobals = preset as Preset & { globalSignalChain?: import("./types.js").GlobalSignalChainConfig };
+    const hasGlobalChain = Boolean(presetWithGlobals.globalSignalChain);
+    const resolvedChain = hasGlobalChain
+      ? JSON.parse(JSON.stringify(presetWithGlobals.globalSignalChain)) as import("./types.js").GlobalSignalChainConfig
+      : null;
     const presetPayload: Preset = {
       ...stripLegacyGlobals(preset),
       attachments,
-      globalSignalChain: resolvedChain,
+      ...(hasGlobalChain && resolvedChain ? { globalSignalChain: resolvedChain } : {}),
     };
 
-    uiState.globalSignalChain = resolvedChain;
+    if (hasGlobalChain && resolvedChain) {
+      uiState.globalSignalChain = resolvedChain;
+    }
     uiState.presetCache.set(presetPayload.id, clonePreset(presetPayload));
     uiState.activePresetId = presetPayload.id;
     setActivePresetSnapshot(presetPayload);
@@ -1651,7 +1657,6 @@ export function createDefaultPreset(): void {
   const activeFolderId = uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID;
   const selectedFolderId = activeFolderId === PRESET_FOLDER_FAVORITES_ID ? PRESET_FOLDER_ALL_ID : activeFolderId;
 
-  cachePresetInMemory(newPreset);
   uiState.presets.unshift(newPreset);
   uiState.filteredPresets = uiState.presets.slice();
   uiState.presetCache.set(newPreset.id, newPreset);
@@ -1666,6 +1671,10 @@ export function createDefaultPreset(): void {
   renderPresetUI(clonePreset(newPreset));
   showNotification("Preset created", newPreset.name);
   updatePresetActionButtons();
+  postMessage({
+    type: "loadPreset",
+    preset: newPreset,
+  });
 }
 
 export function saveCurrentPreset(): void {
@@ -1728,6 +1737,7 @@ export function saveCurrentPreset(): void {
         category: updatedPreset.category,
         description: updatedPreset.description,
         includeGlobalSignalChain: includeGlobalFx,
+        preset: updatedPreset,
       };
       if (includeGlobalFx) {
         savePayload.globalSignalChain = uiState.globalSignalChain;
@@ -1755,7 +1765,7 @@ export function saveCurrentPreset(): void {
   // Creating new preset
   const basePreset = stripLegacyGlobals(cleanedPreset ?? clonePreset(activePreset ?? ({} as Preset)));
   const fallbackId = `user-${Date.now()}`;
-  const newPresetId = activePreset?.id && isUserPreset(activePreset.id) ? activePreset.id : fallbackId;
+  const newPresetId = fallbackId;
   const newPreset: Preset = {
     ...basePreset,
     id: newPresetId,
@@ -1779,6 +1789,7 @@ export function saveCurrentPreset(): void {
     category: newPreset.category,
     description: newPreset.description,
     includeGlobalSignalChain: includeGlobalFx,
+    preset: newPreset,
   };
   if (includeGlobalFx) {
     savePayload.globalSignalChain = uiState.globalSignalChain;
@@ -2376,6 +2387,7 @@ export function saveOverwriteCurrentPreset(): void {
     category: updatedPreset.category,
     description: updatedPreset.description,
     includeGlobalSignalChain: includeGlobalFx,
+    preset: updatedPreset,
   };
   if (includeGlobalFx) {
     savePayload.globalSignalChain = uiState.globalSignalChain;
