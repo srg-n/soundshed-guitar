@@ -191,10 +191,9 @@ export class EqCurveInteraction {
   }
 
   updateBands(bands: EqBandConfig[]): void {
+    if (this.isDragging) return; // Don't overwrite bands during an active drag
     this.bands = bands.map(b => ({ ...b }));
-    if (!this.isDragging) {
-      this.draw();
-    }
+    this.draw();
   }
 
   draw(): void {
