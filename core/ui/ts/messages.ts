@@ -23,6 +23,7 @@ import { renderLayoutList } from "./layoutManager.js";
 import { enterCompositeEditState, updateCompositeEditState, exitCompositeEditState } from "./state.js";
 import { EffectTypeRegistry } from "./presetV2.js";
 import { themeSwitcher } from "./theme-switcher.js";
+import { applyUiViewState } from "./navigation.js";
 
 function normalizeResourceRef(ref?: ResourceRef | null): void {
   if (!ref) return;
@@ -60,9 +61,17 @@ function presetSignature(preset?: Preset | null): string {
     }
     if (value && typeof value === "object") {
       const obj = value as Record<string, unknown>;
+      const cleaned: Record<string, unknown> = { ...obj };
+      if (cleaned.params && typeof cleaned.params === "object" && cleaned.params !== null) {
+        const params = cleaned.params as Record<string, unknown>;
+        const cleanedParams: Record<string, unknown> = { ...params };
+        delete cleanedParams.calibrationInputLevel;
+        delete cleanedParams.calibrationOutputLevel;
+        cleaned.params = cleanedParams;
+      }
       const sorted: Record<string, unknown> = {};
-      Object.keys(obj).sort().forEach((key) => {
-        sorted[key] = normalize(obj[key]);
+      Object.keys(cleaned).sort().forEach((key) => {
+        sorted[key] = normalize(cleaned[key]);
       });
       return sorted;
     }
@@ -167,6 +176,11 @@ export function handleIncomingMessage(message: string): void {
         uiState.uiSettings = uiSettings;
         applyUiSettings(uiSettings);
       }
+      const uiViewState = (payload as { uiViewState?: import("./types.js").UiViewState }).uiViewState;
+      if (uiViewState) {
+        uiState.uiViewState = uiViewState;
+        applyUiViewState(uiViewState);
+      }
       const environment = (payload as { environment?: { standalone?: boolean } }).environment;
       if (environment) {
         applyEnvironmentState({ standalone: Boolean(environment.standalone) });
@@ -187,6 +201,35 @@ export function handleIncomingMessage(message: string): void {
                 .map((entry) => ({ id: entry.id ?? "", label: typeof entry.label === "string" ? entry.label : entry.id }))
             : uiState.metronome?.clickTypes,
         });
+      }
+      const mixer = (payload as { mixer?: import("./types.js").MixerState }).mixer;
+      if (mixer) {
+        const activePresetIds = Array.isArray(mixer.activePresetIds) ? mixer.activePresetIds.slice() : [];
+        const presets = mixer.presets ?? {};
+        const resolvedPresets: Record<string, import("./types.js").MixerPresetState> = {};
+
+        const ensurePreset = (id: string) => {
+          const entry = presets[id];
+          resolvedPresets[id] = {
+            id,
+            mix: typeof entry?.mix === "number" ? entry.mix : 1.0,
+            pan: typeof entry?.pan === "number" ? entry.pan : 0.0,
+            mute: Boolean(entry?.mute),
+            solo: Boolean(entry?.solo),
+          };
+        };
+
+        activePresetIds.forEach((id) => ensurePreset(id));
+        Object.keys(presets).forEach((id) => {
+          if (!resolvedPresets[id]) ensurePreset(id);
+        });
+
+        uiState.mixer = {
+          activePresetIds,
+          presets: resolvedPresets,
+          masterGain: typeof mixer.masterGain === "number" ? mixer.masterGain : uiState.mixer?.masterGain ?? 1.0,
+          limiterEnabled: Boolean(mixer.limiterEnabled),
+        };
       }
       uiState.signalTest = null;
       const preset = (payload as { preset?: Preset }).preset;

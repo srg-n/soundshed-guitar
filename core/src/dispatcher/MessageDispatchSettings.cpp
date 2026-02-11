@@ -47,6 +47,7 @@ bool MessageDispatcher::DispatchSettings(PluginController& c,
             if (c.mUiSettings.contains("bounds"))
                 c.mAppSettings["uiBounds"] = c.mUiSettings["bounds"];
             c.SaveAppSettings();
+            c.mHost.NotifyStateChanged();
             return true;
         }
         if (msg.contains("zoom"))
@@ -54,6 +55,17 @@ bool MessageDispatcher::DispatchSettings(PluginController& c,
         if (msg.contains("theme"))
             c.mAppSettings["theme"] = msg["theme"];
         c.SaveAppSettings();
+        c.mHost.NotifyStateChanged();
+        return true;
+    }
+    if (type == "uiViewStateChanged")
+    {
+        if (msg.contains("viewState") && msg["viewState"].is_object())
+        {
+            c.mUiViewState = msg["viewState"];
+            c.mHost.NotifyStateChanged();
+            return true;
+        }
         return true;
     }
     if (type == "uiVisibility")

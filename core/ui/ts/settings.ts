@@ -54,6 +54,7 @@ let equipmentTabsInitialized = false;
 let themeSelectInitialized = false;
 let libraryTabsInitialized = false;
 let libraryStateRequestedAt = 0;
+let suppressViewStateUpdates = false;
 
 export function initSettingsPanel(): void {
   if (settingsInitialized) {
@@ -78,6 +79,31 @@ export function initSettingsPanel(): void {
 
   refreshSettingsView();
   initTone3000Browser();
+}
+
+function updateSettingsViewState(update: { equipmentTab?: string; libraryTab?: string; advancedTab?: string }): void {
+  const current = uiState.uiViewState ?? {};
+  const next = {
+    ...current,
+    settings: {
+      ...(current.settings ?? {}),
+      ...update,
+    },
+  };
+
+  if (JSON.stringify(current) === JSON.stringify(next)) {
+    return;
+  }
+
+  uiState.uiViewState = next;
+  if (suppressViewStateUpdates) {
+    return;
+  }
+  postMessage({ type: "uiViewStateChanged", viewState: next });
+}
+
+export function setSettingsViewStateSuppressed(suppressed: boolean): void {
+  suppressViewStateUpdates = suppressed;
 }
 
 function initLibraryExport(): void {
@@ -148,7 +174,7 @@ export function initThemeSelect(): void {
   }) as EventListener);
 }
 
-function activateEquipmentTab(tabId: string): void {
+export function activateEquipmentTab(tabId: string): void {
   equipmentTabButtons.forEach((button) => {
     const isActive = (button as HTMLElement).dataset.equipmentTab === tabId;
     button.classList.toggle("active", isActive);
@@ -162,6 +188,8 @@ function activateEquipmentTab(tabId: string): void {
   if (tabId === "performance") {
     updateDSPPerformancePlot();
   }
+
+  updateSettingsViewState({ equipmentTab: tabId });
 }
 
 export function initLibraryFilters(): void {
@@ -194,7 +222,7 @@ export function initLibraryTabs(): void {
   activateLibraryTab("tone3000");
 }
 
-function activateLibraryTab(tabId: string): void {
+export function activateLibraryTab(tabId: string): void {
   libraryTabButtons.forEach((button) => {
     const isActive = (button as HTMLElement).dataset.libraryTab === tabId;
     button.classList.toggle("active", isActive);
@@ -212,6 +240,8 @@ function activateLibraryTab(tabId: string): void {
   if (tabId === "advanced") {
     initAdvancedSubTabs();
   }
+
+  updateSettingsViewState({ libraryTab: tabId });
 }
 
 let advancedSubTabsInitialized = false;
@@ -223,26 +253,39 @@ function initAdvancedSubTabs(): void {
   initCompositeEditor();
   initLayoutManager();
 
-  const subTabButtons = Array.from(document.querySelectorAll(".advanced-sub-tab-btn"));
-  const subTabPanels = Array.from(document.querySelectorAll(".advanced-sub-panel"));
+  const subTabButtons = Array.from(document.querySelectorAll<HTMLElement>(".advanced-sub-tab-btn"));
+  const subTabPanels = Array.from(document.querySelectorAll<HTMLElement>(".advanced-sub-panel"));
 
   subTabButtons.forEach((button) => {
     button.addEventListener("click", () => {
       const tabId = (button as HTMLElement).dataset.advancedTab ?? "composites";
-      subTabButtons.forEach((b) => {
-        b.classList.toggle("active", (b as HTMLElement).dataset.advancedTab === tabId);
-      });
-      subTabPanels.forEach((p) => {
-        p.classList.toggle("active", (p as HTMLElement).id === `advanced-tab-${tabId}`);
-      });
-
-      if (tabId === "composites") {
-        renderCompositeList();
-      } else if (tabId === "layouts") {
-        renderLayoutList();
-      }
+      applyAdvancedSubTab(tabId, subTabButtons, subTabPanels);
     });
   });
+}
+
+export function activateAdvancedSubTab(tabId: string): void {
+  initAdvancedSubTabs();
+  const subTabButtons = Array.from(document.querySelectorAll<HTMLElement>(".advanced-sub-tab-btn"));
+  const subTabPanels = Array.from(document.querySelectorAll<HTMLElement>(".advanced-sub-panel"));
+  applyAdvancedSubTab(tabId, subTabButtons, subTabPanels);
+}
+
+function applyAdvancedSubTab(tabId: string, subTabButtons: HTMLElement[], subTabPanels: HTMLElement[]): void {
+  subTabButtons.forEach((b) => {
+    b.classList.toggle("active", (b as HTMLElement).dataset.advancedTab === tabId);
+  });
+  subTabPanels.forEach((p) => {
+    p.classList.toggle("active", (p as HTMLElement).id === `advanced-tab-${tabId}`);
+  });
+
+  if (tabId === "composites") {
+    renderCompositeList();
+  } else if (tabId === "layouts") {
+    renderLayoutList();
+  }
+
+  updateSettingsViewState({ advancedTab: tabId });
 }
 
 function initAdvancedOptionsToggle(): void {

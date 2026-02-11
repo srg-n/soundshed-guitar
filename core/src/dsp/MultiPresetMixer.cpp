@@ -1051,6 +1051,13 @@ namespace guitarfx
     return inst->executor.GetNodeTypes();
   }
 
+  std::optional<MultiPresetMixer::InstanceConfig> MultiPresetMixer::GetPresetConfig(const std::string &presetId) const
+  {
+    if (const auto *inst = FindInstance(presetId))
+      return inst->cfg;
+    return std::nullopt;
+  }
+
   MultiPresetMixer::PresetInstance *MultiPresetMixer::FindInstance(const std::string &id)
   {
     for (auto &inst : mInstances)

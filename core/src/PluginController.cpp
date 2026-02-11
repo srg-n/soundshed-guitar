@@ -788,11 +788,45 @@ void PluginController::ApplyUiSettingsFromAppSettings()
 
 std::string PluginController::SerializeState() const
 {
-    nlohmann::json state;
+    nlohmann::json state = nlohmann::json::object();
+    state["version"] = 1;
     if (mActivePreset)
         state["preset"] = nlohmann::json::parse(PresetStorage::SerializeToJson(*mActivePreset));
-    state["settings"] = mAppSettings;
     state["presetId"] = mActivePresetId;
+    state["appSettings"] = mAppSettings;
+    state["uiSettings"] = mUiSettings;
+    state["uiViewState"] = mUiViewState;
+    state["globalSignalChain"] = mPresetMixer.GetGlobalChainConfig();
+
+    nlohmann::json params = nlohmann::json::array();
+    for (const auto value : mParamValues)
+        params.push_back(value);
+    state["parameters"] = params;
+
+    nlohmann::json mixer = nlohmann::json::object();
+    mixer["masterGain"] = mPresetMixer.GetMasterGain();
+    mixer["limiterEnabled"] = mPresetMixer.IsLimiterEnabled();
+
+    nlohmann::json activePresetIds = nlohmann::json::array();
+    nlohmann::json presetConfigs = nlohmann::json::object();
+    for (const auto& id : mPresetMixer.GetActivePresetIds())
+    {
+        activePresetIds.push_back(id);
+        if (const auto cfg = mPresetMixer.GetPresetConfig(id))
+        {
+            presetConfigs[id] = {
+                {"name", cfg->name},
+                {"mix", cfg->mix},
+                {"pan", cfg->pan},
+                {"mute", cfg->mute},
+                {"solo", cfg->solo}
+            };
+        }
+    }
+    mixer["activePresetIds"] = std::move(activePresetIds);
+    mixer["presets"] = std::move(presetConfigs);
+    state["mixer"] = std::move(mixer);
+
     return state.dump();
 }
 
@@ -801,8 +835,23 @@ void PluginController::DeserializeState(const std::string& json)
     try
     {
         auto state = nlohmann::json::parse(json);
-        if (state.contains("settings"))
+        if (state.contains("appSettings"))
+            mAppSettings = state["appSettings"];
+        else if (state.contains("settings"))
             mAppSettings = state["settings"];
+
+        if (state.contains("uiSettings") && state["uiSettings"].is_object())
+            mUiSettings = state["uiSettings"];
+        else
+            ApplyUiSettingsFromAppSettings();
+
+        if (state.contains("uiViewState") && state["uiViewState"].is_object())
+            mUiViewState = state["uiViewState"];
+
+        if (state.contains("globalSignalChain") && state["globalSignalChain"].is_object())
+        {
+            mPresetMixer.SetGlobalChainConfig(state["globalSignalChain"].get<GlobalSignalChainConfig>());
+        }
         if (state.contains("preset"))
         {
             auto presetOpt = PresetStorage::DeserializeFromJson(state["preset"].dump());
@@ -812,11 +861,86 @@ void PluginController::DeserializeState(const std::string& json)
                 ApplyPreset(*presetOpt);
             }
         }
+
+        if (state.contains("parameters") && state["parameters"].is_array())
+        {
+            int idx = 0;
+            for (const auto& value : state["parameters"])
+            {
+                if (idx >= kParamCount) break;
+                if (value.is_number())
+                    OnParamChange(idx, value.get<double>());
+                idx++;
+            }
+        }
+
+        if (state.contains("mixer") && state["mixer"].is_object())
+        {
+            const auto& mixer = state["mixer"];
+            if (mixer.contains("masterGain") && mixer["masterGain"].is_number())
+                mPresetMixer.SetMasterGain(mixer["masterGain"].get<double>());
+            if (mixer.contains("limiterEnabled") && mixer["limiterEnabled"].is_boolean())
+                mPresetMixer.SetLimiterEnabled(mixer["limiterEnabled"].get<bool>());
+
+            // Reset active presets before restoring mixer state
+            for (const auto& id : mPresetMixer.GetActivePresetIds())
+                mPresetMixer.RemoveActivePreset(id);
+
+            std::vector<std::string> activeIds;
+            if (mixer.contains("activePresetIds") && mixer["activePresetIds"].is_array())
+            {
+                for (const auto& entry : mixer["activePresetIds"])
+                {
+                    if (entry.is_string())
+                        activeIds.push_back(entry.get<std::string>());
+                }
+            }
+            const auto presets = mixer.contains("presets") ? mixer["presets"] : nlohmann::json::object();
+            if (activeIds.empty() && presets.is_object())
+            {
+                for (const auto& [id, _] : presets.items())
+                    activeIds.push_back(id);
+            }
+
+            for (const auto& id : activeIds)
+            {
+                const auto presetEntry = presets.is_object() && presets.contains(id) ? presets[id] : nlohmann::json::object();
+                const std::string name = presetEntry.value("name", id);
+
+                bool added = false;
+                if (mActivePreset && (id == "p1" || id == mActivePresetId))
+                {
+                    added = mPresetMixer.AddActivePreset(*mActivePreset, id, name);
+                }
+                if (!added)
+                {
+                    added = AddActivePresetById(id);
+                }
+                if (!added && mActivePreset)
+                {
+                    (void)mPresetMixer.AddActivePreset(*mActivePreset, id, name);
+                }
+
+                if (presetEntry.is_object())
+                {
+                    if (presetEntry.contains("mix") && presetEntry["mix"].is_number())
+                        mPresetMixer.SetPresetMix(id, presetEntry["mix"].get<double>());
+                    if (presetEntry.contains("pan") && presetEntry["pan"].is_number())
+                        mPresetMixer.SetPresetPan(id, presetEntry["pan"].get<double>());
+                    if (presetEntry.contains("mute") && presetEntry["mute"].is_boolean())
+                        mPresetMixer.SetPresetMute(id, presetEntry["mute"].get<bool>());
+                    if (presetEntry.contains("solo") && presetEntry["solo"].is_boolean())
+                        mPresetMixer.SetPresetSolo(id, presetEntry["solo"].get<bool>());
+                }
+            }
+        }
     }
     catch (const std::exception&)
     {
         // Ignore malformed state
     }
+
+    mPendingStateBroadcast = true;
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -3145,6 +3269,9 @@ void PluginController::BroadcastState()
     // UI settings — UI reads "uiSettings"
     state["uiSettings"] = mUiSettings;
 
+    // UI view state — UI reads "uiViewState"
+    state["uiViewState"] = mUiViewState;
+
     // Global chain — UI reads "globalSignalChain"
     auto chainConfig = mPresetMixer.GetGlobalChainConfig();
     state["globalSignalChain"] = chainConfig;
@@ -3187,6 +3314,28 @@ void PluginController::BroadcastState()
     for (const auto& id : mPresetMixer.GetActivePresetIds())
         activePresetIds.push_back(id);
     state["activePresetIds"] = activePresetIds;
+
+    // Mixer snapshot
+    nlohmann::json mixer = nlohmann::json::object();
+    mixer["masterGain"] = mPresetMixer.GetMasterGain();
+    mixer["limiterEnabled"] = mPresetMixer.IsLimiterEnabled();
+    mixer["activePresetIds"] = activePresetIds;
+    nlohmann::json presetConfigs = nlohmann::json::object();
+    for (const auto& id : mPresetMixer.GetActivePresetIds())
+    {
+        if (const auto cfg = mPresetMixer.GetPresetConfig(id))
+        {
+            presetConfigs[id] = {
+                {"name", cfg->name},
+                {"mix", cfg->mix},
+                {"pan", cfg->pan},
+                {"mute", cfg->mute},
+                {"solo", cfg->solo}
+            };
+        }
+    }
+    mixer["presets"] = std::move(presetConfigs);
+    state["mixer"] = std::move(mixer);
 
     // Metronome
     nlohmann::json metronome;

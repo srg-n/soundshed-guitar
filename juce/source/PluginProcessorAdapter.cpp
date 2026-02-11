@@ -144,29 +144,41 @@ void PluginProcessorAdapter::changeProgramName(int, const juce::String&) {}
 
 void PluginProcessorAdapter::getStateInformation(juce::MemoryBlock& destData)
 {
-    // Serialize both APVTS and controller preset state
     const auto controllerState = mController.SerializeState();
-    auto tree = mAPVTS.copyState();
-
-    // Store controller JSON as a property on the ValueTree
-    tree.setProperty("controllerState", juce::String(controllerState), nullptr);
-
     juce::MemoryOutputStream stream(destData, false);
-    tree.writeToStream(stream);
+    stream.write(controllerState.data(), controllerState.size());
 }
 
 void PluginProcessorAdapter::setStateInformation(const void* data, int sizeInBytes)
 {
-    auto restored = juce::ValueTree::readFromData(data, static_cast<size_t>(sizeInBytes));
-    if (!restored.isValid()) return;
+    if (data == nullptr || sizeInBytes <= 0) return;
 
-    // Restore APVTS parameters
-    mAPVTS.replaceState(restored);
+    std::string controllerState(reinterpret_cast<const char*>(data), static_cast<size_t>(sizeInBytes));
+    if (controllerState.empty()) return;
 
-    // Restore controller preset state
-    const auto controllerState = restored.getProperty("controllerState").toString().toStdString();
-    if (!controllerState.empty())
-        mController.DeserializeState(controllerState);
+    mController.DeserializeState(controllerState);
+
+    auto json = nlohmann::json::parse(controllerState, nullptr, false);
+    if (json.is_object() && json.contains("parameters") && json["parameters"].is_array())
+    {
+        int idx = 0;
+        for (const auto& value : json["parameters"])
+        {
+            if (idx >= kParamCount) break;
+            if (value.is_number())
+            {
+                if (auto* param = mAPVTS.getParameter(kParamIds[idx]))
+                {
+                    if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param))
+                    {
+                        const float normalized = ranged->convertTo0to1(static_cast<float>(value.get<double>()));
+                        ranged->setValueNotifyingHost(normalized);
+                    }
+                }
+            }
+            idx++;
+        }
+    }
 }
 
 // ════════════════════════════════════════════════════════════════════════

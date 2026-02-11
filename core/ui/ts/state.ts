@@ -217,6 +217,15 @@ export const uiState: UiState = {
     limiterEnabled: false,
   },
   uiSettings: { zoom: 1 },
+  uiViewState: {
+    mainPanel: "visualizer",
+    presetTab: "details",
+    settings: {
+      equipmentTab: "settings",
+      libraryTab: "tone3000",
+      advancedTab: "composites",
+    },
+  },
   dspPerformance: undefined,
   dspPerformanceHistory: [],
   globalSignalChain: { ...DEFAULT_GLOBAL_SIGNAL_CHAIN },

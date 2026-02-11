@@ -16,21 +16,14 @@ import { initFxSelector } from "./fxSelector.js";
 import { themeSwitcher } from "./theme-switcher.js";
 import { startUiSettingsTracking } from "./windowSettings.js";
 import { renderFooterDemoAudioControls, bindFooterDemoAudioControls } from "./demoAudio.js";
-import { initDiagnosticsToggle, initLibraryFilters, initLibraryTabs, initSettingsPanel, initThemeSelect, updateSettingsSessionStatus } from "./settings.js";
-import { initTone3000Browser } from "./tone3000Browser.js";
-import { ensureTone3000Session } from "./tone3000.js";
+import { initDiagnosticsToggle, initThemeSelect } from "./settings.js";
 import { postMessage } from "./bridge.js";
 import { initializeMetronome } from "./metronome.js";
 import { initializeBlendEditorModal } from "./signalPath.js";
 import { initializeDialogModals } from "./dialogs.js";
-
-const tabButtons = Array.from(document.querySelectorAll(".tab-button"));
-const tabPanels = Array.from(document.querySelectorAll(".tab-panel"));
-const panelSwitchButtons = Array.from(document.querySelectorAll(".icon-bar .icon-btn, .panel-switch"));
-const mainTabPanels = Array.from(document.querySelectorAll(".main-content .tab-panel"));
+import { activateTab, initializeIconBarTabs, initializeTabButtons, switchMainPanel } from "./navigation.js";
 const eqModal = document.getElementById("eq-modal");
 const eqModalCloseBtn = document.getElementById("eq-modal-close");
-let tone3000BrowserInitialized = false;
 
 function openEqModal(): void {
   if (!eqModal) return;
@@ -43,100 +36,12 @@ function closeEqModal(): void {
   eqModal.style.display = "none";
 }
 
-function activateTab(tabId: string): void {
-  if (!tabButtons.length || !tabPanels.length) {
-    return;
-  }
-
-  tabButtons.forEach((button) => {
-    const isActive = (button as HTMLElement).dataset.tab === tabId;
-    button.classList.toggle("active", isActive);
-  });
-
-  tabPanels.forEach((panel) => {
-    const isDetailsPanel = (panel as HTMLElement).id === "preset-details" && tabId === "details";
-    const isLogPanel = (panel as HTMLElement).id === "log-panel" && tabId === "logs";
-    panel.classList.toggle("active", isDetailsPanel || isLogPanel);
-  });
-}
-
-function switchMainPanel(panelId: string): void {
-  panelSwitchButtons.forEach((btn) => {
-    const btnPanel = (btn as HTMLElement).dataset.panel;
-    btn.classList.toggle("active", btnPanel === panelId);
-  });
-
-  mainTabPanels.forEach((panel) => {
-    const isPanelMatch = (panel as HTMLElement).id === `panel-${panelId}`;
-    panel.classList.toggle("active", isPanelMatch);
-  });
-
-  // Hide signal path bar for full-height panels (everything except visualizer)
-  const signalPathBar = document.getElementById("signal-path-bar");
-  const mainContent = document.querySelector(".main-content") as HTMLElement | null;
-  const fullHeightPanels = ["library", "settings", "scalex", "advanced", "mixer"];
-  const isFullHeight = fullHeightPanels.includes(panelId);
-  
-  if (signalPathBar) {
-    signalPathBar.style.display = isFullHeight ? "none" : "";
-  }
-  if (mainContent) {
-    mainContent.classList.toggle("full-height", isFullHeight);
-  }
-
-  if (panelId === "settings") {
-    initSettingsPanel();
-    void ensureTone3000Session().then(() => updateSettingsSessionStatus());
-  }
-
-  if (panelId === "library") {
-    initLibraryTabs();
-    initLibraryFilters();
-    if (!tone3000BrowserInitialized) {
-      initTone3000Browser();
-      tone3000BrowserInitialized = true;
-    }
-    void ensureTone3000Session();
-  }
-
-  if (panelId === "scalex") {
-    const iframe = document.getElementById("scalex-iframe") as HTMLIFrameElement | null;
-    if (iframe && !iframe.src && iframe.dataset.src) {
-      iframe.src = iframe.dataset.src;
-    }
-  }
-}
-
-function initializeIconBarTabs(): void {
-  panelSwitchButtons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const panelId = (btn as HTMLElement).dataset.panel;
-      if (panelId) {
-        if (panelId === "metronome") {
-          return;
-        }
-        if (panelId === "eq") {
-          openEqModal();
-          return;
-        }
-        switchMainPanel(panelId);
-      }
-    });
-  });
-}
 
 async function bootstrap(): Promise<void> {
   installFetchLogger();
   renderLogEntries();
 
-  tabButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      const tabId = (button as HTMLElement).dataset.tab ?? "";
-      if (tabId) {
-        activateTab(tabId);
-      }
-    });
-  });
+  initializeTabButtons();
 
   // Initialize theme switcher
   themeSwitcher; // Ensure singleton is created
@@ -150,7 +55,7 @@ async function bootstrap(): Promise<void> {
   initializeInputModeControls();
   initializeAmpCabPowerControls();
   initializePresetControls();
-  initializeIconBarTabs();
+  initializeIconBarTabs({ onEq: openEqModal });
   initializeDialogModals();
   initializeSavePresetModal();
   initializeSaveAsButton();
@@ -161,7 +66,7 @@ async function bootstrap(): Promise<void> {
     eqModalCloseBtn.addEventListener("click", closeEqModal);
   }
   if (eqModal) {
-    eqModal.addEventListener("click", (event) => {
+    eqModal.addEventListener("mousedown", (event) => {
       if (event.target === eqModal) {
         closeEqModal();
       }

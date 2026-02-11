@@ -106,6 +106,16 @@ export interface UiSettings {
   };
 }
 
+export interface UiViewState {
+  mainPanel?: string;
+  presetTab?: string;
+  settings?: {
+    equipmentTab?: string;
+    libraryTab?: string;
+    advancedTab?: string;
+  };
+}
+
 export interface ResourceRef {
   type?: string;
   id?: string;
@@ -324,6 +334,7 @@ export interface UiState {
   tone3000Session?: Tone3000Session | null;
   mixer?: MixerState;
   uiSettings?: UiSettings;
+  uiViewState?: UiViewState;
   dspPerformance?: DSPPerformanceStats;
   dspPerformanceHistory: DSPPerformanceStats[];
   globalSignalChain?: GlobalSignalChainConfig;

@@ -94,6 +94,8 @@ namespace guitarfx
     // Master/global controls
     void SetMasterGain(double value) { mMasterGain = value; }
     void SetLimiterEnabled(bool enabled) { mLimiterEnabled = enabled; }
+    [[nodiscard]] double GetMasterGain() const { return mMasterGain; }
+    [[nodiscard]] bool IsLimiterEnabled() const { return mLimiterEnabled; }
 
     // Global input/output settings
     void SetAutoLevelInput(bool enabled) { mAutoLevelInput = enabled; }
@@ -169,6 +171,7 @@ namespace guitarfx
     // Queries
     [[nodiscard]] std::vector<std::string> GetActivePresetIds() const;
     [[nodiscard]] std::vector<std::string> GetPresetNodeTypes(const std::string &presetId) const;
+    [[nodiscard]] std::optional<InstanceConfig> GetPresetConfig(const std::string &presetId) const;
     [[nodiscard]] size_t GetPresetCount() const { return mInstances.size(); }
     [[nodiscard]] SignalGraphExecutor::DSPPerformanceStats GetPerformanceStats() const;
 

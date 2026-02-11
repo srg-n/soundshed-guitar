@@ -298,6 +298,25 @@ int GuitarFXPluginAdapter::UnserializeState(const iplug::IByteChunk& chunk, int 
     if (position < 0) return startPos;
 
     mController.DeserializeState(stateStr.Get());
+
+    auto json = nlohmann::json::parse(stateStr.Get(), nullptr, false);
+    if (json.is_object() && json.contains("parameters") && json["parameters"].is_array())
+    {
+        int idx = 0;
+        for (const auto& value : json["parameters"])
+        {
+            if (idx >= kParamCount) break;
+            if (value.is_number())
+            {
+                if (auto* param = GetParam(idx))
+                {
+                    param->Set(value.get<double>());
+                    OnParamChange(idx);
+                }
+            }
+            idx++;
+        }
+    }
     return position;
 }
 
