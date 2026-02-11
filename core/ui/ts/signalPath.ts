@@ -16,7 +16,11 @@ import { EffectTypeRegistry, type EffectTypeInfo } from "./presetV2.js";
 import { getBadgeIcon, getFxCategoryIcon, getFxEffectIcon, renderIcon } from "./iconAssets.js";
 import { sendAddSignalPathNode, sendAddSignalPathNodeOnEdge, type SignalPathEdgeRef } from "./fxSelector.js";
 import { GenericKnob } from "./controls.js";
-import { drawEqCurve, type EqBand, EqCurveInteraction, type EqBandConfig } from "./eqCurve.js";
+import {
+  EqCurveInteraction,
+  buildEqBandConfigsFromParams,
+  eqBandChangeToParams,
+} from "./eqCurve.js";
 import { buildBlendModelMappingsFromIds } from "./blendUtils.js";
 import { BlendEditorModal } from "./blendEditor.js";
 import { resourceBrowserModal } from "./resourceBrowser.js";
@@ -26,6 +30,8 @@ import { layoutDesigner } from "./layoutDesigner.js";
 const signalPathNodesElement = document.getElementById("signal-path-nodes");
 const nodeParamsPanelElement = document.getElementById("node-params-panel");
 let signalPathEqInteraction: EqCurveInteraction | null = null;
+/** Knob instances for the current node params panel, keyed by param key. */
+const nodeParamKnobs = new Map<string, GenericKnob>();
 const effectVisualizationElement = document.getElementById("effect-visualization");
 const effectVisualizationTitle = document.getElementById("effect-visualization-title");
 const effectVisualizationSubtitle = document.getElementById("effect-visualization-subtitle");
@@ -1428,6 +1434,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
     signalPathEqInteraction.destroy();
     signalPathEqInteraction = null;
   }
+  nodeParamKnobs.clear();
 
   // Ensure node.params exists
   if (!node.params) {
@@ -2189,6 +2196,11 @@ function bindNodeParamControls(node: GraphNode, preset: Preset): void {
         }
       },
     });
+
+    // Store knob instance for live EQ curve sync
+    if (paramKey) {
+      nodeParamKnobs.set(paramKey, knobInstance);
+    }
   });
 
   if (blendState) {
@@ -2214,7 +2226,7 @@ function updateEqVisualization(node: GraphNode): void {
     canvas.height = height;
   }
 
-  const bandConfigs = buildSignalPathEqBandConfigs(node, typeInfo);
+  const bandConfigs = buildEqBandConfigsFromParams(node.params ?? {});
 
   if (signalPathEqInteraction) {
     // Update existing interaction in place
@@ -2226,126 +2238,28 @@ function updateEqVisualization(node: GraphNode): void {
       canvas,
       bandConfigs,
       (bandIndex, freq, gainDb, q) => {
-        // Lightweight onChange: update params and send to plugin without rebuilding the panel
-        const keys = SIGNAL_PATH_EQ_BAND_KEYS[bandIndex];
-        if (!keys) return;
-        node.params[keys.gain] = gainDb;
-        node.params[keys.freq] = freq;
-        if (keys.q) node.params[keys.q] = q;
-        sendSignalPathNodeParamUpdate(node.id, keys.gain, gainDb);
-        sendSignalPathNodeParamUpdate(node.id, keys.freq, freq);
-        if (keys.q) sendSignalPathNodeParamUpdate(node.id, keys.q, q);
+        // Lightweight onChange: update params, send to plugin, and sync knobs live
+        const changed = eqBandChangeToParams(bandIndex, freq, gainDb, q);
+        for (const [key, value] of Object.entries(changed)) {
+          node.params[key] = value;
+          sendSignalPathNodeParamUpdate(node.id, key, value);
+          // Sync corresponding knob display
+          const knob = nodeParamKnobs.get(key);
+          if (knob) knob.setValue(value);
+        }
       },
       (bandIndex, freq, gainDb, q) => {
         // onCommit: full update including panel rebuild for knob display sync
-        applySignalPathEqBandChange(node, typeInfo, bandIndex, freq, gainDb, q, preset);
+        const changed = eqBandChangeToParams(bandIndex, freq, gainDb, q);
+        for (const [key, value] of Object.entries(changed)) {
+          node.params[key] = value;
+          sendSignalPathNodeParamUpdate(node.id, key, value);
+        }
+        if (preset) {
+          showNodeParamsPanel(node, preset);
+        }
       }
     );
-  }
-}
-
-function getEqBands(node: GraphNode, typeInfo: EffectTypeInfo): EqBand[] {
-  const getDefault = (key: string, fallback: number): number => {
-    const def = typeInfo.parameters.find((param) => param.key === key)?.default;
-    return typeof def === "number" ? def : fallback;
-  };
-
-  const readParam = (keys: string[], fallback: number): number => {
-    for (const key of keys) {
-      const value = node.params[key];
-      if (typeof value === "number") {
-        return value;
-      }
-    }
-    return fallback;
-  };
-
-  const lowGain = readParam(["lowGain"], getDefault("lowGain", 0));
-  const lowFreq = readParam(["lowFreq"], getDefault("lowFreq", 100));
-  const lowMidGain = readParam(["lowMidGain"], getDefault("lowMidGain", 0));
-  const lowMidFreq = readParam(["lowMidFreq"], getDefault("lowMidFreq", 400));
-  const lowMidQ = readParam(["lowMidQ"], getDefault("lowMidQ", 1.0));
-  const highMidGain = readParam(["highMidGain"], getDefault("highMidGain", 0));
-  const highMidFreq = readParam(["highMidFreq"], getDefault("highMidFreq", 2000));
-  const highMidQ = readParam(["highMidQ"], getDefault("highMidQ", 1.0));
-  const highGain = readParam(["highGain"], getDefault("highGain", 0));
-  const highFreq = readParam(["highFreq"], getDefault("highFreq", 8000));
-
-  return [
-    { freq: lowFreq, gainDb: lowGain, q: 1.0 },
-    { freq: lowMidFreq, gainDb: lowMidGain, q: lowMidQ },
-    { freq: highMidFreq, gainDb: highMidGain, q: highMidQ },
-    { freq: highFreq, gainDb: highGain, q: 1.0 },
-  ];
-}
-
-const SIGNAL_PATH_EQ_BAND_KEYS = [
-  { gain: "lowGain", freq: "lowFreq", q: null as string | null },
-  { gain: "lowMidGain", freq: "lowMidFreq", q: "lowMidQ" },
-  { gain: "highMidGain", freq: "highMidFreq", q: "highMidQ" },
-  { gain: "highGain", freq: "highFreq", q: null as string | null },
-];
-
-const SIGNAL_PATH_EQ_BAND_RANGES = [
-  { freqMin: 20, freqMax: 500, hasQ: false, qMin: 0.1, qMax: 10, label: "Low" },
-  { freqMin: 200, freqMax: 2000, hasQ: true, qMin: 0.1, qMax: 10, label: "Low Mid" },
-  { freqMin: 1000, freqMax: 8000, hasQ: true, qMin: 0.1, qMax: 10, label: "High Mid" },
-  { freqMin: 4000, freqMax: 20000, hasQ: false, qMin: 0.1, qMax: 10, label: "High" },
-];
-
-function buildSignalPathEqBandConfigs(node: GraphNode, typeInfo: EffectTypeInfo): EqBandConfig[] {
-  const bands = getEqBands(node, typeInfo);
-  return bands.map((band, i) => {
-    const range = SIGNAL_PATH_EQ_BAND_RANGES[i];
-    return {
-      freq: band.freq,
-      gainDb: band.gainDb,
-      q: band.q,
-      freqMin: range.freqMin,
-      freqMax: range.freqMax,
-      gainMin: -18,
-      gainMax: 18,
-      hasQ: range.hasQ,
-      qMin: range.qMin,
-      qMax: range.qMax,
-      label: range.label,
-    };
-  });
-}
-
-function applySignalPathEqBandChange(
-  node: GraphNode,
-  typeInfo: EffectTypeInfo,
-  bandIndex: number,
-  freq: number,
-  gainDb: number,
-  q: number,
-  preset: Preset | null,
-): void {
-  const keys = SIGNAL_PATH_EQ_BAND_KEYS[bandIndex];
-  if (!keys) return;
-
-  node.params[keys.gain] = gainDb;
-  node.params[keys.freq] = freq;
-  if (keys.q) node.params[keys.q] = q;
-
-  sendSignalPathNodeParamUpdate(node.id, keys.gain, gainDb);
-  sendSignalPathNodeParamUpdate(node.id, keys.freq, freq);
-  if (keys.q) sendSignalPathNodeParamUpdate(node.id, keys.q, q);
-
-  // Sync knob displays
-  const knobs = nodeParamsPanelElement?.querySelectorAll(".node-param-knob") as NodeListOf<HTMLElement> | null;
-  knobs?.forEach((knob) => {
-    const knobParamKey = knob.dataset.paramKey;
-    if (!knobParamKey) return;
-    if (knobParamKey === keys.gain) knob.dataset.value = gainDb.toString();
-    else if (knobParamKey === keys.freq) knob.dataset.value = freq.toString();
-    else if (keys.q && knobParamKey === keys.q) knob.dataset.value = q.toString();
-  });
-
-  // Re-show the panel to rebuild knob instances with updated values
-  if (preset) {
-    showNodeParamsPanel(node, preset);
   }
 }
 

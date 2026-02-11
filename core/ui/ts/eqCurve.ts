@@ -99,6 +99,75 @@ function peakingMagnitude(freq: number, band: EqBand, sampleRate: number): numbe
   return numMag / denMag;
 }
 
+// ===== Shared 4-band parametric EQ constants =====
+
+/** Canonical param keys for each EQ band (matches ParametricEQEffect). */
+export const EQ_BAND_KEYS: ReadonlyArray<{ gain: string; freq: string; q: string | null }> = [
+  { gain: "lowGain", freq: "lowFreq", q: null },
+  { gain: "lowMidGain", freq: "lowMidFreq", q: "lowMidQ" },
+  { gain: "highMidGain", freq: "highMidFreq", q: "highMidQ" },
+  { gain: "highGain", freq: "highFreq", q: null },
+];
+
+export const EQ_BAND_LABELS: ReadonlyArray<string> = ["Low", "Low Mid", "High Mid", "High"];
+
+export const EQ_BAND_RANGES: ReadonlyArray<{
+  freqMin: number; freqMax: number;
+  hasQ: boolean; qMin: number; qMax: number;
+}> = [
+  { freqMin: 20, freqMax: 500, hasQ: false, qMin: 0.1, qMax: 10 },
+  { freqMin: 200, freqMax: 2000, hasQ: true, qMin: 0.1, qMax: 10 },
+  { freqMin: 1000, freqMax: 8000, hasQ: true, qMin: 0.1, qMax: 10 },
+  { freqMin: 4000, freqMax: 20000, hasQ: false, qMin: 0.1, qMax: 10 },
+];
+
+export const EQ_FREQ_DEFAULTS: ReadonlyArray<number> = [100, 400, 2000, 8000];
+
+/**
+ * Build EqBandConfig[] from a flat params dict using the canonical param keys.
+ * Works for both global EQ node.params and signal-path node.params.
+ */
+export function buildEqBandConfigsFromParams(
+  params: Record<string, number | undefined>,
+): EqBandConfig[] {
+  return EQ_BAND_KEYS.map((keys, i) => {
+    const range = EQ_BAND_RANGES[i];
+    return {
+      freq: (typeof params[keys.freq] === "number" ? params[keys.freq] : EQ_FREQ_DEFAULTS[i]) as number,
+      gainDb: (typeof params[keys.gain] === "number" ? params[keys.gain] : 0) as number,
+      q: keys.q && typeof params[keys.q] === "number" ? (params[keys.q] as number) : 1.0,
+      freqMin: range.freqMin,
+      freqMax: range.freqMax,
+      gainMin: -18,
+      gainMax: 18,
+      hasQ: range.hasQ,
+      qMin: range.qMin,
+      qMax: range.qMax,
+      label: EQ_BAND_LABELS[i],
+    };
+  });
+}
+
+/**
+ * Convert a band change from EqCurveInteraction into a param-key → value dict
+ * using the canonical EQ_BAND_KEYS.
+ */
+export function eqBandChangeToParams(
+  bandIndex: number,
+  freq: number,
+  gainDb: number,
+  q: number,
+): Record<string, number> {
+  const keys = EQ_BAND_KEYS[bandIndex];
+  if (!keys) return {};
+  const result: Record<string, number> = {
+    [keys.gain]: gainDb,
+    [keys.freq]: freq,
+  };
+  if (keys.q) result[keys.q] = q;
+  return result;
+}
+
 // ===== Interactive EQ Curve with Draggable Handles =====
 
 const BAND_COLORS = [

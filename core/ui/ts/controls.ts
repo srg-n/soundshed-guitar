@@ -3,7 +3,15 @@ import { setAppSetting } from "./bridge.js";
 import { postMessage, setParameter } from "./bridge.js";
 import { sendGlobalChainParam } from "./messages.js";
 import { uiState } from "./state.js";
-import { drawEqCurve, type EqBand, EqCurveInteraction, type EqBandConfig } from "./eqCurve.js";
+import {
+  drawEqCurve,
+  type EqBand,
+  EqCurveInteraction,
+  type EqBandConfig,
+  EQ_BAND_LABELS,
+  buildEqBandConfigsFromParams,
+  eqBandChangeToParams,
+} from "./eqCurve.js";
 import type { GraphNode, SignalGraph } from "./types.js";
 
 export interface KnobConfig {
@@ -892,82 +900,58 @@ const GLOBAL_EQ_PARAM_MAP: Record<string, GlobalEqParamBinding> = {
 
 let eqCurveInteraction: EqCurveInteraction | null = null;
 
-const EQ_BAND_PARAM_IDS: { gain: string; freq: string; q: string | null }[] = [
+/** Map from knob param IDs ("eq_low_gain") to canonical keys ("lowGain") per band. */
+const GLOBAL_EQ_KNOB_IDS: ReadonlyArray<{ gain: string; freq: string; q: string | null }> = [
   { gain: "eq_low_gain", freq: "eq_low_freq", q: null },
   { gain: "eq_lowmid_gain", freq: "eq_lowmid_freq", q: "eq_lowmid_q" },
   { gain: "eq_highmid_gain", freq: "eq_highmid_freq", q: "eq_highmid_q" },
   { gain: "eq_high_gain", freq: "eq_high_freq", q: null },
 ];
 
-const EQ_BAND_LABELS = ["Low", "Low Mid", "High Mid", "High"];
-
-const EQ_BAND_RANGES = [
-  { freqMin: 20, freqMax: 500, hasQ: false, qMin: 0.1, qMax: 10 },
-  { freqMin: 200, freqMax: 2000, hasQ: true, qMin: 0.1, qMax: 10 },
-  { freqMin: 1000, freqMax: 8000, hasQ: true, qMin: 0.1, qMax: 10 },
-  { freqMin: 4000, freqMax: 20000, hasQ: false, qMin: 0.1, qMax: 10 },
-];
-
-const EQ_BAND_FREQ_DEFAULTS = [100, 400, 2000, 8000];
-
-function buildEqBandConfigs(): EqBandConfig[] {
-  return EQ_BAND_PARAM_IDS.map((ids, i) => ({
-    freq: readEqParamValue(ids.freq, EQ_BAND_FREQ_DEFAULTS[i]),
-    gainDb: readEqParamValue(ids.gain, 0),
-    q: ids.q ? readEqParamValue(ids.q, 1.0) : 1.0,
-    freqMin: EQ_BAND_RANGES[i].freqMin,
-    freqMax: EQ_BAND_RANGES[i].freqMax,
-    gainMin: -18,
-    gainMax: 18,
-    hasQ: EQ_BAND_RANGES[i].hasQ,
-    qMin: EQ_BAND_RANGES[i].qMin,
-    qMax: EQ_BAND_RANGES[i].qMax,
-    label: EQ_BAND_LABELS[i],
-  }));
+function getGlobalEqParams(): Record<string, number | undefined> {
+  const eqNode = getPostChainEqNode();
+  return eqNode?.params ?? {};
 }
 
-function handleEqCurveBandChange(bandIndex: number, freq: number, gainDb: number, q: number): void {
-  const ids = EQ_BAND_PARAM_IDS[bandIndex];
+function buildGlobalEqBandConfigs(): EqBandConfig[] {
+  return buildEqBandConfigsFromParams(getGlobalEqParams());
+}
 
-  // Update knob display values to stay in sync
-  const freqKnob = knobInstances.get(ids.freq);
-  if (freqKnob) freqKnob.setValue(freq);
+/** Drag handler: update eqNode, send to plugin, and sync knobs live. */
+function handleEqCurveDrag(bandIndex: number, freq: number, gainDb: number, q: number): void {
+  const changed = eqBandChangeToParams(bandIndex, freq, gainDb, q);
 
-  const gainKnob = knobInstances.get(ids.gain);
-  if (gainKnob) gainKnob.setValue(gainDb);
-
-  if (ids.q) {
-    const qKnob = knobInstances.get(ids.q);
-    if (qKnob) qKnob.setValue(q);
+  // 1) Apply all values to local eqNode FIRST
+  const eqNode = getPostChainEqNode();
+  if (eqNode) {
+    for (const [key, value] of Object.entries(changed)) {
+      eqNode.params[key] = value;
+    }
   }
 
-  // Send to plugin for real-time audio feedback
-  const gainMapping = GLOBAL_EQ_PARAM_MAP[ids.gain];
-  if (gainMapping) {
-    sendGlobalChainParam(gainMapping.path, gainDb);
-    const eqNode = getPostChainEqNode();
-    if (eqNode) gainMapping.apply(eqNode, gainDb);
+  // 2) Send all to plugin
+  for (const [key, value] of Object.entries(changed)) {
+    sendGlobalChainParam(`eq.${key}`, value);
   }
 
-  const freqMapping = GLOBAL_EQ_PARAM_MAP[ids.freq];
-  if (freqMapping) {
-    sendGlobalChainParam(freqMapping.path, freq);
-    const eqNode = getPostChainEqNode();
-    if (eqNode) freqMapping.apply(eqNode, freq);
-  }
-
-  if (ids.q) {
-    const qMapping = GLOBAL_EQ_PARAM_MAP[ids.q];
-    if (qMapping) {
-      sendGlobalChainParam(qMapping.path, q);
-      const eqNode = getPostChainEqNode();
-      if (eqNode) qMapping.apply(eqNode, q);
+  // 3) Sync knob displays to match dragged values
+  const knobIds = GLOBAL_EQ_KNOB_IDS[bandIndex];
+  if (knobIds) {
+    const freqKnob = knobInstances.get(knobIds.freq);
+    if (freqKnob) freqKnob.setValue(freq);
+    const gainKnob = knobInstances.get(knobIds.gain);
+    if (gainKnob) gainKnob.setValue(gainDb);
+    if (knobIds.q) {
+      const qKnob = knobInstances.get(knobIds.q);
+      if (qKnob) qKnob.setValue(q);
     }
   }
 }
 
-function handleEqCurveBandCommit(bandIndex: number, freq: number, gainDb: number, q: number): void {
-  handleEqCurveBandChange(bandIndex, freq, gainDb, q);
+/** Full commit handler: sends params + logs the change. */
+function handleEqCurveCommit(bandIndex: number, freq: number, gainDb: number, q: number): void {
+  handleEqCurveDrag(bandIndex, freq, gainDb, q);
+
   appendLog(`EQ ${EQ_BAND_LABELS[bandIndex]}: ${Math.round(freq)}Hz ${gainDb >= 0 ? "+" : ""}${gainDb.toFixed(1)}dB Q:${q.toFixed(1)}`);
 }
 
@@ -983,24 +967,9 @@ function updateEQSectionState(): void {
   }
 }
 
-function readEqParamValue(paramId: string, fallback: number): number {
-  const knobInstance = knobInstances.get(paramId);
-  if (knobInstance) {
-    return knobInstance.getValue();
-  }
-
-  const mapping = GLOBAL_EQ_PARAM_MAP[paramId];
-  const eqNode = getPostChainEqNode();
-  if (mapping && eqNode) {
-    return mapping.read(eqNode);
-  }
-
-  return fallback;
-}
-
 function updateEqModalVisualization(): void {
   if (eqCurveInteraction) {
-    eqCurveInteraction.updateBands(buildEqBandConfigs());
+    eqCurveInteraction.updateBands(buildGlobalEqBandConfigs());
     return;
   }
 
@@ -1017,29 +986,8 @@ function updateEqModalVisualization(): void {
     canvas.height = height;
   }
 
-  const bands: EqBand[] = [
-    {
-      freq: readEqParamValue("eq_low_freq", 100),
-      gainDb: readEqParamValue("eq_low_gain", 0),
-      q: 1.0,
-    },
-    {
-      freq: readEqParamValue("eq_lowmid_freq", 400),
-      gainDb: readEqParamValue("eq_lowmid_gain", 0),
-      q: readEqParamValue("eq_lowmid_q", 1.0),
-    },
-    {
-      freq: readEqParamValue("eq_highmid_freq", 2000),
-      gainDb: readEqParamValue("eq_highmid_gain", 0),
-      q: readEqParamValue("eq_highmid_q", 1.0),
-    },
-    {
-      freq: readEqParamValue("eq_high_freq", 8000),
-      gainDb: readEqParamValue("eq_high_gain", 0),
-      q: 1.0,
-    },
-  ];
-
+  const configs = buildGlobalEqBandConfigs();
+  const bands: EqBand[] = configs.map(c => ({ freq: c.freq, gainDb: c.gainDb, q: c.q }));
   drawEqCurve(canvas, bands);
 }
 
@@ -1284,11 +1232,15 @@ function initializeEQControls(): void {
   // Create interactive EQ curve with draggable handles
   const eqCanvas = document.getElementById("eq-curve-canvas") as HTMLCanvasElement | null;
   if (eqCanvas) {
+    if (eqCurveInteraction) {
+      eqCurveInteraction.destroy();
+      eqCurveInteraction = null;
+    }
     eqCurveInteraction = new EqCurveInteraction(
       eqCanvas,
-      buildEqBandConfigs(),
-      handleEqCurveBandChange,
-      handleEqCurveBandCommit
+      buildGlobalEqBandConfigs(),
+      handleEqCurveDrag,
+      handleEqCurveCommit
     );
   }
 
@@ -1344,7 +1296,7 @@ export function syncEQControlsFromState(): void {
   });
 
   if (eqCurveInteraction) {
-    eqCurveInteraction.updateBands(buildEqBandConfigs());
+    eqCurveInteraction.updateBands(buildGlobalEqBandConfigs());
   }
 
   updateEqModalVisualization();

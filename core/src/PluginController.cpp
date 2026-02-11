@@ -1400,7 +1400,8 @@ void PluginController::HandleSetGlobalChainParamRequest(const nlohmann::json& pa
     else if (path == "eq.highGain") mPresetMixer.SetGlobalEQBandGain(3, value.get<double>());
     else if (path == "eq.highFreq") mPresetMixer.SetGlobalEQBandFrequency(3, value.get<double>());
 
-    SendGlobalChainStateToUI();
+    // No echo: the UI already owns the values it sent.
+    // Full state is pushed via HandleGetGlobalChainRequest / HandleSetGlobalChainRequest.
 }
 
 void PluginController::HandleSignalTestRequest(const nlohmann::json& payload)
