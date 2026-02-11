@@ -113,6 +113,50 @@
   color: rgba(255, 255, 255, 0.7);
 }
 
+.theme-light .effect-visualization {
+  background-color: #eef0f4;
+  border: 1px solid var(--border-light);
+  box-shadow: inset 0 8px 18px rgba(80, 92, 112, 0.2);
+}
+
+.theme-light .effect-visualization::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(220, 226, 236, 0.9) 100%);
+}
+
+.theme-light .effect-visualization::after {
+  opacity: var(--effect-visual-icon-opacity, 0.05);
+}
+
+.theme-light .effect-visualization-overlay {
+  color: var(--text-secondary);
+}
+
+.theme-light .effect-visualization-placeholder p {
+  color: var(--text-muted);
+}
+
+.theme-classic .effect-visualization {
+  background-color: #5b3a28;
+  border: 1px solid var(--border-light);
+  box-shadow: inset 0 8px 18px rgba(54, 34, 24, 0.4);
+}
+
+.theme-classic .effect-visualization::before {
+  background: linear-gradient(180deg, rgba(91, 58, 40, 0.2) 0%, rgba(54, 34, 24, 0.7) 100%);
+}
+
+.theme-classic .effect-visualization::after {
+  opacity: var(--effect-visual-icon-opacity, 0.08);
+}
+
+.theme-classic .effect-visualization-overlay {
+  color: var(--text-dark-primary);
+}
+
+.theme-classic .effect-visualization-placeholder p {
+  color: var(--text-dark-tertiary);
+}
+
 /* Amp Knobs Row */
 .amp-knobs {
   display: flex;

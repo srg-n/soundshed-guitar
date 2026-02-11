@@ -215,3 +215,33 @@
 .preset-favorite.active {
   text-shadow: 0 0 6px color-mix(in srgb, var(--color-preset-favorite), transparent 40%);
 }
+
+.theme-light .preset-selector {
+  background: var(--bg-secondary);
+  border-color: var(--border-light);
+}
+
+.theme-light .preset-chooser-label {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border-color: var(--border-light);
+}
+
+.theme-light .preset-chooser-label:hover {
+  background: var(--bg-tertiary);
+}
+
+.theme-classic .preset-selector {
+  background: var(--bg-dark-secondary);
+  border-color: var(--border-dark-medium);
+}
+
+.theme-classic .preset-chooser-label {
+  background: var(--bg-dark-tertiary);
+  color: var(--text-dark-primary);
+  border-color: var(--border-dark-light);
+}
+
+.theme-classic .preset-chooser-label:hover {
+  background: var(--bg-dark-secondary);
+}

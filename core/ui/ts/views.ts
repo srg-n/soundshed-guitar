@@ -757,42 +757,58 @@ export function updateSignalDiagnosticsView(): void {
     return;
   }
 
-  if (inputPeak) inputPeak.textContent = `${formatDb(diagnostics.input.peakDbfs)} dBFS`;
-  if (inputRms) inputRms.textContent = `${formatDb(diagnostics.input.rmsDbfs)} dBFS`;
-  if (inputHeadroom) inputHeadroom.textContent = `${formatDb(diagnostics.input.headroomDb)} dB`;
+  const input = diagnostics.input ?? {
+    peakDbfs: Number.NaN,
+    rmsDbfs: Number.NaN,
+    headroomDb: Number.NaN,
+    clipped: false,
+    clipCount: 0,
+  };
+  const output = diagnostics.output ?? {
+    peakDbfs: Number.NaN,
+    rmsDbfs: Number.NaN,
+    headroomDb: Number.NaN,
+    clipped: false,
+    clipCount: 0,
+  };
+
+  if (inputPeak) inputPeak.textContent = `${formatDb(input.peakDbfs)} dBFS`;
+  if (inputRms) inputRms.textContent = `${formatDb(input.rmsDbfs)} dBFS`;
+  if (inputHeadroom) inputHeadroom.textContent = `${formatDb(input.headroomDb)} dB`;
   if (inputClip) {
-    inputClip.classList.toggle("clip-on", diagnostics.input.clipped);
-    inputClip.classList.toggle("clip-off", !diagnostics.input.clipped);
+    inputClip.classList.toggle("clip-on", input.clipped);
+    inputClip.classList.toggle("clip-off", !input.clipped);
     inputClip.childNodes.forEach((node) => {
       if (node.nodeType === Node.TEXT_NODE) {
-        node.textContent = diagnostics.input.clipped ? `Clipping (${diagnostics.input.clipCount})` : "OK";
+        node.textContent = input.clipped ? `Clipping (${input.clipCount})` : "OK";
       }
     });
   }
 
-  if (outputPeak) outputPeak.textContent = `${formatDb(diagnostics.output.peakDbfs)} dBFS`;
-  if (outputRms) outputRms.textContent = `${formatDb(diagnostics.output.rmsDbfs)} dBFS`;
-  if (outputHeadroom) outputHeadroom.textContent = `${formatDb(diagnostics.output.headroomDb)} dB`;
+  if (outputPeak) outputPeak.textContent = `${formatDb(output.peakDbfs)} dBFS`;
+  if (outputRms) outputRms.textContent = `${formatDb(output.rmsDbfs)} dBFS`;
+  if (outputHeadroom) outputHeadroom.textContent = `${formatDb(output.headroomDb)} dB`;
   if (outputClip) {
-    outputClip.classList.toggle("clip-on", diagnostics.output.clipped);
-    outputClip.classList.toggle("clip-off", !diagnostics.output.clipped);
+    outputClip.classList.toggle("clip-on", output.clipped);
+    outputClip.classList.toggle("clip-off", !output.clipped);
     outputClip.childNodes.forEach((node) => {
       if (node.nodeType === Node.TEXT_NODE) {
-        node.textContent = diagnostics.output.clipped ? `Clipping (${diagnostics.output.clipCount})` : "OK";
+        node.textContent = output.clipped ? `Clipping (${output.clipCount})` : "OK";
       }
     });
   }
 
   if (listEl) {
-    const rows = diagnostics.nodes
+    const rows = (diagnostics.nodes ?? [])
       .map((node) => {
         const scopeLabel = escapeHtml(node.scope);
         const presetLabel = node.presetId ? `${escapeHtml(node.presetId)} · ` : "";
         const nodeLabel = `${presetLabel}${escapeHtml(node.nodeId)} (${escapeHtml(node.nodeType)})`;
-        const peak = formatDb(node.levels.peakDbfs);
-        const headroom = formatDb(node.levels.headroomDb);
-        const clipClass = node.levels.clipped ? "clip-on" : "clip-off";
-        const clipText = node.levels.clipped ? `Clipping (${node.levels.clipCount})` : "OK";
+        const levels = node.levels ?? { peakDbfs: Number.NaN, headroomDb: Number.NaN, clipped: false, clipCount: 0 };
+        const peak = formatDb(levels.peakDbfs);
+        const headroom = formatDb(levels.headroomDb);
+        const clipClass = levels.clipped ? "clip-on" : "clip-off";
+        const clipText = levels.clipped ? `Clipping (${levels.clipCount})` : "OK";
         return `
           <div class=\"signal-diagnostics-item\">
             <span class=\"signal-diagnostics-cell scope\">${scopeLabel}</span>
