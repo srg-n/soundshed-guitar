@@ -10,7 +10,7 @@ namespace guitarfx
 {
   /*
    * Design notes (gain stages v1):
-  * - Stage count is clamped to 1..4, defaulting to 2 to preserve legacy presets.
+  * - Stage count is clamped to 1..4, defaulting to 2.
    * - Tone stack is positioned between stage 2 and stage 3 ("split around tone").
   * - Stage gain is a single dB trim applied to all stages; gain/voice retain voicing.
    * - Missing params fall back to defaults; no allocations or locks in Process().
@@ -26,8 +26,12 @@ namespace guitarfx
       mSampleRate = sampleRate;
       mMaxBlockSize = maxBlockSize;
       UpdateSmoothing();
+      UpdateSagCoefficients();
       UpdatePreFilters();
+      UpdatePreEmphasis();
       UpdateToneStack();
+      UpdateSpeakerFilters();
+      UpdatePostFilters();
       Reset();
     }
 
@@ -41,6 +45,12 @@ namespace guitarfx
         mTrebleS1[ch] = mTrebleS2[ch] = 0.0;
         mPresenceS1[ch] = mPresenceS2[ch] = 0.0;
         mPreHPS1[ch] = mPreHPS2[ch] = 0.0;
+        mPreEmphS1[ch] = mPreEmphS2[ch] = 0.0;
+        mDepthS1[ch] = mDepthS2[ch] = 0.0;
+        mResonanceS1[ch] = mResonanceS2[ch] = 0.0;
+        mDampingS1[ch] = mDampingS2[ch] = 0.0;
+        mPostHPS1[ch] = mPostHPS2[ch] = 0.0;
+        mSagEnv[ch] = 0.0f;
       }
       mVoiceSmoothed = mVoice;
     }
@@ -74,6 +84,8 @@ namespace guitarfx
 
           double tightened = ProcessBiquad(sample, mPreHPB0, mPreHPB1, mPreHPB2, mPreHPA1, mPreHPA2,
                                            mPreHPS1[ch], mPreHPS2[ch]);
+          tightened = ProcessBiquad(tightened, mPreEmphB0, mPreEmphB1, mPreEmphB2, mPreEmphA1, mPreEmphA2,
+                                    mPreEmphS1[ch], mPreEmphS2[ch]);
 
           const float pre = static_cast<float>(tightened) * mStageGainLinear * masterGain;
           const float clean = SoftClip(pre * cleanGain) * 0.9f;
@@ -101,7 +113,36 @@ namespace guitarfx
             processed = SoftClip(static_cast<float>(processed) * masterGain * mStageGainLinear);
           }
 
-          out[i] = static_cast<float>(processed) * outputGain;
+          float powerInput = static_cast<float>(processed);
+          if (std::abs(mBias) > 1.0e-6f)
+          {
+            powerInput += mBias * 0.1f;
+          }
+
+          const float detector = std::abs(powerInput);
+          if (detector > mSagEnv[ch])
+            mSagEnv[ch] = mSagAttackCoef * mSagEnv[ch] + (1.0f - mSagAttackCoef) * detector;
+          else
+            mSagEnv[ch] = mSagReleaseCoef * mSagEnv[ch] + (1.0f - mSagReleaseCoef) * detector;
+
+          const float sagGain = 1.0f / (1.0f + mSag * mSagEnv[ch]);
+          powerInput *= sagGain;
+
+          const float powerGain = 1.0f + 6.0f * mPowerDrive;
+          float powered = SoftClip(powerInput * powerGain);
+
+          double speaker = powered;
+          speaker = ProcessBiquad(speaker, mDepthB0, mDepthB1, mDepthB2, mDepthA1, mDepthA2,
+                                  mDepthS1[ch], mDepthS2[ch]);
+          speaker = ProcessBiquad(speaker, mResonanceB0, mResonanceB1, mResonanceB2, mResonanceA1, mResonanceA2,
+                                  mResonanceS1[ch], mResonanceS2[ch]);
+          speaker = ProcessBiquad(speaker, mDampingB0, mDampingB1, mDampingB2, mDampingA1, mDampingA2,
+                                  mDampingS1[ch], mDampingS2[ch]);
+
+          speaker = ProcessBiquad(speaker, mPostHPB0, mPostHPB1, mPostHPB2, mPostHPA1, mPostHPA2,
+                                  mPostHPS1[ch], mPostHPS2[ch]);
+
+          out[i] = static_cast<float>(speaker) * outputGain;
         }
       }
     }
@@ -115,6 +156,16 @@ namespace guitarfx
       else if (key == "gain")
       {
         mGain = static_cast<float>(std::clamp(value, 0.0, 1.0));
+      }
+      else if (key == "bright")
+      {
+        mBright = (value >= 0.5) ? 1.0f : 0.0f;
+        UpdatePreEmphasis();
+      }
+      else if (key == "preEmphasis")
+      {
+        mPreEmphasis = static_cast<float>(std::clamp(value, 0.0, 1.0));
+        UpdatePreEmphasis();
       }
       else if (key == "bass")
       {
@@ -155,6 +206,33 @@ namespace guitarfx
       {
         SetStageGain(value);
       }
+      else if (key == "powerDrive")
+      {
+        mPowerDrive = static_cast<float>(std::clamp(value, 0.0, 1.0));
+      }
+      else if (key == "sag")
+      {
+        mSag = static_cast<float>(std::clamp(value, 0.0, 1.0));
+      }
+      else if (key == "bias")
+      {
+        mBias = static_cast<float>(std::clamp(value, -1.0, 1.0));
+      }
+      else if (key == "depth")
+      {
+        mDepth = static_cast<float>(std::clamp(value, 0.0, 1.0));
+        UpdateSpeakerFilters();
+      }
+      else if (key == "resonance")
+      {
+        mResonance = static_cast<float>(std::clamp(value, 0.0, 1.0));
+        UpdateSpeakerFilters();
+      }
+      else if (key == "damping")
+      {
+        mDamping = static_cast<float>(std::clamp(value, 0.0, 1.0));
+        UpdateSpeakerFilters();
+      }
     }
 
     void SetConfig(const std::string &, const std::string &) override {}
@@ -165,6 +243,10 @@ namespace guitarfx
         return mVoice;
       if (key == "gain")
         return mGain;
+      if (key == "bright")
+        return mBright;
+      if (key == "preEmphasis")
+        return mPreEmphasis;
       if (key == "bass")
         return mBass;
       if (key == "middle")
@@ -182,6 +264,18 @@ namespace guitarfx
       if (key == "stageGain" || key == "stage1Gain" || key == "stage2Gain" || key == "stage3Gain"
           || key == "stage4Gain" || key == "stage5Gain" || key == "stage6Gain")
         return mStageGainDb;
+      if (key == "powerDrive")
+        return mPowerDrive;
+      if (key == "sag")
+        return mSag;
+      if (key == "bias")
+        return mBias;
+      if (key == "depth")
+        return mDepth;
+      if (key == "resonance")
+        return mResonance;
+      if (key == "damping")
+        return mDamping;
       return 0.0;
     }
 
@@ -230,6 +324,20 @@ namespace guitarfx
       mVoiceSmoothCoef = static_cast<float>(std::exp(-1.0 / (tau * mSampleRate)));
     }
 
+    void UpdateSagCoefficients()
+    {
+      if (mSampleRate <= 0.0)
+      {
+        mSagAttackCoef = 0.0f;
+        mSagReleaseCoef = 0.0f;
+        return;
+      }
+      const double attackTau = 0.01;  // 10 ms
+      const double releaseTau = 0.18; // 180 ms
+      mSagAttackCoef = static_cast<float>(std::exp(-1.0 / (attackTau * mSampleRate)));
+      mSagReleaseCoef = static_cast<float>(std::exp(-1.0 / (releaseTau * mSampleRate)));
+    }
+
     void UpdateToneStack()
     {
       if (mSampleRate <= 0.0)
@@ -254,6 +362,41 @@ namespace guitarfx
         return;
 
       ComputeHighPass(90.0, 0.707, mPreHPB0, mPreHPB1, mPreHPB2, mPreHPA1, mPreHPA2);
+    }
+
+    void UpdatePreEmphasis()
+    {
+      if (mSampleRate <= 0.0)
+        return;
+
+      const double brightBoost = (mBright > 0.5f) ? 3.0 : 0.0;
+      const double emphasisBoost = static_cast<double>(mPreEmphasis) * 6.0;
+      const double gainDb = brightBoost + emphasisBoost;
+
+      ComputeHighShelf(2500.0, 0.8, gainDb, mPreEmphB0, mPreEmphB1, mPreEmphB2, mPreEmphA1, mPreEmphA2);
+    }
+
+    void UpdateSpeakerFilters()
+    {
+      if (mSampleRate <= 0.0)
+        return;
+
+      const double depthGain = static_cast<double>(mDepth) * 6.0;
+      const double resonanceGain = static_cast<double>(mResonance) * 6.0;
+      const double dampingGain = static_cast<double>(mDamping) * -6.0;
+
+      ComputeLowShelf(120.0, 0.9, depthGain, mDepthB0, mDepthB1, mDepthB2, mDepthA1, mDepthA2);
+      ComputePeakingEQ(120.0, 1.0, resonanceGain, mResonanceB0, mResonanceB1, mResonanceB2,
+                       mResonanceA1, mResonanceA2);
+      ComputeHighShelf(3500.0, 0.9, dampingGain, mDampingB0, mDampingB1, mDampingB2, mDampingA1, mDampingA2);
+    }
+
+    void UpdatePostFilters()
+    {
+      if (mSampleRate <= 0.0)
+        return;
+
+      ComputeHighPass(25.0, 0.707, mPostHPB0, mPostHPB1, mPostHPB2, mPostHPA1, mPostHPA2);
     }
 
     void ComputeHighPass(double freq, double Q, double &b0, double &b1, double &b2, double &a1, double &a2)
@@ -340,8 +483,23 @@ namespace guitarfx
     int mStageCount = 2;
     double mStageGainDb = 0.0;
     float mStageGainLinear = 1.0f;
+    float mBright = 0.0f;
+    float mPreEmphasis = 0.0f;
+    float mPowerDrive = 0.0f;
+    float mSag = 0.0f;
+    float mBias = 0.0f;
+    float mDepth = 0.4f;
+    float mResonance = 0.4f;
+    float mDamping = 0.5f;
+    float mSagAttackCoef = 0.0f;
+    float mSagReleaseCoef = 0.0f;
 
     double mPreHPB0 = 1.0, mPreHPB1 = 0.0, mPreHPB2 = 0.0, mPreHPA1 = 0.0, mPreHPA2 = 0.0;
+    double mPreEmphB0 = 1.0, mPreEmphB1 = 0.0, mPreEmphB2 = 0.0, mPreEmphA1 = 0.0, mPreEmphA2 = 0.0;
+    double mDepthB0 = 1.0, mDepthB1 = 0.0, mDepthB2 = 0.0, mDepthA1 = 0.0, mDepthA2 = 0.0;
+    double mResonanceB0 = 1.0, mResonanceB1 = 0.0, mResonanceB2 = 0.0, mResonanceA1 = 0.0, mResonanceA2 = 0.0;
+    double mDampingB0 = 1.0, mDampingB1 = 0.0, mDampingB2 = 0.0, mDampingA1 = 0.0, mDampingA2 = 0.0;
+    double mPostHPB0 = 1.0, mPostHPB1 = 0.0, mPostHPB2 = 0.0, mPostHPA1 = 0.0, mPostHPA2 = 0.0;
 
     double mLowB0 = 1.0, mLowB1 = 0.0, mLowB2 = 0.0, mLowA1 = 0.0, mLowA2 = 0.0;
     double mMidB0 = 1.0, mMidB1 = 0.0, mMidB2 = 0.0, mMidA1 = 0.0, mMidA2 = 0.0;
@@ -355,6 +513,12 @@ namespace guitarfx
     std::array<double, 2> mTrebleS1 = {}, mTrebleS2 = {};
     std::array<double, 2> mPresenceS1 = {}, mPresenceS2 = {};
     std::array<double, 2> mPreHPS1 = {}, mPreHPS2 = {};
+    std::array<double, 2> mPreEmphS1 = {}, mPreEmphS2 = {};
+    std::array<double, 2> mDepthS1 = {}, mDepthS2 = {};
+    std::array<double, 2> mResonanceS1 = {}, mResonanceS2 = {};
+    std::array<double, 2> mDampingS1 = {}, mDampingS2 = {};
+    std::array<double, 2> mPostHPS1 = {}, mPostHPS2 = {};
+    std::array<float, 2> mSagEnv = {0.0f, 0.0f};
   };
 
   inline void RegisterBuiltinAmpEffect()
@@ -368,6 +532,8 @@ namespace guitarfx
     info.parameters = {
       {"voice", "Voice", 0.0, 0.0, 1.0, "toggle"},
       {"gain", "Gain", 0.45, 0.0, 1.0, "amount"},
+      {"bright", "Bright", 0.0, 0.0, 1.0, "toggle"},
+      {"preEmphasis", "Pre Emphasis", 0.0, 0.0, 1.0, "amount"},
       {"bass", "Bass", 0.5, 0.0, 1.0, "amount"},
       {"middle", "Middle", 0.5, 0.0, 1.0, "amount"},
       {"treble", "Treble", 0.5, 0.0, 1.0, "amount"},
@@ -375,7 +541,13 @@ namespace guitarfx
       {"presence", "Presence", 0.5, 0.0, 1.0, "amount"},
       {"output", "Output", 0.0, -24.0, 24.0, "dB"},
       {"stageCount", "Gain Stages", 2.0, 1.0, 4.0, "amount"},
-      {"stageGain", "Stage Gain", 0.0, -24.0, 24.0, "dB"}
+      {"stageGain", "Stage Gain", 0.0, -24.0, 24.0, "dB"},
+      {"powerDrive", "Power Drive", 0.0, 0.0, 1.0, "amount"},
+      {"sag", "Sag", 0.0, 0.0, 1.0, "amount"},
+      {"bias", "Bias", 0.0, -1.0, 1.0, "amount"},
+      {"depth", "Depth", 0.4, 0.0, 1.0, "amount"},
+      {"resonance", "Resonance", 0.4, 0.0, 1.0, "amount"},
+      {"damping", "Damping", 0.5, 0.0, 1.0, "amount"}
     };
 
     EffectRegistry::Instance().Register("amp_builtin", info, []()

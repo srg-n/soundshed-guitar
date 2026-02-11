@@ -55,6 +55,7 @@ const EFFECT_VISUAL_BACKGROUNDS: Record<string, string> = {
   utility: "linear-gradient(145deg, rgba(86, 86, 96, 0.95) 0%, rgba(26, 26, 30, 0.95) 100%)",
 };
 
+
 type BlendParamSpec = {
   id: string;
   label: string;
@@ -1529,31 +1530,41 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
     `;
   };
 
-  const hasGroups = paramDefs.some((paramDef) => typeof paramDef.group === "string" && paramDef.group.trim().length > 0);
-  const paramControls = hasGroups
-    ? (() => {
-        const groupOrder: string[] = [];
-        const groupMap = new Map<string, string[]>();
+  const buildParamControls = (defs: EffectTypeInfo["parameters"]): string => {
+    const hasGroups = defs.some((paramDef) => typeof paramDef.group === "string" && paramDef.group.trim().length > 0);
+    if (!hasGroups) {
+      return defs.map(renderParamControl).join("");
+    }
 
-        paramDefs.forEach((paramDef) => {
-          const group = paramDef.group?.trim() || "Other";
-          if (!groupMap.has(group)) {
-            groupMap.set(group, []);
-            groupOrder.push(group);
-          }
-          groupMap.get(group)?.push(renderParamControl(paramDef));
-        });
+    const groupOrder: string[] = [];
+    const groupMap = new Map<string, string[]>();
 
-        return groupOrder.map((group) => `
-          <div class="node-param-group-block">
-            <div class="node-param-group-title">${group}</div>
-            <div class="node-param-group-items">
-              ${(groupMap.get(group) || []).join("")}
-            </div>
-          </div>
-        `).join("");
-      })()
-    : paramDefs.map(renderParamControl).join("");
+    defs.forEach((paramDef) => {
+      const group = paramDef.group?.trim() || "Other";
+      if (!groupMap.has(group)) {
+        groupMap.set(group, []);
+        groupOrder.push(group);
+      }
+      groupMap.get(group)?.push(renderParamControl(paramDef));
+    });
+
+    return groupOrder.map((group) => `
+      <div class="node-param-group-block">
+        <div class="node-param-group-title">${group}</div>
+        <div class="node-param-group-items">
+          ${(groupMap.get(group) || []).join("")}
+        </div>
+      </div>
+    `).join("");
+  };
+
+  let advancedParamDefs = paramDefs.filter((paramDef) => Boolean(paramDef.advanced));
+  let mainParamDefs = paramDefs.filter((paramDef) => !paramDef.advanced);
+  if (mainParamDefs.length === 0) {
+    mainParamDefs = paramDefs;
+    advancedParamDefs = [];
+  }
+  const hasAdvancedTab = advancedParamDefs.length > 0;
 
   const isEqNode = typeInfo?.category === "eq" || node.type.startsWith("eq_");
   const eqVisualizer = isEqNode ? `
@@ -1826,9 +1837,28 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
       ${eqVisualizer}
       ${mixerInputControls}
       ${customLayoutHtml ? customLayoutHtml : `
-        <div class="params-controls">
-          ${paramControls}
-        </div>
+        ${hasAdvancedTab ? `
+          <div class="node-param-tabs" role="tablist" aria-label="Parameter Groups">
+            <button class="node-param-tab is-active" data-tab="main" type="button" role="tab" aria-selected="true">Main</button>
+            <button class="node-param-tab" data-tab="advanced" type="button" role="tab" aria-selected="false">Advanced</button>
+          </div>
+          <div class="node-param-tab-panels">
+            <div class="node-param-tab-panel is-active" data-tab="main" role="tabpanel">
+              <div class="params-controls">
+                ${buildParamControls(mainParamDefs)}
+              </div>
+            </div>
+            <div class="node-param-tab-panel" data-tab="advanced" role="tabpanel">
+              <div class="params-controls">
+                ${buildParamControls(advancedParamDefs)}
+              </div>
+            </div>
+          </div>
+        ` : `
+          <div class="params-controls">
+            ${buildParamControls(paramDefs)}
+          </div>
+        `}
       `}
       <div class="node-actions">
         ${bypassButton}
@@ -1850,6 +1880,32 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
   bindBypassButton(node, preset);
   bindCalibrationButton(node);
   bindCustomizeLayoutButton(node);
+  bindParamTabs();
+}
+
+function bindParamTabs(): void {
+  const tabButtons = nodeParamsPanelElement?.querySelectorAll(".node-param-tab");
+  const tabPanels = nodeParamsPanelElement?.querySelectorAll(".node-param-tab-panel");
+  if (!tabButtons || !tabPanels || tabButtons.length === 0 || tabPanels.length === 0) {
+    return;
+  }
+
+  tabButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const tab = (button as HTMLElement).dataset.tab;
+      if (!tab) return;
+
+      tabButtons.forEach((btn) => {
+        const active = (btn as HTMLElement).dataset.tab === tab;
+        btn.classList.toggle("is-active", active);
+        btn.setAttribute("aria-selected", active ? "true" : "false");
+      });
+      tabPanels.forEach((panel) => {
+        const active = (panel as HTMLElement).dataset.tab === tab;
+        panel.classList.toggle("is-active", active);
+      });
+    });
+  });
 }
 
 function formatParamLabel(key: string): string {

@@ -839,6 +839,9 @@ export function handleIncomingMessage(message: string): void {
           const requiresResource =
             typeof effect.requiresResource === "boolean" ? effect.requiresResource : existing?.requiresResource ?? false;
           const resourceType = typeof effect.resourceType === "string" ? effect.resourceType : existing?.resourceType;
+          const existingParamsByKey = new Map(
+            (existing?.parameters ?? []).map((param) => [param.key, param]),
+          );
           const parameters = Array.isArray(effect.parameters)
             ? effect.parameters
                 .filter((param) => param && typeof param === "object")
@@ -850,14 +853,25 @@ export function handleIncomingMessage(message: string): void {
                     min?: unknown;
                     max?: unknown;
                     unit?: unknown;
+                    step?: unknown;
+                    labels?: unknown;
+                    group?: unknown;
+                    advanced?: unknown;
                   };
+                  const key = typeof p.key === "string" ? p.key : "";
+                  const existingParam = key ? existingParamsByKey.get(key) : undefined;
+                  const labels = Array.isArray(p.labels) ? p.labels.filter((label) => typeof label === "string") : null;
                   return {
-                    key: typeof p.key === "string" ? p.key : "",
-                    name: typeof p.name === "string" ? p.name : "",
-                    default: typeof p.default === "number" ? p.default : 0,
-                    min: typeof p.min === "number" ? p.min : 0,
-                    max: typeof p.max === "number" ? p.max : 1,
-                    unit: typeof p.unit === "string" ? p.unit : "",
+                    key,
+                    name: typeof p.name === "string" ? p.name : existingParam?.name ?? "",
+                    default: typeof p.default === "number" ? p.default : existingParam?.default ?? 0,
+                    min: typeof p.min === "number" ? p.min : existingParam?.min ?? 0,
+                    max: typeof p.max === "number" ? p.max : existingParam?.max ?? 1,
+                    unit: typeof p.unit === "string" ? p.unit : existingParam?.unit ?? "",
+                    step: typeof p.step === "number" ? p.step : existingParam?.step,
+                    labels: labels ?? existingParam?.labels,
+                    group: typeof p.group === "string" ? p.group : existingParam?.group,
+                    advanced: typeof p.advanced === "boolean" ? p.advanced : existingParam?.advanced,
                   };
                 })
                 .filter((param) => param.key !== "")

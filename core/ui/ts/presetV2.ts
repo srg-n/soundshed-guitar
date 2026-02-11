@@ -17,6 +17,7 @@ export interface ParameterDef {
   step?: number;
   labels?: string[];
   group?: string;
+  advanced?: boolean;
 }
 
 export interface EffectTypeInfo {
@@ -148,16 +149,24 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     category: "amp",
     requiresResource: false,
     parameters: [
-      { key: "voice", name: "Voice", default: 0, min: 0, max: 1, unit: "toggle" },
-      { key: "gain", name: "Gain", default: 0.45, min: 0, max: 1, unit: "amount" },
-      { key: "stageCount", name: "Preamp Stages", default: 2, min: 1, max: 4, unit: "amount", step: 1 },
-      { key: "stageGain", name: "Stage Gain", default: 0, min: -24, max: 24, unit: "dB" },
-      { key: "bass", name: "Bass", default: 0.5, min: 0, max: 1, unit: "amount" },
-      { key: "middle", name: "Middle", default: 0.5, min: 0, max: 1, unit: "amount" },
-      { key: "treble", name: "Treble", default: 0.5, min: 0, max: 1, unit: "amount" },
-      { key: "contour", name: "Contour", default: 0.2, min: 0, max: 1, unit: "amount" },
-      { key: "presence", name: "Presence", default: 0.5, min: 0, max: 1, unit: "amount" },
-      { key: "output", name: "Output", default: 0, min: -24, max: 24, unit: "dB" }
+      { key: "voice", name: "Voice", default: 0, min: 0, max: 1, unit: "toggle", group: "Input" },
+      { key: "gain", name: "Gain", default: 0.45, min: 0, max: 1, unit: "amount", group: "Input" },
+      { key: "bright", name: "Bright", default: 0, min: 0, max: 1, unit: "toggle", group: "Input" },
+      { key: "preEmphasis", name: "Pre Emphasis", default: 0, min: 0, max: 1, unit: "amount", group: "Input", advanced: true },
+      { key: "stageCount", name: "Preamp Stages", default: 2, min: 1, max: 4, unit: "amount", step: 1, group: "Input" },
+      { key: "stageGain", name: "Stage Gain", default: 0, min: -24, max: 24, unit: "dB", group: "Input" },
+      { key: "bass", name: "Bass", default: 0.5, min: 0, max: 1, unit: "amount", group: "Tone" },
+      { key: "middle", name: "Middle", default: 0.5, min: 0, max: 1, unit: "amount", group: "Tone" },
+      { key: "treble", name: "Treble", default: 0.5, min: 0, max: 1, unit: "amount", group: "Tone" },
+      { key: "contour", name: "Contour", default: 0.2, min: 0, max: 1, unit: "amount", group: "Tone" },
+      { key: "presence", name: "Presence", default: 0.5, min: 0, max: 1, unit: "amount", group: "Tone" },
+      { key: "output", name: "Output", default: 0, min: -24, max: 24, unit: "dB", group: "Output" },
+      { key: "powerDrive", name: "Power Drive", default: 0, min: 0, max: 1, unit: "amount", group: "Power", advanced: true },
+      { key: "sag", name: "Sag", default: 0, min: 0, max: 1, unit: "amount", group: "Power", advanced: true },
+      { key: "bias", name: "Bias", default: 0, min: -1, max: 1, unit: "amount", group: "Power", advanced: true },
+      { key: "depth", name: "Depth", default: 0.4, min: 0, max: 1, unit: "amount", group: "Speaker", advanced: true },
+      { key: "resonance", name: "Resonance", default: 0.4, min: 0, max: 1, unit: "amount", group: "Speaker", advanced: true },
+      { key: "damping", name: "Damping", default: 0.5, min: 0, max: 1, unit: "amount", group: "Speaker", advanced: true },
     ]
   },
   {

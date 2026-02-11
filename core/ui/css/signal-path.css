@@ -1047,6 +1047,77 @@
   gap: 12px;
 }
 
+.node-param-tabs {
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  align-self: flex-start;
+}
+
+.node-param-tab {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.node-param-tab.is-active {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--text-primary);
+}
+
+.node-param-tab-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.node-param-tab-panel {
+  display: none;
+}
+
+.node-param-tab-panel.is-active {
+  display: block;
+}
+
+.theme-light .node-param-tabs {
+  background: rgba(80, 92, 112, 0.08);
+  border-color: rgba(80, 92, 112, 0.2);
+}
+
+.theme-light .node-param-tab {
+  color: var(--text-secondary);
+}
+
+.theme-light .node-param-tab.is-active {
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--text-primary);
+}
+
+.theme-classic .node-param-tabs {
+  background: rgba(54, 34, 24, 0.35);
+  border-color: rgba(255, 244, 214, 0.18);
+}
+
+.theme-classic .node-param-tab {
+  color: var(--text-dark-tertiary);
+}
+
+.theme-classic .node-param-tab.is-active {
+  background: rgba(255, 244, 214, 0.16);
+  color: var(--text-dark-primary);
+}
+
 .theme-light .effect-visualization .node-params-panel {
   border-color: var(--border-light);
   background: rgba(245, 247, 251, 0.92);
