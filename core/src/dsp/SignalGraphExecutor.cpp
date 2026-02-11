@@ -408,8 +408,8 @@ namespace guitarfx
     double realTimeSeconds = static_cast<double>(numSamples) / mSampleRate;
     double realTimeUs = realTimeSeconds * 1e6;
 
-    mLastPerformanceStats.realTimeUs = realTimeUs;
-    mLastPerformanceStats.nodeProcessingTimesUs.clear();
+    DSPPerformanceStats localStats;
+    localStats.realTimeUs = realTimeUs;
 
     // Clear all buffers and reset input flags
     for (auto &[id, state] : mNodeStates)
@@ -578,7 +578,7 @@ namespace guitarfx
           state->processor->Process(inPtrs, outPtrs, numSamples);
           auto nodeEnd = std::chrono::high_resolution_clock::now();
           const std::chrono::duration<double, std::micro> nodeDuration(nodeEnd - nodeStart);
-          mLastPerformanceStats.nodeProcessingTimesUs[nodeId] = nodeDuration.count();
+          localStats.nodeProcessingTimesUs[nodeId] = nodeDuration.count();
 
           // Copy back
           std::copy(mTempLeftBuffer.begin(), mTempLeftBuffer.begin() + numSamples, state->bufferLeft.begin());
@@ -623,8 +623,23 @@ namespace guitarfx
 
     auto totalEnd = std::chrono::high_resolution_clock::now();
     const std::chrono::duration<double, std::micro> totalDuration(totalEnd - totalStart);
-    mLastPerformanceStats.totalProcessingTimeUs = totalDuration.count();
-    mLastPerformanceStats.dspLoadPercent = (mLastPerformanceStats.totalProcessingTimeUs / realTimeUs) * 100.0;
+    localStats.totalProcessingTimeUs = totalDuration.count();
+    if (realTimeUs > 0.0)
+    {
+      localStats.dspLoadPercent = (localStats.totalProcessingTimeUs / realTimeUs) * 100.0;
+    }
+
+    std::unique_lock<std::mutex> lock(mPerformanceStatsMutex, std::try_to_lock);
+    if (lock.owns_lock())
+    {
+      mLastPerformanceStats = std::move(localStats);
+    }
+  }
+
+  SignalGraphExecutor::DSPPerformanceStats SignalGraphExecutor::GetPerformanceStats() const
+  {
+    std::lock_guard<std::mutex> lock(mPerformanceStatsMutex);
+    return mLastPerformanceStats;
   }
 
   std::vector<SignalGraphExecutor::NodeSignalLevel> SignalGraphExecutor::GetNodeSignalLevels() const

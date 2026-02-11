@@ -7,6 +7,7 @@
 #include <vector>
 #include <chrono>
 #include <atomic>
+#include <mutex>
 
 namespace guitarfx
 {
@@ -76,7 +77,7 @@ namespace guitarfx
     // Queries
     [[nodiscard]] bool IsValid() const { return mIsValid; }
     [[nodiscard]] std::vector<std::string> GetExecutionOrder() const { return mExecutionOrder; }
-    [[nodiscard]] DSPPerformanceStats GetPerformanceStats() const { return mLastPerformanceStats; }
+    [[nodiscard]] DSPPerformanceStats GetPerformanceStats() const;
 
   private:
     struct NodeState
@@ -112,6 +113,7 @@ namespace guitarfx
     bool mPrepared = false;
 
     DSPPerformanceStats mLastPerformanceStats;
+    mutable std::mutex mPerformanceStatsMutex;
 
     std::atomic<bool> mSignalDiagnosticsEnabled{false};
 
