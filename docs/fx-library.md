@@ -127,6 +127,7 @@ Algorithmic room reverberation.
 | `decay` | 0.0–1.0 | 0.5 | — |
 | `damping` | 0.0–1.0 | 0.5 | — |
 | `mix` | 0.0–1.0 | 0.3 | — |
+| `safetyClip` | 0.0–1.0 | 0.0 | — |
 
 ### Simple Cabinet (`cab_simple`)
 Filter-based cabinet simulation (no IR required).

@@ -6,6 +6,7 @@
 #include "dsp/IRWavLoader.h"
 #include "dsp/RealtimeConvolver.h"
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -31,6 +32,8 @@ namespace guitarfx
       mOutputBufferRR.resize(static_cast<std::size_t>(maxBlockSize));
       mOutputBufferLR.resize(static_cast<std::size_t>(maxBlockSize));
       mOutputBufferRL.resize(static_cast<std::size_t>(maxBlockSize));
+
+      ApplyPendingQuality();
 
       if (!mImpulseLL.empty())
       {
@@ -116,10 +119,8 @@ namespace guitarfx
         mEnabled = value > 0.5;
       else if (key == "quality")
       {
-        int q = static_cast<int>(std::clamp(value, 0.0, 3.0));
-        mQuality = static_cast<IRQuality>(q);
-        if (!mImpulseLL.empty())
-          InitializeConvolvers();
+        const int q = static_cast<int>(std::clamp(value, 0.0, 3.0));
+        mPendingQuality.store(q, std::memory_order_release);
       }
     }
 
@@ -134,7 +135,10 @@ namespace guitarfx
       if (key == "enabled")
         return mEnabled ? 1.0 : 0.0;
       if (key == "quality")
-        return static_cast<double>(mQuality);
+      {
+        const int pending = mPendingQuality.load(std::memory_order_acquire);
+        return pending >= 0 ? static_cast<double>(pending) : static_cast<double>(mQuality);
+      }
       return 0.0;
     }
 
@@ -144,6 +148,7 @@ namespace guitarfx
         return false;
 
       mIRPath = resourcePath;
+      ApplyPendingQuality();
       return InitializeConvolvers();
     }
 
@@ -320,6 +325,15 @@ namespace guitarfx
       return true;
     }
 
+    void ApplyPendingQuality()
+    {
+      const int pending = mPendingQuality.exchange(-1, std::memory_order_acq_rel);
+      if (pending >= 0)
+      {
+        mQuality = static_cast<IRQuality>(pending);
+      }
+    }
+
     RealtimeConvolver mConvolverLL;
     RealtimeConvolver mConvolverRR;
     RealtimeConvolver mConvolverLR;
@@ -345,6 +359,7 @@ namespace guitarfx
     double mMix = 1.0;
     double mOutputGain = 1.0;
     IRQuality mQuality = IRQuality::Standard;
+    std::atomic<int> mPendingQuality{-1};
   };
 
   inline void RegisterIRReverbEffect()

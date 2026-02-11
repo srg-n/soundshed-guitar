@@ -79,6 +79,9 @@ namespace guitarfx
 
     void Process(float **inputs, float **outputs, int numSamples) override
     {
+      if (!outputs || numSamples <= 0)
+        return;
+
       // Guard against processing before Prepare() is called (avoids empty buffer % 0)
       if (mCombBufferL[0].empty())
       {
@@ -88,13 +91,36 @@ namespace guitarfx
         return;
       }
 
+      if (!mEnabled || mMix <= 0.0)
+      {
+        // Bypass: copy input to output, falling back L→R if R is null
+        if (outputs[0])
+        {
+          if (inputs && inputs[0])
+            std::copy_n(inputs[0], numSamples, outputs[0]);
+          else
+            std::fill_n(outputs[0], numSamples, 0.0f);
+        }
+        if (outputs[1])
+        {
+          if (inputs && inputs[1])
+            std::copy_n(inputs[1], numSamples, outputs[1]);
+          else if (inputs && inputs[0])
+            std::copy_n(inputs[0], numSamples, outputs[1]);
+          else
+            std::fill_n(outputs[1], numSamples, 0.0f);
+        }
+        return;
+      }
+
       const float wet = static_cast<float>(mMix);
       const float dry = 1.0f - wet;
+      const float clipAmount = static_cast<float>(mSafetyClip);
 
       for (int i = 0; i < numSamples; ++i)
       {
-        float inL = inputs[0] ? inputs[0][i] : 0.0f;
-        float inR = inputs[1] ? inputs[1][i] : 0.0f;
+        float inL = inputs && inputs[0] ? inputs[0][i] : 0.0f;
+        float inR = inputs && inputs[1] ? inputs[1][i] : 0.0f;
 
         // Sum input
         float input = (inL + inR) * 0.5f;
@@ -142,10 +168,19 @@ namespace guitarfx
         }
 
         // Mix
+        float mixedL = inL * dry + outL * wet;
+        float mixedR = inR * dry + outR * wet;
+
+        if (clipAmount > 0.0f)
+        {
+          mixedL = ApplySoftClip(mixedL, clipAmount);
+          mixedR = ApplySoftClip(mixedR, clipAmount);
+        }
+
         if (outputs[0])
-          outputs[0][i] = inL * dry + outL * wet;
+          outputs[0][i] = mixedL;
         if (outputs[1])
-          outputs[1][i] = inR * dry + outR * wet;
+          outputs[1][i] = mixedR;
       }
     }
 
@@ -165,6 +200,10 @@ namespace guitarfx
       {
         mMix = std::clamp(value, 0.0, 1.0);
       }
+      else if (key == "safetyClip")
+      {
+        mSafetyClip = std::clamp(value, 0.0, 1.0);
+      }
     }
 
     void SetConfig(const std::string &, const std::string &) override {}
@@ -177,6 +216,8 @@ namespace guitarfx
         return mDamping;
       if (key == "mix")
         return mMix;
+      if (key == "safetyClip")
+        return mSafetyClip;
       return 0.0;
     }
 
@@ -188,6 +229,15 @@ namespace guitarfx
     {
       mFeedback = static_cast<float>(0.7 + mDecay * 0.28);
       mDamp = static_cast<float>(mDamping * 0.4);
+    }
+
+    static float ApplySoftClip(float sample, float amount)
+    {
+      const float drive = 1.0f + amount * 4.0f;
+      const float normalized = static_cast<float>(std::tanh(drive));
+      if (normalized <= 0.0f)
+        return sample;
+      return static_cast<float>(std::tanh(sample * drive)) / normalized;
     }
 
     // Comb filters
@@ -205,6 +255,7 @@ namespace guitarfx
     double mDecay = 0.5;
     double mDamping = 0.5;
     double mMix = 0.3;
+    double mSafetyClip = 0.0;
 
     // Computed
     float mFeedback = 0.84f;
@@ -222,7 +273,8 @@ namespace guitarfx
     info.parameters = {
         {"decay", "Decay", 0.5, 0.0, 1.0, ""},
         {"damping", "Damping", 0.5, 0.0, 1.0, ""},
-        {"mix", "Mix", 0.3, 0.0, 1.0, ""}};
+      {"mix", "Mix", 0.3, 0.0, 1.0, ""},
+      {"safetyClip", "Safety Clip", 0.0, 0.0, 1.0, ""}};
 
     EffectRegistry::Instance().Register("reverb_room", info, []()
                                         { return std::make_unique<ReverbEffect>(); });
