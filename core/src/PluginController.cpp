@@ -1413,6 +1413,10 @@ void PluginController::HandlePresetLoadRequest(const nlohmann::json& payload)
         {
             mPresetMixer.SetGlobalChainConfig(*preset.globalSignalChain);
         }
+        else
+        {
+            mPresetMixer.SetGlobalChainConfig(mPresetMixer.GetGlobalChainConfig());
+        }
 
         mActivePresetId = payload.value("presetId", preset.id);
         ApplyPreset(preset);

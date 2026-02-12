@@ -307,7 +307,7 @@ function initializeInputOutputKnobs(): void {
     const transposeKnobInstance = new GenericKnob({
       knobElement: transposeKnob,
       paramId: "transpose",
-      minValue: -36,
+      minValue: -12,
       maxValue: 12,
       defaultValue: 0,
       displayFormat: (value) => {
@@ -335,10 +335,13 @@ function initializeInputOutputKnobs(): void {
       },
       onValueCommit: (value) => {
         const rounded = Math.round(value);
+        const enabled = rounded !== 0;
+        sendGlobalChainParam("transpose.semitones", rounded);
+        sendGlobalChainParam("transpose.enabled", enabled);
         const transposeNode = getPreChainTransposeNode();
         if (transposeNode) {
           transposeNode.params.semitones = rounded;
-          transposeNode.bypassed = rounded === 0;
+          transposeNode.bypassed = !enabled;
         }
       },
     });

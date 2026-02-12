@@ -401,7 +401,7 @@ PluginProcessorAdapter::createParameterLayout()
 
     layout.add(std::make_unique<juce::AudioParameterInt>(
         juce::ParameterID{ kParamIds[kParamTranspose], 1 }, kParamLabels[kParamTranspose],
-        -36, 12, 0,
+        -12, 12, 0,
         juce::AudioParameterIntAttributes{}.withLabel("st")));
 
     layout.add(std::make_unique<juce::AudioParameterChoice>(
@@ -471,29 +471,16 @@ void PluginProcessorAdapter::applyParametersToController()
         return fallback;
     };
 
-    // Push each parameter to the controller (which routes to the mixer)
+    // Push only core amp/preset parameters each block.
+    // Global signal-chain controls (gate/transpose/EQ/doubler) are driven by
+    // explicit UI messages (`setGlobalChainParam`) and must not be overwritten
+    // here with APVTS defaults every audio block.
     mController.OnParamChange(kParamInputTrim,      getValue(kParamIds[kParamInputTrim], 0.0));
     mController.OnParamChange(kParamOutputTrim,     getValue(kParamIds[kParamOutputTrim], 0.0));
     mController.OnParamChange(kParamDrive,          getValue(kParamIds[kParamDrive], 0.5));
     mController.OnParamChange(kParamTone,           getValue(kParamIds[kParamTone], 0.5));
-    mController.OnParamChange(kParamGateEnabled,    getValue(kParamIds[kParamGateEnabled], 0.0));
-    mController.OnParamChange(kParamGateThreshold,  getValue(kParamIds[kParamGateThreshold], -60.0));
     mController.OnParamChange(kParamMix,            getValue(kParamIds[kParamMix], 1.0));
-    mController.OnParamChange(kParamDoublerEnabled, getValue(kParamIds[kParamDoublerEnabled], 0.0));
-    mController.OnParamChange(kParamDoublerDelay,   getValue(kParamIds[kParamDoublerDelay], 6.0));
-    mController.OnParamChange(kParamTranspose,      getValue(kParamIds[kParamTranspose], 0.0));
     mController.OnParamChange(kParamIRQuality,      getValue(kParamIds[kParamIRQuality], 1.0));
-    mController.OnParamChange(kParamEQEnabled,      getValue(kParamIds[kParamEQEnabled], 0.0));
-    mController.OnParamChange(kParamEQLowGain,      getValue(kParamIds[kParamEQLowGain], 0.0));
-    mController.OnParamChange(kParamEQLowFreq,      getValue(kParamIds[kParamEQLowFreq], 100.0));
-    mController.OnParamChange(kParamEQLowMidGain,   getValue(kParamIds[kParamEQLowMidGain], 0.0));
-    mController.OnParamChange(kParamEQLowMidFreq,   getValue(kParamIds[kParamEQLowMidFreq], 500.0));
-    mController.OnParamChange(kParamEQLowMidQ,      getValue(kParamIds[kParamEQLowMidQ], 1.0));
-    mController.OnParamChange(kParamEQHighMidGain,  getValue(kParamIds[kParamEQHighMidGain], 0.0));
-    mController.OnParamChange(kParamEQHighMidFreq,  getValue(kParamIds[kParamEQHighMidFreq], 2000.0));
-    mController.OnParamChange(kParamEQHighMidQ,     getValue(kParamIds[kParamEQHighMidQ], 1.0));
-    mController.OnParamChange(kParamEQHighGain,     getValue(kParamIds[kParamEQHighGain], 0.0));
-    mController.OnParamChange(kParamEQHighFreq,     getValue(kParamIds[kParamEQHighFreq], 8000.0));
 }
 
 std::filesystem::path PluginProcessorAdapter::locateAssetsRoot() const

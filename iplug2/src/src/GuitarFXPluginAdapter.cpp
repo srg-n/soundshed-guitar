@@ -616,7 +616,7 @@ void GuitarFXPluginAdapter::InitializeParameters()
     GetParam(kParamMix)->InitDouble("Mix", 1.0, 0.0, 1.0, 0.01);
     GetParam(kParamDoublerEnabled)->InitBool("Doubler", false);
     GetParam(kParamDoublerDelay)->InitDouble("Doubler Delay", 6.0, 0.5, 50.0, 0.1, "ms");
-    GetParam(kParamTranspose)->InitInt("Transpose", 0, -36, 12, "st");
+    GetParam(kParamTranspose)->InitInt("Transpose", 0, -12, 12, "st");
     GetParam(kParamIRQuality)->InitEnum("IR Quality", 1, 4, "", iplug::IParam::kFlagsNone,
         "", "Economy", "Standard", "High", "Full");
     GetParam(kParamEQEnabled)->InitBool("EQ", false);

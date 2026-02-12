@@ -1623,6 +1623,9 @@ export function openSavePresetModal(): void {
   const modal = document.getElementById("save-preset-modal");
   if (!modal) return;
 
+  // Save As must always create a new preset, never reuse edit state.
+  delete modal.dataset.editingPresetId;
+
   const folderSelect = document.getElementById("preset-folder-select") as HTMLSelectElement | null;
   const nameInput = document.getElementById("preset-name-input") as HTMLInputElement | null;
   const categoryInput = document.getElementById("preset-category-input") as HTMLInputElement | null;
@@ -1806,7 +1809,6 @@ export function saveCurrentPreset(): void {
     savePayload.globalSignalChain = uiState.globalSignalChain;
   }
   postMessage(savePayload);
-  uiState.presets.unshift(newPreset);
   uiState.filteredPresets = uiState.presets.slice();
   uiState.presetCache.set(newPreset.id, newPreset);
   if (selectedFolderId) {

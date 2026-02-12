@@ -8,6 +8,18 @@ namespace guitarfx
 {
   namespace
   {
+    bool GraphHasNodeType(const SignalGraph& graph, const std::string& type)
+    {
+      for (const auto& node : graph.nodes)
+      {
+        if (node.type == type)
+        {
+          return true;
+        }
+      }
+      return false;
+    }
+
     GraphNode* FindNodeByIdOrType(SignalGraph& graph, const std::string& id, const std::string& type)
     {
       if (auto* node = graph.FindNode(id))
@@ -293,11 +305,15 @@ namespace guitarfx
   void MultiPresetMixer::SetGlobalChainConfig(const GlobalSignalChainConfig& config)
   {
     mGlobalChainConfig = config;
-    if (mGlobalChainConfig.preChainGraph.nodes.empty() && mGlobalChainConfig.preChainGraph.edges.empty())
+    if ((mGlobalChainConfig.preChainGraph.nodes.empty() && mGlobalChainConfig.preChainGraph.edges.empty())
+        || !GraphHasNodeType(mGlobalChainConfig.preChainGraph, "dynamics_gate")
+        || !GraphHasNodeType(mGlobalChainConfig.preChainGraph, "transpose"))
     {
       mGlobalChainConfig.preChainGraph = GlobalSignalChainConfig::BuildDefaultPreChainGraph();
     }
-    if (mGlobalChainConfig.postChainGraph.nodes.empty() && mGlobalChainConfig.postChainGraph.edges.empty())
+    if ((mGlobalChainConfig.postChainGraph.nodes.empty() && mGlobalChainConfig.postChainGraph.edges.empty())
+        || !GraphHasNodeType(mGlobalChainConfig.postChainGraph, "eq_parametric")
+        || !GraphHasNodeType(mGlobalChainConfig.postChainGraph, "delay_doubler"))
     {
       mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
     }
@@ -393,14 +409,17 @@ namespace guitarfx
 
   void MultiPresetMixer::SetGlobalTranspose(int semitones)
   {
-    const double value = static_cast<double>(std::clamp(semitones, -36, 12));
+    const double value = static_cast<double>(std::clamp(semitones, -12, 12));
+    const bool enabled = (value != 0.0);
     if (mGlobalChainConfig.preChainGraph.nodes.empty() && mGlobalChainConfig.preChainGraph.edges.empty())
     {
       mGlobalChainConfig.preChainGraph = GlobalSignalChainConfig::BuildDefaultPreChainGraph();
     }
     if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_transpose", "transpose"))
     {
+      node->enabled = enabled;
       node->params["semitones"] = value;
+      mPreChainExecutor.SetNodeEnabled(node->id, enabled);
       mPreChainExecutor.SetNodeParam(node->id, "semitones", value);
     }
   }

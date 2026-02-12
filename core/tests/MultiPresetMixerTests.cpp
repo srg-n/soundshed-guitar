@@ -65,6 +65,14 @@ static Preset MakeLinearPreset(const std::string& id, const std::vector<std::str
   return preset;
 }
 
+static bool GraphHasNodeType(const SignalGraph& graph, const std::string& nodeType)
+{
+  return std::any_of(graph.nodes.begin(), graph.nodes.end(), [&](const GraphNode& node)
+  {
+    return node.type == nodeType;
+  });
+}
+
 int main()
 {
   bool allPassed = true;
@@ -171,6 +179,43 @@ int main()
     else
     {
       std::cout << "MultiPresetMixer signal-path replacement test passed" << std::endl;
+    }
+  }
+
+  // Loading a preset without embedded global chain settings must keep global transpose usable
+  {
+    MultiPresetMixer mixer;
+    ResourceLibrary lib;
+    mixer.SetResourceLibrary(&lib);
+    mixer.Prepare(kTestSampleRate, kTestBlockSize);
+
+    auto config = GlobalSignalChainConfig::CreateDefault();
+    config.preChainGraph = SignalGraph{};
+    config.preChainGraph.nodes.push_back(GraphNode{"__input__", kNodeTypeInput, "utility", "Input", true});
+    config.preChainGraph.nodes.push_back(GraphNode{"__output__", kNodeTypeOutput, "utility", "Output", true});
+    config.preChainGraph.edges.push_back(GraphEdge{"__input__", "__output__", 0, 0, 1.0});
+    mixer.SetGlobalChainConfig(config);
+
+    // Simulate preset load path: preset itself has no globalSignalChain override
+    auto preset = MakePassthroughPreset("pNoGlobals");
+    if (!mixer.AddActivePreset(preset, "pNoGlobals", "NoGlobals"))
+    {
+      std::cerr << "Failed to add no-globals preset" << std::endl;
+      allPassed = false;
+    }
+
+    mixer.SetTranspose(3);
+
+    const auto normalized = mixer.GetGlobalChainConfig();
+    if (!GraphHasNodeType(normalized.preChainGraph, "dynamics_gate")
+        || !GraphHasNodeType(normalized.preChainGraph, "transpose"))
+    {
+      std::cerr << "Global pre-chain lost required gate/transpose nodes" << std::endl;
+      allPassed = false;
+    }
+    else
+    {
+      std::cout << "MultiPresetMixer optional-global-chain regression test passed" << std::endl;
     }
   }
 

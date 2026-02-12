@@ -310,13 +310,6 @@ export class LayoutDesignerModal {
   private save(): void {
     if (!this.layout) return;
 
-    // Ensure a stable GUID-based layoutId so subsequent edits overwrite the same file.
-    if (!this.layout.layoutId) {
-      this.layout.layoutId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-        ? crypto.randomUUID()
-        : generateLayoutId();
-    }
-
     this.layout.modifiedAt = new Date().toISOString();
 
     // Ensure blendId is stored in the layout itself
@@ -329,7 +322,6 @@ export class LayoutDesignerModal {
       type: "saveEffectLayout",
       effectType: this.effectType,
       blendId: this.blendId || undefined,
-      layoutId: this.layout.layoutId,
       layout: this.layout,
     });
 
