@@ -181,7 +181,7 @@
 			"problemMatcher": "$msCompile"
 		},
 		{
-			"label": "Build SoundshedGuitar (JUCE) Release",
+			"label": "Build SoundshedGuitar (JUCE) Standalone Release",
 			"type": "shell",
 			"command": "cmake",
 			"args": [
@@ -197,49 +197,57 @@
 			"problemMatcher": "$msCompile"
 		},
 		{
-			"label": "Build SoundshedGuitar App Release (copilot)",
+			"label": "Build SoundshedGuitar (JUCE) VST3 Release",
 			"type": "shell",
 			"command": "cmake",
 			"args": [
 				"--build",
-				"${workspaceFolder}/iplug2/src/build",
+				"${workspaceFolder}/juce/build",
 				"--config",
 				"Release",
 				"--target",
-				"SoundshedGuitar_App"
+				"SoundshedGuitar_VST3",
+				"--parallel"
 			],
-			"isBackground": false,
-			"group": "build"
+			"group": "build",
+			"problemMatcher": "$msCompile"
 		},
 		{
-			"label": "Build SoundshedGuitar App Release (copilot)",
-			"type": "shell",
-			"command": "cmake",
-			"args": [
-				"--build",
-				"${workspaceFolder}/iplug2/src/build",
-				"--config",
-				"Release",
-				"--target",
-				"SoundshedGuitar_App"
+			"label": "Build SoundshedGuitar (JUCE) Standalone+VST3 Release",
+			"dependsOn": [
+				"Build SoundshedGuitar (JUCE) Standalone Release",
+				"Build SoundshedGuitar (JUCE) VST3 Release"
 			],
-			"isBackground": false,
-			"group": "build"
+			"dependsOrder": "sequence",
+			"group": "build",
+			"problemMatcher": []
 		},
 		{
-			"label": "Build SoundshedGuitar App Release (copilot)",
+			"label": "Build SoundshedGuitar (iPlug2) Standalone+VST3 Release",
+			"dependsOn": [
+				"Build TypeScript"
+			],
+			"dependsOrder": "sequence",
 			"type": "shell",
 			"command": "cmake",
 			"args": [
 				"--build",
 				"${workspaceFolder}/iplug2/src/build",
 				"--config",
-				"Release",
-				"--target",
-				"SoundshedGuitar_App"
+				"Release"
 			],
-			"isBackground": false,
-			"group": "build"
+			"group": "build",
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "Build All Release (JUCE + iPlug2)",
+			"dependsOn": [
+				"Build SoundshedGuitar (JUCE) Standalone+VST3 Release",
+				"Build SoundshedGuitar (iPlug2) Standalone+VST3 Release"
+			],
+			"dependsOrder": "sequence",
+			"group": "build",
+			"problemMatcher": []
 		}
 	]
 }
