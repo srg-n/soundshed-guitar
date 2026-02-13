@@ -151,7 +151,7 @@ namespace guitarfx
       if (!resource.filePath.empty())
       {
         const auto relativePath = resource.filePath.lexically_relative(indexDir);
-        if (!relativePath.empty() && relativePath.native() != ".")
+        if (!relativePath.empty() && !(relativePath == std::filesystem::path(".")))
           item["filePath"] = relativePath.generic_string();
         else
           item["filePath"] = resource.filePath.generic_string();

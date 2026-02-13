@@ -75,7 +75,7 @@ target_link_libraries(SoundshedGuitar_App
 )
 
 if(MSVC)
-  target_compile_options(SoundshedGuitar_App PRIVATE /wd4068 /bigobj)
+  target_compile_options(SoundshedGuitar_App PRIVATE /wd4068 /bigobj /FS)
 endif()
 
 set_target_properties(SoundshedGuitar_App PROPERTIES
