@@ -30,7 +30,7 @@ void DemoPreviewService::MixIntoInput(float** inputs, int numSamples)
     if (!mDemoAudioActive.load(std::memory_order_acquire))
         return;
 
-    auto buf = mDemoAudioBuffer.load(std::memory_order_acquire);
+    auto buf = std::atomic_load_explicit(&mDemoAudioBuffer, std::memory_order_acquire);
     if (!buf || buf->channels < 1)
         return;
 
@@ -130,7 +130,7 @@ void DemoPreviewService::StartPreview(const nlohmann::json& payload)
         std::lock_guard<std::mutex> lock(mDSPMutex);
         mPresetMixer.Reset();
         mDemoAudioCursor.store(0, std::memory_order_release);
-        mDemoAudioBuffer.store(buffer, std::memory_order_release);
+        std::atomic_store_explicit(&mDemoAudioBuffer, std::move(buffer), std::memory_order_release);
         mDemoAudioActive.store(true, std::memory_order_release);
     }
 
@@ -144,7 +144,7 @@ void DemoPreviewService::StartPreview(const nlohmann::json& payload)
 void DemoPreviewService::StopPreview()
 {
     mDemoAudioActive.store(false, std::memory_order_release);
-    auto stopped = mDemoAudioBuffer.exchange(nullptr, std::memory_order_acq_rel);
+    auto stopped = std::atomic_exchange_explicit(&mDemoAudioBuffer, std::shared_ptr<DemoAudioBuffer>{}, std::memory_order_acq_rel);
     nlohmann::json msg;
     msg["type"] = "previewStopped";
     if (stopped)
@@ -157,7 +157,7 @@ void DemoPreviewService::StopPreview()
 
 void DemoPreviewService::OnIdle()
 {
-    auto demoBuffer = mDemoAudioBuffer.load(std::memory_order_acquire);
+    auto demoBuffer = std::atomic_load_explicit(&mDemoAudioBuffer, std::memory_order_acquire);
     if (!demoBuffer || mDemoAudioActive.load(std::memory_order_acquire))
         return;
 
@@ -166,7 +166,7 @@ void DemoPreviewService::OnIdle()
     msg["id"] = demoBuffer->id;
     msg["title"] = demoBuffer->title;
     mSendMessage(msg.dump());
-    mDemoAudioBuffer.store(nullptr, std::memory_order_release);
+    std::atomic_store_explicit(&mDemoAudioBuffer, std::shared_ptr<DemoAudioBuffer>{}, std::memory_order_release);
 }
 
 } // namespace guitarfx

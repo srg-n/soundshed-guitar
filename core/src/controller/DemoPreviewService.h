@@ -48,7 +48,7 @@ private:
     std::function<void(const std::string&, const std::string&)> mReportError;
     std::function<void(const std::string&)> mSendMessage;
 
-    std::atomic<std::shared_ptr<DemoAudioBuffer>> mDemoAudioBuffer{nullptr};
+    std::shared_ptr<DemoAudioBuffer> mDemoAudioBuffer;
     std::atomic<size_t> mDemoAudioCursor{0};
     std::atomic<bool> mDemoAudioActive{false};
 };

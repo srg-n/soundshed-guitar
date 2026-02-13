@@ -207,7 +207,11 @@ function(soundshed_copy_ui_resources FORMAT_TARGET)
         return()
     endif()
 
-    set(_dst_base "$<TARGET_FILE_DIR:${FORMAT_TARGET}>/resources/ui")
+    if(APPLE)
+        set(_dst_base "$<TARGET_BUNDLE_DIR:${FORMAT_TARGET}>/Contents/Resources/ui")
+    else()
+        set(_dst_base "$<TARGET_FILE_DIR:${FORMAT_TARGET}>/resources/ui")
+    endif()
 
     add_custom_command(TARGET ${FORMAT_TARGET} POST_BUILD
         COMMENT "Copying core UI resources for ${FORMAT_TARGET}"

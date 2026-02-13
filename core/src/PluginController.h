@@ -449,7 +449,7 @@ private:
     };
 
     std::vector<MetronomeClickTypeConfig> mMetronomeClickConfig;
-    std::atomic<std::shared_ptr<MetronomeClickSamples>> mMetronomeClickSamples{nullptr};
+    std::shared_ptr<MetronomeClickSamples> mMetronomeClickSamples;
 
     std::unique_ptr<DemoPreviewService> mDemoPreview;
 

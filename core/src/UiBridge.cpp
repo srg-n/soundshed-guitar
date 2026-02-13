@@ -1,10 +1,38 @@
 #include "UiBridge.h"
 
+#include <array>
 #include <cstdlib>
 #include <system_error>
 
 namespace
 {
+    std::filesystem::path NormalizeResourceRoot(const std::filesystem::path& candidate)
+    {
+        if (candidate.empty())
+            return {};
+
+        const auto parent = candidate.parent_path();
+        const auto grandParent = parent.parent_path();
+
+        const std::array<std::filesystem::path, 7> probes = {
+            candidate,
+            candidate / "resources",
+            candidate / "Resources",
+            parent / "resources",
+            parent / "Resources",
+            grandParent / "resources",
+            grandParent / "Resources"
+        };
+
+        for (const auto& probe : probes)
+        {
+            if (guitarfx::ui::IsValidResourceRoot(probe))
+                return probe;
+        }
+
+        return {};
+    }
+
     std::filesystem::path ResolveEnvOverride()
     {
         const char* envValue = std::getenv("SOUNDSHED_RESOURCE_ROOT");
@@ -12,18 +40,11 @@ namespace
             return {};
 
         const std::filesystem::path envPath(envValue);
-        if (guitarfx::ui::IsValidResourceRoot(envPath))
-            return envPath;
+        if (const auto normalized = NormalizeResourceRoot(envPath); !normalized.empty())
+            return normalized;
 
         const auto assetsPath = envPath / "assets";
-        if (guitarfx::ui::IsValidResourceRoot(assetsPath))
-            return assetsPath;
-
-        const auto resourcesPath = envPath / "resources";
-        if (guitarfx::ui::IsValidResourceRoot(resourcesPath))
-            return resourcesPath;
-
-        return {};
+        return NormalizeResourceRoot(assetsPath);
     }
 }
 
@@ -50,15 +71,14 @@ std::filesystem::path ResolveResourceRoot(
     const auto cwd = std::filesystem::current_path(ec);
     if (!ec)
     {
-        const auto resourcesPath = cwd / "resources";
-        if (IsValidResourceRoot(resourcesPath))
-            return resourcesPath;
+        if (const auto normalized = NormalizeResourceRoot(cwd); !normalized.empty())
+            return normalized;
     }
 
     for (const auto& candidate : extraCandidates)
     {
-        if (IsValidResourceRoot(candidate))
-            return candidate;
+        if (const auto normalized = NormalizeResourceRoot(candidate); !normalized.empty())
+            return normalized;
     }
 
     return {};

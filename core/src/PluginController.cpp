@@ -531,7 +531,7 @@ void PluginController::RenderMetronome(float** outputs, int numSamples)
     const double panLeft = std::cos(panAngle);
     const double panRight = std::sin(panAngle);
 
-    const auto clickSampleSet = mMetronomeClickSamples.load(std::memory_order_acquire);
+    const auto clickSampleSet = std::atomic_load_explicit(&mMetronomeClickSamples, std::memory_order_acquire);
     const bool hasSampleClick = clickSampleSet
         && ((!clickSampleSet->low.empty() && !clickSampleSet->low.front().empty())
             || (!clickSampleSet->high.empty() && !clickSampleSet->high.front().empty()));
@@ -739,12 +739,12 @@ void PluginController::UpdateMetronomeClickConfigFromSettings()
             config.highPath = resolveClickPath(highPath);
             mMetronomeClickConfig.push_back(config);
 
-            nlohmann::json entry;
-            entry["id"] = id;
-            entry["label"] = label;
-            entry["lowPath"] = lowPath;
-            entry["highPath"] = highPath;
-            defaultConfig.push_back(std::move(entry));
+            nlohmann::json defaultEntry;
+            defaultEntry["id"] = id;
+            defaultEntry["label"] = label;
+            defaultEntry["lowPath"] = lowPath;
+            defaultEntry["highPath"] = highPath;
+            defaultConfig.push_back(std::move(defaultEntry));
         }
 
         mAppSettings[kMetronomeClickConfigSettingKey] = std::move(defaultConfig);
@@ -846,7 +846,7 @@ void PluginController::RefreshMetronomeClickSamples(double sampleRate)
     const auto* config = FindMetronomeClickType(mMetronomeClickType);
     if (!config)
     {
-        mMetronomeClickSamples.store(nullptr, std::memory_order_release);
+        std::atomic_store_explicit(&mMetronomeClickSamples, std::shared_ptr<MetronomeClickSamples>{}, std::memory_order_release);
         return;
     }
 
@@ -857,7 +857,7 @@ void PluginController::RefreshMetronomeClickSamples(double sampleRate)
     }
 
     auto samples = BuildMetronomeClickSamples(*config, sampleRate);
-    mMetronomeClickSamples.store(samples, std::memory_order_release);
+    std::atomic_store_explicit(&mMetronomeClickSamples, std::move(samples), std::memory_order_release);
 }
 
 void PluginController::ApplyDiagnosticsSettingsFromAppSettings()

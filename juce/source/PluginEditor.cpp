@@ -177,7 +177,7 @@ std::optional<juce::WebBrowserComponent::Resource> PluginEditor::getResource (co
             "<!doctype html><html><head><meta charset=\"utf-8\"/>"
             "<title>Soundshed Guitar</title></head>"
             "<body style=\"font-family:sans-serif;background:#101014;color:#eee;padding:24px;\">"
-            "<h1>UI not found</h1><p>Expected assets/ui/index.html on disk.</p>"
+            "<h1>UI not found</h1><p>Expected resources/ui/index.html on disk.</p>"
             "</body></html>";
 
         std::vector<std::byte> bytes (fallbackHtml.getNumBytesAsUTF8());
