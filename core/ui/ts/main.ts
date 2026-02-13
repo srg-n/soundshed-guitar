@@ -29,6 +29,7 @@ function openEqModal(): void {
   if (!eqModal) return;
   eqModal.style.display = "flex";
   refreshEqModalVisualization();
+  requestAnimationFrame(() => refreshEqModalVisualization());
 }
 
 function closeEqModal(): void {

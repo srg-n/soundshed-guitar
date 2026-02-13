@@ -130,12 +130,29 @@ export const EQ_FREQ_DEFAULTS: ReadonlyArray<number> = [100, 400, 2000, 8000];
 export function buildEqBandConfigsFromParams(
   params: Record<string, number | undefined>,
 ): EqBandConfig[] {
+  const normalize = (value: number | undefined, fallback: number, min: number, max: number): number => {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return fallback;
+    }
+    return Math.max(min, Math.min(max, value));
+  };
+
   return EQ_BAND_KEYS.map((keys, i) => {
     const range = EQ_BAND_RANGES[i];
+    const freqDefault = EQ_FREQ_DEFAULTS[i];
+    const gainValue = normalize(params[keys.gain], 0, -18, 18);
+    const freqValue = normalize(params[keys.freq], freqDefault, range.freqMin, range.freqMax);
+    const qValue = keys.q
+      ? normalize(params[keys.q], 1.0, range.qMin, range.qMax)
+      : 1.0;
+
     return {
-      freq: (typeof params[keys.freq] === "number" ? params[keys.freq] : EQ_FREQ_DEFAULTS[i]) as number,
-      gainDb: (typeof params[keys.gain] === "number" ? params[keys.gain] : 0) as number,
-      q: keys.q && typeof params[keys.q] === "number" ? (params[keys.q] as number) : 1.0,
+      freq: freqValue,
+      gainDb: gainValue,
+      q: qValue,
+      defaultFreq: freqDefault,
+      defaultGainDb: 0,
+      defaultQ: 1.0,
       freqMin: range.freqMin,
       freqMax: range.freqMax,
       gainMin: -18,
@@ -181,6 +198,9 @@ export interface EqBandConfig {
   freq: number;
   gainDb: number;
   q: number;
+  defaultFreq: number;
+  defaultGainDb: number;
+  defaultQ: number;
   freqMin: number;
   freqMax: number;
   gainMin: number;
@@ -233,6 +253,11 @@ export class EqCurveInteraction {
   private boundPointerMove: (e: PointerEvent) => void;
   private boundPointerUp: (e: PointerEvent) => void;
   private boundPointerLeave: (e: PointerEvent) => void;
+  private boundMouseDown: (e: MouseEvent) => void;
+  private boundMouseMove: (e: MouseEvent) => void;
+  private boundMouseUp: (e: MouseEvent) => void;
+  private boundMouseLeave: (e: MouseEvent) => void;
+  private readonly usePointerEvents: boolean;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -250,10 +275,24 @@ export class EqCurveInteraction {
     this.boundPointerUp = this.handlePointerUp.bind(this);
     this.boundPointerLeave = this.handlePointerLeave.bind(this);
 
-    this.canvas.addEventListener("pointerdown", this.boundPointerDown);
-    this.canvas.addEventListener("pointermove", this.boundPointerMove);
-    this.canvas.addEventListener("pointerup", this.boundPointerUp);
-    this.canvas.addEventListener("pointerleave", this.boundPointerLeave);
+    this.boundMouseDown = (e: MouseEvent) => this.handlePointerDown(e as unknown as PointerEvent);
+    this.boundMouseMove = (e: MouseEvent) => this.handlePointerMove(e as unknown as PointerEvent);
+    this.boundMouseUp = (e: MouseEvent) => this.handlePointerUp(e as unknown as PointerEvent);
+    this.boundMouseLeave = (e: MouseEvent) => this.handlePointerLeave(e as unknown as PointerEvent);
+
+    this.usePointerEvents = typeof window !== "undefined" && "PointerEvent" in window;
+
+    if (this.usePointerEvents) {
+      this.canvas.addEventListener("pointerdown", this.boundPointerDown);
+      this.canvas.addEventListener("pointermove", this.boundPointerMove);
+      this.canvas.addEventListener("pointerup", this.boundPointerUp);
+      this.canvas.addEventListener("pointerleave", this.boundPointerLeave);
+    } else {
+      this.canvas.addEventListener("mousedown", this.boundMouseDown);
+      window.addEventListener("mousemove", this.boundMouseMove);
+      window.addEventListener("mouseup", this.boundMouseUp);
+      this.canvas.addEventListener("mouseleave", this.boundMouseLeave);
+    }
     this.canvas.style.touchAction = "none";
 
     this.draw();
@@ -541,10 +580,25 @@ export class EqCurveInteraction {
   private handlePointerDown(e: PointerEvent): void {
     const coords = this.getCanvasCoords(e);
     const hit = this.hitTestHandle(coords.x, coords.y);
+    if (hit && hit.type === "main" && e.detail >= 2) {
+      const band = this.bands[hit.bandIndex];
+      band.freq = Math.max(band.freqMin, Math.min(band.freqMax, band.defaultFreq));
+      band.gainDb = Math.max(band.gainMin, Math.min(band.gainMax, band.defaultGainDb));
+      band.q = Math.max(band.qMin, Math.min(band.qMax, band.defaultQ));
+      this.onChange(hit.bandIndex, band.freq, band.gainDb, band.q);
+      this.onCommit(hit.bandIndex, band.freq, band.gainDb, band.q);
+      this.draw();
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
     if (hit) {
       this.isDragging = true;
       this.dragHandle = hit;
-      this.canvas.setPointerCapture(e.pointerId);
+      if (this.usePointerEvents && typeof e.pointerId === "number" && this.canvas.setPointerCapture) {
+        this.canvas.setPointerCapture(e.pointerId);
+      }
       this.canvas.style.cursor = "grabbing";
       e.preventDefault();
       e.stopPropagation();
@@ -610,7 +664,9 @@ export class EqCurveInteraction {
       this.onCommit(this.dragHandle.bandIndex, band.freq, band.gainDb, band.q);
       this.isDragging = false;
       this.dragHandle = null;
-      this.canvas.releasePointerCapture(e.pointerId);
+      if (this.usePointerEvents && typeof e.pointerId === "number" && this.canvas.releasePointerCapture) {
+        this.canvas.releasePointerCapture(e.pointerId);
+      }
 
       const coords = this.getCanvasCoords(e);
       const hit = this.hitTestHandle(coords.x, coords.y);
@@ -630,9 +686,16 @@ export class EqCurveInteraction {
 
   destroy(): void {
     this.destroyed = true;
-    this.canvas.removeEventListener("pointerdown", this.boundPointerDown);
-    this.canvas.removeEventListener("pointermove", this.boundPointerMove);
-    this.canvas.removeEventListener("pointerup", this.boundPointerUp);
-    this.canvas.removeEventListener("pointerleave", this.boundPointerLeave);
+    if (this.usePointerEvents) {
+      this.canvas.removeEventListener("pointerdown", this.boundPointerDown);
+      this.canvas.removeEventListener("pointermove", this.boundPointerMove);
+      this.canvas.removeEventListener("pointerup", this.boundPointerUp);
+      this.canvas.removeEventListener("pointerleave", this.boundPointerLeave);
+    } else {
+      this.canvas.removeEventListener("mousedown", this.boundMouseDown);
+      window.removeEventListener("mousemove", this.boundMouseMove);
+      window.removeEventListener("mouseup", this.boundMouseUp);
+      this.canvas.removeEventListener("mouseleave", this.boundMouseLeave);
+    }
   }
 }

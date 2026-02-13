@@ -911,9 +911,32 @@ const GLOBAL_EQ_KNOB_IDS: ReadonlyArray<{ gain: string; freq: string; q: string 
   { gain: "eq_high_gain", freq: "eq_high_freq", q: null },
 ];
 
+const GLOBAL_EQ_KNOB_TO_PARAM: ReadonlyArray<{ knobId: string; paramKey: string }> = [
+  { knobId: "eq_low_gain", paramKey: "lowGain" },
+  { knobId: "eq_low_freq", paramKey: "lowFreq" },
+  { knobId: "eq_lowmid_gain", paramKey: "lowMidGain" },
+  { knobId: "eq_lowmid_freq", paramKey: "lowMidFreq" },
+  { knobId: "eq_lowmid_q", paramKey: "lowMidQ" },
+  { knobId: "eq_highmid_gain", paramKey: "highMidGain" },
+  { knobId: "eq_highmid_freq", paramKey: "highMidFreq" },
+  { knobId: "eq_highmid_q", paramKey: "highMidQ" },
+  { knobId: "eq_high_gain", paramKey: "highGain" },
+  { knobId: "eq_high_freq", paramKey: "highFreq" },
+];
+
 function getGlobalEqParams(): Record<string, number | undefined> {
-  const eqNode = getPostChainEqNode();
-  return eqNode?.params ?? {};
+  const params: Record<string, number | undefined> = {
+    ...(getPostChainEqNode()?.params ?? {}),
+  };
+
+  for (const { knobId, paramKey } of GLOBAL_EQ_KNOB_TO_PARAM) {
+    const knob = knobInstances.get(knobId);
+    if (knob) {
+      params[paramKey] = knob.getValue();
+    }
+  }
+
+  return params;
 }
 
 function buildGlobalEqBandConfigs(): EqBandConfig[] {
@@ -1034,7 +1057,16 @@ function initializeEQControls(): void {
     });
   }
 
-  const onEqValueChange = () => updateEqModalVisualization();
+  const onEqValueChange = (paramId: string, value: number): void => {
+    const mapping = GLOBAL_EQ_PARAM_MAP[paramId];
+    if (mapping) {
+      const eqNode = getPostChainEqNode();
+      if (eqNode) {
+        mapping.apply(eqNode, value);
+      }
+    }
+    updateEqModalVisualization();
+  };
   const onEqValueCommit = (paramId: string, value: number): void => {
     const mapping = GLOBAL_EQ_PARAM_MAP[paramId];
     if (!mapping) {
@@ -1060,7 +1092,7 @@ function initializeEQControls(): void {
       displayFormat: (value) => `${value >= 0 ? "+" : ""}${value.toFixed(1)} dB`,
       valueDisplayId: "eq-low-gain-value",
       sensitivity: 0.1,
-      onValueChange: onEqValueChange,
+      onValueChange: (value) => onEqValueChange("eq_low_gain", value),
       onValueCommit: (value) => onEqValueCommit("eq_low_gain", value),
       sendParameter: false,
     });
@@ -1078,7 +1110,7 @@ function initializeEQControls(): void {
       displayFormat: (value) => `${Math.round(value)} Hz`,
       valueDisplayId: "eq-low-freq-value",
       sensitivity: 2.0,
-      onValueChange: onEqValueChange,
+      onValueChange: (value) => onEqValueChange("eq_low_freq", value),
       onValueCommit: (value) => onEqValueCommit("eq_low_freq", value),
       sendParameter: false,
     });
@@ -1097,7 +1129,7 @@ function initializeEQControls(): void {
       displayFormat: (value) => `${value >= 0 ? "+" : ""}${value.toFixed(1)} dB`,
       valueDisplayId: "eq-lowmid-gain-value",
       sensitivity: 0.1,
-      onValueChange: onEqValueChange,
+      onValueChange: (value) => onEqValueChange("eq_lowmid_gain", value),
       onValueCommit: (value) => onEqValueCommit("eq_lowmid_gain", value),
       sendParameter: false,
     });
@@ -1115,7 +1147,7 @@ function initializeEQControls(): void {
       displayFormat: (value) => `${Math.round(value)} Hz`,
       valueDisplayId: "eq-lowmid-freq-value",
       sensitivity: 5.0,
-      onValueChange: onEqValueChange,
+      onValueChange: (value) => onEqValueChange("eq_lowmid_freq", value),
       onValueCommit: (value) => onEqValueCommit("eq_lowmid_freq", value),
       sendParameter: false,
     });
@@ -1133,7 +1165,7 @@ function initializeEQControls(): void {
       displayFormat: (value) => value.toFixed(1),
       valueDisplayId: "eq-lowmid-q-value",
       sensitivity: 0.05,
-      onValueChange: onEqValueChange,
+      onValueChange: (value) => onEqValueChange("eq_lowmid_q", value),
       onValueCommit: (value) => onEqValueCommit("eq_lowmid_q", value),
       sendParameter: false,
     });
@@ -1152,7 +1184,7 @@ function initializeEQControls(): void {
       displayFormat: (value) => `${value >= 0 ? "+" : ""}${value.toFixed(1)} dB`,
       valueDisplayId: "eq-highmid-gain-value",
       sensitivity: 0.1,
-      onValueChange: onEqValueChange,
+      onValueChange: (value) => onEqValueChange("eq_highmid_gain", value),
       onValueCommit: (value) => onEqValueCommit("eq_highmid_gain", value),
       sendParameter: false,
     });
@@ -1170,7 +1202,7 @@ function initializeEQControls(): void {
       displayFormat: (value) => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : `${Math.round(value)} Hz`,
       valueDisplayId: "eq-highmid-freq-value",
       sensitivity: 20.0,
-      onValueChange: onEqValueChange,
+      onValueChange: (value) => onEqValueChange("eq_highmid_freq", value),
       onValueCommit: (value) => onEqValueCommit("eq_highmid_freq", value),
       sendParameter: false,
     });
@@ -1188,7 +1220,7 @@ function initializeEQControls(): void {
       displayFormat: (value) => value.toFixed(1),
       valueDisplayId: "eq-highmid-q-value",
       sensitivity: 0.05,
-      onValueChange: onEqValueChange,
+      onValueChange: (value) => onEqValueChange("eq_highmid_q", value),
       onValueCommit: (value) => onEqValueCommit("eq_highmid_q", value),
       sendParameter: false,
     });
@@ -1207,7 +1239,7 @@ function initializeEQControls(): void {
       displayFormat: (value) => `${value >= 0 ? "+" : ""}${value.toFixed(1)} dB`,
       valueDisplayId: "eq-high-gain-value",
       sensitivity: 0.1,
-      onValueChange: onEqValueChange,
+      onValueChange: (value) => onEqValueChange("eq_high_gain", value),
       onValueCommit: (value) => onEqValueCommit("eq_high_gain", value),
       sendParameter: false,
     });
@@ -1225,7 +1257,7 @@ function initializeEQControls(): void {
       displayFormat: (value) => `${(value / 1000).toFixed(1)}k`,
       valueDisplayId: "eq-high-freq-value",
       sensitivity: 50.0,
-      onValueChange: onEqValueChange,
+      onValueChange: (value) => onEqValueChange("eq_high_freq", value),
       onValueCommit: (value) => onEqValueCommit("eq_high_freq", value),
       sendParameter: false,
     });
