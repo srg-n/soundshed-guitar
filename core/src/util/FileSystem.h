@@ -9,6 +9,9 @@ namespace guitarfx
 class FileSystem
 {
 public:
+  [[nodiscard]] std::filesystem::path ResolvePlatformRootDirectory() const;
+  [[nodiscard]] std::filesystem::path ResolveDataDirectory() const;
+  [[nodiscard]] std::filesystem::path ResolveDataV1Directory() const;
   [[nodiscard]] std::filesystem::path ResolvePresetDirectory() const;
   [[nodiscard]] std::filesystem::path ResolveCacheDirectory() const;
   [[nodiscard]] std::filesystem::path ResolveSettingsDirectory() const;

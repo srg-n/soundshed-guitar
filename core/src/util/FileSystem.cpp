@@ -5,6 +5,32 @@
 namespace guitarfx
 {
 
+std::filesystem::path FileSystem::ResolvePlatformRootDirectory() const
+{
+#ifdef _WIN32
+  if (const char* appData = std::getenv("APPDATA"); appData != nullptr && appData[0] != '\0')
+    return std::filesystem::path{appData} / "SoundshedGuitar";
+#elif defined(__APPLE__)
+  if (const char* home = std::getenv("HOME"); home != nullptr && home[0] != '\0')
+    return std::filesystem::path{home} / "Library" / "SoundshedGuitar";
+#else
+  if (const char* home = std::getenv("HOME"); home != nullptr && home[0] != '\0')
+    return std::filesystem::path{home} / ".config" / "SoundshedGuitar";
+#endif
+
+  return std::filesystem::path{"settings"};
+}
+
+std::filesystem::path FileSystem::ResolveDataDirectory() const
+{
+  return ResolvePlatformRootDirectory() / "data";
+}
+
+std::filesystem::path FileSystem::ResolveDataV1Directory() const
+{
+  return ResolveDataDirectory() / "v1";
+}
+
 std::filesystem::path FileSystem::ResolvePresetDirectory() const
 {
   return ResolveSettingsDirectory() / "presets";
@@ -12,31 +38,17 @@ std::filesystem::path FileSystem::ResolvePresetDirectory() const
 
 std::filesystem::path FileSystem::ResolveCacheDirectory() const
 {
-  return std::filesystem::path{"cache"};
+  return ResolveSettingsDirectory() / "cache";
 }
 
 std::filesystem::path FileSystem::ResolveSettingsDirectory() const
 {
-  // Use AppData on Windows, ~/.config on Linux/Mac
-#ifdef _WIN32
-  const char* appData = std::getenv("APPDATA");
-  if (appData)
-  {
-    return std::filesystem::path{appData} / "SoundshedGuitar";
-  }
-#else
-  const char* home = std::getenv("HOME");
-  if (home)
-  {
-    return std::filesystem::path{home} / ".config" / "SoundshedGuitar";
-  }
-#endif
-  return std::filesystem::path{"settings"};
+  return ResolveDataV1Directory();
 }
 
 std::filesystem::path FileSystem::ResolveSettingsFile() const
 {
-  return ResolveSettingsDirectory() / "settings.json";
+  return ResolveSettingsDirectory() / "settings" / "app.json";
 }
 
 std::optional<std::filesystem::path> FileSystem::EnsureDirectory(const std::filesystem::path& dir) const

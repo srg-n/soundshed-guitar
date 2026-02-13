@@ -135,6 +135,10 @@ namespace guitarfx
   void ResourceLibrary::SaveToFile(const std::filesystem::path& path) const
   {
     nlohmann::json json = nlohmann::json::array();
+    const auto indexDir = path.parent_path();
+
+    std::error_code dirEc;
+    std::filesystem::create_directories(indexDir, dirEc);
 
     for (const auto& [key, resource] : mResources)
     {
@@ -144,7 +148,18 @@ namespace guitarfx
       item["name"] = resource.name;
       item["category"] = resource.category;
       item["description"] = resource.description;
-      item["filePath"] = resource.filePath.string();
+      if (!resource.filePath.empty())
+      {
+        const auto relativePath = resource.filePath.lexically_relative(indexDir);
+        if (!relativePath.empty() && relativePath.native() != ".")
+          item["filePath"] = relativePath.generic_string();
+        else
+          item["filePath"] = resource.filePath.generic_string();
+      }
+      else
+      {
+        item["filePath"] = "";
+      }
       item["hash"] = resource.hash;
       item["tags"] = resource.tags;
       if (!resource.metadata.empty())

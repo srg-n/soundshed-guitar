@@ -173,7 +173,7 @@ juce::File PluginEditor::getStandaloneWindowStateFile() const
     if (! isMacStandaloneAppExecutable())
         return {};
 
-    const auto userDataPath = processorRef.GetUserDataPath() / "window-state.json";
+    const auto userDataPath = processorRef.GetUserDataPath() / "data" / "v1" / "settings" / "ui" / "window-state.json";
     return juce::File (userDataPath.string());
 }
 

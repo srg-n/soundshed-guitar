@@ -43,7 +43,7 @@ namespace
 {
     // ── NAM calibration constants ───────────────────────────────────
 
-    constexpr const char* kNamCalibrationFileName = "model-calibration.json";
+    constexpr const char* kNamCalibrationFileName = "calibration/models/index.json";
     constexpr double kNamCalibrationDurationSeconds = 1.0;
     constexpr double kNamCalibrationFrequencyHz = 1000.0;
     constexpr double kMinLinear = 1e-6;
@@ -76,7 +76,7 @@ namespace
     constexpr const char* kInterfaceCalibrationEnabledSettingKey = "audio.interfaceCalibration.enabled";
     constexpr const char* kInterfaceCalibrationReferenceDbuSettingKey = "audio.interfaceCalibration.referenceDbu";
     constexpr double kInterfaceCalibrationDefaultReferenceDbu = 12.0;
-    constexpr const char* kSessionLogFileName = "session-log.txt";
+    constexpr const char* kSessionLogFileName = "logs/session-log.txt";
 
     double ToDbFS(double linear)
     {
@@ -285,7 +285,7 @@ static std::string GenerateGuidV4String()
 
 static std::filesystem::path ResolveEffectLayoutsSettingsPath(const FileSystem& fileSystem)
 {
-    return fileSystem.ResolveSettingsDirectory() / "effect-layouts.json";
+    return fileSystem.ResolveSettingsDirectory() / "layouts" / "indexes" / "effect-layouts.json";
 }
 
 static nlohmann::json LoadEffectLayoutsSettings(const FileSystem& fileSystem)
@@ -344,7 +344,7 @@ static void SaveEffectLayoutsSettings(const FileSystem& fileSystem, const nlohma
 static std::filesystem::path ResolveLayoutFilePath(const FileSystem& fileSystem, const std::string& layoutId)
 {
     const auto settingsDir = fileSystem.ResolveSettingsDirectory();
-    const auto layoutsDir = settingsDir / "layouts";
+    const auto layoutsDir = settingsDir / "layouts" / "content";
     const std::string fileStem = util::SanitizeFilename(layoutId);
     return layoutsDir / (fileStem + ".layout.json");
 }
@@ -373,15 +373,15 @@ PluginController::~PluginController() = default;
 void PluginController::Initialize()
 {
     mResourceRoot = mHost.GetUserDataPath();
-    mUserPresetsPath = mResourceRoot / "presets" / "user";
+    mUserPresetsPath = mFileSystem.ResolvePresetDirectory() / "user";
 
     std::cout << "[Plugin] Initializing. Resource root: " << mResourceRoot.string() << std::endl;
 
     // Ensure essential directories exist on first launch
     [[maybe_unused]] const auto ensuredResourceRoot = mFileSystem.EnsureDirectory(mResourceRoot);
+    [[maybe_unused]] const auto ensuredSettingsRoot = mFileSystem.EnsureDirectory(mFileSystem.ResolveSettingsDirectory());
     [[maybe_unused]] const auto ensuredUserPresets = mFileSystem.EnsureDirectory(mUserPresetsPath);
-    [[maybe_unused]] const auto ensuredFactoryPresets = mFileSystem.EnsureDirectory(mResourceRoot / "presets" / "factory");
-    [[maybe_unused]] const auto ensuredResources = mFileSystem.EnsureDirectory(mResourceRoot / "resources");
+    [[maybe_unused]] const auto ensuredResources = mFileSystem.EnsureDirectory(mFileSystem.ResolveSettingsDirectory() / "resources");
 
     mPresetMixer.SetResourceLibrary(&mResourceLibrary);
 
@@ -980,10 +980,20 @@ void PluginController::DeserializeState(const std::string& json)
     try
     {
         auto state = nlohmann::json::parse(json);
-        if (state.contains("appSettings"))
-            mAppSettings = state["appSettings"];
-        else if (state.contains("settings"))
-            mAppSettings = state["settings"];
+        const nlohmann::json* incomingSettings = nullptr;
+        if (state.contains("appSettings") && state["appSettings"].is_object())
+            incomingSettings = &state["appSettings"];
+        else if (state.contains("settings") && state["settings"].is_object())
+            incomingSettings = &state["settings"];
+
+        if (incomingSettings != nullptr)
+        {
+            if (!mAppSettings.is_object())
+                mAppSettings = nlohmann::json::object();
+
+            for (auto it = incomingSettings->begin(); it != incomingSettings->end(); ++it)
+                mAppSettings[it.key()] = it.value();
+        }
 
         if (state.contains("uiSettings") && state["uiSettings"].is_object())
             mUiSettings = state["uiSettings"];
@@ -1374,8 +1384,8 @@ void PluginController::AppendSessionLog(const std::string& message)
         return;
 
     const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
-    [[maybe_unused]] const auto ensuredSettingsDir = mFileSystem.EnsureDirectory(settingsDir);
     const auto logPath = settingsDir / kSessionLogFileName;
+    [[maybe_unused]] const auto ensuredLogDir = mFileSystem.EnsureDirectory(logPath.parent_path());
 
     std::ofstream output(logPath, std::ios::app);
     if (!output)
@@ -1882,7 +1892,7 @@ void PluginController::HandleSavePresetRequest(const nlohmann::json& payload)
         }
 
         if (mUserPresetsPath.empty())
-            mUserPresetsPath = mResourceRoot / "presets" / "user";
+            mUserPresetsPath = mFileSystem.ResolvePresetDirectory() / "user";
         [[maybe_unused]] const auto ensuredUserPresetPath = mFileSystem.EnsureDirectory(mUserPresetsPath);
 
         const auto presetPath = mUserPresetsPath / (newPreset.id + ".json");
@@ -1916,7 +1926,7 @@ void PluginController::HandleDeletePresetRequest(const nlohmann::json& payload)
         return;
 
     if (mUserPresetsPath.empty())
-        mUserPresetsPath = mResourceRoot / "presets" / "user";
+        mUserPresetsPath = mFileSystem.ResolvePresetDirectory() / "user";
 
     const auto presetPath = mUserPresetsPath / (presetId + ".json");
     if (!std::filesystem::exists(presetPath))
@@ -1940,7 +1950,7 @@ void PluginController::HandleGetPresetByIdRequest(const nlohmann::json& payload)
         return;
 
     if (mUserPresetsPath.empty())
-        mUserPresetsPath = mResourceRoot / "presets" / "user";
+        mUserPresetsPath = mFileSystem.ResolvePresetDirectory() / "user";
 
     const auto userPath = mUserPresetsPath / (presetId + ".json");
     const auto factoryPath = mResourceRoot / "presets" / "factory" / (presetId + ".json");
@@ -2604,7 +2614,7 @@ void PluginController::HandleImportRemoteResourceRequest(const nlohmann::json& p
 
     const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
     const auto sanitizedProvider = util::SanitizePathSegment(provider, true);
-    auto targetDir = settingsDir / "resources" / sanitizedProvider;
+    auto targetDir = settingsDir / "resources" / "content" / sanitizedProvider;
     const auto sanitizedSubfolder = util::SanitizeSubfolderPath(subfolder);
     if (!sanitizedSubfolder.empty()) targetDir /= sanitizedSubfolder;
     [[maybe_unused]] const auto ensuredTargetDir = mFileSystem.EnsureDirectory(targetDir);
@@ -3167,8 +3177,10 @@ void PluginController::HandleCleanupResourceLibraryRequest(const nlohmann::json&
     if (!resources.is_array()) { ReportErrorToUI("Cleanup failed", "Missing resource list"); return; }
 
     const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
-    const auto libraryDir = settingsDir / "resources";
-    const auto libraryFile = libraryDir / "library.json";
+    const auto resourcesDir = settingsDir / "resources";
+    const auto libraryDir = resourcesDir / "indexes";
+    const auto libraryFile = libraryDir / "resources-index.json";
+    const auto resourceFilesDir = resourcesDir / "content";
 
     nlohmann::json entries = nlohmann::json::array();
     if (std::filesystem::exists(libraryFile))
@@ -3236,7 +3248,7 @@ void PluginController::HandleCleanupResourceLibraryRequest(const nlohmann::json&
         if (!resourceOpt) { ++skipped; continue; }
 
         const bool isUserEntry = userKeys.count(key) > 0;
-        const bool isUserFile = !resourceOpt->filePath.empty() && isUnderDirectory(resourceOpt->filePath, libraryDir);
+        const bool isUserFile = !resourceOpt->filePath.empty() && isUnderDirectory(resourceOpt->filePath, resourceFilesDir);
         if (!isUserEntry && !isUserFile) { ++skipped; continue; }
 
         mResourceLibrary.RemoveResource(t, i);
@@ -3965,6 +3977,10 @@ std::optional<std::filesystem::path> PluginController::ResolveResourceRef(const 
 void PluginController::AppendUserLibraryResource(const LibraryResource& resource)
 {
     mResourceLibrary.AddResource(resource);
+
+    const auto libraryFile = mFileSystem.ResolveSettingsDirectory() / "resources" / "indexes" / "resources-index.json";
+    [[maybe_unused]] const auto ensuredLibraryDir = mFileSystem.EnsureDirectory(libraryFile.parent_path());
+    mResourceLibrary.SaveToFile(libraryFile);
 }
 
 void PluginController::EnsureBasicGraph()
@@ -4167,7 +4183,7 @@ void PluginController::StoreNamCalibrationInCache(const std::string& hash, const
 
     const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
     const auto filePath = settingsDir / kNamCalibrationFileName;
-    [[maybe_unused]] const auto ensuredSettingsDir = mFileSystem.EnsureDirectory(settingsDir);
+    [[maybe_unused]] const auto ensuredCalibrationDir = mFileSystem.EnsureDirectory(filePath.parent_path());
 
     nlohmann::json root = nlohmann::json::object();
     if (std::filesystem::exists(filePath))
@@ -4269,7 +4285,7 @@ void PluginController::SendNamCalibrationStatus(const std::string& nodeId, const
 
 void PluginController::SaveAppSettings() const
 {
-    auto settingsPath = mFileSystem.ResolveSettingsFile();
+    const auto settingsPath = mFileSystem.ResolveSettingsFile();
     if (settingsPath.empty()) return;
 
     try
@@ -4284,7 +4300,8 @@ void PluginController::SaveAppSettings() const
 
 void PluginController::LoadAppSettings()
 {
-    auto settingsPath = mFileSystem.ResolveSettingsFile();
+    const auto settingsPath = mFileSystem.ResolveSettingsFile();
+
     if (settingsPath.empty())
     {
         std::cerr << "[Plugin] Settings file path is empty" << std::endl;
@@ -4367,22 +4384,21 @@ void PluginController::LoadLastSessionState()
 
 void PluginController::LoadResourceLibraries()
 {
-    // Load resource libraries from the resource root
-    auto libraryPath = mResourceRoot / "resources";
-    if (std::filesystem::exists(libraryPath))
+    const auto libraryFile = mFileSystem.ResolveSettingsDirectory() / "resources" / "indexes" / "resources-index.json";
+    mResourceLibrary.Clear();
+    if (!std::filesystem::exists(libraryFile))
     {
-        mResourceLibrary.LoadFromDirectory(libraryPath);
-        std::cout << "[Plugin] Loaded resource library from " << libraryPath.string() << std::endl;
+        std::cout << "[Plugin] Resource library file not found: " << libraryFile.string() << std::endl;
+        return;
     }
-    else
-    {
-        std::cout << "[Plugin] Resource library directory not found: " << libraryPath.string() << std::endl;
-    }
+
+    mResourceLibrary.LoadFromFile(libraryFile);
+    std::cout << "[Plugin] Loaded resource library from " << libraryFile.string() << std::endl;
 }
 
 void PluginController::LoadBlendLibrary()
 {
-    auto blendPath = mFileSystem.ResolveSettingsDirectory() / "blends.json";
+    const auto blendPath = mFileSystem.ResolveSettingsDirectory() / "blends" / "library.json";
     if (std::filesystem::exists(blendPath))
     {
         try
@@ -4400,7 +4416,7 @@ void PluginController::LoadBlendLibrary()
 
 void PluginController::SaveBlendLibrary() const
 {
-    auto blendPath = mFileSystem.ResolveSettingsDirectory() / "blends.json";
+    const auto blendPath = mFileSystem.ResolveSettingsDirectory() / "blends" / "library.json";
     try
     {
         [[maybe_unused]] const auto ensuredBlendParent = mFileSystem.EnsureDirectory(blendPath.parent_path());
@@ -4454,7 +4470,7 @@ void PluginController::LoadCompositeLibrary()
 void PluginController::LoadLayoutLibrary()
 {
     const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
-    const auto layoutsDir = settingsDir / "layouts";
+    const auto layoutsDir = settingsDir / "layouts" / "content";
 
     nlohmann::json library;
     library["byEffectType"] = nlohmann::json::object();
@@ -4657,7 +4673,7 @@ void PluginController::LoadLayoutLibrary()
 void PluginController::SaveLayoutToFile(const std::string& effectType, const nlohmann::json& layoutJson)
 {
     const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
-    const auto layoutsDir = settingsDir / "layouts";
+    const auto layoutsDir = settingsDir / "layouts" / "content";
 
     [[maybe_unused]] const auto ensuredLayoutsDir = mFileSystem.EnsureDirectory(layoutsDir);
 
@@ -4678,7 +4694,16 @@ void PluginController::SaveLayoutToFile(const std::string& effectType, const nlo
 
 std::filesystem::path PluginController::ResolveUiStoragePath(const std::string& filename) const
 {
-    const auto dir = mFileSystem.ResolveSettingsDirectory() / "ui";
+    const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
+
+    if (filename == "preset-folders.json")
+    {
+        const auto dir = settingsDir / "presets";
+        [[maybe_unused]] const auto ensuredPresetDir = mFileSystem.EnsureDirectory(dir);
+        return dir / filename;
+    }
+
+    const auto dir = settingsDir / "settings" / "ui";
     [[maybe_unused]] const auto ensuredUiDir = mFileSystem.EnsureDirectory(dir);
     return dir / filename;
 }
