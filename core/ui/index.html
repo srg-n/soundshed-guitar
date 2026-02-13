@@ -148,10 +148,6 @@
 
       <div class="control-bar-group preset-group">
         <div class="preset-row preset-row-top">
-          <div class="preset-nav">
-            <button class="nav-btn" id="prev-preset" title="Previous Preset">←</button>
-            <button class="nav-btn" id="next-preset" title="Next Preset">→</button>
-          </div>
           <div class="preset-actions">
             <button class="preset-action-btn" id="preset-random-btn" title="Random Preset">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -217,12 +213,14 @@
         </div>
 
         <div class="preset-row preset-row-bottom">
+          <button class="nav-btn" id="prev-preset" title="Previous Preset">←</button>
           <div class="preset-selector" id="preset-selector">
             <span class="preset-favorite" id="preset-favorite" title="Toggle Favorite">♡</span>
             <button class="preset-chooser-label" id="preset-chooser-label" type="button" aria-haspopup="dialog" aria-expanded="false">
               Default Preset
             </button>
           </div>
+          <button class="nav-btn" id="next-preset" title="Next Preset">→</button>
         </div>
 
         <div class="preset-library-popover" id="preset-library-popover" aria-hidden="true">

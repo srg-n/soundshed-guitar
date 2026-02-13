@@ -100,10 +100,12 @@
 
 .preset-row-top {
   flex-wrap: wrap;
+  justify-content: center;
 }
 
 .preset-row-bottom {
   justify-content: center;
+  gap: 8px;
 }
 
 .preset-nav {
@@ -116,7 +118,7 @@
 .preset-actions {
   display: flex;
   gap: 2px;
-  margin-left: 4px;
+  margin-left: 0;
 }
 
 .preset-action-btn {
