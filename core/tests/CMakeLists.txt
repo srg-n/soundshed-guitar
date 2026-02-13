@@ -9,6 +9,7 @@ set(TEST_SOURCES
     NAMPerformanceBenchmark.cpp
     PresetDSPLoadingTests.cpp
     PresetStorageTests.cpp
+    ResourcePreviewWorkflowTests.cpp
     SignalGraphExecutorTests.cpp
     SynthSawEffectTests.cpp
     TestWavLoad.cpp

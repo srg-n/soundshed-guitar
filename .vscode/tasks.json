@@ -166,6 +166,23 @@
 			"problemMatcher": []
 		},
 		{
+			"label": "Run Fast Tests (No Benchmarks)",
+			"type": "shell",
+			"command": "ctest",
+			"args": [
+				"-C",
+				"Debug",
+				"--output-on-failure",
+				"-LE",
+				"benchmark"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/core/build"
+			},
+			"group": "test",
+			"problemMatcher": []
+		},
+		{
 			"label": "Build SoundshedGuitar (JUCE) Debug",
 			"type": "shell",
 			"command": "cmake",

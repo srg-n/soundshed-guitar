@@ -2084,7 +2084,10 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
             slot.filePath.clear();
         }
         if (!ref.filePath.empty())
+        {
             slot.filePath = ref.filePath;
+            slot.resourceId.clear();
+        }
         if (!ref.embeddedId.empty())
             slot.embeddedId = ref.embeddedId;
         if (!ref.parameterId.empty())
