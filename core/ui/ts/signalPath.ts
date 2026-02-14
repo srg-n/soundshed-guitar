@@ -48,6 +48,7 @@ let selectedNodeId: string | null = null;
 let lastSelectedNodeType: string | null = null;
 let lastSelectedNodeCategory: string | null = null;
 let lastRenderedPresetId: string | null = null;
+let overlayBypassClickCleanup: (() => void) | null = null;
 
 const DEFAULT_VISUALIZATION_TITLE = "";
 const DEFAULT_VISUALIZATION_SUBTITLE = "Select an item in the signal chain to edit";
@@ -62,6 +63,10 @@ const EFFECT_VISUAL_BACKGROUNDS: Record<string, string> = {
   channel: "linear-gradient(145deg, rgba(148, 108, 48, 0.95) 0%, rgba(38, 28, 12, 0.95) 100%)",
   utility: "linear-gradient(145deg, rgba(86, 86, 96, 0.95) 0%, rgba(26, 26, 30, 0.95) 100%)",
 };
+
+layoutDesigner.onClose(() => {
+  refreshSelectedNodeParams();
+});
 
 
 type BlendParamSpec = {
@@ -1968,6 +1973,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
 
   // Bind controls
   bindNodeParamControls(node, preset);
+  bindLayoutOverlayBypassToggles(node, preset);
   bindResourceControls(node, preset);
   bindBlendEditorControls(node);
   bindCloseButton();
@@ -1975,6 +1981,39 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
   bindCalibrationButton(node);
   bindCustomizeLayoutButton(node);
   bindParamTabs();
+}
+
+function bindLayoutOverlayBypassToggles(node: GraphNode, preset: Preset): void {
+  if (!nodeParamsPanelElement) {
+    return;
+  }
+
+  overlayBypassClickCleanup?.();
+
+  const clickHandler = (event: Event) => {
+    const target = event.target as HTMLElement | null;
+    const overlay = target?.closest('.custom-layout-overlay[data-toggle-bypass="true"]') as HTMLElement | null;
+    if (!overlay) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const currentBypassed = isNodeBypassed(node);
+    const newBypassState = !currentBypassed;
+    sendSignalPathNodeBypassUpdate(node.id, newBypassState);
+
+    (node as unknown as { bypassed?: boolean }).bypassed = newBypassState;
+    (node as unknown as { enabled?: boolean }).enabled = !newBypassState;
+    renderSignalPathBar();
+    showNodeParamsPanel(node, preset);
+  };
+
+  nodeParamsPanelElement.addEventListener("click", clickHandler);
+  overlayBypassClickCleanup = () => {
+    nodeParamsPanelElement?.removeEventListener("click", clickHandler);
+  };
 }
 
 function bindParamTabs(): void {

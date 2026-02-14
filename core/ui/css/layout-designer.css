@@ -2,7 +2,7 @@
 
 /* Modal sizing */
 .layout-designer-content {
-  width: 900px;
+  width: 1100px;
   max-width: 95vw;
   height: 680px;
   max-height: 90vh;
@@ -185,6 +185,55 @@
 
 .layout-designer-background.layer-1 {
   z-index: 0;
+}
+
+/* Rectangle overlays */
+.layout-rectangle-overlay {
+  position: absolute;
+  z-index: 1;
+  cursor: move;
+  pointer-events: auto;
+  box-sizing: border-box;
+}
+
+.layout-overlay-power-badge {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--text-on-accent);
+  background: var(--accent-primary);
+  border: 1px solid var(--bg-dark-primary);
+  pointer-events: none;
+}
+
+.layout-overlay-sidebar-badge {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-on-accent);
+  background: var(--accent-primary);
+}
+
+.layout-rectangle-overlay:hover {
+  outline: 1px dashed rgba(var(--accent-primary-rgb), 0.45);
+  outline-offset: 2px;
+}
+
+.layout-rectangle-overlay.selected {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.layout-rectangle-overlay.dragging {
+  opacity: 0.85;
 }
 
 /* Control placeholders */

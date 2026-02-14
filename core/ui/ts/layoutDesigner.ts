@@ -17,6 +17,9 @@ import {
   type LayoutControl,
   type LayoutTextLabel,
   type LayoutBackground,
+  type LayoutImageRef,
+  type LayoutRectangleOverlay,
+  type LayoutLibraryEntry,
   type LabelPosition,
   type KnobStylePreset,
   LAYOUT_GRID_SIZE,
@@ -25,12 +28,15 @@ import {
   snapToGrid,
   generateLayoutId,
   generateLabelId,
+  generateOverlayId,
   createEmptyLayout,
+  layoutLookupKey,
 } from "./layoutTypes.js";
 
 type SelectedElement =
   | { type: "control"; paramKey: string }
   | { type: "label"; id: string }
+  | { type: "overlay"; id: string }
   | { type: "background"; layerIndex: number }
   | null;
 
@@ -41,7 +47,11 @@ interface DragState {
   startY: number;
   elementStartX: number;
   elementStartY: number;
-  type: "control" | "label" | null;
+  elementStartWidth: number;
+  elementStartHeight: number;
+  type: "control" | "label" | "overlay" | null;
+  mode: "move" | "resize";
+  resizeHandle: "top-left" | "top-right" | "bottom-left" | "bottom-right" | null;
   id: string;
 }
 
@@ -71,7 +81,11 @@ export class LayoutDesignerModal {
     startY: 0,
     elementStartX: 0,
     elementStartY: 0,
+    elementStartWidth: 0,
+    elementStartHeight: 0,
     type: null,
+    mode: "move",
+    resizeHandle: null,
     id: "",
   };
 
@@ -110,6 +124,7 @@ export class LayoutDesignerModal {
   private previewToggleBtn: HTMLButtonElement | null = null;
   private addLabelBtn: HTMLButtonElement | null = null;
   private addControlBtn: HTMLButtonElement | null = null;
+  private addRectBtn: HTMLButtonElement | null = null;
   private addBgBtn: HTMLButtonElement | null = null;
   private addColorBgBtn: HTMLButtonElement | null = null;
   private resetLayoutBtn: HTMLButtonElement | null = null;
@@ -126,6 +141,7 @@ export class LayoutDesignerModal {
 
   // Callbacks
   private onSaveCallback?: (layout: EffectLayout) => void;
+  private onCloseCallback?: (didSave: boolean) => void;
 
   initialize(): void {
     if (this.initialized) return;
@@ -157,6 +173,7 @@ export class LayoutDesignerModal {
     this.previewToggleBtn = document.getElementById("layout-designer-preview-toggle") as HTMLButtonElement;
     this.addLabelBtn = document.getElementById("layout-designer-add-label") as HTMLButtonElement;
     this.addControlBtn = document.getElementById("layout-designer-add-control") as HTMLButtonElement;
+    this.addRectBtn = document.getElementById("layout-designer-add-rect") as HTMLButtonElement;
     this.addBgBtn = document.getElementById("layout-designer-add-bg") as HTMLButtonElement;
     this.addColorBgBtn = document.getElementById("layout-designer-add-color-bg") as HTMLButtonElement;
     this.resetLayoutBtn = document.getElementById("layout-designer-reset") as HTMLButtonElement;
@@ -197,7 +214,8 @@ export class LayoutDesignerModal {
     this.previewToggleBtn?.addEventListener("click", () => this.togglePreview());
     this.addLabelBtn?.addEventListener("click", () => this.addTextLabel());
     this.addControlBtn?.addEventListener("click", () => this.showAddControlMenu());
-    this.addBgBtn?.addEventListener("click", () => this.browseBackgroundImage());
+    this.addRectBtn?.addEventListener("click", () => this.addRectangleOverlay());
+    this.addBgBtn?.addEventListener("click", () => this.showAddBackgroundMenu());
     this.addColorBgBtn?.addEventListener("click", () => this.addColorBackground());
     this.resetLayoutBtn?.addEventListener("click", () => this.resetLayout());
     this.undoBtn?.addEventListener("click", () => this.undo());
@@ -269,6 +287,10 @@ export class LayoutDesignerModal {
       this.layout = this.createDefaultLayout(effectType);
     }
 
+    if (this.layout && !Array.isArray(this.layout.overlays)) {
+      this.layout.overlays = [];
+    }
+
     // Tag the layout with blendId so it persists across save/load
     if (this.layout && this.blendId) {
       this.layout.blendId = this.blendId;
@@ -293,7 +315,7 @@ export class LayoutDesignerModal {
     this.modal.style.display = "flex";
   }
 
-  close(): void {
+  close(didSave: boolean = false): void {
     if (this.modal) {
       this.modal.style.display = "none";
     }
@@ -301,10 +323,52 @@ export class LayoutDesignerModal {
     this.effectType = "";
     this.blendId = "";
     this.selectedElement = null;
+    this.onCloseCallback?.(didSave);
   }
 
   onSave(callback: (layout: EffectLayout) => void): void {
     this.onSaveCallback = callback;
+  }
+
+  onClose(callback: (didSave: boolean) => void): void {
+    this.onCloseCallback = callback;
+  }
+
+  private persistLayoutLocally(layout: EffectLayout): void {
+    if (!uiState.layoutLibrary) {
+      uiState.layoutLibrary = { byEffectType: {}, defaults: {}, images: [] };
+    }
+
+    const blendId = this.blendId || layout.blendId || "";
+    const lookupKey = layoutLookupKey(this.effectType || layout.effectType, blendId || undefined);
+    if (!uiState.layoutLibrary.byEffectType[lookupKey]) {
+      uiState.layoutLibrary.byEffectType[lookupKey] = [];
+    }
+
+    const list = uiState.layoutLibrary.byEffectType[lookupKey];
+    const layoutId = layout.layoutId || generateLayoutId();
+    layout.layoutId = layoutId;
+
+    const clonedLayout = JSON.parse(JSON.stringify(layout)) as EffectLayout;
+    const existingIndex = list.findIndex((entry) => entry.layoutId === layoutId);
+    const newEntry: LayoutLibraryEntry = {
+      layout: clonedLayout,
+      isDefault: true,
+      layoutId,
+      filePath: existingIndex >= 0 ? list[existingIndex].filePath : undefined,
+    };
+
+    if (existingIndex >= 0) {
+      list[existingIndex] = newEntry;
+    } else {
+      list.push(newEntry);
+    }
+
+    uiState.layoutLibrary.defaults[lookupKey] = layoutId;
+    uiState.layoutLibrary.byEffectType[lookupKey] = list.map((entry) => ({
+      ...entry,
+      isDefault: entry.layoutId === layoutId,
+    }));
   }
 
   private save(): void {
@@ -325,12 +389,14 @@ export class LayoutDesignerModal {
       layout: this.layout,
     });
 
+    this.persistLayoutLocally(this.layout);
+
     if (this.onSaveCallback) {
       this.onSaveCallback(this.layout);
     }
 
     showNotification("Layout saved", "success");
-    this.close();
+    this.close(true);
   }
 
   private async exportLayout(): Promise<void> {
@@ -707,6 +773,7 @@ export class LayoutDesignerModal {
 
     this.updateCanvasSize();
     this.renderBackgrounds();
+    this.renderRectangleOverlays();
 
     if (this.previewMode) {
       this.renderRuntimePreview();
@@ -796,6 +863,90 @@ export class LayoutDesignerModal {
     });
   }
 
+  private renderRectangleOverlays(): void {
+    if (!this.canvas || !this.layout) return;
+
+    this.canvas.querySelectorAll(".layout-rectangle-overlay").forEach((el) => el.remove());
+
+    const overlays = this.layout.overlays ?? [];
+    overlays.forEach((overlay) => {
+      const el = this.createRectangleOverlayElement(overlay);
+      if (this.canvas) {
+        this.canvas.appendChild(el);
+      }
+    });
+  }
+
+  private createRectangleOverlayElement(overlay: LayoutRectangleOverlay): HTMLElement {
+    const isSelected = this.selectedElement?.type === "overlay" && this.selectedElement.id === overlay.id;
+    const backgroundColor = overlay.style?.backgroundColor || "#000000";
+    const backgroundOpacity = typeof overlay.style?.backgroundOpacity === "number"
+      ? Math.max(0, Math.min(1, overlay.style.backgroundOpacity))
+      : 0.25;
+    const borderColor = overlay.style?.borderColor || "#ffffff";
+    const borderWidth = Math.max(0, overlay.style?.borderWidth ?? 1);
+    const borderRadius = Math.max(0, overlay.style?.borderRadius ?? 0);
+    const toggleBypassOnClick = overlay.style?.toggleBypassOnClick === true;
+    const fill = this.colorWithAlpha(backgroundColor, backgroundOpacity);
+
+    const el = document.createElement("div");
+    el.className = `layout-rectangle-overlay${isSelected ? " selected" : ""}`;
+    el.dataset.overlayId = overlay.id;
+    el.style.left = `${overlay.position.x}px`;
+    el.style.top = `${overlay.position.y}px`;
+    el.style.width = `${overlay.size.width}px`;
+    el.style.height = `${overlay.size.height}px`;
+    el.style.backgroundColor = fill;
+    el.style.border = `${borderWidth}px solid ${borderColor}`;
+    el.style.borderRadius = `${borderRadius}px`;
+
+    if (toggleBypassOnClick && !this.previewMode) {
+      const badgeEl = document.createElement("span");
+      badgeEl.className = "layout-overlay-power-badge";
+      badgeEl.textContent = "PWR";
+      el.appendChild(badgeEl);
+    }
+
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!this.previewMode) {
+        this.selectElement({ type: "overlay", id: overlay.id });
+      }
+    });
+
+    if (isSelected && !this.previewMode) {
+      (["top-left", "top-right", "bottom-left", "bottom-right"] as const).forEach((handle) => {
+        const handleEl = document.createElement("div");
+        handleEl.className = `layout-resize-handle ${handle}`;
+        handleEl.dataset.overlayHandle = handle;
+        el.appendChild(handleEl);
+      });
+    }
+
+    return el;
+  }
+
+  private colorWithAlpha(hexColor: string, alpha: number): string {
+    const clampedAlpha = Math.max(0, Math.min(1, alpha));
+    const normalized = hexColor.trim();
+    const shortMatch = normalized.match(/^#([\da-fA-F]{3})$/);
+    const longMatch = normalized.match(/^#([\da-fA-F]{6})$/);
+
+    if (shortMatch) {
+      const [r, g, b] = shortMatch[1].split("").map((ch) => parseInt(ch + ch, 16));
+      return `rgba(${r}, ${g}, ${b}, ${clampedAlpha})`;
+    }
+    if (longMatch) {
+      const hex = longMatch[1];
+      const r = parseInt(hex.slice(0, 2), 16);
+      const g = parseInt(hex.slice(2, 4), 16);
+      const b = parseInt(hex.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${clampedAlpha})`;
+    }
+
+    return normalized;
+  }
+
   private getImageUrl(imageId: string): string | null {
     // Check layout library for image
     const image = uiState.layoutLibrary?.images.find((img) => img.imageId === imageId);
@@ -809,6 +960,32 @@ export class LayoutDesignerModal {
       }
     }
     return null;
+  }
+
+  private getReusableLayoutImages(purpose: "background" | "knob"): LayoutImageRef[] {
+    const images = uiState.layoutLibrary?.images ?? [];
+    const available = images.filter((img) => Boolean(img.imageId) && (Boolean(img.dataUrl) || Boolean(img.fileName)));
+    const preferredType = purpose === "background" ? "background" : "knob";
+    const matching = available.filter((img) => img.type === preferredType);
+    return [...matching].sort((a, b) => {
+      const aName = (a.fileName || a.imageId).toLowerCase();
+      const bName = (b.fileName || b.imageId).toLowerCase();
+      return aName.localeCompare(bName);
+    });
+  }
+
+  private renderImageOptionsHtml(purpose: "background" | "knob", selectedImageId?: string): string {
+    const images = this.getReusableLayoutImages(purpose);
+    const options = [
+      `<option value="">Select existing image...</option>`,
+      ...images.map((img) => {
+        const selected = selectedImageId && img.imageId === selectedImageId ? "selected" : "";
+        const typeLabel = img.type ? ` [${img.type}]` : "";
+        const name = img.fileName || img.imageId;
+        return `<option value="${img.imageId}" ${selected}>${name}${typeLabel}</option>`;
+      }),
+    ];
+    return options.join("");
   }
 
   private renderControls(): void {
@@ -982,7 +1159,7 @@ export class LayoutDesignerModal {
     if (!this.selectedElement) {
       this.sidebarContent.innerHTML = `
         <div class="layout-designer-sidebar-empty">
-          Select a control or label to edit its properties
+          Select a control, label, background, or rectangle to edit its properties
         </div>
       `;
       return;
@@ -992,6 +1169,8 @@ export class LayoutDesignerModal {
       this.renderControlProperties(this.selectedElement.paramKey);
     } else if (this.selectedElement.type === "label") {
       this.renderLabelProperties(this.selectedElement.id);
+    } else if (this.selectedElement.type === "overlay") {
+      this.renderOverlayProperties(this.selectedElement.id);
     } else if (this.selectedElement.type === "background") {
       this.renderBackgroundProperties(this.selectedElement.layerIndex);
     }
@@ -1054,6 +1233,24 @@ export class LayoutDesignerModal {
       </div>
 
       ${isImage ? `
+      <div class="layout-property-group">
+        <div class="layout-property-group-title">Image Source</div>
+        <div class="layout-image-preview">
+          ${bg.value ? `<img src="${this.getImageUrl(bg.value) || ""}" alt="Background">` : `<span class="layout-image-preview-placeholder">No image</span>`}
+        </div>
+        <div class="layout-property-row">
+          <span class="layout-property-label">Use Existing</span>
+          <div class="layout-property-input">
+            <select id="prop-bg-image-select">
+              ${this.renderImageOptionsHtml("background", bg.value)}
+            </select>
+          </div>
+        </div>
+        <div class="layout-image-actions">
+          <button id="prop-browse-bg-image">Browse...</button>
+        </div>
+      </div>
+
       <div class="layout-property-group">
         <div class="layout-property-group-title">Size & Position</div>
         <div class="layout-property-row">
@@ -1127,6 +1324,8 @@ export class LayoutDesignerModal {
     const opacityInput = document.getElementById("prop-bg-opacity") as HTMLInputElement;
     const opacityValue = document.getElementById("prop-bg-opacity-value") as HTMLElement;
     const deleteBtn = document.getElementById("prop-delete-bg") as HTMLButtonElement;
+    const bgImageSelect = document.getElementById("prop-bg-image-select") as HTMLSelectElement;
+    const browseBgBtn = document.getElementById("prop-browse-bg-image") as HTMLButtonElement;
 
     typeSelect?.addEventListener("change", () => {
       const newType = typeSelect.value as "color" | "gradient";
@@ -1181,6 +1380,19 @@ export class LayoutDesignerModal {
       this.renderCanvas();
     });
 
+    bgImageSelect?.addEventListener("change", () => {
+      const imageId = bgImageSelect.value;
+      if (!imageId) return;
+      bg.type = "image";
+      bg.value = imageId;
+      this.renderCanvas();
+      this.renderSidebar();
+    });
+
+    browseBgBtn?.addEventListener("click", () => {
+      this.browseBackgroundImage(bg.layerIndex);
+    });
+
     deleteBtn?.addEventListener("click", () => {
       if (!this.layout) return;
       this.layout.backgrounds = this.layout.backgrounds.filter((b) => b.layerIndex !== bg.layerIndex);
@@ -1233,6 +1445,14 @@ export class LayoutDesignerModal {
         ${control.style?.knobStyle === "custom" ? `
         <div class="layout-image-preview">
           ${control.style?.knobImageId ? `<img src="${this.getImageUrl(control.style.knobImageId) || ""}" alt="Knob">` : `<span class="layout-image-preview-placeholder">No image</span>`}
+        </div>
+        <div class="layout-property-row">
+          <span class="layout-property-label">Use Existing</span>
+          <div class="layout-property-input">
+            <select id="prop-knob-image-select">
+              ${this.renderImageOptionsHtml("knob", control.style?.knobImageId)}
+            </select>
+          </div>
         </div>
         <div class="layout-image-actions">
           <button id="prop-browse-knob-image">Browse...</button>
@@ -1334,6 +1554,7 @@ export class LayoutDesignerModal {
     const deleteBtn = document.getElementById("prop-delete-control") as HTMLButtonElement;
     const browseKnobBtn = document.getElementById("prop-browse-knob-image") as HTMLButtonElement;
     const clearKnobBtn = document.getElementById("prop-clear-knob-image") as HTMLButtonElement;
+    const knobImageSelect = document.getElementById("prop-knob-image-select") as HTMLSelectElement;
     const isResourceControl = this.isResourceControl(control);
 
     typeSelect?.addEventListener("change", () => {
@@ -1406,6 +1627,16 @@ export class LayoutDesignerModal {
         this.renderCanvas();
         this.renderSidebar();
       }
+    });
+
+    knobImageSelect?.addEventListener("change", () => {
+      const imageId = knobImageSelect.value;
+      if (!imageId) return;
+      if (!control.style) control.style = {};
+      control.style.knobStyle = "custom";
+      control.style.knobImageId = imageId;
+      this.renderCanvas();
+      this.renderSidebar();
     });
 
     if (isResourceControl) {
@@ -1581,12 +1812,310 @@ export class LayoutDesignerModal {
     this.renderCanvas();
   }
 
-  private browseBackgroundImage(): void {
+  private addRectangleOverlay(): void {
+    if (!this.layout) return;
+
+    this.pushUndoState();
+    const newOverlay: LayoutRectangleOverlay = {
+      id: generateOverlayId(),
+      position: {
+        x: snapToGrid(this.layout.dimensions.width / 2 - 80),
+        y: snapToGrid(this.layout.dimensions.height / 2 - 50),
+      },
+      size: {
+        width: 160,
+        height: 100,
+      },
+      style: {
+        visibilityMode: "always",
+        toggleBypassOnClick: false,
+        backgroundColor: "#000000",
+        backgroundOpacity: 0.25,
+        borderColor: "#ffffff",
+        borderWidth: 1,
+        borderRadius: 0,
+      },
+    };
+
+    if (!this.layout.overlays) {
+      this.layout.overlays = [];
+    }
+    this.layout.overlays.push(newOverlay);
+    this.selectElement({ type: "overlay", id: newOverlay.id });
+    this.renderCanvas();
+  }
+
+  private renderOverlayProperties(overlayId: string): void {
+    if (!this.sidebarContent || !this.layout) return;
+
+    const overlay = (this.layout.overlays ?? []).find((item) => item.id === overlayId);
+    if (!overlay) return;
+
+    const style = overlay.style ?? {};
+    const visibilityMode = style.visibilityMode ?? "always";
+    const toggleBypassOnClick = style.toggleBypassOnClick === true;
+    const backgroundColor = style.backgroundColor || "#000000";
+    const backgroundOpacity = Math.round(((typeof style.backgroundOpacity === "number" ? style.backgroundOpacity : 0.25) * 100));
+    const borderColor = style.borderColor || "#ffffff";
+    const borderWidth = style.borderWidth ?? 1;
+    const borderRadius = style.borderRadius ?? 0;
+
+    this.sidebarContent.innerHTML = `
+      <div class="layout-property-group">
+        <div class="layout-property-group-title">Rectangle Overlay</div>
+        ${toggleBypassOnClick ? `<div class="layout-overlay-sidebar-badge">Power Indicator</div>` : ""}
+        <div class="layout-property-row">
+          <span class="layout-property-label">Visible</span>
+          <div class="layout-property-input">
+            <select id="prop-overlay-visibility-mode">
+              <option value="always" ${visibilityMode === "always" ? "selected" : ""}>Always</option>
+              <option value="enabled" ${visibilityMode === "enabled" ? "selected" : ""}>When Enabled</option>
+              <option value="bypassed" ${visibilityMode === "bypassed" ? "selected" : ""}>When Bypassed</option>
+            </select>
+          </div>
+        </div>
+        <div class="layout-property-row">
+          <span class="layout-property-label">On Click</span>
+          <div class="layout-property-input">
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dark-secondary);">
+              <input type="checkbox" id="prop-overlay-toggle-bypass" ${toggleBypassOnClick ? "checked" : ""}>
+              Toggle Bypass
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="layout-property-group">
+        <div class="layout-property-group-title">Position</div>
+        <div class="layout-position-inputs">
+          <label>X <input type="number" id="prop-overlay-x" value="${overlay.position.x}" step="8"></label>
+          <label>Y <input type="number" id="prop-overlay-y" value="${overlay.position.y}" step="8"></label>
+        </div>
+      </div>
+
+      <div class="layout-property-group">
+        <div class="layout-property-group-title">Size</div>
+        <div class="layout-position-inputs">
+          <label>W <input type="number" id="prop-overlay-width" value="${overlay.size.width}" min="16" step="8"></label>
+          <label>H <input type="number" id="prop-overlay-height" value="${overlay.size.height}" min="16" step="8"></label>
+        </div>
+      </div>
+
+      <div class="layout-property-group">
+        <div class="layout-property-group-title">Appearance</div>
+        <div class="layout-property-row">
+          <span class="layout-property-label">Fill</span>
+          <div class="layout-property-input">
+            <input type="color" id="prop-overlay-bg-color" value="${backgroundColor}">
+          </div>
+        </div>
+        <div class="layout-property-row">
+          <span class="layout-property-label">Fill Opacity</span>
+          <div class="layout-property-input">
+            <input type="range" id="prop-overlay-bg-opacity" min="0" max="100" value="${backgroundOpacity}" style="width: 80px;">
+            <span id="prop-overlay-bg-opacity-value">${backgroundOpacity}%</span>
+          </div>
+        </div>
+        <div class="layout-property-row">
+          <span class="layout-property-label">Border</span>
+          <div class="layout-property-input">
+            <input type="color" id="prop-overlay-border-color" value="${borderColor}">
+          </div>
+        </div>
+        <div class="layout-property-row">
+          <span class="layout-property-label">Border W</span>
+          <div class="layout-property-input">
+            <input type="number" id="prop-overlay-border-width" value="${borderWidth}" min="0" max="24" step="1">
+          </div>
+        </div>
+        <div class="layout-property-row">
+          <span class="layout-property-label">Radius</span>
+          <div class="layout-property-input">
+            <input type="number" id="prop-overlay-border-radius" value="${borderRadius}" min="0" max="64" step="1">
+          </div>
+        </div>
+      </div>
+
+      <div class="layout-property-group">
+        <button id="prop-delete-overlay" style="width: 100%; background: rgba(255,100,100,0.2); color: #ff6b6b;">Delete Rectangle</button>
+      </div>
+    `;
+
+    this.bindOverlayPropertyHandlers(overlay);
+  }
+
+  private bindOverlayPropertyHandlers(overlay: LayoutRectangleOverlay): void {
+    this.sidebarContent?.addEventListener("input", () => this.pushSidebarUndoOnce(), { once: true, capture: true });
+    this.sidebarContent?.addEventListener("change", () => this.pushSidebarUndoOnce(), { once: true, capture: true });
+
+    const xInput = document.getElementById("prop-overlay-x") as HTMLInputElement;
+    const yInput = document.getElementById("prop-overlay-y") as HTMLInputElement;
+    const visibilityModeSelect = document.getElementById("prop-overlay-visibility-mode") as HTMLSelectElement;
+    const toggleBypassCheck = document.getElementById("prop-overlay-toggle-bypass") as HTMLInputElement;
+    const widthInput = document.getElementById("prop-overlay-width") as HTMLInputElement;
+    const heightInput = document.getElementById("prop-overlay-height") as HTMLInputElement;
+    const bgColorInput = document.getElementById("prop-overlay-bg-color") as HTMLInputElement;
+    const bgOpacityInput = document.getElementById("prop-overlay-bg-opacity") as HTMLInputElement;
+    const bgOpacityValue = document.getElementById("prop-overlay-bg-opacity-value") as HTMLElement;
+    const borderColorInput = document.getElementById("prop-overlay-border-color") as HTMLInputElement;
+    const borderWidthInput = document.getElementById("prop-overlay-border-width") as HTMLInputElement;
+    const borderRadiusInput = document.getElementById("prop-overlay-border-radius") as HTMLInputElement;
+    const deleteBtn = document.getElementById("prop-delete-overlay") as HTMLButtonElement;
+
+    xInput?.addEventListener("change", () => {
+      overlay.position.x = snapToGrid(parseInt(xInput.value) || 0);
+      xInput.value = String(overlay.position.x);
+      this.renderCanvas();
+    });
+
+    visibilityModeSelect?.addEventListener("change", () => {
+      if (!overlay.style) overlay.style = {};
+      overlay.style.visibilityMode = visibilityModeSelect.value as "always" | "enabled" | "bypassed";
+      this.renderCanvas();
+    });
+
+    toggleBypassCheck?.addEventListener("change", () => {
+      if (!overlay.style) overlay.style = {};
+      overlay.style.toggleBypassOnClick = toggleBypassCheck.checked;
+      this.renderCanvas();
+    });
+
+    yInput?.addEventListener("change", () => {
+      overlay.position.y = snapToGrid(parseInt(yInput.value) || 0);
+      yInput.value = String(overlay.position.y);
+      this.renderCanvas();
+    });
+
+    widthInput?.addEventListener("change", () => {
+      overlay.size.width = Math.max(16, snapToGrid(parseInt(widthInput.value) || 16));
+      widthInput.value = String(overlay.size.width);
+      this.renderCanvas();
+    });
+
+    heightInput?.addEventListener("change", () => {
+      overlay.size.height = Math.max(16, snapToGrid(parseInt(heightInput.value) || 16));
+      heightInput.value = String(overlay.size.height);
+      this.renderCanvas();
+    });
+
+    bgColorInput?.addEventListener("change", () => {
+      if (!overlay.style) overlay.style = {};
+      overlay.style.backgroundColor = bgColorInput.value;
+      this.renderCanvas();
+    });
+
+    bgOpacityInput?.addEventListener("input", () => {
+      if (!overlay.style) overlay.style = {};
+      overlay.style.backgroundOpacity = (parseInt(bgOpacityInput.value) || 0) / 100;
+      if (bgOpacityValue) bgOpacityValue.textContent = `${bgOpacityInput.value}%`;
+      this.renderCanvas();
+    });
+
+    borderColorInput?.addEventListener("change", () => {
+      if (!overlay.style) overlay.style = {};
+      overlay.style.borderColor = borderColorInput.value;
+      this.renderCanvas();
+    });
+
+    borderWidthInput?.addEventListener("change", () => {
+      if (!overlay.style) overlay.style = {};
+      overlay.style.borderWidth = Math.max(0, parseInt(borderWidthInput.value) || 0);
+      this.renderCanvas();
+    });
+
+    borderRadiusInput?.addEventListener("change", () => {
+      if (!overlay.style) overlay.style = {};
+      overlay.style.borderRadius = Math.max(0, parseInt(borderRadiusInput.value) || 0);
+      this.renderCanvas();
+    });
+
+    deleteBtn?.addEventListener("click", () => {
+      if (!this.layout?.overlays) return;
+      this.layout.overlays = this.layout.overlays.filter((item) => item.id !== overlay.id);
+      this.selectElement(null);
+      this.renderCanvas();
+    });
+  }
+
+  private showAddBackgroundMenu(): void {
+    if (!this.layout || !this.sidebarContent) return;
+
+    if (this.layout.backgrounds.length >= 2) {
+      showNotification("Maximum 2 background layers", "warning");
+      return;
+    }
+
+    const targetLayerIndex = this.layout.backgrounds.length;
+    const images = this.getReusableLayoutImages("background");
+
+    this.selectedElement = null;
+    this.sidebarContent.innerHTML = `
+      <div class="layout-property-group">
+        <div class="layout-property-group-title">Add Background Layer ${targetLayerIndex + 1}</div>
+        <div style="font-size: 11px; color: var(--text-dark-muted); margin-bottom: 8px;">Choose an existing image resource or browse for a new file</div>
+        <div class="layout-property-row">
+          <span class="layout-property-label">Use Existing</span>
+          <div class="layout-property-input">
+            <select id="layout-add-bg-image-select">
+              ${this.renderImageOptionsHtml("background")}
+            </select>
+          </div>
+        </div>
+        ${images.length > 0 ? `
+        <div style="font-size: 10px; color: var(--text-dark-muted); margin-top: 6px;">
+          Found ${images.length} reusable image${images.length === 1 ? "" : "s"}
+        </div>
+        ` : ""}
+        <div class="layout-image-actions" style="margin-top: 8px;">
+          <button id="layout-add-bg-browse">Browse...</button>
+        </div>
+      </div>
+    `;
+
+    const existingSelect = document.getElementById("layout-add-bg-image-select") as HTMLSelectElement;
+    const browseBtn = document.getElementById("layout-add-bg-browse") as HTMLButtonElement;
+
+    existingSelect?.addEventListener("change", () => {
+      const imageId = existingSelect.value;
+      if (!imageId) return;
+      this.applyImageBackground(targetLayerIndex, imageId);
+    });
+
+    browseBtn?.addEventListener("click", () => {
+      this.browseBackgroundImage(targetLayerIndex);
+    });
+  }
+
+  private applyImageBackground(layerIndex: number, imageId: string): void {
+    if (!this.layout) return;
+
+    this.pushUndoState();
+    const existingIndex = this.layout.backgrounds.findIndex((bg) => bg.layerIndex === layerIndex);
+    const newBg: LayoutBackground = {
+      layerIndex,
+      type: "image",
+      value: imageId,
+      opacity: 1,
+      size: "cover",
+    };
+
+    if (existingIndex >= 0) {
+      this.layout.backgrounds[existingIndex] = newBg;
+    } else {
+      this.layout.backgrounds.push(newBg);
+    }
+
+    this.selectElement({ type: "background", layerIndex });
+    this.renderCanvas();
+    this.renderSidebar();
+  }
+
+  private browseBackgroundImage(layerIndex?: number): void {
     console.log("[LayoutDesigner] browseBackgroundImage called");
     postMessage({
       type: "browseLayoutImage",
       purpose: "background",
-      layerIndex: this.layout?.backgrounds.length || 0,
+      layerIndex: layerIndex ?? (this.layout?.backgrounds.length || 0),
     });
   }
 
@@ -1827,22 +2356,7 @@ export class LayoutDesignerModal {
     }
 
     if (purpose === "background" && layerIndex !== undefined) {
-      this.pushUndoState();
-      // Add or update background layer
-      const existingIndex = this.layout.backgrounds.findIndex((bg) => bg.layerIndex === layerIndex);
-      const newBg: LayoutBackground = {
-        layerIndex,
-        type: "image",
-        value: imageId,
-        opacity: 1,
-        size: "cover",
-      };
-
-      if (existingIndex >= 0) {
-        this.layout.backgrounds[existingIndex] = newBg;
-      } else {
-        this.layout.backgrounds.push(newBg);
-      }
+      this.applyImageBackground(layerIndex, imageId);
     } else if (purpose === "knob" && paramKey) {
       this.pushUndoState();
       const control = this.layout.controls.find((c) => c.paramKey === paramKey);
@@ -1850,6 +2364,10 @@ export class LayoutDesignerModal {
         if (!control.style) control.style = {};
         control.style.knobImageId = imageId;
       }
+
+      this.renderCanvas();
+      this.renderSidebar();
+      return;
     }
 
     this.renderCanvas();
@@ -1862,23 +2380,49 @@ export class LayoutDesignerModal {
     if (this.previewMode) return;
 
     const target = e.target as HTMLElement;
+    const resizeHandle = target.closest(".layout-resize-handle") as HTMLElement;
+    const rectangle = target.closest(".layout-rectangle-overlay") as HTMLElement;
     const placeholder = target.closest(".layout-control-placeholder") as HTMLElement;
     const textLabel = target.closest(".layout-text-label") as HTMLElement;
+
+    if (resizeHandle && rectangle) {
+      const overlayId = rectangle.dataset.overlayId;
+      const handle = resizeHandle.dataset.overlayHandle as "top-left" | "top-right" | "bottom-left" | "bottom-right" | undefined;
+      if (overlayId && handle) {
+        this.startDrag(e, rectangle, "overlay", overlayId, "resize", handle);
+      }
+      return;
+    }
+
+    if (rectangle) {
+      const overlayId = rectangle.dataset.overlayId;
+      if (overlayId) {
+        this.startDrag(e, rectangle, "overlay", overlayId, "move");
+      }
+      return;
+    }
 
     if (placeholder) {
       const paramKey = placeholder.dataset.paramKey;
       if (paramKey) {
-        this.startDrag(e, placeholder, "control", paramKey);
+        this.startDrag(e, placeholder, "control", paramKey, "move");
       }
     } else if (textLabel) {
       const labelId = textLabel.dataset.labelId;
       if (labelId) {
-        this.startDrag(e, textLabel, "label", labelId);
+        this.startDrag(e, textLabel, "label", labelId, "move");
       }
     }
   }
 
-  private startDrag(e: MouseEvent, element: HTMLElement, type: "control" | "label", id: string): void {
+  private startDrag(
+    e: MouseEvent,
+    element: HTMLElement,
+    type: "control" | "label" | "overlay",
+    id: string,
+    mode: "move" | "resize",
+    resizeHandle: "top-left" | "top-right" | "bottom-left" | "bottom-right" | null = null,
+  ): void {
     e.preventDefault();
 
     this.pushUndoState();
@@ -1889,7 +2433,11 @@ export class LayoutDesignerModal {
       startY: e.clientY,
       elementStartX: parseInt(element.style.left) || 0,
       elementStartY: parseInt(element.style.top) || 0,
+      elementStartWidth: parseInt(element.style.width) || 0,
+      elementStartHeight: parseInt(element.style.height) || 0,
       type,
+      mode,
+      resizeHandle,
       id,
     };
 
@@ -1902,12 +2450,74 @@ export class LayoutDesignerModal {
     const dx = e.clientX - this.dragState.startX;
     const dy = e.clientY - this.dragState.startY;
 
+    if (this.dragState.type === "overlay" && this.dragState.mode === "resize") {
+      const minSize = 16;
+      let newX = this.dragState.elementStartX;
+      let newY = this.dragState.elementStartY;
+      let newWidth = this.dragState.elementStartWidth;
+      let newHeight = this.dragState.elementStartHeight;
+
+      switch (this.dragState.resizeHandle) {
+        case "top-left":
+          newX = snapToGrid(this.dragState.elementStartX + dx / this.zoom);
+          newY = snapToGrid(this.dragState.elementStartY + dy / this.zoom);
+          newWidth = snapToGrid(this.dragState.elementStartWidth - dx / this.zoom);
+          newHeight = snapToGrid(this.dragState.elementStartHeight - dy / this.zoom);
+          break;
+        case "top-right":
+          newY = snapToGrid(this.dragState.elementStartY + dy / this.zoom);
+          newWidth = snapToGrid(this.dragState.elementStartWidth + dx / this.zoom);
+          newHeight = snapToGrid(this.dragState.elementStartHeight - dy / this.zoom);
+          break;
+        case "bottom-left":
+          newX = snapToGrid(this.dragState.elementStartX + dx / this.zoom);
+          newWidth = snapToGrid(this.dragState.elementStartWidth - dx / this.zoom);
+          newHeight = snapToGrid(this.dragState.elementStartHeight + dy / this.zoom);
+          break;
+        case "bottom-right":
+        default:
+          newWidth = snapToGrid(this.dragState.elementStartWidth + dx / this.zoom);
+          newHeight = snapToGrid(this.dragState.elementStartHeight + dy / this.zoom);
+          break;
+      }
+
+      if (newWidth < minSize) {
+        if (this.dragState.resizeHandle === "top-left" || this.dragState.resizeHandle === "bottom-left") {
+          newX += newWidth - minSize;
+        }
+        newWidth = minSize;
+      }
+      if (newHeight < minSize) {
+        if (this.dragState.resizeHandle === "top-left" || this.dragState.resizeHandle === "top-right") {
+          newY += newHeight - minSize;
+        }
+        newHeight = minSize;
+      }
+
+      newX = Math.max(0, Math.min(this.layout.dimensions.width - minSize, newX));
+      newY = Math.max(0, Math.min(this.layout.dimensions.height - minSize, newY));
+      newWidth = Math.min(newWidth, this.layout.dimensions.width - newX);
+      newHeight = Math.min(newHeight, this.layout.dimensions.height - newY);
+
+      this.dragState.element.style.left = `${newX}px`;
+      this.dragState.element.style.top = `${newY}px`;
+      this.dragState.element.style.width = `${Math.max(minSize, newWidth)}px`;
+      this.dragState.element.style.height = `${Math.max(minSize, newHeight)}px`;
+      return;
+    }
+
     const newX = snapToGrid(this.dragState.elementStartX + dx / this.zoom);
     const newY = snapToGrid(this.dragState.elementStartY + dy / this.zoom);
+    const dragWidth = this.dragState.type === "overlay"
+      ? (parseInt(this.dragState.element.style.width) || this.dragState.elementStartWidth || 60)
+      : 60;
+    const dragHeight = this.dragState.type === "overlay"
+      ? (parseInt(this.dragState.element.style.height) || this.dragState.elementStartHeight || 60)
+      : 60;
 
     // Clamp to canvas bounds
-    const clampedX = Math.max(0, Math.min(this.layout.dimensions.width - 60, newX));
-    const clampedY = Math.max(0, Math.min(this.layout.dimensions.height - 60, newY));
+    const clampedX = Math.max(0, Math.min(this.layout.dimensions.width - dragWidth, newX));
+    const clampedY = Math.max(0, Math.min(this.layout.dimensions.height - dragHeight, newY));
 
     this.dragState.element.style.left = `${clampedX}px`;
     this.dragState.element.style.top = `${clampedY}px`;
@@ -1935,12 +2545,24 @@ export class LayoutDesignerModal {
         if (label) {
           label.position = { x: newX, y: newY };
         }
+      } else if (type === "overlay") {
+        const overlay = (this.layout.overlays ?? []).find((item) => item.id === id);
+        if (overlay) {
+          overlay.position = { x: newX, y: newY };
+          if (this.dragState.mode === "resize") {
+            overlay.size = {
+              width: Math.max(16, parseInt(element.style.width) || overlay.size.width),
+              height: Math.max(16, parseInt(element.style.height) || overlay.size.height),
+            };
+          }
+        }
       }
 
       // Update sidebar if selected
       if (
         (this.selectedElement?.type === "control" && this.selectedElement.paramKey === id) ||
-        (this.selectedElement?.type === "label" && this.selectedElement.id === id)
+        (this.selectedElement?.type === "label" && this.selectedElement.id === id) ||
+        (this.selectedElement?.type === "overlay" && this.selectedElement.id === id)
       ) {
         this.renderSidebar();
       }
@@ -1953,7 +2575,11 @@ export class LayoutDesignerModal {
       startY: 0,
       elementStartX: 0,
       elementStartY: 0,
+      elementStartWidth: 0,
+      elementStartHeight: 0,
       type: null,
+      mode: "move",
+      resizeHandle: null,
       id: "",
     };
   }
@@ -2038,6 +2664,11 @@ export class LayoutDesignerModal {
       this.layout.textLabels = this.layout.textLabels.filter(
         (l) => l.id !== (this.selectedElement as { type: "label"; id: string }).id
       );
+    } else if (this.selectedElement.type === "overlay") {
+      const selectedOverlayId = this.selectedElement.id;
+      this.layout.overlays = (this.layout.overlays ?? []).filter(
+        (item) => item.id !== selectedOverlayId
+      );
     } else if (this.selectedElement.type === "background") {
       const selectedLayerIndex = this.selectedElement.layerIndex;
       this.layout.backgrounds = this.layout.backgrounds.filter(
@@ -2071,6 +2702,10 @@ export class LayoutDesignerModal {
         (l) => l.id === (this.selectedElement as { type: "label"; id: string }).id
       );
       position = label?.position;
+    } else if (this.selectedElement.type === "overlay") {
+      const selectedOverlayId = this.selectedElement.id;
+      const overlay = (this.layout.overlays ?? []).find((item) => item.id === selectedOverlayId);
+      position = overlay?.position;
     }
 
     if (!position) return;

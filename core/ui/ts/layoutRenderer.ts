@@ -12,6 +12,7 @@ import type {
   LayoutControl,
   LayoutTextLabel,
   LayoutBackground,
+  LayoutRectangleOverlay,
 } from "./layoutTypes.js";
 import { layoutLookupKey } from "./layoutTypes.js";
 import type { GraphNode } from "./types.js";
@@ -82,6 +83,7 @@ export function renderCustomLayout(
   resourceControls: LayoutResourceControlDef[] = []
 ): string {
   const backgrounds = renderBackgrounds(layout.backgrounds);
+  const overlays = renderOverlays(node, layout.overlays ?? []);
   const controls = renderControls(node, layout.controls, paramDefs, resourceControls);
   const labels = renderTextLabels(layout.textLabels);
 
@@ -102,7 +104,8 @@ export function renderCustomLayout(
       "
     >
       ${backgrounds}
-      <div class="custom-layout-controls" style="position: absolute; inset: 0; z-index: 2; margin: 0; padding: 0;">
+      ${overlays}
+      <div class="custom-layout-controls" style="position: absolute; inset: 0; z-index: 2; margin: 0; padding: 0; pointer-events: none;">
         ${controls}
       </div>
       <div class="custom-layout-labels" style="position: absolute; inset: 0; z-index: 3; pointer-events: none; margin: 0; padding: 0;">
@@ -110,6 +113,86 @@ export function renderCustomLayout(
       </div>
     </div>
   `;
+}
+
+function renderOverlays(node: GraphNode, overlays: LayoutRectangleOverlay[]): string {
+  const bypassed = isNodeBypassed(node);
+  return overlays
+    .map((overlay) => {
+      const visibilityMode = overlay.style?.visibilityMode ?? "always";
+      const toggleBypassOnClick = overlay.style?.toggleBypassOnClick === true;
+      const isVisible =
+        visibilityMode === "always"
+        || (visibilityMode === "enabled" && !bypassed)
+        || (visibilityMode === "bypassed" && bypassed);
+
+      if (!isVisible && !toggleBypassOnClick) {
+        return "";
+      }
+
+      const backgroundColor = overlay.style?.backgroundColor || "#000000";
+      const backgroundOpacity = typeof overlay.style?.backgroundOpacity === "number"
+        ? Math.max(0, Math.min(1, overlay.style.backgroundOpacity))
+        : 0.25;
+      const borderColor = overlay.style?.borderColor || "#ffffff";
+      const borderWidth = Math.max(0, overlay.style?.borderWidth ?? 1);
+      const borderRadius = Math.max(0, overlay.style?.borderRadius ?? 0);
+      const fill = colorWithAlpha(backgroundColor, backgroundOpacity);
+
+      return `
+        <div
+          class="custom-layout-overlay"
+          style="
+            position: absolute;
+            left: ${overlay.position.x}px;
+            top: ${overlay.position.y}px;
+            width: ${overlay.size.width}px;
+            height: ${overlay.size.height}px;
+            background-color: ${isVisible ? fill : "transparent"};
+            border: ${isVisible ? `${borderWidth}px solid ${borderColor}` : "0 solid transparent"};
+            border-radius: ${borderRadius}px;
+            z-index: ${toggleBypassOnClick ? 4 : 1};
+            box-sizing: border-box;
+            pointer-events: ${toggleBypassOnClick ? "auto" : "none"};
+            cursor: ${toggleBypassOnClick ? "pointer" : "default"};
+          "
+          data-toggle-bypass="${toggleBypassOnClick ? "true" : "false"}"
+        ></div>
+      `;
+    })
+    .join("");
+}
+
+function isNodeBypassed(node: GraphNode): boolean {
+  const anyNode = node as unknown as { bypassed?: unknown; enabled?: unknown };
+  if (typeof anyNode.bypassed === "boolean") {
+    return anyNode.bypassed;
+  }
+  if (typeof anyNode.enabled === "boolean") {
+    return !anyNode.enabled;
+  }
+  return false;
+}
+
+function colorWithAlpha(hexColor: string, alpha: number): string {
+  const clampedAlpha = Math.max(0, Math.min(1, alpha));
+  const normalized = hexColor.trim();
+  const shortMatch = normalized.match(/^#([\da-fA-F]{3})$/);
+  const longMatch = normalized.match(/^#([\da-fA-F]{6})$/);
+
+  if (shortMatch) {
+    const [r, g, b] = shortMatch[1].split("").map((ch) => parseInt(ch + ch, 16));
+    return `rgba(${r}, ${g}, ${b}, ${clampedAlpha})`;
+  }
+  if (longMatch) {
+    const hex = longMatch[1];
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${clampedAlpha})`;
+  }
+
+  return normalized;
 }
 
 /**
@@ -161,12 +244,10 @@ function renderBackgrounds(backgrounds: LayoutBackground[]): string {
           } else if (bg.size === "stretch") {
             bgSize = "100% 100%";
           }
-          // Determine position (offset or center)
+          // Match designer semantics exactly: origin is always top-left with pixel offsets.
           const offsetX = bg.offsetX || 0;
           const offsetY = bg.offsetY || 0;
-          const bgPosition = offsetX !== 0 || offsetY !== 0 
-            ? `${offsetX}px ${offsetY}px` 
-            : "center";
+          const bgPosition = `${offsetX}px ${offsetY}px`;
           // Tile mode uses repeat
           const bgRepeat = bg.size === "tile" ? "repeat" : "no-repeat";
 

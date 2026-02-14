@@ -3103,7 +3103,7 @@ void PluginController::HandleBrowseLayoutImageRequest(const nlohmann::json& payl
             if (!result.success) return;
 
             const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
-            const auto imagesDir = settingsDir / "layouts" / "images";
+            const auto imagesDir = settingsDir / "layouts" / "content" / "images";
             [[maybe_unused]] const auto ensuredImagesDir = mFileSystem.EnsureDirectory(imagesDir);
 
             const auto selectedPath = result.path;
@@ -3155,7 +3155,7 @@ void PluginController::HandleSaveLayoutImageRequest(const nlohmann::json& payloa
     { AppendSessionLog("SaveLayoutImage: missing required fields"); return; }
 
     const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
-    const auto imagesDir = settingsDir / "layouts" / "images";
+    const auto imagesDir = settingsDir / "layouts" / "content" / "images";
     [[maybe_unused]] const auto ensuredImagesDir = mFileSystem.EnsureDirectory(imagesDir);
 
     const auto decodedBytes = util::DecodeBase64(dataEncoded);
@@ -4569,39 +4569,64 @@ void PluginController::LoadLayoutLibrary()
             SaveEffectLayoutsSettings(mFileSystem, settings);
         }
 
-        const auto imagesDir = layoutsDir / "images";
-        if (std::filesystem::exists(imagesDir))
+        const auto appendImagesFromDir = [&library](const std::filesystem::path& imagesDir)
         {
+            if (!std::filesystem::exists(imagesDir))
+                return;
+
             for (const auto& entry : std::filesystem::directory_iterator(imagesDir))
             {
-                if (entry.is_regular_file())
+                if (!entry.is_regular_file())
+                    continue;
+
+                const auto ext = entry.path().extension().string();
+                if (ext != ".png" && ext != ".jpg" && ext != ".jpeg")
+                    continue;
+
+                std::ifstream imageFile(entry.path(), std::ios::binary);
+                if (!imageFile)
+                    continue;
+
+                std::vector<std::uint8_t> imageData(
+                    (std::istreambuf_iterator<char>(imageFile)),
+                    std::istreambuf_iterator<char>());
+                imageFile.close();
+
+                const std::string base64Data = util::EncodeBase64(imageData);
+                std::string mimeType = "image/png";
+                if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
+                const std::string dataUrl = "data:" + mimeType + ";base64," + base64Data;
+
+                const std::string imageId = entry.path().stem().string();
+                auto& images = library["images"];
+                bool replaced = false;
+                if (images.is_array())
                 {
-                    const auto ext = entry.path().extension().string();
-                    if (ext == ".png" || ext == ".jpg" || ext == ".jpeg")
+                    for (auto& existing : images)
                     {
-                        std::ifstream imageFile(entry.path(), std::ios::binary);
-                        if (imageFile)
+                        if (existing.is_object() && existing.value("imageId", std::string{}) == imageId)
                         {
-                            std::vector<std::uint8_t> imageData(
-                                (std::istreambuf_iterator<char>(imageFile)),
-                                std::istreambuf_iterator<char>());
-                            imageFile.close();
-
-                            const std::string base64Data = util::EncodeBase64(imageData);
-                            std::string mimeType = "image/png";
-                            if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
-                            const std::string dataUrl = "data:" + mimeType + ";base64," + base64Data;
-
-                            nlohmann::json imageRef;
-                            imageRef["imageId"] = entry.path().stem().string();
-                            imageRef["fileName"] = entry.path().filename().string();
-                            imageRef["dataUrl"] = dataUrl;
-                            library["images"].push_back(imageRef);
+                            existing["fileName"] = entry.path().filename().string();
+                            existing["dataUrl"] = dataUrl;
+                            replaced = true;
+                            break;
                         }
                     }
                 }
+
+                if (!replaced)
+                {
+                    nlohmann::json imageRef;
+                    imageRef["imageId"] = imageId;
+                    imageRef["fileName"] = entry.path().filename().string();
+                    imageRef["dataUrl"] = dataUrl;
+                    images.push_back(imageRef);
+                }
             }
-        }
+        };
+
+        // Canonical location for layout images.
+        appendImagesFromDir(layoutsDir / "images");
     }
 
     // Build layout library from mapping (not inferred from filenames).

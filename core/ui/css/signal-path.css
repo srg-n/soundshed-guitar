@@ -1969,6 +1969,7 @@
 
 .custom-layout-control {
   box-sizing: border-box;
+  pointer-events: auto;
 }
 
 .custom-layout-resource-selector {

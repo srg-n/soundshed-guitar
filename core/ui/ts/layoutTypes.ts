@@ -105,6 +105,33 @@ export interface LayoutTextLabel {
   textAlign?: "left" | "center" | "right";
 }
 
+/** A draggable/resizable rectangular overlay drawn above backgrounds */
+export interface LayoutRectangleOverlay {
+  /** Unique ID within the layout */
+  id: string;
+  /** Position in pixels */
+  position: { x: number; y: number };
+  /** Size in pixels */
+  size: { width: number; height: number };
+  /** Visual appearance */
+  style?: {
+    /** Visibility mode for this overlay */
+    visibilityMode?: "always" | "enabled" | "bypassed";
+    /** Whether clicking this overlay toggles effect bypass in runtime view */
+    toggleBypassOnClick?: boolean;
+    /** Fill color (without alpha) */
+    backgroundColor?: string;
+    /** Fill opacity (0-1) */
+    backgroundOpacity?: number;
+    /** Border color */
+    borderColor?: string;
+    /** Border width (pixels) */
+    borderWidth?: number;
+    /** Corner radius (pixels) */
+    borderRadius?: number;
+  };
+}
+
 /** Complete effect layout definition */
 export interface EffectLayout {
   /** Effect type this layout applies to (e.g., "delay_digital") */
@@ -128,6 +155,8 @@ export interface EffectLayout {
   backgrounds: LayoutBackground[];
   /** Positioned parameter controls */
   controls: LayoutControl[];
+  /** Rectangle overlays drawn above backgrounds and below controls */
+  overlays?: LayoutRectangleOverlay[];
   /** Additional text labels */
   textLabels: LayoutTextLabel[];
   /** Image assets referenced by this layout (for export) */
@@ -204,6 +233,11 @@ export function generateLabelId(): string {
   return `label-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** Generate a unique ID for rectangle overlays */
+export function generateOverlayId(): string {
+  return `overlay-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 /** Create an empty layout for an effect type */
 export function createEmptyLayout(effectType: string): EffectLayout {
   return {
@@ -212,6 +246,7 @@ export function createEmptyLayout(effectType: string): EffectLayout {
     dimensions: { ...DEFAULT_LAYOUT_DIMENSIONS },
     backgrounds: [],
     controls: [],
+    overlays: [],
     textLabels: [],
     createdAt: new Date().toISOString(),
     modifiedAt: new Date().toISOString(),
