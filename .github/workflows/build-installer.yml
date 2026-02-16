@@ -84,6 +84,15 @@ jobs:
         working-directory: core/ui
         run: npm run build
 
+      - name: Fetch JUCE source
+        shell: pwsh
+        run: |
+          if (Test-Path "juce/JUCE/CMakeLists.txt") {
+            Write-Host "JUCE source already present at juce/JUCE"
+          } else {
+            git clone --depth 1 https://github.com/juce-framework/JUCE.git juce/JUCE
+          }
+
       - name: Configure JUCE CMake
         run: cmake -S juce -B juce/Builds
 
