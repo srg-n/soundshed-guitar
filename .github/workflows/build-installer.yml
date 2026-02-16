@@ -215,3 +215,83 @@ jobs:
         with:
           name: SoundshedGuitar-JUCE-Installer
           path: juce/packaging/Output/*.exe
+
+  build-juce-macos-dmg:
+    name: Build JUCE macOS DMG
+    if: ${{ github.event.inputs.target == 'both' || github.event.inputs.target == 'juce' }}
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: core/ui/package-lock.json
+
+      - name: Build UI
+        working-directory: core/ui
+        run: npm ci
+
+      - name: Build UI bundle
+        working-directory: core/ui
+        run: npm run build
+
+      - name: Cache JUCE source
+        id: cache-juce-source-macos
+        uses: actions/cache@v4
+        with:
+          path: juce/JUCE
+          key: ${{ runner.os }}-juce-source-v1
+
+      - name: Fetch JUCE source
+        run: |
+          if [ "${{ steps.cache-juce-source-macos.outputs.cache-hit }}" = "true" ]; then
+            echo "JUCE source restored from cache"
+          elif [ -f "juce/JUCE/CMakeLists.txt" ]; then
+            echo "JUCE source already present at juce/JUCE"
+          else
+            git clone --depth 1 https://github.com/juce-framework/JUCE.git juce/JUCE
+          fi
+
+      - name: Configure JUCE CMake
+        run: cmake -S juce -B juce/Builds -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+
+      - name: Build JUCE Standalone Release
+        run: cmake --build juce/Builds --config Release --target SoundshedGuitar_Standalone
+
+      - name: Export JUCE build env
+        run: |
+          if [ ! -f "juce/.env" ]; then
+            echo "Expected juce/.env after configure, but it was not found."
+            exit 1
+          fi
+          cat juce/.env >> "$GITHUB_ENV"
+
+      - name: Create DMG
+        run: |
+          APP_PATH="juce/Builds/${PROJECT_NAME}_artefacts/Release/Standalone/${PRODUCT_NAME}.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Standalone app not found at $APP_PATH"
+            exit 1
+          fi
+
+          STAGING_DIR="${RUNNER_TEMP}/dmg-root"
+          mkdir -p "$STAGING_DIR"
+          cp -R "$APP_PATH" "$STAGING_DIR/"
+
+          DMG_NAME="${PRODUCT_NAME}-${VERSION}-macOS.dmg"
+          DMG_PATH="${RUNNER_TEMP}/${DMG_NAME}"
+          hdiutil create -volname "${PRODUCT_NAME}" -srcfolder "$STAGING_DIR" -ov -format UDZO "$DMG_PATH"
+          echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"
+          echo "DMG_NAME=$DMG_NAME" >> "$GITHUB_ENV"
+
+      - name: Upload macOS DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.DMG_NAME }}
+          path: ${{ env.DMG_PATH }}
