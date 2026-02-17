@@ -33,12 +33,16 @@ UninstallFilesDir="{commonappdata}\{#ProductName}\uninstall"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{commoncf64}\VST3\{#ProductName}Data"
+Type: filesandordirs; Name: "{commonpf64}\{#Publisher}\{#ProductName}\resources\ui"
+Type: filesandordirs; Name: "{commoncf64}\VST3\{#ProductName}.vst3\Contents\x86_64-win\resources\ui"
+Type: filesandordirs; Name: "{commonappdata}\{#ProductName}\resources"
 
 ; MSVC adds a .ilk when building the plugin. Let's not include that.
 [Files]
-Source: "..\Builds\{#ProjectName}_artefacts\Release\VST3\{#ProductName}.vst3\*"; DestDir: "{commoncf64}\VST3\{#ProductName}.vst3\"; Excludes: *.ilk; Flags: ignoreversion recursesubdirs; Components: vst3
+Source: "..\Builds\{#ProjectName}_artefacts\Release\VST3\{#ProductName}.vst3\*"; DestDir: "{commoncf64}\VST3\{#ProductName}.vst3\"; Excludes: *.ilk,Contents\x86_64-win\resources\ui\*; Flags: ignoreversion recursesubdirs; Components: vst3
 Source: "..\Builds\{#ProjectName}_artefacts\Release\CLAP\{#ProductName}.clap"; DestDir: "{commoncf64}\CLAP\"; Flags: ignoreversion; Components: clap
-Source: "..\Builds\{#ProjectName}_artefacts\Release\Standalone\*"; DestDir: "{commonpf64}\{#Publisher}\{#ProductName}"; Flags: ignoreversion recursesubdirs; Components: standalone
+Source: "..\Builds\{#ProjectName}_artefacts\Release\Standalone\*"; DestDir: "{commonpf64}\{#Publisher}\{#ProductName}"; Excludes: resources\ui\*; Flags: ignoreversion recursesubdirs; Components: standalone
+Source: "..\..\core\ui\*"; DestDir: "{commonappdata}\{#ProductName}\resources\ui"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: standalone vst3
 Source: "{#WebView2RuntimeUrl}"; DestDir: "{tmp}"; DestName: "MicrosoftEdgeWebView2Setup.exe"; Flags: external download ignoreversion; Components: standalone; Check: NeedsWebView2Runtime
 
 [Icons]
@@ -69,4 +73,113 @@ end;
 function NeedsWebView2Runtime: Boolean;
 begin
     Result := not IsWebView2RuntimeInstalled;
+end;
+
+function CreateDirectoryJunction(const LinkPath: string; const TargetPath: string): Boolean;
+var
+    ResultCode: Integer;
+begin
+    if not DirExists(TargetPath) then
+    begin
+        Log('Junction target does not exist: ' + TargetPath);
+        Result := False;
+        Exit;
+    end;
+
+    if DirExists(LinkPath) then
+    begin
+        DelTree(LinkPath, True, True, True);
+    end;
+
+    if not DirExists(ExtractFileDir(LinkPath)) then
+    begin
+        if not ForceDirectories(ExtractFileDir(LinkPath)) then
+        begin
+            Log('Failed to create parent directory for: ' + LinkPath);
+            Result := False;
+            Exit;
+        end;
+    end;
+
+    Result := Exec(ExpandConstant('{cmd}'),
+                   '/C mklink /J "' + LinkPath + '" "' + TargetPath + '"',
+                   '',
+                   SW_HIDE,
+                   ewWaitUntilTerminated,
+                   ResultCode) and (ResultCode = 0);
+
+    if not Result then
+        Log('Failed to create junction. Link=' + LinkPath + ' Target=' + TargetPath + ' ExitCode=' + IntToStr(ResultCode));
+end;
+
+function CopyDirectoryTree(const SourcePath: string; const DestPath: string): Boolean;
+var
+    ResultCode: Integer;
+begin
+    if not DirExists(SourcePath) then
+    begin
+        Log('Copy source does not exist: ' + SourcePath);
+        Result := False;
+        Exit;
+    end;
+
+    if DirExists(DestPath) then
+    begin
+        DelTree(DestPath, True, True, True);
+    end;
+
+    if not DirExists(ExtractFileDir(DestPath)) then
+    begin
+        if not ForceDirectories(ExtractFileDir(DestPath)) then
+        begin
+            Log('Failed to create copy destination parent: ' + ExtractFileDir(DestPath));
+            Result := False;
+            Exit;
+        end;
+    end;
+
+    Result := Exec(ExpandConstant('{cmd}'),
+                   '/C xcopy /E /I /Y "' + SourcePath + '" "' + DestPath + '"',
+                   '',
+                   SW_HIDE,
+                   ewWaitUntilTerminated,
+                   ResultCode) and (ResultCode = 0);
+
+    if not Result then
+        Log('Fallback copy failed. Source=' + SourcePath + ' Dest=' + DestPath + ' ExitCode=' + IntToStr(ResultCode));
+end;
+
+procedure EnsureUiAtPath(const LinkPath: string; const SharedUiPath: string);
+begin
+    if CreateDirectoryJunction(LinkPath, SharedUiPath) then
+        Exit;
+
+    Log('Falling back to physical UI copy at: ' + LinkPath);
+
+    if not CopyDirectoryTree(SharedUiPath, LinkPath) then
+        Log('UI fallback copy was not successful for: ' + LinkPath);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+    SharedUiPath: string;
+begin
+    if CurStep <> ssPostInstall then
+        Exit;
+
+    SharedUiPath := ExpandConstant('{commonappdata}\{#ProductName}\resources\ui');
+
+    if WizardIsComponentSelected('standalone') then
+    begin
+        EnsureUiAtPath(
+            ExpandConstant('{commonpf64}\{#Publisher}\{#ProductName}\resources\ui'),
+            SharedUiPath);
+    end;
+
+    if WizardIsComponentSelected('vst3') then
+    begin
+        EnsureUiAtPath(
+            ExpandConstant('{commoncf64}\VST3\{#ProductName}.vst3\Contents\x86_64-win\resources\ui'),
+            SharedUiPath);
+    end;
 end;
