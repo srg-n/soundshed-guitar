@@ -43,7 +43,6 @@ Source: "..\Builds\{#ProjectName}_artefacts\Release\VST3\{#ProductName}.vst3\*";
 Source: "..\Builds\{#ProjectName}_artefacts\Release\CLAP\{#ProductName}.clap"; DestDir: "{commoncf64}\CLAP\"; Flags: ignoreversion; Components: clap
 Source: "..\Builds\{#ProjectName}_artefacts\Release\Standalone\*"; DestDir: "{commonpf64}\{#Publisher}\{#ProductName}"; Excludes: resources\ui\*; Flags: ignoreversion recursesubdirs; Components: standalone
 Source: "..\..\core\ui\*"; DestDir: "{commonappdata}\{#ProductName}\resources\ui"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: standalone vst3
-Source: "{#WebView2RuntimeUrl}"; DestDir: "{tmp}"; DestName: "MicrosoftEdgeWebView2Setup.exe"; Flags: external download ignoreversion; Components: standalone; Check: NeedsWebView2Runtime
 
 [Icons]
 Name: "{autoprograms}\{#ProductName}"; Filename: "{commonpf64}\{#Publisher}\{#ProductName}\{#ProductName}.exe"; Components: standalone
@@ -51,7 +50,6 @@ Name: "{autoprograms}\Uninstall {#ProductName}"; Filename: "{uninstallexe}"
 
 ; This is optional, for preset or other plugin data
 [Run]
-Filename: "{tmp}\MicrosoftEdgeWebView2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "Installing Microsoft Edge WebView2 Runtime..."; Flags: runhidden waituntilterminated; Components: standalone; Check: NeedsWebView2Runtime
 Filename: "{cmd}"; \
     WorkingDir: "{commoncf64}\VST3"; \
     Parameters: "/C mklink /D ""{commoncf64}\VST3\{#ProductName}Data"" ""{commonappdata}\{#ProductName}"""; \
@@ -73,6 +71,44 @@ end;
 function NeedsWebView2Runtime: Boolean;
 begin
     Result := not IsWebView2RuntimeInstalled;
+end;
+
+function InstallWebView2Runtime: Boolean;
+var
+    InstallerPath: string;
+    DownloadCommand: string;
+    ResultCode: Integer;
+begin
+    Result := True;
+
+    if not NeedsWebView2Runtime then
+        Exit;
+
+    InstallerPath := ExpandConstant('{tmp}\MicrosoftEdgeWebView2Setup.exe');
+    DownloadCommand := '/C powershell -NoProfile -ExecutionPolicy Bypass -Command "' +
+                       '$ProgressPreference = ''SilentlyContinue''; ' +
+                       'Invoke-WebRequest -UseBasicParsing -Uri ''{#WebView2RuntimeUrl}'' -OutFile ''' + InstallerPath + '''"';
+
+    if not Exec(ExpandConstant('{cmd}'), DownloadCommand, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+    begin
+        Log('Failed to download WebView2 runtime bootstrapper. ExitCode=' + IntToStr(ResultCode));
+        Result := False;
+        Exit;
+    end;
+
+    if not FileExists(InstallerPath) then
+    begin
+        Log('WebView2 runtime bootstrapper was not downloaded: ' + InstallerPath);
+        Result := False;
+        Exit;
+    end;
+
+    if not Exec(InstallerPath, '/silent /install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+    begin
+        Log('WebView2 runtime installer failed. ExitCode=' + IntToStr(ResultCode));
+        Result := False;
+        Exit;
+    end;
 end;
 
 function CreateDirectoryJunction(const LinkPath: string; const TargetPath: string): Boolean;
@@ -166,6 +202,12 @@ var
 begin
     if CurStep <> ssPostInstall then
         Exit;
+
+    if WizardIsComponentSelected('standalone') then
+    begin
+        if not InstallWebView2Runtime then
+            Log('Continuing install without WebView2 runtime; standalone UI may not load until runtime is installed.');
+    end;
 
     SharedUiPath := ExpandConstant('{commonappdata}\{#ProductName}\resources\ui');
 
