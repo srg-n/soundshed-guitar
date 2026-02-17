@@ -1102,8 +1102,10 @@
 }
 
 .theme-classic .node-param-tabs {
-  background: rgba(54, 34, 24, 0.35);
-  border-color: rgba(255, 244, 214, 0.18);
+  background: rgba(71, 47, 29, 0.76);
+  border-color: rgba(255, 244, 214, 0.24);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .theme-classic .node-param-tab {
@@ -1111,7 +1113,7 @@
 }
 
 .theme-classic .node-param-tab.is-active {
-  background: rgba(255, 244, 214, 0.16);
+  background: rgba(255, 244, 214, 0.22);
   color: var(--text-dark-primary);
 }
 
@@ -1180,9 +1182,10 @@
 
 .theme-classic .effect-visualization .node-params-panel {
   border-color: var(--border-dark-light);
-  background: rgba(90, 58, 40, 0.9);
-  box-shadow: 0 16px 40px rgba(54, 34, 24, 0.45);
-  backdrop-filter: blur(10px);
+  background: rgba(104, 71, 44, 0.95);
+  box-shadow: 0 16px 40px rgba(40, 24, 15, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .theme-classic .node-params-title {
@@ -1206,13 +1209,15 @@
 }
 
 .theme-classic .node-param-step {
-  background: rgba(54, 34, 24, 0.35);
-  border-color: rgba(255, 244, 214, 0.15);
+  background: rgba(65, 42, 26, 0.64);
+  border-color: rgba(255, 244, 214, 0.22);
 }
 
 .theme-classic .node-param-group-block {
-  background: rgba(54, 34, 24, 0.4);
+  background: rgba(60, 39, 24, 0.68);
   border-color: var(--border-dark-medium);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
 }
 
 .theme-classic .node-param-group-title {
@@ -1220,8 +1225,10 @@
 }
 
 .theme-classic .eq-visualizer {
-  background: rgba(54, 34, 24, 0.45);
+  background: rgba(58, 38, 23, 0.72);
   border-color: var(--border-dark-medium);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
 }
 
 .theme-classic .eq-visualizer-header {
@@ -1229,7 +1236,7 @@
 }
 
 .theme-classic .eq-curve-canvas {
-  background: rgba(75, 47, 34, 0.75);
+  background: rgba(78, 52, 32, 0.8);
 }
 
 .theme-classic .node-actions {

@@ -12,22 +12,23 @@ html, body {
 }
 
 body {
-  font-family: sans-serif;
+  font-family: Arial, Helvetica, sans-serif;
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 body.theme-classic {
-  background-color: #5b3a28;
-  background-image: url("../images/themes/70s.png");
+  background-color: #5b3f29;
+  background-image:
+    radial-gradient(circle at 24% 14%, rgba(248, 213, 151, 0.22) 0%, rgba(248, 213, 151, 0) 48%),
+    linear-gradient(180deg, rgba(45, 28, 17, 0.22) 0%, rgba(45, 28, 17, 0.48) 100%),
+    url("../images/themes/70s.png");
   background-size: cover;
   background-repeat: no-repeat;
   background-position: center;
-  background-blend-mode: multiply;
+  background-blend-mode: screen, multiply, normal;
   background-attachment: fixed;
-      
-    filter: drop-shadow(2px 4px 6px black);
 }
 
 .prevent-select {
@@ -625,6 +626,82 @@ body:not(.is-standalone) .main-content .metronome-only {
   font-size: 10px;
 }
 
+.theme-classic .footer-bar {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(249, 232, 196, 0.08) 0px,
+      rgba(249, 232, 196, 0.08) 2px,
+      rgba(111, 76, 46, 0.06) 2px,
+      rgba(111, 76, 46, 0.06) 4px
+    ),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-footer), #fff 7%) 0%, var(--bg-footer) 100%);
+  border-top: 1px solid color-mix(in srgb, var(--border-dark-medium), #000 12%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 244, 220, 0.28),
+    inset 0 -1px 0 rgba(68, 43, 27, 0.45);
+}
+
+.theme-classic .footer-btn {
+  color: var(--text-dark-tertiary);
+}
+
+.theme-classic .footer-btn:hover {
+  color: var(--text-dark-primary);
+  text-shadow: 0 0 8px rgba(216, 133, 47, 0.28);
+}
+
+.theme-classic .footer-divider {
+  color: color-mix(in srgb, var(--text-dark-disabled), #000 10%);
+}
+
+.theme-classic .footer-play-btn,
+.theme-classic .footer-repeat-btn,
+.theme-classic .footer-demo-select {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-dark-secondary), #fff 8%) 0%, var(--bg-dark-secondary) 100%);
+  border-color: color-mix(in srgb, var(--border-dark-medium), #000 8%);
+  box-shadow: inset 0 1px 0 rgba(255, 244, 220, 0.16);
+}
+
+.theme-classic .footer-play-btn:hover,
+.theme-classic .footer-repeat-btn:hover {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-dark-tertiary), #fff 10%) 0%, var(--bg-dark-tertiary) 100%);
+  border-color: color-mix(in srgb, var(--border-dark-strong), #000 10%);
+}
+
+.theme-classic .footer-repeat-btn.is-active {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 244, 220, 0.24),
+    0 0 0 1px rgba(216, 133, 47, 0.2);
+}
+
+.theme-classic .footer-demo-select:focus {
+  box-shadow: 0 0 0 2px rgba(216, 133, 47, 0.25);
+}
+
+.theme-classic .bpm-display.metronome-only:hover {
+  background: rgba(255, 244, 220, 0.14);
+}
+
+.theme-classic .footer-theme-label,
+.theme-classic .footer-hint {
+  color: var(--text-dark-muted);
+}
+
+.theme-classic .footer-bpm-panel {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-panel), #fff 8%) 0%, var(--bg-panel) 100%);
+  border-color: var(--border-dark-light);
+  box-shadow: 0 10px 26px rgba(45, 29, 18, 0.32);
+}
+
+.theme-classic .footer-bpm-field input {
+  border-color: var(--border-dark-medium);
+  background: color-mix(in srgb, var(--bg-dark-secondary), #fff 6%);
+  color: var(--text-dark-primary);
+}
+
 /* Global Drag State */
 body.fx-dragging .signal-path-nodes {
   background: var(--overlay-accent-light);
@@ -668,10 +745,12 @@ body.fx-dragging .signal-connector {
 
 .performance-plot-container {
   margin: 20px 0;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  background: var(--bg-panel);
+  border: 1px solid var(--border-browser);
+  border-radius: 10px;
+  background: var(--bg-browser-card);
   padding: 10px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 #performance-plot {
@@ -683,10 +762,12 @@ body.fx-dragging .signal-connector {
 
 .performance-details {
   margin-top: 20px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
+  background: var(--bg-browser-card);
+  border: 1px solid var(--border-browser);
+  border-radius: 10px;
   padding: 12px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .signal-diagnostics-summary {
@@ -739,7 +820,7 @@ body.fx-dragging .signal-connector {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-browser);
   padding-bottom: 6px;
 }
 
@@ -756,12 +837,14 @@ body.fx-dragging .signal-connector {
 }
 
 .signal-diagnostics-item {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
+  background: var(--bg-browser-shell);
+  border: 1px solid var(--border-browser);
+  border-radius: 8px;
   padding: 6px 8px;
   font-size: 11px;
   color: var(--text-primary);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .signal-diagnostics-cell {

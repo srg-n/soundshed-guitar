@@ -136,13 +136,13 @@
 }
 
 .theme-classic .effect-visualization {
-  background-color: #5b3a28;
+  background-color: #5f4128;
   border: 1px solid var(--border-light);
-  box-shadow: inset 0 8px 18px rgba(54, 34, 24, 0.4);
+  box-shadow: inset 0 8px 18px rgba(38, 23, 14, 0.3);
 }
 
 .theme-classic .effect-visualization::before {
-  background: linear-gradient(180deg, rgba(91, 58, 40, 0.2) 0%, rgba(54, 34, 24, 0.7) 100%);
+  background: linear-gradient(180deg, rgba(247, 231, 195, 0.12) 0%, rgba(44, 28, 18, 0.56) 100%);
 }
 
 .theme-classic .effect-visualization::after {

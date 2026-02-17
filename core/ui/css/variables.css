@@ -48,6 +48,26 @@
   --bg-fx-primary: linear-gradient(180deg, #252530 0%, #1a1a22 100%);
   --bg-fx-secondary: linear-gradient(180deg, #2e2e3a 0%, #252530 100%);
   --bg-fx-categories: linear-gradient(180deg, #1e1e28 0%, #161620 100%);
+
+  /* Unified Browser/Library Surfaces */
+  --bg-browser-shell: rgba(18, 22, 34, 0.46);
+  --bg-browser-header: rgba(28, 34, 50, 0.58);
+  --bg-browser-sidebar: rgba(20, 26, 40, 0.52);
+  --bg-browser-card: rgba(34, 40, 58, 0.42);
+  --bg-browser-input: rgba(20, 24, 36, 0.64);
+  --bg-browser-hover: rgba(255, 255, 255, 0.12);
+  --bg-browser-selected: rgba(224, 120, 72, 0.18);
+  --border-browser: rgba(162, 172, 198, 0.32);
+  --border-browser-strong: rgba(186, 196, 220, 0.46);
+  --border-browser-focus: var(--color-primary);
+
+  /* Unified Status Colors */
+  --status-info-bg: color-mix(in srgb, var(--color-info) 22%, transparent);
+  --status-info-border: color-mix(in srgb, var(--color-info) 45%, transparent);
+  --status-info-text: var(--color-info-light);
+  --status-error-bg: color-mix(in srgb, var(--color-error) 22%, transparent);
+  --status-error-border: color-mix(in srgb, var(--color-error) 45%, transparent);
+  --status-error-text: color-mix(in srgb, var(--color-error) 82%, white);
   
   /* Text Colors */
   --text-primary: #3a3a40;
@@ -175,6 +195,16 @@
   --border-strong: #c8ccd8;
   --border-dark: #b8bcc8;
   --border-darker: #a8acb8;
+
+  --bg-browser-shell: rgba(250, 252, 255, 0.54);
+  --bg-browser-header: rgba(244, 247, 252, 0.68);
+  --bg-browser-sidebar: rgba(240, 244, 250, 0.62);
+  --bg-browser-card: rgba(255, 255, 255, 0.58);
+  --bg-browser-input: rgba(255, 255, 255, 0.76);
+  --bg-browser-hover: rgba(255, 255, 255, 0.48);
+  --bg-browser-selected: rgba(216, 100, 40, 0.12);
+  --border-browser: rgba(180, 190, 210, 0.5);
+  --border-browser-strong: rgba(160, 172, 196, 0.66);
 }
 
 /* Dark Theme */
@@ -265,114 +295,134 @@
   --color-preset-text: #d8c8b8;
   
   --amp-glow: radial-gradient(ellipse, rgba(255, 136, 80, 0.4) 0%, transparent 70%);
+
+  --bg-browser-shell: rgba(16, 20, 32, 0.52);
+  --bg-browser-header: rgba(24, 30, 44, 0.64);
+  --bg-browser-sidebar: rgba(18, 24, 36, 0.6);
+  --bg-browser-card: rgba(58, 58, 58, 0.5);
+  --bg-browser-input: rgba(16, 22, 34, 0.72);
+  --bg-browser-hover: rgba(255, 255, 255, 0.1);
+  --bg-browser-selected: rgba(255, 136, 80, 0.16);
+  --border-browser: rgba(124, 136, 162, 0.42);
+  --border-browser-strong: rgba(146, 158, 184, 0.58);
 }
 
 /* Classic 1970s Theme (Palette) */
 .theme-classic {
-  /* Primary Colors - Orange/yellow from palette */
-  --color-accent: #e57c23;
-  --color-accent-hover: #f4a825;
-  --color-accent-dark: #c6651c;
-  
-  /* Success/Info - teal from palette */
-  --color-success: #78c4a7;
-  --color-success-light: #8ad0b6;
-  --color-success-glow: rgba(120, 196, 167, 0.35);
-  --color-info: #78c4a7;
-  --color-info-light: #8ad0b6;
-  
-  /* Background Colors - dark brown main UI */
-  --bg-primary: linear-gradient(180deg, #5b3a28 0%, #4a2f22 100%);
-  --bg-secondary: linear-gradient(180deg, #6b4530 0%, #5b3a28 100%);
-  --bg-tertiary: linear-gradient(180deg, #704a33b0 0%, #5b3a28ae 100%);
-  --bg-surface: linear-gradient(180deg, #6b4530 0%, #5b3a28 100%);
-  --bg-elevated: linear-gradient(180deg, #7a4f36 0%, #6b4530 100%);
-  
-  --bg-panel: linear-gradient(180deg, #6b4530 0%, #5b3a28 100%);
-  --bg-card: linear-gradient(180deg, #7a4f36 0%, #6b4530 100%);
-  --bg-input: #6b4530;
-  
-  /* Dark Backgrounds - brown from palette */
-  --bg-dark-primary: linear-gradient(180deg, #5b3a28 0%, #4a2f22 100%);
-  --bg-dark-secondary: linear-gradient(180deg, #6b4530 0%, #5b3a28 100%);
-  --bg-dark-tertiary: linear-gradient(180deg, #6a4330 0%, #553625 100%);
-  --bg-dark-surface: #5b3a28;
-  
-  --bg-footer: linear-gradient(180deg, #6b4530 0%, #553625 100%);
-  --bg-header-dark: #5b3a28;
-  
-  --bg-fx-primary: linear-gradient(180deg, #6b4530 0%, #553625 100%);
-  --bg-fx-secondary: linear-gradient(180deg, #7a4f36 0%, #6b4530 100%);
-  --bg-fx-categories: linear-gradient(180deg, #553625 0%, #4a2f22 100%);
-  
-  /* Text Colors - cream for dark UI */
-  --text-primary: #fde9b2;
-  --text-secondary: #f7e1a6;
-  --text-tertiary: #efd79a;
-  --text-muted: #e4cc8f;
-  
-  --text-dark-primary: #fff4d6;
-  --text-dark-secondary: #fde9b2;
-  --text-dark-tertiary: #f7e1a6;
-  --text-dark-muted: #efd79a;
-  --text-dark-dimmed: #e4cc8f;
-  --text-dark-disabled: #d7bf85;
-  
-  /* Borders - warm browns */
-  --border-light: #8a5b3e;
-  --border-medium: #7a4f36;
-  --border-strong: #6b4530;
-  --border-dark: #5b3a28;
-  --border-darker: #4a2f22;
-  
-  --border-dark-light: #8a5b3e;
-  --border-dark-medium: #7a4f36;
-  --border-dark-strong: #9a6a45;
-  
-  /* Controls - vintage look */
-  --control-bg: linear-gradient(145deg, #7a4f36, #5b3a28);
-  --control-border: #8a5b3e;
-  --control-indicator: #fde9b2;
-  
-  --amp-knob-bg: linear-gradient(145deg, #8a5b3e, #6b4530);
-  --amp-knob-border: #9a6a45;
-  
-  --knob-dark-bg: linear-gradient(135deg, #9a6a45, #6b4530);
-  --knob-dark-border: #b07a53;
-  --knob-dark-indicator: #f4a825;
-  
+  /* Primary Colors - vintage amber with nickel contrast */
+  --color-accent: #d8852f;
+  --color-accent-hover: #e6a34a;
+  --color-accent-dark: #b86a20;
+
+  /* Success/Info - restrained seafoam nod to era pedals */
+  --color-success: #6fae95;
+  --color-success-light: #84bea8;
+  --color-success-glow: rgba(111, 174, 149, 0.35);
+  --color-info: #6f9db5;
+  --color-info-light: #84adc2;
+
+  /* Background Colors - tweed + tobacco sunburst range */
+  --bg-primary: linear-gradient(180deg, #6a472e 0%, #513723 100%);
+  --bg-secondary: linear-gradient(180deg, #7c5636 0%, #63442a 100%);
+  --bg-tertiary: linear-gradient(180deg, #8d6542 0%, #6c4a2d 100%);
+  --bg-surface: linear-gradient(180deg, #85603d 0%, #6d4b2f 100%);
+  --bg-elevated: linear-gradient(180deg, #936b43 0%, #7a5536 100%);
+
+  --bg-panel: linear-gradient(180deg, #7d5838 0%, #65472d 100%);
+  --bg-card: linear-gradient(180deg, #986f45 0%, #7b5636 100%);
+  --bg-input: #6f4d31;
+
+  /* Dark Backgrounds - walnut faceplate */
+  --bg-dark-primary: linear-gradient(180deg, #5b3f29 0%, #49311f 100%);
+  --bg-dark-secondary: linear-gradient(180deg, #6a4a2f 0%, #563a24 100%);
+  --bg-dark-tertiary: linear-gradient(180deg, #745236 0%, #5d4028 100%);
+  --bg-dark-surface: #5f4128;
+
+  --bg-footer: linear-gradient(180deg, #6a4a2f 0%, #523720 100%);
+  --bg-header-dark: #5b3f29;
+
+  --bg-fx-primary: linear-gradient(180deg, #6a4a2f 0%, #523720 100%);
+  --bg-fx-secondary: linear-gradient(180deg, #7b5636 0%, #614229 100%);
+  --bg-fx-categories: linear-gradient(180deg, #523720 0%, #412b1b 100%);
+
+  /* Text Colors - parchment + ivory */
+  --text-primary: #f7e7c3;
+  --text-secondary: #efdcb3;
+  --text-tertiary: #e4cc9e;
+  --text-muted: #d6bc8b;
+
+  --text-dark-primary: #fff4db;
+  --text-dark-secondary: #f4e3bc;
+  --text-dark-tertiary: #ead4a8;
+  --text-dark-muted: #dbc293;
+  --text-dark-dimmed: #c9ad7c;
+  --text-dark-disabled: #b49568;
+
+  /* Borders - brass/nickel hardware */
+  --border-light: #a97a4e;
+  --border-medium: #936542;
+  --border-strong: #7a5336;
+  --border-dark: #64442b;
+  --border-darker: #4d341f;
+
+  --border-dark-light: #ab7d52;
+  --border-dark-medium: #855a3a;
+  --border-dark-strong: #bc8a5b;
+
+  /* Controls - lacquered vintage hardware */
+  --control-bg: linear-gradient(145deg, #8e6340, #69472d);
+  --control-border: #a67a50;
+  --control-indicator: #fff0cc;
+
+  --amp-knob-bg: linear-gradient(145deg, #9a7048, #755133);
+  --amp-knob-border: #b28759;
+
+  --knob-dark-bg: linear-gradient(135deg, #a97a4f, #724d30);
+  --knob-dark-border: #c09365;
+  --knob-dark-indicator: #efb34f;
+
   /* Toggle */
-  --toggle-bg: #8a5b3e;
-  --toggle-border: #7a4f36;
-  --toggle-active: #e57c23;
-  
+  --toggle-bg: #996a43;
+  --toggle-border: #7f5535;
+  --toggle-active: #d8852f;
+
   /* Shadows */
-  --shadow-sm: 0 2px 4px rgba(91, 58, 40, 0.12);
-  --shadow-md: 0 4px 8px rgba(91, 58, 40, 0.18);
-  --shadow-lg: 0 8px 32px rgba(91, 58, 40, 0.22);
-  --shadow-xl: 0 8px 32px rgba(91, 58, 40, 0.35);
-  
-  --shadow-inset-light: inset 0 1px 0 rgba(255, 247, 221, 0.6);
-  --shadow-inset-dark: inset 0 -2px 0 rgba(91, 58, 40, 0.15);
-  
+  --shadow-sm: 0 2px 4px rgba(65, 40, 24, 0.16);
+  --shadow-md: 0 4px 8px rgba(65, 40, 24, 0.24);
+  --shadow-lg: 0 8px 32px rgba(65, 40, 24, 0.3);
+  --shadow-xl: 0 8px 32px rgba(65, 40, 24, 0.45);
+
+  --shadow-inset-light: inset 0 1px 0 rgba(255, 244, 219, 0.55);
+  --shadow-inset-dark: inset 0 -2px 0 rgba(58, 35, 21, 0.2);
+
   /* Overlays */
-  --overlay-light: rgba(255, 244, 214, 0.4);
-  --overlay-medium: rgba(255, 244, 214, 0.6);
-  --overlay-dark: rgba(91, 58, 40, 0.25);
-  --overlay-darker: rgba(91, 58, 40, 0.6);
-  
+  --overlay-light: rgba(255, 244, 220, 0.24);
+  --overlay-medium: rgba(255, 244, 220, 0.38);
+  --overlay-dark: rgba(73, 49, 31, 0.3);
+  --overlay-darker: rgba(50, 32, 20, 0.62);
+
   /* Special */
-  --color-preset-bg: #fff7dd;
-  --color-preset-border: #efd79a;
-  --color-preset-favorite: #e57c23;
-  --color-preset-text: #5b3a28;
-  
-  --amp-glow: radial-gradient(ellipse, rgba(229, 124, 35, 0.35) 0%, transparent 70%);
-  
+  --color-preset-bg: #faedd2;
+  --color-preset-border: #d8b885;
+  --color-preset-favorite: #d8852f;
+  --color-preset-text: #4b331f;
+
+  --amp-glow: radial-gradient(ellipse, rgba(216, 133, 47, 0.34) 0%, transparent 70%);
+
   /* Node Colors */
-  --node-input: #78c4a7;
-  --node-input-hover: #8ad0b6;
-  --node-output: #e57c23;
-  --node-output-hover: #f4a825;
+  --node-input: #6fae95;
+  --node-input-hover: #84bea8;
+  --node-output: #d8852f;
+  --node-output-hover: #e6a34a;
+
+  --bg-browser-shell: rgba(62, 43, 28, 0.5);
+  --bg-browser-header: rgba(79, 55, 36, 0.62);
+  --bg-browser-sidebar: rgba(69, 47, 30, 0.56);
+  --bg-browser-card: rgba(85, 57, 35, 0.42);
+  --bg-browser-input: rgba(73, 50, 32, 0.7);
+  --bg-browser-hover: rgba(255, 244, 220, 0.18);
+  --bg-browser-selected: rgba(216, 133, 47, 0.2);
+  --border-browser: rgba(188, 138, 91, 0.42);
+  --border-browser-strong: rgba(205, 156, 108, 0.58);
 }
 

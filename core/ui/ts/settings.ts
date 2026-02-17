@@ -156,7 +156,7 @@ export function initThemeSelect(): void {
   const themes: Array<{ value: ThemeName; label: string }> = [
     { value: "light", label: "Light" },
     { value: "dark", label: "Dark" },
-    { value: "classic", label: "70s" },
+    { value: "classic", label: "Vintage" },
   ];
 
   themeSelect.innerHTML = themes

@@ -78,7 +78,7 @@ export class ThemeSwitcher {
     const names: Record<ThemeName, string> = {
       light: 'Light',
       dark: 'Dark',
-      classic: '70s'
+      classic: 'Vintage'
     };
     return names[t];
   }

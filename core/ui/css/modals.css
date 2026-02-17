@@ -105,7 +105,7 @@
 }
 
 .tone3000-details-close:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-browser-hover);
   color: var(--text-dark-primary);
 }
 
@@ -657,8 +657,8 @@
 .resource-browser-tabs {
   display: flex;
   gap: 0;
-  background: var(--bg-dark-secondary);
-  border-bottom: 1px solid var(--border-dark-medium);
+  background: var(--bg-browser-header);
+  border-bottom: 1px solid var(--border-browser);
 }
 
 .resource-browser-tab-btn {
@@ -676,13 +676,13 @@
 
 .resource-browser-tab-btn:hover {
   color: var(--text-dark-primary);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-browser-hover);
 }
 
 .resource-browser-tab-btn.active {
   color: var(--color-primary);
   border-bottom-color: var(--color-primary);
-  background: rgba(224, 120, 72, 0.08);
+  background: var(--bg-browser-selected);
 }
 
 .resource-browser-tab-panel {
@@ -708,8 +708,8 @@
 .resource-browser-filters select {
   padding: 8px 10px;
   border-radius: 6px;
-  border: 1px solid var(--border-dark-light);
-  background: var(--bg-dark-primary);
+  border: 1px solid var(--border-browser);
+  background: var(--bg-browser-input);
   color: var(--text-dark-primary);
   font-size: 12px;
 }
@@ -743,7 +743,7 @@
 .resource-browser-empty {
   padding: 20px;
   border-radius: 8px;
-  border: 1px dashed var(--border-dark-medium);
+  border: 1px dashed var(--border-browser);
   color: var(--text-dark-muted);
   font-size: 12px;
   text-align: center;
@@ -757,20 +757,20 @@
   gap: 12px;
   padding: 10px 12px;
   border-radius: 8px;
-  border: 1px solid var(--border-dark-medium);
-  background: var(--bg-dark-secondary);
+  border: 1px solid var(--border-browser);
+  background: var(--bg-browser-card);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .resource-browser-item:hover {
-  background: var(--bg-dark-tertiary);
-  border-color: var(--border-dark-strong);
+  background: var(--bg-browser-hover);
+  border-color: var(--border-browser-strong);
 }
 
 .resource-browser-item.is-selected {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(224, 120, 72, 0.2);
+  border-color: var(--border-browser-focus);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 24%, transparent);
 }
 
 .resource-browser-item-info {
@@ -796,7 +796,7 @@
 }
 
 .resource-browser-provider {
-  background: rgba(224, 120, 72, 0.2);
+  background: var(--bg-browser-selected);
   color: var(--color-primary);
   padding: 1px 6px;
   border-radius: 3px;
@@ -808,7 +808,7 @@
   padding: 6px 12px;
   border-radius: 6px;
   border: none;
-  background: var(--bg-dark-tertiary);
+  background: var(--bg-browser-input);
   color: var(--text-dark-primary);
   font-size: 11px;
   cursor: pointer;
@@ -832,18 +832,18 @@
 
 .resource-browser-tone {
   border-radius: 8px;
-  border: 1px solid var(--border-dark-medium);
-  background: var(--bg-dark-secondary);
+  border: 1px solid var(--border-browser);
+  background: var(--bg-browser-card);
   
   transition: all 0.2s ease;
 }
 
 .resource-browser-tone:hover {
-  border-color: var(--border-dark-strong);
+  border-color: var(--border-browser-strong);
 }
 
 .resource-browser-tone.is-expanded {
-  border-color: var(--color-primary);
+  border-color: var(--border-browser-focus);
 }
 
 .resource-browser-tone-header {
@@ -859,14 +859,14 @@
   height: 48px;
   border-radius: 6px;
   object-fit: cover;
-  background: var(--bg-dark-tertiary);
+  background: var(--bg-browser-input);
 }
 
 .resource-browser-tone-image-placeholder {
   width: 48px;
   height: 48px;
   border-radius: 6px;
-  background: var(--bg-dark-tertiary);
+  background: var(--bg-browser-input);
 }
 
 .resource-browser-tone-info {
@@ -895,7 +895,7 @@
   padding: 6px 12px;
   border-radius: 6px;
   border: none;
-  background: var(--bg-dark-tertiary);
+  background: var(--bg-browser-input);
   color: var(--text-dark-primary);
   font-size: 11px;
   cursor: pointer;
@@ -916,8 +916,8 @@
 /* Tone models list */
 .resource-browser-tone-models {
   padding: 8px 12px 12px;
-  background: var(--bg-dark-primary);
-  border-top: 1px solid var(--border-dark-light);
+  background: var(--bg-browser-shell);
+  border-top: 1px solid var(--border-browser);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -930,13 +930,13 @@
   gap: 10px;
   padding: 8px 10px;
   border-radius: 6px;
-  background: var(--bg-dark-secondary);
-  border: 1px solid var(--border-dark-light);
+  background: var(--bg-browser-card);
+  border: 1px solid var(--border-browser);
   transition: all 0.2s;
 }
 
 .resource-browser-model:hover {
-  border-color: var(--border-dark-medium);
+  border-color: var(--border-browser-strong);
 }
 
 .resource-browser-model.is-previewing {
@@ -1031,14 +1031,14 @@
   gap: 16px;
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid var(--border-dark-light);
+  border-top: 1px solid var(--border-browser);
 }
 
 .resource-browser-page-btn {
   padding: 6px 12px;
   border-radius: 6px;
-  border: 1px solid var(--border-dark-medium);
-  background: var(--bg-dark-secondary);
+  border: 1px solid var(--border-browser);
+  background: var(--bg-browser-card);
   color: var(--text-dark-primary);
   font-size: 11px;
   cursor: pointer;
@@ -1046,8 +1046,8 @@
 }
 
 .resource-browser-page-btn:hover:not(:disabled) {
-  background: var(--bg-dark-tertiary);
-  border-color: var(--border-dark-strong);
+  background: var(--bg-browser-hover);
+  border-color: var(--border-browser-strong);
 }
 
 .resource-browser-page-btn:disabled {
