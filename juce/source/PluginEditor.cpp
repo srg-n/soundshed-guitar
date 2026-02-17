@@ -146,8 +146,31 @@ PluginEditor::PluginEditor (PluginProcessorAdapter& p)
         webView.evaluateJavascript (juce::String (script));
     });
 
-    const auto cacheBust = "?v=" + juce::String (juce::Time::getCurrentTime().toMilliseconds());
-    webView.goToURL (juce::WebBrowserComponent::getResourceProviderRoot() + cacheBust);
+   #if JUCE_WINDOWS
+    const auto webView2Supported = juce::WebBrowserComponent::areOptionsSupported (
+        juce::WebBrowserComponent::Options{}
+            .withBackend (juce::WebBrowserComponent::Options::Backend::webview2));
+
+    if (! webView2Supported)
+    {
+        const juce::String missingRuntimeHtml =
+            "data:text/html;charset=UTF-8," \
+            "<!doctype html><html><head><meta charset='utf-8'/>" \
+            "<title>Soundshed Guitar</title></head>" \
+            "<body style='font-family:Segoe UI,Arial,sans-serif;background:#101014;color:#eee;padding:24px;line-height:1.5;'>" \
+            "<h2>Microsoft Edge WebView2 Runtime is required</h2>" \
+            "<p>The Soundshed Guitar UI cannot start because WebView2 is not available.</p>" \
+            "<p>Install the runtime, then restart the app.</p>" \
+            "<p>Download: <a href='https://aka.ms/webview2' style='color:#8ab4ff;'>https://aka.ms/webview2</a></p>" \
+            "</body></html>";
+        webView.goToURL (missingRuntimeHtml);
+    }
+    else
+   #endif
+    {
+        const auto cacheBust = "?v=" + juce::String (juce::Time::getCurrentTime().toMilliseconds());
+        webView.goToURL (juce::WebBrowserComponent::getResourceProviderRoot() + cacheBust);
+    }
 
     setResizable (true, true);
     setResizeLimits (1024, 768, 4096, 3072);
