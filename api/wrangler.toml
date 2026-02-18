@@ -9,7 +9,6 @@ ENVIRONMENT = "development"
 COOKIE_NAME = "ss_session"
 SESSION_TTL_SECONDS = "2592000"
 MAGIC_LINK_TTL_SECONDS = "900"
-TURNSTILE_SITE_KEY = "replace-with-turnstile-site-key"
 SENDGRID_FROM_EMAIL = "no-reply@soundshed.com"
 SENDGRID_FROM_NAME = "Soundshed"
 

@@ -18,13 +18,7 @@ Set `ENVIRONMENT` to `development` for local and `production` in deployed enviro
 wrangler secret put SENDGRID_API_KEY
 ```
 
-4. Set Turnstile secret key as a Worker secret
-
-```bash
-wrangler secret put TURNSTILE_SECRET_KEY
-```
-
-5. Apply schema migration to local D1
+4. Apply schema migration to local D1
 
 ```bash
 npm run d1:migrate

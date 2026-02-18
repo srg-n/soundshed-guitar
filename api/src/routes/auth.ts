@@ -2,12 +2,11 @@ import { Hono } from "hono";
 import { createSession, insertAuthToken, revokeSession, upsertUserByEmail, useAuthToken } from "../lib/db";
 import { sendMagicCodeEmail } from "../lib/email";
 import { fail, ok, safeJson } from "../lib/http";
-import { verifyTurnstileToken } from "../lib/turnstile";
 import { optionalAuth } from "../middleware/session";
 import { Env } from "../types/env";
 import { addSeconds, buildSessionCookie, clearSessionCookie, isEmail, parsePositiveInt, randomCode, sha256 } from "../lib/utils";
 
-type StartBody = { email?: string; turnstileToken?: string };
+type StartBody = { email?: string };
 type VerifyBody = { email?: string; code?: string };
 
 export function authRoutes() {
@@ -16,15 +15,8 @@ export function authRoutes() {
   app.post("/start", async (c) => {
     const body = await safeJson<StartBody>(c.req.raw);
     const email = body?.email?.trim().toLowerCase();
-    const turnstileToken = body?.turnstileToken?.trim() ?? "";
     if (!email || !isEmail(email)) {
       return fail(c, "INVALID_EMAIL", "A valid email is required", 422);
-    }
-
-    const remoteIp = c.req.header("CF-Connecting-IP") ?? undefined;
-    const turnstile = await verifyTurnstileToken(c.env, turnstileToken, remoteIp);
-    if (!turnstile.ok) {
-      return fail(c, "INVALID_TURNSTILE", turnstile.reason, 422);
     }
 
     const code = randomCode(18);
