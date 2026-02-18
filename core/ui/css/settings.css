@@ -424,8 +424,24 @@
   flex-wrap: wrap;
 }
 
-.riff-trim-controls input[type="range"] {
-  width: 140px;
+.riff-icon-btn {
+  min-width: 36px;
+  padding: 6px 10px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.riff-record-btn.recording {
+  border-color: var(--status-error-border);
+  color: var(--status-error-text);
+}
+
+.riff-capture-waveform {
+  cursor: ew-resize;
+}
+
+.riff-save-modal-content {
+  width: min(640px, 90vw);
 }
 
 .riff-library-item .equipment-library-item-meta {

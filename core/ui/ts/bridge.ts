@@ -144,6 +144,10 @@ export function previewRiffTake(takeId: string): void {
   postMessage({ type: "previewRiffTake", takeId });
 }
 
+export function loadRiffTakeForEdit(takeId: string): void {
+  postMessage({ type: "loadRiffTakeForEdit", takeId });
+}
+
 export function previewCapturedRiff(): void {
   postMessage({ type: "previewCapturedRiff" });
 }

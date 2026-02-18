@@ -8,7 +8,7 @@ import { handleTunerUpdate, handleTunerStarted, handleTunerStopped, handleTunerR
 import { applyUiSettings } from "./windowSettings.js";
 import { updateDSPPerformancePlot, updateSignalDiagnosticsView } from "./views.js";
 import { refreshSettingsView } from "./settings.js";
-import { applyRiffCaptureState, applyRiffLibraryState, handleCapturedPreviewComplete, handleRiffPreviewPlayback, renderRiffLibraryPanel } from "./riffLibrary.js";
+import { applyRiffCaptureState, applyRiffLibraryState, handleCapturedPreviewComplete, handleRiffPreviewPlayback, handleSavedRiffPreviewComplete, renderRiffLibraryPanel } from "./riffLibrary.js";
 import { refreshSelectedNodeParams, renderSignalPathBar } from "./signalPath.js";
 import { refreshFxSelector } from "./fxSelector.js";
 import { applyEnvironmentState, applyMetronomeState } from "./metronome.js";
@@ -362,6 +362,8 @@ export function handleIncomingMessage(message: string): void {
       showNotification(
         source === "import"
           ? "Riff WAV imported"
+          : source === "editLoad"
+            ? "Riff take loaded for edit"
           : source === "trim"
             ? "Riff cropped to markers"
             : "Riff capture complete",
@@ -481,12 +483,16 @@ export function handleIncomingMessage(message: string): void {
     case "previewComplete": {
       appendLog(`preview complete ← ${(payload as { title?: string; id?: string }).title ?? (payload as { id?: string }).id ?? "demo"}`);
       const previewId = (payload as { id?: string }).id ?? "";
-      handleRiffPreviewPlayback("stop", previewId);
-      const riffLooped = handleCapturedPreviewComplete(previewId);
-      onDemoAudioStopped();
-      if (riffLooped) {
+      const savedRiffLooped = handleSavedRiffPreviewComplete(previewId);
+      if (savedRiffLooped) {
         break;
       }
+      handleRiffPreviewPlayback("stop", previewId);
+      const capturedLooped = handleCapturedPreviewComplete(previewId);
+      if (capturedLooped) {
+        break;
+      }
+      onDemoAudioStopped();
       if (uiState.demoAudioRepeat) {
         previewSelectedDemoAudio();
       } else {

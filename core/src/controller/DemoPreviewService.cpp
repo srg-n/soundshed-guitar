@@ -169,4 +169,9 @@ void DemoPreviewService::OnIdle()
     std::atomic_store_explicit(&mDemoAudioBuffer, std::shared_ptr<DemoAudioBuffer>{}, std::memory_order_release);
 }
 
+bool DemoPreviewService::IsPreviewActive() const
+{
+    return mDemoAudioActive.load(std::memory_order_acquire);
+}
+
 } // namespace guitarfx

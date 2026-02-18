@@ -1,4 +1,4 @@
-import { deleteRiff, getRiffLibrary, importRiffWav, markRiffUsed, previewCapturedRiffRange, previewRiffTake, saveRiffTake, setRiffFavorite, setRiffLibraryPath, startRiffCapture, stopPreviewPlayback, stopRiffCapture, trimCapturedRiff } from "./bridge.js";
+import { deleteRiff, getRiffLibrary, importRiffWav, loadRiffTakeForEdit, markRiffUsed, previewCapturedRiffRange, previewRiffTake, saveRiffTake, setRiffFavorite, setRiffLibraryPath, startRiffCapture, stopPreviewPlayback, stopRiffCapture, trimCapturedRiff } from "./bridge.js";
 import { appendLog } from "./logging.js";
 import { showNotification } from "./notifications.js";
 import { uiState } from "./state.js";
@@ -13,6 +13,9 @@ let capturedPreviewProgress = 0;
 let activeRiffTakePreviewId = "";
 let trimStartRatio = 0;
 let trimEndRatio = 1;
+let activeTrimHandle: "start" | "end" | null = null;
+let selectedTrimHandle: "start" | "end" = "start";
+let editingRiffId = "";
 
 function splitCsv(value: string): string[] {
   return value
@@ -41,6 +44,39 @@ function getPreferredTakeId(riff: RiffLibrary["riffs"][number]): string | null {
     return riff.preferredTakeId;
   }
   return riff.takes[0].id;
+}
+
+function populateSaveModalFields(riff?: RiffLibrary["riffs"][number]): void {
+  const titleInput = document.getElementById("riff-save-title") as HTMLInputElement | null;
+  const categoriesInput = document.getElementById("riff-save-categories") as HTMLInputElement | null;
+  const tagsInput = document.getElementById("riff-save-tags") as HTMLInputElement | null;
+  const notesInput = document.getElementById("riff-save-notes") as HTMLInputElement | null;
+  const favoriteInput = document.getElementById("riff-save-favorite") as HTMLInputElement | null;
+
+  if (!riff) {
+    if (titleInput) titleInput.value = "";
+    if (categoriesInput) categoriesInput.value = "";
+    if (tagsInput) tagsInput.value = "";
+    if (notesInput) notesInput.value = "";
+    if (favoriteInput) favoriteInput.checked = false;
+    return;
+  }
+
+  if (titleInput) {
+    titleInput.value = riff.title ?? "";
+  }
+  if (categoriesInput) {
+    categoriesInput.value = Array.isArray(riff.categories) ? riff.categories.join(", ") : "";
+  }
+  if (tagsInput) {
+    tagsInput.value = Array.isArray(riff.tags) ? riff.tags.join(", ") : "";
+  }
+  if (notesInput) {
+    notesInput.value = riff.notes ?? "";
+  }
+  if (favoriteInput) {
+    favoriteInput.checked = Boolean(riff.favorite);
+  }
 }
 
 export function applyRiffLibraryState(library: Partial<RiffLibrary>): void {
@@ -189,36 +225,37 @@ function updateTrimLabels(): void {
 }
 
 function syncTrimControlsFromState(): void {
-  const startInput = document.getElementById("riff-trim-start") as HTMLInputElement | null;
-  const endInput = document.getElementById("riff-trim-end") as HTMLInputElement | null;
-  if (!startInput || !endInput) {
-    return;
-  }
-
   const hasAudio = Boolean(uiState.riffCapture?.hasAudio);
-  startInput.disabled = !hasAudio;
-  endInput.disabled = !hasAudio;
-  startInput.value = String(Math.round(trimStartRatio * 1000));
-  endInput.value = String(Math.round(trimEndRatio * 1000));
+  const cropBtn = document.getElementById("riff-capture-trim") as HTMLButtonElement | null;
+  if (cropBtn) {
+    cropBtn.disabled = !hasAudio;
+  }
   updateTrimLabels();
 }
 
-function applyTrimRangeFromInputs(): void {
-  const startInput = document.getElementById("riff-trim-start") as HTMLInputElement | null;
-  const endInput = document.getElementById("riff-trim-end") as HTMLInputElement | null;
-  if (!startInput || !endInput) {
-    return;
-  }
-
-  const range = clampTrimRange(Number(startInput.value) / 1000, Number(endInput.value) / 1000);
+function setTrimRange(startRatio: number, endRatio: number): void {
+  const range = clampTrimRange(startRatio, endRatio);
   trimStartRatio = range.start;
   trimEndRatio = range.end;
-
-  startInput.value = String(Math.round(trimStartRatio * 1000));
-  endInput.value = String(Math.round(trimEndRatio * 1000));
-
   updateTrimLabels();
   renderCapturedWaveform();
+}
+
+function getCanvasRatioFromPointer(event: MouseEvent, canvas: HTMLCanvasElement): number {
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+}
+
+function nudgeSelectedTrimHandle(direction: -1 | 1, coarse = false): void {
+  const step = coarse ? 0.01 : 0.001;
+  if (selectedTrimHandle === "start") {
+    setTrimRange(trimStartRatio + direction * step, trimEndRatio);
+  } else {
+    setTrimRange(trimStartRatio, trimEndRatio + direction * step);
+  }
 }
 
 function isCapturedRepeatEnabled(): boolean {
@@ -237,6 +274,15 @@ export function handleCapturedPreviewComplete(previewId: string): boolean {
   const range = clampTrimRange(trimStartRatio, trimEndRatio);
   previewCapturedRiffRange(range.start, range.end);
   appendLog("riff preview repeat loop");
+  return true;
+}
+
+export function handleSavedRiffPreviewComplete(previewId: string): boolean {
+  if (!previewId || activeRiffTakePreviewId !== previewId || !isLibraryTakeId(previewId)) {
+    return false;
+  }
+  previewRiffTake(previewId);
+  appendLog(`riff preview repeat loop → ${previewId}`);
   return true;
 }
 
@@ -346,6 +392,19 @@ function renderCapturedWaveform(): void {
   ctx.lineTo(trimEndX, height);
   ctx.stroke();
 
+  ctx.fillStyle = "rgba(255, 204, 102, 0.95)";
+  ctx.beginPath();
+  ctx.arc(trimStartX, centerY, 4, 0, Math.PI * 2);
+  ctx.arc(trimEndX, centerY, 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  const selectedX = selectedTrimHandle === "start" ? trimStartX : trimEndX;
+  ctx.strokeStyle = "rgba(255,255,255,0.95)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(selectedX, centerY, 6, 0, Math.PI * 2);
+  ctx.stroke();
+
   if (capturedPreviewActive) {
     const playheadX = Math.max(trimStartX, Math.min(trimEndX, trimStartX + capturedPreviewProgress * (trimEndX - trimStartX)));
     ctx.strokeStyle = "rgba(255, 204, 102, 0.95)";
@@ -365,7 +424,8 @@ function renderCapturedPlayButton(): void {
 
   const hasAudio = Boolean(uiState.riffCapture?.hasAudio);
   playCaptureBtn.disabled = !hasAudio;
-  playCaptureBtn.textContent = capturedPreviewActive ? "Stop" : "Play Captured Take";
+  playCaptureBtn.textContent = capturedPreviewActive ? "■" : "▶";
+  playCaptureBtn.classList.add("riff-icon-btn");
 
   const trimBtn = document.getElementById("riff-capture-trim") as HTMLButtonElement | null;
   if (trimBtn) {
@@ -382,7 +442,7 @@ function renderRiffTakePreviewButtons(): void {
   buttons.forEach((button) => {
     const takeId = button.dataset.takeId ?? "";
     const active = Boolean(takeId) && takeId === activeRiffTakePreviewId;
-    button.textContent = active ? "Stop" : "Preview";
+    button.textContent = active ? "■" : "▶";
   });
 }
 
@@ -434,36 +494,58 @@ function renderRiffCaptureStatus(): void {
     return;
   }
   const capture = uiState.riffCapture;
+  const recordBtn = document.getElementById("riff-capture-record-toggle") as HTMLButtonElement | null;
   if (!capture) {
     status.textContent = "Idle";
+    if (recordBtn) {
+      recordBtn.textContent = "● Record";
+      recordBtn.classList.add("riff-record-btn");
+      recordBtn.classList.remove("recording");
+    }
     return;
   }
 
   if (capture.active) {
     status.textContent = `Recording · ${capture.bars} bar(s) @ ${capture.tempoBpm.toFixed(1)} BPM`;
+    if (recordBtn) {
+      recordBtn.textContent = "■ Stop";
+      recordBtn.classList.add("riff-record-btn", "recording");
+    }
     return;
   }
 
   if (capture.complete && capture.takeId) {
     const seconds = capture.sampleRate > 0 ? capture.capturedSamples / capture.sampleRate : 0;
     status.textContent = `Captured ${capture.takeId} (${formatDuration(seconds)})`;
+    if (recordBtn) {
+      recordBtn.textContent = "● Record";
+      recordBtn.classList.add("riff-record-btn");
+      recordBtn.classList.remove("recording");
+    }
     return;
   }
 
   status.textContent = "Idle";
+  if (recordBtn) {
+    recordBtn.textContent = "● Record";
+    recordBtn.classList.add("riff-record-btn");
+    recordBtn.classList.remove("recording");
+  }
 }
 
 function bindRiffLibraryActions(): void {
   const pathInput = document.getElementById("riff-library-path") as HTMLInputElement | null;
   const pathSaveBtn = document.getElementById("riff-library-path-save") as HTMLButtonElement | null;
   const refreshBtn = document.getElementById("riff-library-refresh") as HTMLButtonElement | null;
-  const startBtn = document.getElementById("riff-capture-start") as HTMLButtonElement | null;
-  const stopBtn = document.getElementById("riff-capture-stop") as HTMLButtonElement | null;
-  const saveBtn = document.getElementById("riff-capture-save") as HTMLButtonElement | null;
+  const recordToggleBtn = document.getElementById("riff-capture-record-toggle") as HTMLButtonElement | null;
   const playCaptureBtn = document.getElementById("riff-capture-play") as HTMLButtonElement | null;
-  const trimStartInput = document.getElementById("riff-trim-start") as HTMLInputElement | null;
-  const trimEndInput = document.getElementById("riff-trim-end") as HTMLInputElement | null;
   const trimButton = document.getElementById("riff-capture-trim") as HTMLButtonElement | null;
+  const openSaveModalBtn = document.getElementById("riff-open-save-modal") as HTMLButtonElement | null;
+  const saveModal = document.getElementById("riff-save-modal") as HTMLDivElement | null;
+  const saveModalCloseBtn = document.getElementById("riff-save-modal-close") as HTMLButtonElement | null;
+  const saveModalCancelBtn = document.getElementById("riff-save-modal-cancel") as HTMLButtonElement | null;
+  const saveModalConfirmBtn = document.getElementById("riff-save-modal-confirm") as HTMLButtonElement | null;
+  const saveModalTitle = document.getElementById("riff-save-modal-title") as HTMLHeadingElement | null;
 
   if (pathSaveBtn && pathSaveBtn.dataset.bound !== "true") {
     pathSaveBtn.dataset.bound = "true";
@@ -485,9 +567,61 @@ function bindRiffLibraryActions(): void {
     });
   }
 
-  if (startBtn && startBtn.dataset.bound !== "true") {
-    startBtn.dataset.bound = "true";
-    startBtn.addEventListener("click", () => {
+  const openSaveModal = (editing = false) => {
+    if (!saveModal) {
+      return;
+    }
+    if (saveModalTitle) {
+      saveModalTitle.textContent = editing ? "Edit Riff Take" : "Save Take";
+    }
+    saveModal.style.display = "flex";
+  };
+
+  const closeSaveModal = () => {
+    if (!saveModal) {
+      return;
+    }
+    saveModal.style.display = "none";
+    editingRiffId = "";
+  };
+
+  if (openSaveModalBtn && openSaveModalBtn.dataset.bound !== "true") {
+    openSaveModalBtn.dataset.bound = "true";
+    openSaveModalBtn.addEventListener("click", () => {
+      editingRiffId = "";
+      populateSaveModalFields();
+      openSaveModal(false);
+    });
+  }
+
+  if (saveModalCloseBtn && saveModalCloseBtn.dataset.bound !== "true") {
+    saveModalCloseBtn.dataset.bound = "true";
+    saveModalCloseBtn.addEventListener("click", closeSaveModal);
+  }
+
+  if (saveModalCancelBtn && saveModalCancelBtn.dataset.bound !== "true") {
+    saveModalCancelBtn.dataset.bound = "true";
+    saveModalCancelBtn.addEventListener("click", closeSaveModal);
+  }
+
+  if (saveModal && saveModal.dataset.bound !== "true") {
+    saveModal.dataset.bound = "true";
+    saveModal.addEventListener("click", (event) => {
+      if (event.target === saveModal) {
+        closeSaveModal();
+      }
+    });
+  }
+
+  if (recordToggleBtn && recordToggleBtn.dataset.bound !== "true") {
+    recordToggleBtn.dataset.bound = "true";
+    recordToggleBtn.addEventListener("click", () => {
+      if (uiState.riffCapture?.active) {
+        stopRiffCapture(false);
+        appendLog("riff capture stop");
+        return;
+      }
+
       const tempoInput = document.getElementById("riff-capture-tempo") as HTMLInputElement | null;
       const numInput = document.getElementById("riff-capture-timesig-num") as HTMLInputElement | null;
       const denInput = document.getElementById("riff-capture-timesig-den") as HTMLInputElement | null;
@@ -509,17 +643,13 @@ function bindRiffLibraryActions(): void {
     });
   }
 
-  if (stopBtn && stopBtn.dataset.bound !== "true") {
-    stopBtn.dataset.bound = "true";
-    stopBtn.addEventListener("click", () => {
-      stopRiffCapture(false);
-      appendLog("riff capture stop");
-    });
-  }
-
-  if (saveBtn && saveBtn.dataset.bound !== "true") {
-    saveBtn.dataset.bound = "true";
-    saveBtn.addEventListener("click", () => {
+  if (saveModalConfirmBtn && saveModalConfirmBtn.dataset.bound !== "true") {
+    saveModalConfirmBtn.dataset.bound = "true";
+    saveModalConfirmBtn.addEventListener("click", () => {
+      if (!uiState.riffCapture?.hasAudio) {
+        showNotification("No captured take available yet");
+        return;
+      }
       const titleInput = document.getElementById("riff-save-title") as HTMLInputElement | null;
       const categoriesInput = document.getElementById("riff-save-categories") as HTMLInputElement | null;
       const tagsInput = document.getElementById("riff-save-tags") as HTMLInputElement | null;
@@ -539,6 +669,7 @@ function bindRiffLibraryActions(): void {
       }
 
       saveRiffTake({
+        riffId: editingRiffId || undefined,
         title,
         categories: splitCsv(categoriesInput?.value ?? ""),
         tags: splitCsv(tagsInput?.value ?? ""),
@@ -551,6 +682,7 @@ function bindRiffLibraryActions(): void {
         patternType: (patternTypeSelect?.value === "drum" ? "drum" : "click") as "click" | "drum",
         patternId: patternIdInput?.value.trim() ?? "",
       });
+      closeSaveModal();
       appendLog(`riff save requested → ${title}`);
     });
   }
@@ -606,20 +738,6 @@ function bindRiffLibraryActions(): void {
     });
   }
 
-  if (trimStartInput && trimStartInput.dataset.bound !== "true") {
-    trimStartInput.dataset.bound = "true";
-    trimStartInput.addEventListener("input", () => {
-      applyTrimRangeFromInputs();
-    });
-  }
-
-  if (trimEndInput && trimEndInput.dataset.bound !== "true") {
-    trimEndInput.dataset.bound = "true";
-    trimEndInput.addEventListener("input", () => {
-      applyTrimRangeFromInputs();
-    });
-  }
-
   if (trimButton && trimButton.dataset.bound !== "true") {
     trimButton.dataset.bound = "true";
     trimButton.addEventListener("click", () => {
@@ -630,6 +748,79 @@ function bindRiffLibraryActions(): void {
       const trimRange = clampTrimRange(trimStartRatio, trimEndRatio);
       trimCapturedRiff(trimRange.start, trimRange.end);
       appendLog(`riff crop to markers → ${trimRange.start.toFixed(3)}-${trimRange.end.toFixed(3)}`);
+    });
+  }
+
+  const waveform = document.getElementById("riff-capture-waveform") as HTMLCanvasElement | null;
+  if (waveform && waveform.dataset.bound !== "true") {
+    waveform.dataset.bound = "true";
+
+    waveform.addEventListener("mousedown", (event) => {
+      if (!uiState.riffCapture?.hasAudio) {
+        return;
+      }
+      const pointerRatio = getCanvasRatioFromPointer(event, waveform);
+      const startDist = Math.abs(pointerRatio - trimStartRatio);
+      const endDist = Math.abs(pointerRatio - trimEndRatio);
+      activeTrimHandle = startDist <= endDist ? "start" : "end";
+      selectedTrimHandle = activeTrimHandle;
+      waveform.focus();
+      event.preventDefault();
+    });
+
+    window.addEventListener("mousemove", (event) => {
+      if (!activeTrimHandle || !uiState.riffCapture?.hasAudio) {
+        return;
+      }
+      const pointerRatio = getCanvasRatioFromPointer(event, waveform);
+      if (activeTrimHandle === "start") {
+        setTrimRange(pointerRatio, trimEndRatio);
+      } else {
+        setTrimRange(trimStartRatio, pointerRatio);
+      }
+    });
+
+    window.addEventListener("mouseup", () => {
+      activeTrimHandle = null;
+    });
+
+    waveform.addEventListener("keydown", (event) => {
+      if (!uiState.riffCapture?.hasAudio) {
+        return;
+      }
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        nudgeSelectedTrimHandle(-1, event.shiftKey);
+        return;
+      }
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        nudgeSelectedTrimHandle(1, event.shiftKey);
+        return;
+      }
+      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        event.preventDefault();
+        selectedTrimHandle = selectedTrimHandle === "start" ? "end" : "start";
+        renderCapturedWaveform();
+        return;
+      }
+      if (event.key === "Home") {
+        event.preventDefault();
+        if (selectedTrimHandle === "start") {
+          setTrimRange(0, trimEndRatio);
+        } else {
+          setTrimRange(trimStartRatio, Math.max(trimStartRatio + 0.001, 0.001));
+        }
+        return;
+      }
+      if (event.key === "End") {
+        event.preventDefault();
+        if (selectedTrimHandle === "start") {
+          setTrimRange(Math.min(trimEndRatio - 0.001, 0.999), trimEndRatio);
+        } else {
+          setTrimRange(trimStartRatio, 1);
+        }
+      }
     });
   }
 
@@ -655,6 +846,41 @@ function bindRiffLibraryActions(): void {
           }
           previewRiffTake(takeId);
           appendLog(`riff preview → ${takeId}`);
+        }
+        return;
+      }
+
+      const editButton = target.closest<HTMLButtonElement>(".riff-edit-btn");
+      if (editButton) {
+        const riffId = editButton.dataset.riffId ?? "";
+        const takeId = editButton.dataset.takeId ?? "";
+        const riff = (uiState.riffLibrary?.riffs ?? []).find((entry) => entry.id === riffId);
+        if (!riff) {
+          showNotification("Riff not found");
+          return;
+        }
+        editingRiffId = riffId;
+        populateSaveModalFields(riff);
+        openSaveModal(true);
+
+        const take = riff.takes.find((entry) => entry.id === takeId) ?? riff.takes[0];
+        if (take) {
+          const tempoInput = document.getElementById("riff-capture-tempo") as HTMLInputElement | null;
+          const numInput = document.getElementById("riff-capture-timesig-num") as HTMLInputElement | null;
+          const denInput = document.getElementById("riff-capture-timesig-den") as HTMLInputElement | null;
+          const barsInput = document.getElementById("riff-capture-bars") as HTMLInputElement | null;
+          const patternTypeSelect = document.getElementById("riff-capture-pattern-type") as HTMLSelectElement | null;
+          const patternIdInput = document.getElementById("riff-capture-pattern-id") as HTMLInputElement | null;
+
+          if (tempoInput) tempoInput.value = String(Math.round(take.tempoBpm ?? 120));
+          if (numInput) numInput.value = String(take.timeSigNum ?? 4);
+          if (denInput) denInput.value = String(take.timeSigDen ?? 4);
+          if (barsInput) barsInput.value = String(Math.max(1, take.bars ?? 1));
+          if (patternTypeSelect) patternTypeSelect.value = take.patternType === "drum" ? "drum" : "click";
+          if (patternIdInput) patternIdInput.value = take.patternId ?? "";
+
+          loadRiffTakeForEdit(take.id);
+          appendLog(`riff edit load requested → ${take.id}`);
         }
         return;
       }
@@ -739,7 +965,8 @@ export function renderRiffLibraryPanel(): void {
             <div class="equipment-library-item-path" title="${take?.filePath ?? ""}">${takeSummary}</div>
           </div>
           <div class="equipment-library-item-actions riff-library-actions">
-            <button class="equipment-library-browse riff-preview-btn" data-take-id="${take?.id ?? ""}" ${take ? "" : "disabled"}>Preview</button>
+            <button class="equipment-library-browse riff-preview-btn riff-icon-btn" data-take-id="${take?.id ?? ""}" ${take ? "" : "disabled"}>▶</button>
+            <button class="equipment-library-browse riff-edit-btn" data-riff-id="${riff.id}" data-take-id="${take?.id ?? ""}">Edit</button>
             <button class="equipment-library-browse riff-favorite-btn" data-riff-id="${riff.id}" data-favorite="${riff.favorite ? "true" : "false"}">${riff.favorite ? "Unfavorite" : "Favorite"}</button>
             <button class="equipment-library-browse riff-used-btn" data-riff-id="${riff.id}" data-used="${riff.used ? "true" : "false"}">${riff.used ? "Mark Unused" : "Mark Used"}</button>
             <button class="equipment-library-browse riff-delete-btn" data-riff-id="${riff.id}">Delete</button>

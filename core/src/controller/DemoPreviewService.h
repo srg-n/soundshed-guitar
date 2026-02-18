@@ -30,6 +30,7 @@ public:
     void StartPreview(const nlohmann::json& payload);
     void StopPreview();
     void OnIdle();
+    [[nodiscard]] bool IsPreviewActive() const;
 
 private:
     struct DemoAudioBuffer

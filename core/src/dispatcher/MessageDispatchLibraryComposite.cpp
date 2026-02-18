@@ -118,6 +118,11 @@ bool MessageDispatcher::DispatchLibraryAndComposite(PluginController& c,
         c.HandleSaveRiffTakeRequest(msg);
         return true;
     }
+    if (type == "loadRiffTakeForEdit")
+    {
+        c.HandleLoadRiffTakeForEditRequest(msg);
+        return true;
+    }
     if (type == "deleteRiff")
     {
         c.HandleDeleteRiffRequest(msg);

@@ -512,19 +512,17 @@
               <div class="settings-row">
                 <label>Actions</label>
                 <div class="riff-capture-actions">
-                  <button id="riff-capture-start" type="button">Start Capture</button>
-                  <button id="riff-capture-stop" type="button" class="secondary">Stop</button>
-                  <button id="riff-capture-play" type="button" class="secondary">Play Captured Take</button>
+                  <button id="riff-capture-record-toggle" type="button">● Record</button>
+                  <button id="riff-capture-play" type="button" class="secondary">▶</button>
+                  <button id="riff-open-save-modal" type="button" class="secondary">Save Take</button>
                 </div>
               </div>
               <div class="settings-row">
                 <label>Trim + Loop</label>
                 <div class="riff-trim-controls">
                   <span class="settings-unit">Start</span>
-                  <input type="range" id="riff-trim-start" min="0" max="1000" step="1" value="0" />
                   <span class="settings-unit" id="riff-trim-start-label">0.00s</span>
                   <span class="settings-unit">End</span>
-                  <input type="range" id="riff-trim-end" min="0" max="1000" step="1" value="1000" />
                   <span class="settings-unit" id="riff-trim-end-label">0.00s</span>
                   <label class="toggle-switch">
                     <input type="checkbox" id="riff-capture-repeat" />
@@ -535,39 +533,9 @@
                 </div>
               </div>
               <div class="riff-waveform-wrap">
-                <canvas id="riff-capture-waveform" class="riff-capture-waveform" width="640" height="120"></canvas>
+                <canvas id="riff-capture-waveform" class="riff-capture-waveform" width="640" height="120" tabindex="0" aria-label="Riff trim waveform"></canvas>
               </div>
-            </div>
-
-            <div class="settings-section">
-              <h3>Save Take</h3>
-              <div class="settings-row">
-                <label for="riff-save-title">Title</label>
-                <input type="text" id="riff-save-title" placeholder="Palm-muted verse riff" />
-                <label class="toggle-switch">
-                  <input type="checkbox" id="riff-save-favorite" />
-                  <span class="toggle-slider"></span>
-                </label>
-                <span class="settings-unit">Favorite</span>
-              </div>
-              <div class="settings-row">
-                <label for="riff-save-categories">Categories</label>
-                <input type="text" id="riff-save-categories" placeholder="metal, rhythm" />
-                <span class="settings-unit">CSV</span>
-              </div>
-              <div class="settings-row">
-                <label for="riff-save-tags">Tags</label>
-                <input type="text" id="riff-save-tags" placeholder="drop C, tight, intro" />
-                <span class="settings-unit">CSV</span>
-              </div>
-              <div class="settings-row">
-                <label for="riff-save-notes">Notes</label>
-                <input type="text" id="riff-save-notes" placeholder="Works with modern high-gain presets" />
-              </div>
-              <div class="settings-row">
-                <label>Save</label>
-                <button id="riff-capture-save" type="button">Save Current Take</button>
-              </div>
+              <div class="settings-hint">Drag the vertical trim markers in the waveform to set loop/crop start and end.</div>
             </div>
 
             <div class="settings-section">
@@ -1034,6 +1002,44 @@
           [Double Click] to activate/deactivate.</span>
       </div>
     </footer>
+
+    <div id="riff-save-modal" class="modal riff-save-modal" style="display: none;">
+      <div class="modal-content riff-save-modal-content">
+        <div class="modal-header">
+          <h3 id="riff-save-modal-title">Save Take</h3>
+          <button id="riff-save-modal-close" class="modal-close" type="button">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="settings-row">
+            <label for="riff-save-title">Title</label>
+            <input type="text" id="riff-save-title" placeholder="Palm-muted verse riff" />
+            <label class="toggle-switch">
+              <input type="checkbox" id="riff-save-favorite" />
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="settings-unit">Favorite</span>
+          </div>
+          <div class="settings-row">
+            <label for="riff-save-categories">Categories</label>
+            <input type="text" id="riff-save-categories" placeholder="metal, rhythm" />
+            <span class="settings-unit">CSV</span>
+          </div>
+          <div class="settings-row">
+            <label for="riff-save-tags">Tags</label>
+            <input type="text" id="riff-save-tags" placeholder="drop C, tight, intro" />
+            <span class="settings-unit">CSV</span>
+          </div>
+          <div class="settings-row">
+            <label for="riff-save-notes">Notes</label>
+            <input type="text" id="riff-save-notes" placeholder="Works with modern high-gain presets" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="riff-save-modal-cancel" class="secondary" type="button">Cancel</button>
+          <button id="riff-save-modal-confirm" type="button">Save Take</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Tone3000 Details Modal -->
     <div id="tone3000-details-modal" class="modal tone3000-details-modal" style="display: none;">
