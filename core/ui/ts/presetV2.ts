@@ -285,6 +285,26 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
+    type: "input",
+    displayName: "Input",
+    category: "utility",
+    catalogHidden: true,
+    requiresResource: false,
+    parameters: [
+      { key: "gainDb", name: "Gain", default: 0, min: -24, max: 24, unit: "dB" }
+    ]
+  },
+  {
+    type: "output",
+    displayName: "Output",
+    category: "utility",
+    catalogHidden: true,
+    requiresResource: false,
+    parameters: [
+      { key: "gainDb", name: "Gain", default: 0, min: -24, max: 24, unit: "dB" }
+    ]
+  },
+  {
     type: "gain",
     displayName: "Gain",
     category: "utility",

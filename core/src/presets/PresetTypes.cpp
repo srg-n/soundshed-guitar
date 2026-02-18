@@ -1,6 +1,9 @@
 #include "presets/PresetTypes.h"
 #include "dsp/EffectRegistry.h"
 
+#include <algorithm>
+#include <tuple>
+
 namespace guitarfx
 {
 namespace
@@ -20,6 +23,71 @@ namespace
         node.params[param.id] = param.defaultValue;
       }
     }
+  }
+
+  GraphNode* EnsureBoundaryNode(SignalGraph& graph,
+                                const std::string& nodeId,
+                                const std::string& nodeType)
+  {
+    if (auto* existing = graph.FindNode(nodeId))
+    {
+      existing->type = nodeType;
+      existing->enabled = true;
+      return existing;
+    }
+
+    for (auto& node : graph.nodes)
+    {
+      if (node.type == nodeType)
+      {
+        const std::string oldId = node.id;
+        node.id = nodeId;
+        node.enabled = true;
+
+        if (oldId != nodeId)
+        {
+          for (auto& edge : graph.edges)
+          {
+            if (edge.from == oldId)
+            {
+              edge.from = nodeId;
+            }
+            if (edge.to == oldId)
+            {
+              edge.to = nodeId;
+            }
+          }
+        }
+
+        return &node;
+      }
+    }
+
+    GraphNode node;
+    node.id = nodeId;
+    node.type = nodeType;
+    node.enabled = true;
+    graph.nodes.push_back(node);
+    return &graph.nodes.back();
+  }
+
+}
+
+void EnsurePresetBoundaryGainNodes(SignalGraph& graph)
+{
+  auto* inputNode = EnsureBoundaryNode(graph, "__input__", kNodeTypeInput);
+  auto* outputNode = EnsureBoundaryNode(graph, "__output__", kNodeTypeOutput);
+
+  inputNode->enabled = true;
+  outputNode->enabled = true;
+
+  if (inputNode->params.find("gainDb") == inputNode->params.end())
+  {
+    inputNode->params["gainDb"] = 0.0;
+  }
+  if (outputNode->params.find("gainDb") == outputNode->params.end())
+  {
+    outputNode->params["gainDb"] = 0.0;
   }
 }
 

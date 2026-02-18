@@ -425,8 +425,12 @@ namespace guitarfx
       }
     }
 
-    // Apply input trim
-    const float inputGain = static_cast<float>(std::pow(10.0, mInputTrim / 20.0));
+    // Apply input trim (global + input node gain)
+    const auto* inputNode = mGraph.FindNode("__input__");
+    const double inputNodeGainDb = (inputNode && inputNode->params.count("gainDb"))
+      ? inputNode->params.at("gainDb")
+      : 0.0;
+    const float inputGain = static_cast<float>(std::pow(10.0, (mInputTrim + inputNodeGainDb) / 20.0));
 
     // Find input node and copy input
     for (auto &[id, state] : mNodeStates)
@@ -471,8 +475,8 @@ namespace guitarfx
       if (!node)
         continue;
 
-      // Skip input node (already handled)
-      if (node->type == kNodeTypeInput || node->id == "__input__")
+      // Skip canonical input routing node (already fed from host input)
+      if (node->type == kNodeTypeInput)
         continue;
 
       // Gather inputs from incoming edges
@@ -551,8 +555,7 @@ namespace guitarfx
       // Process the node
       if (state->processor && state->hasInput)
       {
-        if (node->type == kNodeTypeSplitter ||
-            node->type == kNodeTypeOutput || node->id == "__output__")
+        if (node->type == kNodeTypeSplitter || node->type == kNodeTypeOutput)
         {
           // These nodes just pass through (routing handled above)
         }
@@ -596,7 +599,11 @@ namespace guitarfx
     }
 
     // Find output node and copy to output
-    const float outputGain = static_cast<float>(std::pow(10.0, mOutputTrim / 20.0));
+    const auto* outputNode = mGraph.FindNode("__output__");
+    const double outputNodeGainDb = (outputNode && outputNode->params.count("gainDb"))
+      ? outputNode->params.at("gainDb")
+      : 0.0;
+    const float outputGain = static_cast<float>(std::pow(10.0, (mOutputTrim + outputNodeGainDb) / 20.0));
 
     for (const auto &[id, state] : mNodeStates)
     {
@@ -672,6 +679,11 @@ namespace guitarfx
 
   void SignalGraphExecutor::SetNodeParam(const std::string &nodeId, const std::string &key, double value)
   {
+    if (auto* node = mGraph.FindNode(nodeId))
+    {
+      node->params[key] = value;
+    }
+
     auto *state = FindNodeState(nodeId);
     if (state && state->processor)
     {

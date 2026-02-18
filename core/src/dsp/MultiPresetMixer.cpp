@@ -110,8 +110,11 @@ namespace guitarfx
     inst.cfg.id = presetId;
     inst.cfg.name = name;
 
+    Preset normalizedPreset = preset;
+    EnsurePresetBoundaryGainNodes(normalizedPreset);
+
     inst.executor.SetResourceLibrary(mResourceLibrary);
-    inst.executor.SetGraph(preset.graph);
+    inst.executor.SetGraph(normalizedPreset.graph);
     inst.executor.SetSignalDiagnosticsEnabled(mSignalDiagnosticsEnabled.load(std::memory_order_acquire));
     ApplyNamInterfaceCalibration(inst.executor);
 

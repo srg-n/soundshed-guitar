@@ -274,4 +274,15 @@ namespace guitarfx
   constexpr const char* kNodeTypeMixer = "mixer";
   constexpr const char* kNodeTypeCompositePrefix = "composite:";
 
+  /**
+    * Ensure preset graph has canonical input/output boundary nodes
+    * with built-in gain parameters.
+   */
+  void EnsurePresetBoundaryGainNodes(SignalGraph& graph);
+
+  inline void EnsurePresetBoundaryGainNodes(Preset& preset)
+  {
+    EnsurePresetBoundaryGainNodes(preset.graph);
+  }
+
 } // namespace guitarfx
