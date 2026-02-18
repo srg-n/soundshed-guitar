@@ -75,3 +75,5 @@ core/ui/assets/ir/
 core/ui/dist/
 
 core/ui/node_modules/
+
+api/node_modules/

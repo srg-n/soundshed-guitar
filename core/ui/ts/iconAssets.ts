@@ -90,8 +90,11 @@ const effectIcons: Record<string, IconKey> = {
   reverb_room: "hall",
   reverb_hall: "hall",
   reverb_plate: "hall",
+  reverb_chamber: "hall",
   reverb_spring: "hall",
   reverb_shimmer: "sparkle",
+  reverb_ambient: "sparkle",
+  reverb_advanced: "sparkle",
 
   // Synth
   synth_saw: "note",

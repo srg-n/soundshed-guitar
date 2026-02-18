@@ -22,6 +22,7 @@ import { initializeMetronome } from "./metronome.js";
 import { initializeBlendEditorModal } from "./signalPath.js";
 import { initializeDialogModals } from "./dialogs.js";
 import { activateTab, initializeIconBarTabs, initializeTabButtons, switchMainPanel } from "./navigation.js";
+import { initializeToneSharingPanel } from "./toneSharingPanel.js";
 const eqModal = document.getElementById("eq-modal");
 const eqModalCloseBtn = document.getElementById("eq-modal-close");
 
@@ -63,6 +64,7 @@ async function bootstrap(): Promise<void> {
   initializePresetActionButtons();
   initializeTuner();
   initializeMetronome();
+  initializeToneSharingPanel();
   if (eqModalCloseBtn) {
     eqModalCloseBtn.addEventListener("click", closeEqModal);
   }

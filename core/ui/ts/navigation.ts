@@ -70,21 +70,23 @@ export function activateTab(tabId: string): void {
 }
 
 export function switchMainPanel(panelId: string): void {
+  const normalizedPanelId = panelId === "scalex" ? "sharing" : panelId;
+
   panelSwitchButtons.forEach((btn) => {
     const btnPanel = (btn as HTMLElement).dataset.panel;
-    btn.classList.toggle("active", btnPanel === panelId);
+    btn.classList.toggle("active", btnPanel === normalizedPanelId);
   });
 
   mainTabPanels.forEach((panel) => {
-    const isPanelMatch = (panel as HTMLElement).id === `panel-${panelId}`;
+    const isPanelMatch = (panel as HTMLElement).id === `panel-${normalizedPanelId}`;
     panel.classList.toggle("active", isPanelMatch);
   });
 
   // Hide signal path bar for full-height panels (everything except visualizer)
   const signalPathBar = document.getElementById("signal-path-bar");
   const mainContent = document.querySelector(".main-content") as HTMLElement | null;
-  const fullHeightPanels = ["library", "settings", "scalex", "advanced", "mixer"];
-  const isFullHeight = fullHeightPanels.includes(panelId);
+  const fullHeightPanels = ["library", "settings", "sharing", "advanced", "mixer"];
+  const isFullHeight = fullHeightPanels.includes(normalizedPanelId);
 
   if (signalPathBar) {
     signalPathBar.style.display = isFullHeight ? "none" : "";
@@ -93,12 +95,12 @@ export function switchMainPanel(panelId: string): void {
     mainContent.classList.toggle("full-height", isFullHeight);
   }
 
-  if (panelId === "settings") {
+  if (normalizedPanelId === "settings") {
     initSettingsPanel();
     void ensureTone3000Session().then(() => updateSettingsSessionStatus());
   }
 
-  if (panelId === "library") {
+  if (normalizedPanelId === "library") {
     initLibraryTabs();
     initLibraryFilters();
     if (!tone3000BrowserInitialized) {
@@ -108,14 +110,7 @@ export function switchMainPanel(panelId: string): void {
     void ensureTone3000Session();
   }
 
-  if (panelId === "scalex") {
-    const iframe = document.getElementById("scalex-iframe") as HTMLIFrameElement | null;
-    if (iframe && !iframe.src && iframe.dataset.src) {
-      iframe.src = iframe.dataset.src;
-    }
-  }
-
-  updateUiViewState({ mainPanel: panelId });
+  updateUiViewState({ mainPanel: normalizedPanelId });
 }
 
 export function initializeIconBarTabs(options?: { onEq?: () => void; onMetronome?: () => void }): void {

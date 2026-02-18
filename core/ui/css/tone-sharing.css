@@ -1,0 +1,218 @@
+.tone-sharing-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+  overflow: auto;
+}
+
+.tone-sharing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.tone-sharing-subtitle {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.tone-sharing-endpoint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tone-sharing-endpoint input {
+  min-width: 280px;
+}
+
+.tone-sharing-layout {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.tone-sharing-card {
+  background: color-mix(in srgb, var(--bg-panel), #000 8%);
+  border: 1px solid var(--border-medium);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tone-sharing-card h3 {
+  margin: 0;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tone-sharing-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tone-sharing-auth-status,
+.tone-sharing-status {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.tone-sharing-auth-row,
+.tone-sharing-grid-form {
+  display: grid;
+  gap: 6px;
+}
+
+.tone-sharing-grid-form label,
+.tone-sharing-auth-row label,
+.tone-sharing-endpoint label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.tone-sharing-grid-form input,
+.tone-sharing-grid-form select,
+.tone-sharing-grid-form textarea,
+.tone-sharing-auth-row input,
+.tone-sharing-endpoint input {
+  width: 100%;
+  background: var(--bg-control);
+  border: 1px solid var(--border-medium);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 8px;
+  font-size: 12px;
+}
+
+.tone-sharing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tone-sharing-actions.compact button {
+  padding: 6px 9px;
+  font-size: 11px;
+}
+
+.tone-sharing-actions button {
+  background: var(--button-bg);
+  color: var(--button-text);
+  border: 1px solid var(--button-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.tone-sharing-actions button.secondary {
+  background: var(--bg-control);
+}
+
+.tone-sharing-actions button.active {
+  border-color: var(--accent-primary);
+  box-shadow: inset 0 0 0 1px var(--accent-primary);
+}
+
+.tone-sharing-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tone-sharing-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tone-sharing-row-title {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tone-sharing-row-track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(180px, 220px);
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 3px;
+}
+
+.tone-sharing-card-item {
+  background: color-mix(in srgb, var(--bg-control), #000 12%);
+  border: 1px solid var(--border-medium);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tone-sharing-card-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.tone-sharing-card-item-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.tone-sharing-card-item-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.tone-sharing-card-item-actions button {
+  flex: 1;
+  min-width: 0;
+  padding: 6px;
+  font-size: 11px;
+}
+
+.tone-sharing-select-list {
+  max-height: 140px;
+  overflow: auto;
+  border: 1px solid var(--border-medium);
+  border-radius: 8px;
+  background: var(--bg-control);
+}
+
+.tone-sharing-select-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 12px;
+}
+
+.tone-sharing-select-item:last-child {
+  border-bottom: 0;
+}
+
+@media (max-width: 1100px) {
+  .tone-sharing-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .tone-sharing-endpoint input {
+    min-width: 180px;
+  }
+}
