@@ -190,10 +190,10 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     parameters: [
       { key: "inputGain", name: "Input", default: 0, min: -24, max: 24, unit: "dB" },
       { key: "outputGain", name: "Output", default: 0, min: -24, max: 24, unit: "dB" },
-      { key: "autoLevelInput", name: "Auto Level Input", default: 1, min: 0, max: 1, unit: "toggle" },
-      { key: "autoLevelOutput", name: "Auto Level Output", default: 1, min: 0, max: 1, unit: "toggle" },
-      { key: "calibrationInputLevel", name: "Cal Input", default: -18, min: -60, max: 24, unit: "dB" },
-      { key: "calibrationOutputLevel", name: "Cal Output", default: -18, min: -60, max: 24, unit: "dB" }
+      { key: "autoLevelInput", name: "Auto Level Input", default: 1, min: 0, max: 1, unit: "toggle", advanced: true },
+      { key: "autoLevelOutput", name: "Auto Level Output", default: 1, min: 0, max: 1, unit: "toggle", advanced: true },
+      { key: "calibrationInputLevel", name: "Cal Input", default: -18, min: -60, max: 24, unit: "dB", advanced: true },
+      { key: "calibrationOutputLevel", name: "Cal Output", default: -18, min: -60, max: 24, unit: "dB", advanced: true }
     ]
   },
   {
@@ -205,10 +205,10 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     parameters: [
       { key: "inputGain", name: "Input", default: 0, min: -24, max: 24, unit: "dB" },
       { key: "outputGain", name: "Output", default: 0, min: -24, max: 24, unit: "dB" },
-      { key: "autoLevelInput", name: "Auto Level Input", default: 1, min: 0, max: 1, unit: "toggle" },
-      { key: "autoLevelOutput", name: "Auto Level Output", default: 1, min: 0, max: 1, unit: "toggle" },
-      { key: "calibrationInputLevel", name: "Cal Input", default: -18, min: -60, max: 24, unit: "dB" },
-      { key: "calibrationOutputLevel", name: "Cal Output", default: -18, min: -60, max: 24, unit: "dB" }
+      { key: "autoLevelInput", name: "Auto Level Input", default: 1, min: 0, max: 1, unit: "toggle", advanced: true },
+      { key: "autoLevelOutput", name: "Auto Level Output", default: 1, min: 0, max: 1, unit: "toggle", advanced: true },
+      { key: "calibrationInputLevel", name: "Cal Input", default: -18, min: -60, max: 24, unit: "dB", advanced: true },
+      { key: "calibrationOutputLevel", name: "Cal Output", default: -18, min: -60, max: 24, unit: "dB", advanced: true }
     ]
   },
   {
