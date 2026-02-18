@@ -6,6 +6,16 @@
 
 namespace guitarfx
 {
+  namespace
+  {
+    bool IsRelativeOutside(const std::filesystem::path& relativePath)
+    {
+      if (relativePath.empty()) return false;
+      const auto it = relativePath.begin();
+      return it != relativePath.end() && *it == "..";
+    }
+  }
+
   ResourceLibrary::ResourceLibrary() = default;
   ResourceLibrary::~ResourceLibrary() = default;
 
@@ -136,6 +146,7 @@ namespace guitarfx
   {
     nlohmann::json json = nlohmann::json::array();
     const auto indexDir = path.parent_path();
+    const auto resourcesRoot = indexDir.parent_path();
 
     std::error_code dirEc;
     std::filesystem::create_directories(indexDir, dirEc);
@@ -150,11 +161,17 @@ namespace guitarfx
       item["description"] = resource.description;
       if (!resource.filePath.empty())
       {
-        const auto relativePath = resource.filePath.lexically_relative(indexDir);
-        if (!relativePath.empty() && !(relativePath == std::filesystem::path(".")))
-          item["filePath"] = relativePath.generic_string();
+        std::error_code relEc;
+        const auto relativeToResources = std::filesystem::relative(resource.filePath, resourcesRoot, relEc);
+        if (!relEc && !relativeToResources.empty() && relativeToResources != std::filesystem::path(".")
+            && !IsRelativeOutside(relativeToResources))
+        {
+          item["filePath"] = relativeToResources.generic_string();
+        }
         else
+        {
           item["filePath"] = resource.filePath.generic_string();
+        }
       }
       else
       {
@@ -209,7 +226,24 @@ namespace guitarfx
             std::filesystem::path resolvedPath(rawPath);
             if (resolvedPath.is_relative())
             {
-              resolvedPath = path.parent_path() / resolvedPath;
+              const auto indexRelativePath = path.parent_path() / resolvedPath;
+              const auto resourcesRelativePath = path.parent_path().parent_path() / resolvedPath;
+
+              std::error_code indexExistsEc;
+              if (std::filesystem::exists(indexRelativePath, indexExistsEc))
+              {
+                resolvedPath = indexRelativePath;
+              }
+              else
+              {
+                std::error_code resourcesExistsEc;
+                if (std::filesystem::exists(resourcesRelativePath, resourcesExistsEc))
+                  resolvedPath = resourcesRelativePath;
+                else if (!IsRelativeOutside(resolvedPath))
+                  resolvedPath = resourcesRelativePath;
+                else
+                  resolvedPath = indexRelativePath;
+              }
             }
             resource.filePath = resolvedPath;
           }

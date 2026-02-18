@@ -535,7 +535,7 @@ std::filesystem::path GuitarFXPluginAdapter::GetUserDataPath() const
     wchar_t* appDataPath = nullptr;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &appDataPath)))
     {
-        auto path = std::filesystem::path(appDataPath) / "SoundshedGuitar";
+        auto path = std::filesystem::path(appDataPath) / "Soundshed Guitar";
         CoTaskMemFree(appDataPath);
         return path;
     }
@@ -543,10 +543,10 @@ std::filesystem::path GuitarFXPluginAdapter::GetUserDataPath() const
     // Fallback: use user home (match FileSystem::ResolveSettingsDirectory layout)
 #ifdef __APPLE__
     auto home = std::filesystem::path(std::getenv("HOME") ? std::getenv("HOME") : ".");
-    return home / ".config" / "SoundshedGuitar";
+    return home / "Library" / "Soundshed Guitar";
 #else
     auto home = std::filesystem::path(std::getenv("USERPROFILE") ? std::getenv("USERPROFILE") : ".");
-    return home / ".config" / "SoundshedGuitar";
+    return home / ".config" / "Soundshed Guitar";
 #endif
 }
 

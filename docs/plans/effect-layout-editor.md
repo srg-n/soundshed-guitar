@@ -18,7 +18,7 @@ The Effect Layout Editor allows users to create custom visual layouts for effect
 - Re-add deleted controls from available parameters list (Add Control button)
 - Knob style presets: pedal, amp, minimal with distinct CSS visuals
 - Slider control rendering in designer (placeholder) and runtime (actual range input)
-- Save to `[AppData]/SoundshedGuitar/layouts/{effectType}.layout.json`; updates UI state and refreshes signal path view
+- Save to `[AppData]/Soundshed Guitar/layouts/{effectType}.layout.json`; updates UI state and refreshes signal path view
 - Export as `.sgfxlayout.zip` (JSZip in UI creates zip with `layout.json` + images; C++ writes binary blob)
 - Import from `.sgfxlayout.zip` (UI extracts with JSZip, registers images, loads layout)
 - Undo/redo stack (Ctrl+Z/Ctrl+Y, toolbar buttons, up to 50 states, nudge debouncing)
@@ -94,6 +94,6 @@ On app startup
 
 ## Storage
 
-- **Layouts:** `[AppData]/SoundshedGuitar/layouts/{effectType}.layout.json`
-- **Images:** `[AppData]/SoundshedGuitar/layouts/images/{imageId}.{ext}`
+- **Layouts:** `[AppData]/Soundshed Guitar/layouts/{effectType}.layout.json`
+- **Images:** `[AppData]/Soundshed Guitar/layouts/images/{imageId}.{ext}`
 - **Export format:** `.sgfxlayout.zip` containing `layout.json` + `images/` folder (created by JSZip in UI)

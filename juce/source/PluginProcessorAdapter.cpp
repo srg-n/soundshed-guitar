@@ -266,7 +266,7 @@ std::filesystem::path PluginProcessorAdapter::GetUserDataPath() const
 {
     return std::filesystem::path(
         juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-            .getChildFile("SoundshedGuitar")
+            .getChildFile("Soundshed Guitar")
             .getFullPathName()
             .toStdString());
 }

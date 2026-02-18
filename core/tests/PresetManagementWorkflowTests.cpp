@@ -139,6 +139,153 @@ std::optional<nlohmann::json> FindLatestMessageOfType(const std::vector<std::str
     return std::nullopt;
 }
 
+bool TestRiffLibraryPathNormalization()
+{
+    try
+    {
+        const fs::path sandbox = fs::temp_directory_path() / "guitarfx-preset-management-tests" / "riff-path-normalization";
+        std::error_code ec;
+        fs::remove_all(sandbox, ec);
+        fs::create_directories(sandbox, ec);
+        SetSettingsEnvRoot(sandbox);
+
+        const fs::path libraryRoot = sandbox / "riff-library-custom";
+        const fs::path takePath = libraryRoot / "takes" / "riff-1" / "take.wav";
+        fs::create_directories(takePath.parent_path(), ec);
+        {
+            std::ofstream takeFile(takePath, std::ios::binary);
+            takeFile << "riff";
+        }
+
+        const fs::path settingsPath = sandbox / "Soundshed Guitar" / "data" / "v1" / "settings" / "app.json";
+        fs::create_directories(settingsPath.parent_path(), ec);
+        {
+            nlohmann::json appSettings = nlohmann::json::object();
+            appSettings["riffLibrary.path"] = libraryRoot.string();
+            std::ofstream appSettingsFile(settingsPath);
+            appSettingsFile << appSettings.dump(2);
+        }
+
+        const fs::path indexPath = libraryRoot / "riff-library-index.json";
+        {
+            nlohmann::json index = nlohmann::json::object();
+            index["path"] = libraryRoot.string();
+            index["riffs"] = nlohmann::json::array({
+                {
+                    {"id", "riff-1"},
+                    {"title", "Riff One"},
+                    {"favorite", false},
+                    {"used", false},
+                    {"takes", nlohmann::json::array({
+                        {
+                            {"id", "take-1"},
+                            {"filePath", takePath.string()},
+                            {"durationSec", 1.0}
+                        }
+                    })}
+                }
+            });
+            std::ofstream indexFile(indexPath);
+            indexFile << index.dump(2);
+        }
+
+        TestHost host(sandbox);
+        guitarfx::PluginController controller(host);
+        controller.Initialize();
+
+        nlohmann::json normalize;
+        normalize["type"] = "setRiffLibraryPath";
+        normalize["path"] = libraryRoot.string();
+        controller.HandleUIMessage(normalize.dump());
+
+        nlohmann::json storedIndex;
+        {
+            std::ifstream input(indexPath);
+            if (!input)
+            {
+                std::cerr << "Failed to open riff index after save\n";
+                return false;
+            }
+            storedIndex = nlohmann::json::parse(input, nullptr, false);
+        }
+
+        if (storedIndex.is_discarded() || !storedIndex.is_object())
+        {
+            std::cerr << "Riff index is invalid after save\n";
+            return false;
+        }
+
+        const auto riffs = storedIndex.value("riffs", nlohmann::json::array());
+        if (!riffs.is_array() || riffs.empty())
+        {
+            std::cerr << "Riff index has no riffs after save\n";
+            return false;
+        }
+        const auto takes = riffs[0].value("takes", nlohmann::json::array());
+        if (!takes.is_array() || takes.empty())
+        {
+            std::cerr << "Riff index has no takes after save\n";
+            return false;
+        }
+
+        const auto storedPath = fs::path(takes[0].value("filePath", ""));
+        if (storedPath.empty() || storedPath.is_absolute())
+        {
+            std::cerr << "Riff take path was not normalized to relative in index\n";
+            return false;
+        }
+
+        TestHost hostReload(sandbox);
+        guitarfx::PluginController controllerReload(hostReload);
+        controllerReload.Initialize();
+
+        nlohmann::json getLibrary;
+        getLibrary["type"] = "getRiffLibrary";
+        controllerReload.HandleUIMessage(getLibrary.dump());
+
+        const auto libraryMsg = FindLatestMessageOfType(hostReload.sentMessages, "riffLibraryState");
+        if (!libraryMsg || !libraryMsg->contains("library"))
+        {
+            std::cerr << "riffLibraryState not emitted\n";
+            return false;
+        }
+
+        const auto library = (*libraryMsg).value("library", nlohmann::json::object());
+        const auto runtimeRiffs = library.value("riffs", nlohmann::json::array());
+        if (!runtimeRiffs.is_array() || runtimeRiffs.empty())
+        {
+            std::cerr << "riffLibraryState has no riffs\n";
+            return false;
+        }
+        const auto runtimeTakes = runtimeRiffs[0].value("takes", nlohmann::json::array());
+        if (!runtimeTakes.is_array() || runtimeTakes.empty())
+        {
+            std::cerr << "riffLibraryState has no takes\n";
+            return false;
+        }
+
+        const auto runtimePath = fs::path(runtimeTakes[0].value("filePath", ""));
+        if (runtimePath.empty() || !runtimePath.is_absolute())
+        {
+            std::cerr << "Loaded riff take path is not absolute runtime path\n";
+            return false;
+        }
+
+        if (runtimePath.lexically_normal() != takePath.lexically_normal())
+        {
+            std::cerr << "Loaded riff take path does not resolve to expected file\n";
+            return false;
+        }
+
+        return true;
+    }
+    catch (const std::exception& ex)
+    {
+        std::cerr << "Exception in TestRiffLibraryPathNormalization: " << ex.what() << "\n";
+        return false;
+    }
+}
+
 bool TestLoadPresetViaMessage()
 {
     const fs::path sandbox = fs::temp_directory_path() / "guitarfx-preset-management-tests" / "load";
@@ -206,7 +353,7 @@ bool TestSaveGetDeletePresetWorkflow()
     save["preset"] = nlohmann::json::parse(guitarfx::PresetStorage::SerializeToJson(preset));
     controller.HandleUIMessage(save.dump());
 
-    const fs::path savedPath = sandbox / "presets" / "user" / (saveId + ".json");
+    const fs::path savedPath = sandbox / "Soundshed Guitar" / "data" / "v1" / "presets" / "user" / (saveId + ".json");
     if (!fs::exists(savedPath))
     {
         std::cerr << "Saved preset file missing: " << savedPath.string() << "\n";
@@ -267,6 +414,7 @@ int main()
 
     run("Load preset via message", TestLoadPresetViaMessage());
     run("Save/Get/Delete preset workflow", TestSaveGetDeletePresetWorkflow());
+    run("Riff library path normalization", TestRiffLibraryPathNormalization());
 
     std::cout << "\nPreset management workflow tests: " << passed << " passed, " << failed << " failed\n";
     return failed == 0 ? 0 : 1;

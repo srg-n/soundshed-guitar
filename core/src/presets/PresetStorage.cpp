@@ -9,7 +9,57 @@ namespace guitarfx
 {
   namespace
   {
-    nlohmann::json SerializePresetResourceRef(const ResourceRef& ref)
+    bool HasUnsafeRelativeSegments(const std::filesystem::path& path)
+    {
+      if (path.empty() || path.is_absolute())
+        return false;
+
+      for (const auto& segment : path)
+      {
+        if (segment == "..")
+          return true;
+      }
+
+      return false;
+    }
+
+    std::filesystem::path ResolveStoredPathForRuntime(const std::filesystem::path& storedPath,
+                                                      const std::optional<std::filesystem::path>& baseDirectory)
+    {
+      if (storedPath.empty() || storedPath.is_absolute() || !baseDirectory.has_value())
+        return storedPath;
+
+      if (HasUnsafeRelativeSegments(storedPath))
+        return storedPath;
+
+      return (baseDirectory.value() / storedPath).lexically_normal();
+    }
+
+    std::filesystem::path BuildPathForStorage(const std::filesystem::path& runtimePath,
+                                              const std::optional<std::filesystem::path>& baseDirectory)
+    {
+      if (runtimePath.empty() || !baseDirectory.has_value())
+        return runtimePath;
+
+      std::error_code ec;
+      auto normalizedRuntimePath = std::filesystem::weakly_canonical(runtimePath, ec);
+      if (ec)
+        normalizedRuntimePath = runtimePath.lexically_normal();
+
+      ec.clear();
+      auto normalizedBase = std::filesystem::weakly_canonical(baseDirectory.value(), ec);
+      if (ec)
+        normalizedBase = baseDirectory.value().lexically_normal();
+
+      const auto relativePath = normalizedRuntimePath.lexically_relative(normalizedBase);
+      if (!relativePath.empty() && !relativePath.is_absolute() && !HasUnsafeRelativeSegments(relativePath))
+        return relativePath;
+
+      return runtimePath;
+    }
+
+    nlohmann::json SerializePresetResourceRef(const ResourceRef& ref,
+                                              const std::optional<std::filesystem::path>& baseDirectory)
     {
       nlohmann::json json;
       if (!ref.resourceType.empty())
@@ -17,7 +67,7 @@ namespace guitarfx
       if (!ref.resourceId.empty())
         json["resourceId"] = ref.resourceId;
       if (!ref.filePath.empty())
-        json["filePath"] = ref.filePath.string();
+        json["filePath"] = BuildPathForStorage(ref.filePath, baseDirectory).generic_string();
       if (!ref.embeddedId.empty())
         json["embeddedId"] = ref.embeddedId;
       if (!ref.parameterId.empty())
@@ -35,13 +85,16 @@ namespace guitarfx
       return json;
     }
 
-    ResourceRef DeserializePresetResourceRef(const nlohmann::json& json)
+    ResourceRef DeserializePresetResourceRef(const nlohmann::json& json,
+                                             const std::optional<std::filesystem::path>& baseDirectory)
     {
       ResourceRef ref;
       // Support both long-form (resourceType/resourceId) and short-form (type/id)
       ref.resourceType = json.value("resourceType", json.value("type", ""));
       ref.resourceId = json.value("resourceId", json.value("id", ""));
-      ref.filePath = json.value("filePath", "");
+      ref.filePath = ResolveStoredPathForRuntime(
+        std::filesystem::path(json.value("filePath", "")),
+        baseDirectory);
       ref.embeddedId = json.value("embeddedId", "");
       ref.parameterId = json.value("parameterId", "");
       if (json.contains("parameterValue") && json["parameterValue"].is_number())
@@ -61,7 +114,8 @@ namespace guitarfx
       return ref;
     }
 
-    nlohmann::json SerializeGraphNode(const GraphNode& node)
+    nlohmann::json SerializeGraphNode(const GraphNode& node,
+                                      const std::optional<std::filesystem::path>& baseDirectory)
     {
       nlohmann::json json;
       json["id"] = node.id;
@@ -100,14 +154,15 @@ namespace guitarfx
         {
           if (res.IsValid())
           {
-            json["resources"].push_back(SerializePresetResourceRef(res));
+            json["resources"].push_back(SerializePresetResourceRef(res, baseDirectory));
           }
         }
       }
       return json;
     }
 
-    GraphNode DeserializeGraphNode(const nlohmann::json& json)
+    GraphNode DeserializeGraphNode(const nlohmann::json& json,
+                                   const std::optional<std::filesystem::path>& baseDirectory)
     {
       GraphNode node;
       node.id = json.value("id", "");
@@ -157,7 +212,7 @@ namespace guitarfx
         {
           if (resJson.is_object())
           {
-            node.resources.push_back(DeserializePresetResourceRef(resJson));
+            node.resources.push_back(DeserializePresetResourceRef(resJson, baseDirectory));
           }
         }
       }
@@ -189,7 +244,8 @@ namespace guitarfx
       return edge;
     }
 
-    nlohmann::json SerializeEmbeddedResource(const EmbeddedResource& res)
+    nlohmann::json SerializeEmbeddedResource(const EmbeddedResource& res,
+                                             const std::optional<std::filesystem::path>& baseDirectory)
     {
       nlohmann::json json;
       json["id"] = res.id;
@@ -200,11 +256,12 @@ namespace guitarfx
       if (!res.data.empty())
         json["data"] = res.data;
       if (!res.originalPath.empty())
-        json["originalPath"] = res.originalPath.string();
+        json["originalPath"] = BuildPathForStorage(res.originalPath, baseDirectory).generic_string();
       return json;
     }
 
-    EmbeddedResource DeserializeEmbeddedResource(const nlohmann::json& json)
+    EmbeddedResource DeserializeEmbeddedResource(const nlohmann::json& json,
+                                                 const std::optional<std::filesystem::path>& baseDirectory)
     {
       EmbeddedResource res;
       res.id = json.value("id", "");
@@ -212,13 +269,16 @@ namespace guitarfx
       res.name = json.value("name", "");
       res.hash = json.value("hash", "");
       res.data = json.value("data", "");
-      res.originalPath = json.value("originalPath", "");
+      res.originalPath = ResolveStoredPathForRuntime(
+        std::filesystem::path(json.value("originalPath", "")),
+        baseDirectory);
       return res;
     }
   } // namespace
 
   std::string PresetStorage::SerializeToJson(const Preset& preset)
   {
+    const std::optional<std::filesystem::path> noBaseDirectory;
     nlohmann::json json;
 
     // Metadata
@@ -256,7 +316,7 @@ namespace guitarfx
     graph["nodes"] = nlohmann::json::array();
     for (const auto& node : preset.graph.nodes)
     {
-      graph["nodes"].push_back(SerializeGraphNode(node));
+      graph["nodes"].push_back(SerializeGraphNode(node, noBaseDirectory));
     }
     graph["edges"] = nlohmann::json::array();
     for (const auto& edge : preset.graph.edges)
@@ -271,7 +331,7 @@ namespace guitarfx
       json["embeddedResources"] = nlohmann::json::array();
       for (const auto& res : preset.embeddedResources)
       {
-        json["embeddedResources"].push_back(SerializeEmbeddedResource(res));
+        json["embeddedResources"].push_back(SerializeEmbeddedResource(res, noBaseDirectory));
       }
     }
 
@@ -356,7 +416,7 @@ namespace guitarfx
         {
           for (const auto& nodeJson : graph["nodes"])
           {
-            preset.graph.nodes.push_back(DeserializeGraphNode(nodeJson));
+            preset.graph.nodes.push_back(DeserializeGraphNode(nodeJson, std::nullopt));
           }
         }
 
@@ -369,12 +429,14 @@ namespace guitarfx
         }
       }
 
+      EnsurePresetBoundaryGainNodes(preset.graph);
+
       // Embedded resources
       if (json.contains("embeddedResources") && json["embeddedResources"].is_array())
       {
         for (const auto& resJson : json["embeddedResources"])
         {
-          preset.embeddedResources.push_back(DeserializeEmbeddedResource(resJson));
+          preset.embeddedResources.push_back(DeserializeEmbeddedResource(resJson, std::nullopt));
         }
       }
 
@@ -396,7 +458,61 @@ namespace guitarfx
       {
         return false;
       }
-      file << SerializeToJson(preset);
+      const std::optional<std::filesystem::path> baseDirectory = path.parent_path();
+
+      nlohmann::json json;
+
+      json["id"] = preset.id;
+      json["name"] = preset.name;
+      json["version"] = preset.version;
+      if (!preset.author.empty())
+        json["author"] = preset.author;
+      if (!preset.category.empty())
+        json["category"] = preset.category;
+      if (!preset.description.empty())
+        json["description"] = preset.description;
+      if (!preset.createdAt.empty())
+        json["createdAt"] = preset.createdAt;
+      if (!preset.modifiedAt.empty())
+        json["modifiedAt"] = preset.modifiedAt;
+      if (!preset.tags.empty())
+        json["tags"] = preset.tags;
+
+      nlohmann::json global;
+      global["inputTrim"] = preset.global.inputTrim;
+      global["outputTrim"] = preset.global.outputTrim;
+      global["outputVolume"] = preset.global.outputVolume;
+      global["autoLevelInput"] = preset.global.autoLevelInput;
+      global["autoLevelOutput"] = preset.global.autoLevelOutput;
+      global["transpose"] = preset.global.transpose;
+      json["global"] = global;
+
+      if (preset.globalSignalChain.has_value())
+        json["globalSignalChain"] = *preset.globalSignalChain;
+
+      nlohmann::json graph;
+      graph["nodes"] = nlohmann::json::array();
+      for (const auto& node : preset.graph.nodes)
+      {
+        graph["nodes"].push_back(SerializeGraphNode(node, baseDirectory));
+      }
+      graph["edges"] = nlohmann::json::array();
+      for (const auto& edge : preset.graph.edges)
+      {
+        graph["edges"].push_back(SerializeGraphEdge(edge));
+      }
+      json["graph"] = graph;
+
+      if (!preset.embeddedResources.empty())
+      {
+        json["embeddedResources"] = nlohmann::json::array();
+        for (const auto& res : preset.embeddedResources)
+        {
+          json["embeddedResources"].push_back(SerializeEmbeddedResource(res, baseDirectory));
+        }
+      }
+
+      file << json.dump(2);
       return true;
     }
     catch (const std::exception&)
@@ -414,9 +530,99 @@ namespace guitarfx
       {
         return std::nullopt;
       }
-      std::stringstream buffer;
-      buffer << file.rdbuf();
-      return DeserializeFromJson(buffer.str());
+
+      nlohmann::json json = nlohmann::json::parse(file);
+      Preset preset;
+
+      preset.id = json.value("id", "");
+      preset.name = json.value("name", "");
+      if (json.contains("version"))
+      {
+        if (json["version"].is_number())
+        {
+          preset.version = json["version"].get<int>();
+        }
+        else if (json["version"].is_string())
+        {
+          preset.version = std::stoi(json["version"].get<std::string>());
+        }
+      }
+      if (json.contains("formatVersion") && json["formatVersion"].is_number())
+      {
+        preset.version = json["formatVersion"].get<int>();
+      }
+      preset.author = json.value("author", "");
+      preset.category = json.value("category", "");
+      preset.description = json.value("description", "");
+      preset.createdAt = json.value("createdAt", "");
+      preset.modifiedAt = json.value("modifiedAt", "");
+
+      if (json.contains("tags") && json["tags"].is_array())
+      {
+        for (const auto& tag : json["tags"])
+        {
+          preset.tags.push_back(tag.get<std::string>());
+        }
+      }
+
+      nlohmann::json globalJson;
+      if (json.contains("global") && json["global"].is_object())
+      {
+        globalJson = json["global"];
+      }
+      else if (json.contains("globals") && json["globals"].is_object())
+      {
+        globalJson = json["globals"];
+      }
+
+      if (!globalJson.is_null())
+      {
+        preset.global.inputTrim = globalJson.value("inputTrim", 0.0);
+        preset.global.outputTrim = globalJson.value("outputTrim", 0.0);
+        preset.global.outputVolume = globalJson.value("outputVolume", 1.0);
+        preset.global.autoLevelInput = globalJson.value("autoLevelInput", false);
+        preset.global.autoLevelOutput = globalJson.value("autoLevelOutput", false);
+        preset.global.transpose = globalJson.value("transpose", 0);
+      }
+
+      if (json.contains("globalSignalChain") && json["globalSignalChain"].is_object())
+      {
+        preset.globalSignalChain = json["globalSignalChain"].get<GlobalSignalChainConfig>();
+      }
+
+      const std::optional<std::filesystem::path> baseDirectory = path.parent_path();
+      if (json.contains("graph") && json["graph"].is_object())
+      {
+        const auto& graph = json["graph"];
+
+        if (graph.contains("nodes") && graph["nodes"].is_array())
+        {
+          for (const auto& nodeJson : graph["nodes"])
+          {
+            preset.graph.nodes.push_back(DeserializeGraphNode(nodeJson, baseDirectory));
+          }
+        }
+
+        if (graph.contains("edges") && graph["edges"].is_array())
+        {
+          for (const auto& edgeJson : graph["edges"])
+          {
+            preset.graph.edges.push_back(DeserializeGraphEdge(edgeJson));
+          }
+        }
+      }
+
+      EnsurePresetBoundaryGainNodes(preset.graph);
+
+      if (json.contains("embeddedResources") && json["embeddedResources"].is_array())
+      {
+        for (const auto& resJson : json["embeddedResources"])
+        {
+          preset.embeddedResources.push_back(DeserializeEmbeddedResource(resJson, baseDirectory));
+        }
+      }
+
+      return preset;
     }
     catch (const std::exception&)
     {

@@ -9,13 +9,13 @@ std::filesystem::path FileSystem::ResolvePlatformRootDirectory() const
 {
 #ifdef _WIN32
   if (const char* appData = std::getenv("APPDATA"); appData != nullptr && appData[0] != '\0')
-    return std::filesystem::path{appData} / "SoundshedGuitar";
+    return std::filesystem::path{appData} / "Soundshed Guitar";
 #elif defined(__APPLE__)
   if (const char* home = std::getenv("HOME"); home != nullptr && home[0] != '\0')
-    return std::filesystem::path{home} / "Library" / "SoundshedGuitar";
+    return std::filesystem::path{home} / "Library" / "Soundshed Guitar";
 #else
   if (const char* home = std::getenv("HOME"); home != nullptr && home[0] != '\0')
-    return std::filesystem::path{home} / ".config" / "SoundshedGuitar";
+    return std::filesystem::path{home} / ".config" / "Soundshed Guitar";
 #endif
 
   return std::filesystem::path{"settings"};

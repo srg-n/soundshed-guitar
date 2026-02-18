@@ -189,16 +189,19 @@ bool TestSerializeDeserialize()
     return false;
   }
 
+  auto expected = original;
+  guitarfx::EnsurePresetBoundaryGainNodes(expected.graph);
+
   // Verify graph node count
-  if (deserialized->graph.nodes.size() != original.graph.nodes.size())
+  if (deserialized->graph.nodes.size() != expected.graph.nodes.size())
   {
     std::cout << "FAIL (node count mismatch: " << deserialized->graph.nodes.size() 
-              << " vs " << original.graph.nodes.size() << ")" << std::endl;
+              << " vs " << expected.graph.nodes.size() << ")" << std::endl;
     return false;
   }
 
   // Verify graph edge count
-  if (deserialized->graph.edges.size() != original.graph.edges.size())
+  if (deserialized->graph.edges.size() != expected.graph.edges.size())
   {
     std::cout << "FAIL (edge count mismatch)" << std::endl;
     return false;
@@ -509,6 +512,154 @@ bool TestEmbeddedResources()
   return true;
 }
 
+bool TestPresetFilePathNormalizationOnDisk()
+{
+  std::cout << "Test: PresetFilePathNormalizationOnDisk... ";
+
+  PresetTestFixture fixture;
+  const fs::path presetDir = fixture.mTempDir / "presets";
+  const fs::path inPresetDir = presetDir / "assets";
+  const fs::path outsideDir = fixture.mTempDir / "outside";
+  fs::create_directories(inPresetDir);
+  fs::create_directories(outsideDir);
+
+  const fs::path inPresetFile = inPresetDir / "inside.nam";
+  const fs::path outsideFile = outsideDir / "outside.nam";
+  {
+    std::ofstream insideOut(inPresetFile, std::ios::binary);
+    insideOut << "inside";
+  }
+  {
+    std::ofstream outsideOut(outsideFile, std::ios::binary);
+    outsideOut << "outside";
+  }
+
+  guitarfx::Preset preset;
+  preset.id = "path-normalization";
+  preset.name = "Path Normalization";
+  preset.version = 2;
+
+  guitarfx::GraphNode node;
+  node.id = "amp";
+  node.type = "amp_nam";
+  node.enabled = true;
+
+  guitarfx::ResourceRef inPresetRef;
+  inPresetRef.filePath = inPresetFile;
+  node.resources.push_back(inPresetRef);
+
+  guitarfx::ResourceRef outsideRef;
+  outsideRef.filePath = outsideFile;
+  node.resources.push_back(outsideRef);
+
+  preset.graph.nodes.push_back(node);
+
+  guitarfx::EmbeddedResource embedded;
+  embedded.id = "emb-1";
+  embedded.type = "nam";
+  embedded.name = "Embedded";
+  embedded.originalPath = inPresetFile;
+  preset.embeddedResources.push_back(embedded);
+
+  const fs::path presetPath = presetDir / "path-normalization.json";
+  if (!guitarfx::PresetStorage::SaveToFile(preset, presetPath))
+  {
+    std::cout << "FAIL (save failed)" << std::endl;
+    return false;
+  }
+
+  nlohmann::json raw;
+  {
+    std::ifstream input(presetPath);
+    if (!input)
+    {
+      std::cout << "FAIL (unable to open saved preset json)" << std::endl;
+      return false;
+    }
+    raw = nlohmann::json::parse(input, nullptr, false);
+  }
+
+  if (raw.is_discarded() || !raw.is_object())
+  {
+    std::cout << "FAIL (invalid saved preset json)" << std::endl;
+    return false;
+  }
+
+  const auto nodes = raw.value("graph", nlohmann::json::object()).value("nodes", nlohmann::json::array());
+  if (!nodes.is_array() || nodes.empty())
+  {
+    std::cout << "FAIL (missing serialized nodes)" << std::endl;
+    return false;
+  }
+
+  const auto resources = nodes[0].value("resources", nlohmann::json::array());
+  if (!resources.is_array() || resources.size() != 2)
+  {
+    std::cout << "FAIL (serialized resources missing)" << std::endl;
+    return false;
+  }
+
+  const auto storedInside = fs::path(resources[0].value("filePath", ""));
+  const auto storedOutside = fs::path(resources[1].value("filePath", ""));
+  if (storedInside.empty() || storedInside.is_absolute())
+  {
+    std::cout << "FAIL (inside path should be stored as relative)" << std::endl;
+    return false;
+  }
+  if (storedOutside.empty() || !storedOutside.is_absolute())
+  {
+    std::cout << "FAIL (outside path should remain absolute)" << std::endl;
+    return false;
+  }
+
+  const auto embeddedArray = raw.value("embeddedResources", nlohmann::json::array());
+  if (!embeddedArray.is_array() || embeddedArray.empty())
+  {
+    std::cout << "FAIL (missing embedded resources)" << std::endl;
+    return false;
+  }
+
+  const auto storedOriginalPath = fs::path(embeddedArray[0].value("originalPath", ""));
+  if (storedOriginalPath.empty() || storedOriginalPath.is_absolute())
+  {
+    std::cout << "FAIL (embedded originalPath should be stored as relative)" << std::endl;
+    return false;
+  }
+
+  const auto loaded = guitarfx::PresetStorage::LoadFromFile(presetPath);
+  if (!loaded)
+  {
+    std::cout << "FAIL (load failed)" << std::endl;
+    return false;
+  }
+
+  if (loaded->graph.nodes.empty() || loaded->graph.nodes[0].resources.size() != 2)
+  {
+    std::cout << "FAIL (loaded resources missing)" << std::endl;
+    return false;
+  }
+
+  if (loaded->graph.nodes[0].resources[0].filePath != inPresetFile.lexically_normal())
+  {
+    std::cout << "FAIL (inside path did not resolve back to absolute)" << std::endl;
+    return false;
+  }
+  if (loaded->graph.nodes[0].resources[1].filePath != outsideFile.lexically_normal())
+  {
+    std::cout << "FAIL (outside path changed unexpectedly)" << std::endl;
+    return false;
+  }
+
+  if (loaded->embeddedResources.empty() || loaded->embeddedResources[0].originalPath != inPresetFile.lexically_normal())
+  {
+    std::cout << "FAIL (embedded originalPath did not resolve back to absolute)" << std::endl;
+    return false;
+  }
+
+  std::cout << "PASS" << std::endl;
+  return true;
+}
+
 } // anonymous namespace
 
 int main()
@@ -540,6 +691,7 @@ int main()
   runTest(TestDeserializeInvalidJson);
   runTest(TestNodeParams);
   runTest(TestEmbeddedResources);
+  runTest(TestPresetFilePathNormalizationOnDisk);
 
   std::cout << "========================================" << std::endl;
   std::cout << "Results: " << passed << " passed, " << failed << " failed" << std::endl;

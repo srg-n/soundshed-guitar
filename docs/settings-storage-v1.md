@@ -2,8 +2,8 @@
 
 ## Platform root directories
 
-- Windows: `%APPDATA%/SoundshedGuitar`
-- macOS: `~/Library/SoundshedGuitar`
+- Windows: `%APPDATA%/Soundshed Guitar`
+- macOS: `~/Library/Soundshed Guitar`
 
 All persisted app data lives under `<ROOT>/data/v1/`.
 
@@ -19,7 +19,6 @@ All persisted app data lives under `<ROOT>/data/v1/`.
           preset-favorites.json
           preset-ratings.json
           setlists.json
-          theme.json
           window-state.json
       presets/
         preset-folders.json
@@ -61,6 +60,7 @@ Global app settings and integration values.
   "schemaVersion": 1,
   "updatedAt": "2026-02-13T12:00:00Z",
   "lastPresetId": "user-6bae78fb-5225-4b6c-8707-93895fa22823",
+  "theme": "dark",
   "tone3000.apiKey": "...",
   "diagnostics.signalLevelsEnabled": true,
   "ui.advancedOptionsEnabled": true,
@@ -77,7 +77,6 @@ UI-specific persistence files (split by concern).
   "preset-favorites.json": { "favorites": [] },
   "preset-ratings.json": { "ratings": {} },
   "setlists.json": { "setlists": [], "activeSetlistId": "" },
-  "theme.json": { "theme": "dark" },
   "window-state.json": { "width": 1600, "height": 1200 }
 }
 ```
@@ -108,7 +107,7 @@ Canonical index for managed resources.
       "provider": "user",
       "contentHash": "3f2c...",
       "fileExt": "nam",
-      "filePath": "../content/user/3f2c....nam",
+      "filePath": "content/user/3f2c....nam",
       "displayName": "5150 Rhythm",
       "originalFileName": "5150_Rhythm.nam"
     }
