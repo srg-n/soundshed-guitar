@@ -95,6 +95,17 @@ export function setRiffLibraryPath(path: string): void {
   postMessage({ type: "setRiffLibraryPath", path });
 }
 
+export function armRiffCapture(payload: {
+  tempoBpm: number;
+  timeSigNum: number;
+  timeSigDen: number;
+  countInBars: number;
+  patternType: "click" | "drum";
+  patternId?: string;
+}): void {
+  postMessage({ type: "armRiffCapture", ...payload });
+}
+
 export function startRiffCapture(payload: {
   tempoBpm: number;
   timeSigNum: number;

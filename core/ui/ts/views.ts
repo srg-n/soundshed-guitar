@@ -351,6 +351,9 @@ export function renderPresetList(
             ? `<span class="preset-folder-path">${escapeHtml(folderPath)}</span>`
             : "",
         ].filter(Boolean).join("");
+        const tagChips = (preset.tags ?? []).length > 0
+          ? `<div class="preset-item-tags">${(preset.tags ?? []).map((t) => `<span class="preset-item-tag">${escapeHtml(t)}</span>`).join("")}</div>`
+          : "";
 
         return `
         <article class="preset-item ${preset.id === activePresetId ? "active" : ""}" data-id="${preset.id}" draggable="true" style="border-left: 3px solid ${idAccentColor(preset.id)}">
@@ -358,6 +361,7 @@ export function renderPresetList(
             <h3>${escapeHtml(preset.name)}</h3>
           </header>
           ${metaParts ? `<div class="preset-item-meta">${metaParts}</div>` : ""}
+          ${tagChips}
           <p>${escapeHtml(preset.description ?? "")}</p>
           <div class="preset-rating" data-preset-id="${preset.id}">
             <span class="preset-rating-label">${label}</span>

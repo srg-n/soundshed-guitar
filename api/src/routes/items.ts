@@ -12,6 +12,7 @@ type CreateItemBody = {
   title?: string;
   description?: string;
   visibility?: ItemVisibility;
+  tags?: string[];
   appMinVersion?: string;
   appMaxVersion?: string;
   payloadAssetId?: string;
@@ -40,6 +41,7 @@ type ItemRow = {
 type ItemConfig = {
   description: string | null;
   visibility: ItemVisibility;
+  tags: string[] | null;
   appMinVersion: string | null;
   appMaxVersion: string | null;
   payloadAssetId: string | null;
@@ -52,6 +54,7 @@ function parseItemConfig(configJson: string | null | undefined): ItemConfig {
   const defaults: ItemConfig = {
     description: null,
     visibility: "public",
+    tags: null,
     appMinVersion: null,
     appMaxVersion: null,
     payloadAssetId: null,
@@ -67,9 +70,11 @@ function parseItemConfig(configJson: string | null | undefined): ItemConfig {
   try {
     const parsed = JSON.parse(configJson) as Partial<ItemConfig>;
     const visibility = parsed.visibility;
+    const rawTags = parsed.tags;
     return {
       description: typeof parsed.description === "string" ? parsed.description : null,
       visibility: visibility && allowedVisibility.has(visibility) ? visibility : "public",
+      tags: Array.isArray(rawTags) ? rawTags.filter((t): t is string => typeof t === "string") : null,
       appMinVersion: typeof parsed.appMinVersion === "string" ? parsed.appMinVersion : null,
       appMaxVersion: typeof parsed.appMaxVersion === "string" ? parsed.appMaxVersion : null,
       payloadAssetId: typeof parsed.payloadAssetId === "string" ? parsed.payloadAssetId : null,
@@ -94,6 +99,7 @@ function toItemResponse(item: ItemRow) {
     type: item.type,
     title: item.title,
     description: config.description,
+    tags: config.tags,
     visibility: config.visibility,
     moderationStatus: item.moderation_status,
     appMinVersion: config.appMinVersion,
@@ -220,9 +226,11 @@ export function itemRoutes() {
     }
 
     const itemId = randomId("itm");
+    const rawTags = body?.tags;
     const config: ItemConfig = {
       description: body?.description?.trim() ?? null,
       visibility,
+      tags: Array.isArray(rawTags) ? rawTags.filter((t): t is string => typeof t === "string").slice(0, 20) : null,
       appMinVersion: body?.appMinVersion?.trim() ?? null,
       appMaxVersion: body?.appMaxVersion?.trim() ?? null,
       payloadAssetId: body?.payloadAssetId?.trim() ?? null,
@@ -305,6 +313,9 @@ export function itemRoutes() {
     const nextConfig: ItemConfig = {
       description: body.description !== undefined ? body.description?.trim() ?? null : existingConfig.description,
       visibility,
+      tags: body.tags !== undefined
+        ? (Array.isArray(body.tags) ? body.tags.filter((t): t is string => typeof t === "string").slice(0, 20) : null)
+        : existingConfig.tags,
       appMinVersion: body.appMinVersion !== undefined ? body.appMinVersion?.trim() ?? null : existingConfig.appMinVersion,
       appMaxVersion: body.appMaxVersion !== undefined ? body.appMaxVersion?.trim() ?? null : existingConfig.appMaxVersion,
       payloadAssetId: body.payloadAssetId !== undefined ? body.payloadAssetId?.trim() ?? null : existingConfig.payloadAssetId,
@@ -387,11 +398,6 @@ export function itemRoutes() {
     if (item.creator_user_id !== auth.userId) {
       return fail(c, "FORBIDDEN", "You do not own this item", 403);
     }
-    const config = parseItemConfig(item.config_json);
-    if (!config.payloadAssetId) {
-      return fail(c, "MISSING_PAYLOAD", "Cannot publish without payloadAssetId", 422);
-    }
-
     await c.env.DB
       .prepare(
         "UPDATE items SET moderation_status = 'approved', published_at = COALESCE(published_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ?"

@@ -8,7 +8,7 @@ import { handleTunerUpdate, handleTunerStarted, handleTunerStopped, handleTunerR
 import { applyUiSettings } from "./windowSettings.js";
 import { updateDSPPerformancePlot, updateSignalDiagnosticsView } from "./views.js";
 import { refreshSettingsView } from "./settings.js";
-import { applyRiffCaptureState, applyRiffLibraryState, handleCapturedPreviewComplete, handleRiffPreviewPlayback, handleSavedRiffPreviewComplete, renderRiffLibraryPanel } from "./riffLibrary.js";
+import { applyRiffCaptureProgress, applyRiffCaptureState, applyRiffLibraryState, handleCapturedPreviewComplete, handleRiffPreviewPlayback, handleSavedRiffPreviewComplete, renderRiffLibraryPanel } from "./riffLibrary.js";
 import { refreshSelectedNodeParams, renderSignalPathBar } from "./signalPath.js";
 import { refreshFxSelector } from "./fxSelector.js";
 import { applyEnvironmentState, applyMetronomeState } from "./metronome.js";
@@ -324,6 +324,33 @@ export function handleIncomingMessage(message: string): void {
       if (riffPayload.capture) {
         applyRiffCaptureState(riffPayload.capture);
       }
+      break;
+    }
+    case "riffCaptureArmed": {
+      appendLog(`riff capture armed ← ${(payload as { takeId?: string }).takeId ?? "take"}`);
+      applyRiffCaptureState({
+        active: false,
+        armed: true,
+        complete: false,
+        takeId: (payload as { takeId?: string }).takeId ?? "",
+        bars: uiState.riffCapture?.bars ?? 1,
+        tempoBpm: (payload as { tempoBpm?: number }).tempoBpm ?? uiState.riffCapture?.tempoBpm ?? 120,
+        timeSigNum: (payload as { timeSigNum?: number }).timeSigNum ?? uiState.riffCapture?.timeSigNum ?? 4,
+        timeSigDen: (payload as { timeSigDen?: number }).timeSigDen ?? uiState.riffCapture?.timeSigDen ?? 4,
+        hasAudio: false,
+        waveformPeaks: [],
+      });
+      showNotification("Riff armed – waiting for input signal");
+      break;
+    }
+    case "riffCaptureProgress": {
+      applyRiffCaptureProgress(
+        (payload as { capturedSamples?: number }).capturedSamples ?? 0,
+        Array.isArray((payload as { waveformPeaks?: unknown[] }).waveformPeaks)
+          ? ((payload as { waveformPeaks?: unknown[] }).waveformPeaks as unknown[])
+              .filter((value): value is number => typeof value === "number")
+          : [],
+      );
       break;
     }
     case "riffCaptureStarted": {

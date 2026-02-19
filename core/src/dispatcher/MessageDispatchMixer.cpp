@@ -139,6 +139,11 @@ bool MessageDispatcher::DispatchMixerAndMonitoring(PluginController& c,
         c.HandleStopDemoRequest();
         return true;
     }
+    if (type == "armRiffCapture")
+    {
+        c.HandleArmRiffCaptureRequest(msg);
+        return true;
+    }
     if (type == "startRiffCapture")
     {
         c.HandleStartRiffCaptureRequest(msg);

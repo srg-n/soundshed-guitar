@@ -436,6 +436,22 @@
   color: var(--status-error-text);
 }
 
+/* ARM button — blinks when armed, waiting for input signal */
+.riff-arm-btn {
+  min-width: 60px;
+}
+
+@keyframes riff-arm-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.25; }
+}
+
+.riff-arm-btn.armed {
+  border-color: var(--status-error-border);
+  color: var(--status-error-text);
+  animation: riff-arm-blink 1s ease-in-out infinite;
+}
+
 .riff-capture-waveform {
   cursor: ew-resize;
 }

@@ -5,6 +5,7 @@ import {
   initializeSaveAsButton,
   initializeSavePresetModal,
   initializePresetActionButtons,
+  initializePresetTagFilterBar,
   renderActivePreset,
 } from "./presets.js";
 import { installFetchLogger, renderLogEntries } from "./logging.js";
@@ -63,6 +64,7 @@ async function bootstrap(): Promise<void> {
   initializeSavePresetModal();
   initializeSaveAsButton();
   initializePresetActionButtons();
+  initializePresetTagFilterBar();
   initializeTuner();
   initializeMetronome();
   initializeRiffLibraryPanel();

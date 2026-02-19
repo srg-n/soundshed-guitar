@@ -39,6 +39,8 @@ const PRESET_FOLDER_FAVORITES_ID = "__favorites__";
 const PRESET_FOLDER_IMPORTED_NAME = "Imported";
 const PRESET_REQUEST_TIMEOUT_MS = 5000;
 
+const activeTagFilters = new Set<string>();
+
 const pendingPresetRequests = new Map<string, {
   resolve: (preset: Preset) => void;
   reject: (error: Error) => void;
@@ -1050,6 +1052,13 @@ function getFilteredPresets(query: string): Preset[] {
     }
   }
 
+  if (activeTagFilters.size > 0) {
+    basePresets = basePresets.filter((preset) => {
+      const presetTags = preset.tags ?? [];
+      return Array.from(activeTagFilters).every((tag) => presetTags.includes(tag));
+    });
+  }
+
   if (!normalized) {
     return basePresets;
   }
@@ -1195,6 +1204,26 @@ export function renderActivePreset(): void {
 export function filterPresets(query: string): void {
   uiState.filteredPresets = getFilteredPresets(query);
   renderPresetUI(uiState.presetCache.get(uiState.activePresetId ?? "") ?? null);
+}
+
+export function initializePresetTagFilterBar(): void {
+  const bar = document.getElementById("preset-tag-filter-bar");
+  if (!bar) return;
+  bar.querySelectorAll<HTMLButtonElement>(".preset-tag-filter-chip").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tag = btn.dataset.tag ?? "";
+      if (!tag) return;
+      if (activeTagFilters.has(tag)) {
+        activeTagFilters.delete(tag);
+        btn.classList.remove("active");
+      } else {
+        activeTagFilters.add(tag);
+        btn.classList.add("active");
+      }
+      const searchInput = document.getElementById("preset-search") as HTMLInputElement | null;
+      filterPresets(searchInput?.value ?? "");
+    });
+  });
 }
 
 function requestPresetFromBackend(presetId: string): Promise<Preset> {
@@ -1717,6 +1746,7 @@ export function openSavePresetModal(): void {
   if (nameInput) nameInput.value = "";
   if (categoryInput) categoryInput.value = "User";
   if (descriptionInput) descriptionInput.value = "";
+  setPresetTagsPickerValue([]);
   if (includeGlobalFxInput) {
     const activePreset = getActivePresetForRender();
     const hasGlobalFx = Boolean((activePreset as Preset & { globalSignalChain?: unknown })?.globalSignalChain);
@@ -1780,6 +1810,7 @@ export function saveCurrentPreset(): void {
   const name = nameInput?.value?.trim() || "";
   const category = categoryInput?.value?.trim() || "User";
   const description = descriptionInput?.value?.trim() || "";
+  const tags = getPresetTagsPickerValue();
 
   if (!name) {
     showNotification("Error", "Preset name is required");
@@ -1812,6 +1843,7 @@ export function saveCurrentPreset(): void {
         name,
         category,
         description,
+        tags: tags.length > 0 ? tags : undefined,
         attachments: baseAttachments,
       };
       if (includeGlobalFx) {
@@ -1864,6 +1896,7 @@ export function saveCurrentPreset(): void {
     name,
     category,
     description,
+    tags: tags.length > 0 ? tags : undefined,
     attachments: baseAttachments,
   };
   if (includeGlobalFx) {
@@ -1903,11 +1936,33 @@ export function saveCurrentPreset(): void {
   updatePresetActionButtons();
 }
 
+function getPresetTagsPickerValue(): string[] {
+  const picker = document.getElementById("preset-tags-picker");
+  if (!picker) return [];
+  return Array.from(picker.querySelectorAll<HTMLButtonElement>(".preset-tag-chip.active"))
+    .map((btn) => btn.dataset.tag ?? "")
+    .filter(Boolean);
+}
+
+function setPresetTagsPickerValue(tags: string[]): void {
+  const picker = document.getElementById("preset-tags-picker");
+  if (!picker) return;
+  const tagSet = new Set(tags);
+  picker.querySelectorAll<HTMLButtonElement>(".preset-tag-chip").forEach((btn) => {
+    btn.classList.toggle("active", tagSet.has(btn.dataset.tag ?? ""));
+  });
+}
+
 export function initializeSavePresetModal(): void {
   const closeBtn = document.getElementById("save-preset-modal-close");
   const cancelBtn = document.getElementById("save-preset-cancel");
   const confirmBtn = document.getElementById("save-preset-confirm");
   const modal = document.getElementById("save-preset-modal");
+
+  // Wire tag chip toggle clicks
+  document.getElementById("preset-tags-picker")?.querySelectorAll<HTMLButtonElement>(".preset-tag-chip").forEach((btn) => {
+    btn.addEventListener("click", () => btn.classList.toggle("active"));
+  });
 
   if (closeBtn) {
     closeBtn.addEventListener("click", closeSavePresetModal);
@@ -2198,10 +2253,6 @@ export async function buildPresetArchiveBlob(preset: Preset): Promise<Blob> {
       fileName,
       hash,
     });
-  }
-
-  if (!exportResources.length) {
-    throw new Error("Preset has no resources (NAM model or IR cab) to publish");
   }
 
   const archive: PresetArchive = {
@@ -2592,6 +2643,7 @@ export function openEditPresetModal(): void {
   if (nameInput) nameInput.value = preset.name;
   if (categoryInput) categoryInput.value = preset.category || "User";
   if (descriptionInput) descriptionInput.value = preset.description || "";
+  setPresetTagsPickerValue(preset.tags ?? []);
   if (includeGlobalFxInput) {
     includeGlobalFxInput.checked = Boolean((preset as Preset & { globalSignalChain?: unknown }).globalSignalChain);
   }

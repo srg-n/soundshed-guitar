@@ -1,4 +1,4 @@
-import { deleteRiff, getRiffLibrary, importRiffWav, loadRiffTakeForEdit, markRiffUsed, previewCapturedRiffRange, previewRiffTake, saveRiffTake, setRiffFavorite, setRiffLibraryPath, startRiffCapture, stopPreviewPlayback, stopRiffCapture, trimCapturedRiff } from "./bridge.js";
+import { armRiffCapture, deleteRiff, getRiffLibrary, importRiffWav, loadRiffTakeForEdit, markRiffUsed, previewCapturedRiffRange, previewRiffTake, saveRiffTake, setRiffFavorite, setRiffLibraryPath, startRiffCapture, stopPreviewPlayback, stopRiffCapture, trimCapturedRiff } from "./bridge.js";
 import { appendLog } from "./logging.js";
 import { showNotification } from "./notifications.js";
 import { uiState } from "./state.js";
@@ -17,6 +17,10 @@ let activeTrimHandle: "start" | "end" | null = null;
 let selectedTrimHandle: "start" | "end" = "start";
 let editingRiffId = "";
 let savingFromCapture = false;
+// ARM state: true when armed (click playing, waiting for input signal)
+let isArmed = false;
+// Live waveform during active recording (populated by riffCaptureProgress messages)
+let liveWaveformPeaks: number[] = [];
 
 function openRiffCaptureModal(): void {
   const modal = document.getElementById("riff-capture-modal") as HTMLDivElement | null;
@@ -117,9 +121,21 @@ export function applyRiffLibraryState(library: Partial<RiffLibrary>): void {
 
 export function applyRiffCaptureState(capture: Partial<RiffCaptureState>): void {
   const previousTakeId = uiState.riffCapture?.takeId ?? "";
+  const wasArmed = isArmed;
+  // Update module-level armed state
+  if (typeof capture.armed === "boolean") {
+    isArmed = capture.armed;
+  }
+  // When recording starts or capture is cleared, reset live waveform
+  if (capture.active === true || capture.active === false) {
+    if (!capture.active) {
+      liveWaveformPeaks = [];
+    }
+  }
   uiState.riffCapture = {
     active: Boolean(capture.active),
     complete: Boolean(capture.complete),
+    armed: isArmed,
     takeId: typeof capture.takeId === "string" ? capture.takeId : uiState.riffCapture?.takeId ?? "",
     bars: typeof capture.bars === "number" ? capture.bars : uiState.riffCapture?.bars ?? 1,
     tempoBpm: typeof capture.tempoBpm === "number" ? capture.tempoBpm : uiState.riffCapture?.tempoBpm ?? 120,
@@ -132,6 +148,11 @@ export function applyRiffCaptureState(capture: Partial<RiffCaptureState>): void 
       ? capture.waveformPeaks.filter((value): value is number => typeof value === "number")
       : uiState.riffCapture?.waveformPeaks ?? [],
   };
+
+  if (!isArmed && wasArmed) {
+    // Arm was cleared: update ARM button appearance
+    renderArmButton();
+  }
 
   const shouldResetTrim = !uiState.riffCapture.hasAudio
     || uiState.riffCapture.takeId !== previousTakeId
@@ -149,6 +170,15 @@ export function applyRiffCaptureState(capture: Partial<RiffCaptureState>): void 
   syncTrimControlsFromState();
   renderCapturedWaveform();
   renderCapturedPlayButton();
+}
+
+/** Called with periodic waveform updates during active recording */
+export function applyRiffCaptureProgress(capturedSamples: number, peaks: number[]): void {
+  liveWaveformPeaks = peaks;
+  if (uiState.riffCapture) {
+    uiState.riffCapture = { ...uiState.riffCapture, capturedSamples };
+  }
+  renderCapturedWaveform();
 }
 
 function stopCapturedPreviewAnimation(resetProgress = true): void {
@@ -347,8 +377,20 @@ function renderCapturedWaveform(): void {
     return;
   }
 
-  const peaks = uiState.riffCapture?.waveformPeaks ?? [];
-  const hasAudio = Boolean(uiState.riffCapture?.hasAudio) && peaks.length > 0;
+  const isRecording = Boolean(uiState.riffCapture?.active);
+  // During recording show live peaks; after capture show finalized peaks
+  const peaks = isRecording && liveWaveformPeaks.length > 0
+    ? liveWaveformPeaks
+    : (uiState.riffCapture?.waveformPeaks ?? []);
+  const hasAudio = peaks.length > 0 && (Boolean(uiState.riffCapture?.hasAudio) || isRecording);
+  // For live rendering, compute how far through the 16-bar max buffer we are
+  const liveFillRatio = isRecording && uiState.riffCapture && uiState.riffCapture.sampleRate > 0
+    ? Math.min(1, uiState.riffCapture.capturedSamples / Math.max(1, liveWaveformPeaks.length
+        * Math.max(1, Math.ceil((uiState.riffCapture.sampleRate
+          * (60 / Math.max(1, uiState.riffCapture.tempoBpm))
+          * (4 / Math.max(1, uiState.riffCapture.timeSigDen))
+          * uiState.riffCapture.timeSigNum * 16) / 256))))
+    : 1;
 
   const dpr = window.devicePixelRatio || 1;
   const width = Math.max(1, Math.floor(canvas.clientWidth));
@@ -377,66 +419,90 @@ function renderCapturedWaveform(): void {
   if (!hasAudio) {
     ctx.fillStyle = "rgba(255,255,255,0.55)";
     ctx.font = "12px sans-serif";
-    ctx.fillText("No capture yet", 10, Math.floor(height / 2) - 8);
+    ctx.fillText(isArmed ? "Waiting for signal…" : "No capture yet", 10, Math.floor(height / 2) - 8);
     return;
   }
 
   const centerY = height / 2;
   const step = width / peaks.length;
 
+  // For live recording: shade the un-recorded portion (right side)
+  const recordedX = isRecording ? Math.max(0, Math.min(width, liveFillRatio * width)) : width;
+
   const trimRange = clampTrimRange(trimStartRatio, trimEndRatio);
-  const trimStartX = Math.max(0, Math.min(width - 1, trimRange.start * width));
-  const trimEndX = Math.max(0, Math.min(width - 1, trimRange.end * width));
+  const trimStartX = isRecording ? 0 : Math.max(0, Math.min(width - 1, trimRange.start * width));
+  const trimEndX = isRecording ? recordedX : Math.max(0, Math.min(width - 1, trimRange.end * width));
 
-  ctx.fillStyle = "rgba(0,0,0,0.20)";
-  if (trimStartX > 0) {
-    ctx.fillRect(0, 0, trimStartX, height);
-  }
-  if (trimEndX < width) {
-    ctx.fillRect(trimEndX, 0, width - trimEndX, height);
+  if (!isRecording) {
+    ctx.fillStyle = "rgba(0,0,0,0.20)";
+    if (trimStartX > 0) {
+      ctx.fillRect(0, 0, trimStartX, height);
+    }
+    if (trimEndX < width) {
+      ctx.fillRect(trimEndX, 0, width - trimEndX, height);
+    }
+  } else {
+    // Shade un-recorded region
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    if (recordedX < width) {
+      ctx.fillRect(recordedX, 0, width - recordedX, height);
+    }
   }
 
-  ctx.strokeStyle = "rgba(101, 186, 255, 0.95)";
+  ctx.strokeStyle = isRecording ? "rgba(255, 100, 80, 0.95)" : "rgba(101, 186, 255, 0.95)";
   ctx.lineWidth = Math.max(1, step * 0.7);
   ctx.beginPath();
 
   peaks.forEach((peak, index) => {
     const x = index * step + step / 2;
+    if (isRecording && x > recordedX) {
+      return; // don't draw unrecorded region
+    }
     const amp = Math.max(1, Math.min(centerY - 2, peak * (centerY - 2)));
     ctx.moveTo(x, centerY - amp);
     ctx.lineTo(x, centerY + amp);
   });
   ctx.stroke();
 
-  ctx.strokeStyle = "rgba(255, 204, 102, 0.95)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(trimStartX, 0);
-  ctx.lineTo(trimStartX, height);
-  ctx.moveTo(trimEndX, 0);
-  ctx.lineTo(trimEndX, height);
-  ctx.stroke();
-
-  ctx.fillStyle = "rgba(255, 204, 102, 0.95)";
-  ctx.beginPath();
-  ctx.arc(trimStartX, centerY, 4, 0, Math.PI * 2);
-  ctx.arc(trimEndX, centerY, 4, 0, Math.PI * 2);
-  ctx.fill();
-
-  const selectedX = selectedTrimHandle === "start" ? trimStartX : trimEndX;
-  ctx.strokeStyle = "rgba(255,255,255,0.95)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(selectedX, centerY, 6, 0, Math.PI * 2);
-  ctx.stroke();
-
-  if (capturedPreviewActive) {
-    const playheadX = Math.max(trimStartX, Math.min(trimEndX, trimStartX + capturedPreviewProgress * (trimEndX - trimStartX)));
+  if (!isRecording) {
     ctx.strokeStyle = "rgba(255, 204, 102, 0.95)";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(playheadX, 0);
-    ctx.lineTo(playheadX, height);
+    ctx.moveTo(trimStartX, 0);
+    ctx.lineTo(trimStartX, height);
+    ctx.moveTo(trimEndX, 0);
+    ctx.lineTo(trimEndX, height);
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(255, 204, 102, 0.95)";
+    ctx.beginPath();
+    ctx.arc(trimStartX, centerY, 4, 0, Math.PI * 2);
+    ctx.arc(trimEndX, centerY, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    const selectedX = selectedTrimHandle === "start" ? trimStartX : trimEndX;
+    ctx.strokeStyle = "rgba(255,255,255,0.95)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(selectedX, centerY, 6, 0, Math.PI * 2);
+    ctx.stroke();
+
+    if (capturedPreviewActive) {
+      const playheadX = Math.max(trimStartX, Math.min(trimEndX, trimStartX + capturedPreviewProgress * (trimEndX - trimStartX)));
+      ctx.strokeStyle = "rgba(255, 204, 102, 0.95)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(playheadX, 0);
+      ctx.lineTo(playheadX, height);
+      ctx.stroke();
+    }
+  } else {
+    // Draw recording head at current position
+    ctx.strokeStyle = "rgba(255, 80, 80, 0.9)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(recordedX, 0);
+    ctx.lineTo(recordedX, height);
     ctx.stroke();
   }
 }
@@ -520,6 +586,7 @@ function renderRiffCaptureStatus(): void {
   }
   const capture = uiState.riffCapture;
   const recordBtn = document.getElementById("riff-capture-record-toggle") as HTMLButtonElement | null;
+
   if (!capture) {
     status.textContent = "Idle";
     if (recordBtn) {
@@ -527,26 +594,46 @@ function renderRiffCaptureStatus(): void {
       recordBtn.classList.add("riff-record-btn");
       recordBtn.classList.remove("recording");
     }
+    renderArmButton();
     return;
   }
 
-  if (capture.active) {
-    status.textContent = `Recording · ${capture.bars} bar(s) @ ${capture.tempoBpm.toFixed(1)} BPM`;
+  if (isArmed && !capture.active) {
+    const countIn = capture.tempoBpm > 0
+      ? `${capture.tempoBpm.toFixed(1)} BPM · count-in active`
+      : "armed";
+    status.textContent = `Armed · ${countIn} · waiting for signal…`;
     if (recordBtn) {
       recordBtn.textContent = "■ Stop";
       recordBtn.classList.add("riff-record-btn", "recording");
     }
+    renderArmButton();
+    return;
+  }
+
+  if (capture.active) {
+    const capturedSec = capture.sampleRate > 0 ? capture.capturedSamples / capture.sampleRate : 0;
+    const barText = capturedSec > 0 && capture.tempoBpm > 0
+      ? `~${computeBarsFromSamples(capture.capturedSamples, capture.sampleRate, capture.tempoBpm, capture.timeSigNum, capture.timeSigDen)} bar(s)`
+      : `${capture.bars} bar(s)`;
+    status.textContent = `Recording · ${barText} @ ${capture.tempoBpm.toFixed(1)} BPM`;
+    if (recordBtn) {
+      recordBtn.textContent = "■ Stop";
+      recordBtn.classList.add("riff-record-btn", "recording");
+    }
+    renderArmButton();
     return;
   }
 
   if (capture.complete && capture.takeId) {
     const seconds = capture.sampleRate > 0 ? capture.capturedSamples / capture.sampleRate : 0;
-    status.textContent = `Captured ${capture.takeId} (${formatDuration(seconds)})`;
+    status.textContent = `Captured ${capture.takeId} (${formatDuration(seconds)}, ${capture.bars} bar(s))`;
     if (recordBtn) {
       recordBtn.textContent = "● Record";
       recordBtn.classList.add("riff-record-btn");
       recordBtn.classList.remove("recording");
     }
+    renderArmButton();
     return;
   }
 
@@ -555,6 +642,32 @@ function renderRiffCaptureStatus(): void {
     recordBtn.textContent = "● Record";
     recordBtn.classList.add("riff-record-btn");
     recordBtn.classList.remove("recording");
+  }
+  renderArmButton();
+}
+
+function computeBarsFromSamples(capturedSamples: number, sampleRate: number, tempoBpm: number, timeSigNum: number, timeSigDen: number): number {
+  if (sampleRate <= 0 || tempoBpm <= 0 || timeSigNum <= 0 || timeSigDen <= 0) {
+    return 1;
+  }
+  const samplesPerBeat = sampleRate * (60 / tempoBpm) * (4 / timeSigDen);
+  const samplesPerBar = samplesPerBeat * timeSigNum;
+  return Math.max(1, Math.round(capturedSamples / samplesPerBar));
+}
+
+function renderArmButton(): void {
+  const armBtn = document.getElementById("riff-capture-arm") as HTMLButtonElement | null;
+  if (!armBtn) {
+    return;
+  }
+  const recording = Boolean(uiState.riffCapture?.active);
+  armBtn.disabled = recording;
+  if (isArmed) {
+    armBtn.textContent = "⏺ Armed";
+    armBtn.classList.add("armed");
+  } else {
+    armBtn.textContent = "⏺ Arm";
+    armBtn.classList.remove("armed");
   }
 }
 
@@ -566,6 +679,7 @@ function bindRiffLibraryActions(): void {
   const captureModal = document.getElementById("riff-capture-modal") as HTMLDivElement | null;
   const captureModalCloseBtn = document.getElementById("riff-capture-modal-close") as HTMLButtonElement | null;
   const captureModalCancelBtn = document.getElementById("riff-capture-modal-cancel") as HTMLButtonElement | null;
+  const armBtn = document.getElementById("riff-capture-arm") as HTMLButtonElement | null;
   const recordToggleBtn = document.getElementById("riff-capture-record-toggle") as HTMLButtonElement | null;
   const playCaptureBtn = document.getElementById("riff-capture-play") as HTMLButtonElement | null;
   const trimButton = document.getElementById("riff-capture-trim") as HTMLButtonElement | null;
@@ -684,12 +798,46 @@ function bindRiffLibraryActions(): void {
     });
   }
 
+  if (armBtn && armBtn.dataset.bound !== "true") {
+    armBtn.dataset.bound = "true";
+    armBtn.addEventListener("click", () => {
+      if (isArmed || uiState.riffCapture?.active) {
+        // Disarm / cancel armed state
+        isArmed = false;
+        stopRiffCapture(true);
+        appendLog("riff capture disarmed");
+        renderArmButton();
+        renderRiffCaptureStatus();
+        return;
+      }
+
+      const tempoInput = document.getElementById("riff-capture-tempo") as HTMLInputElement | null;
+      const numInput = document.getElementById("riff-capture-timesig-num") as HTMLInputElement | null;
+      const denInput = document.getElementById("riff-capture-timesig-den") as HTMLInputElement | null;
+      const countInInput = document.getElementById("riff-capture-countin") as HTMLInputElement | null;
+      const patternTypeSelect = document.getElementById("riff-capture-pattern-type") as HTMLSelectElement | null;
+      const patternIdInput = document.getElementById("riff-capture-pattern-id") as HTMLInputElement | null;
+
+      const tempo = Math.max(30, Math.min(300, Number(tempoInput?.value ?? 120)));
+      const timeSigNum = Math.max(1, Number(numInput?.value ?? 4));
+      const timeSigDen = Math.max(1, Number(denInput?.value ?? 4));
+      const countInBars = Math.max(0, Number(countInInput?.value ?? 1));
+      const patternType = (patternTypeSelect?.value === "drum" ? "drum" : "click") as "click" | "drum";
+      const patternId = patternIdInput?.value.trim() || undefined;
+
+      armRiffCapture({ tempoBpm: tempo, timeSigNum, timeSigDen, countInBars, patternType, patternId });
+      appendLog(`riff capture arm → @ ${tempo} bpm (${timeSigNum}/${timeSigDen}), count-in: ${countInBars} bars`);
+    });
+  }
+
   if (recordToggleBtn && recordToggleBtn.dataset.bound !== "true") {
     recordToggleBtn.dataset.bound = "true";
     recordToggleBtn.addEventListener("click", () => {
-      if (uiState.riffCapture?.active) {
+      if (isArmed || uiState.riffCapture?.active) {
+        isArmed = false;
         stopRiffCapture(false);
         appendLog("riff capture stop");
+        renderArmButton();
         return;
       }
 

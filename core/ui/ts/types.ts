@@ -56,6 +56,7 @@ export interface Preset {
   name: string;
   category?: string;
   description?: string;
+  tags?: string[];
   attachments?: Attachment[];
   fxChain?: string[];
   audioFxModelId?: string | null;
@@ -350,6 +351,7 @@ export interface RiffLibrary {
 export interface RiffCaptureState {
   active: boolean;
   complete: boolean;
+  armed?: boolean;
   takeId: string;
   bars: number;
   tempoBpm: number;

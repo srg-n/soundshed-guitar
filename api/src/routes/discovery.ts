@@ -7,6 +7,8 @@ type RowItem = {
   kind: "item" | "pack";
   title: string;
   type: string | null;
+  description?: string | null;
+  tags?: string[] | null;
   thumbnailAssetId?: string | null;
 };
 
@@ -27,7 +29,7 @@ export function discoveryRoutes() {
     const resultRows: Array<{ id: string; slug: string; title: string; items: RowItem[] }> = [];
     for (const row of rows.results) {
       const rowItems = await c.env.DB.prepare(
-        `SELECT fri.item_id, fri.pack_id, i.title AS item_title, i.type AS item_type, p.title AS pack_title, p.config_json AS pack_config_json
+        `SELECT fri.item_id, fri.pack_id, i.title AS item_title, i.type AS item_type, i.config_json AS item_config_json, p.title AS pack_title, p.config_json AS pack_config_json
          FROM featured_row_items fri
          LEFT JOIN items i ON i.id = fri.item_id
          LEFT JOIN packs p ON p.id = fri.pack_id
@@ -41,17 +43,29 @@ export function discoveryRoutes() {
           pack_id: string | null;
           item_title: string | null;
           item_type: string | null;
+          item_config_json: string | null;
           pack_title: string | null;
           pack_config_json: string | null;
         }>();
 
       const mappedItems: RowItem[] = rowItems.results.map((entry) => {
         if (entry.item_id) {
+          let itemDescription: string | null = null;
+          let itemTags: string[] | null = null;
+          if (entry.item_config_json) {
+            try {
+              const cfg = JSON.parse(entry.item_config_json) as { description?: string | null; tags?: string[] | null };
+              itemDescription = typeof cfg.description === "string" ? cfg.description : null;
+              itemTags = Array.isArray(cfg.tags) ? cfg.tags.filter((t): t is string => typeof t === "string") : null;
+            } catch { }
+          }
           return {
             id: entry.item_id,
             kind: "item",
             title: entry.item_title ?? "Untitled",
-            type: entry.item_type
+            type: entry.item_type,
+            description: itemDescription,
+            tags: itemTags
           };
         }
         let thumbnailAssetId: string | null = null;
@@ -81,13 +95,13 @@ export function discoveryRoutes() {
     if (resultRows.length === 0) {
       const latestItems = await c.env.DB
         .prepare(
-          `SELECT id, title, type
+          `SELECT id, title, type, config_json
            FROM items
            WHERE moderation_status = 'approved'
            ORDER BY published_at DESC, updated_at DESC
            LIMIT 40`
         )
-        .all<{ id: string; title: string; type: string }>();
+        .all<{ id: string; title: string; type: string; config_json: string | null }>();
 
       const latestPacks = await c.env.DB
         .prepare(
@@ -104,12 +118,25 @@ export function discoveryRoutes() {
           id: "fallback_latest_items",
           slug: "latest-items",
           title: "Latest Presets",
-          items: latestItems.results.map((item) => ({
-            id: item.id,
-            kind: "item",
-            title: item.title,
-            type: item.type
-          }))
+          items: latestItems.results.map((item) => {
+            let itemDescription: string | null = null;
+            let itemTags: string[] | null = null;
+            if (item.config_json) {
+              try {
+                const cfg = JSON.parse(item.config_json) as { description?: string | null; tags?: string[] | null };
+                itemDescription = typeof cfg.description === "string" ? cfg.description : null;
+                itemTags = Array.isArray(cfg.tags) ? cfg.tags.filter((t): t is string => typeof t === "string") : null;
+              } catch { }
+            }
+            return {
+              id: item.id,
+              kind: "item" as const,
+              title: item.title,
+              type: item.type,
+              description: itemDescription,
+              tags: itemTags
+            };
+          })
         });
       }
 

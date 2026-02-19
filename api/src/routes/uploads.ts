@@ -120,7 +120,6 @@ function validatePresetArchive(body: ArrayBuffer): ValidationResult {
 
   const allowedExtensions = new Set([".json", ".wav", ".nam"]);
   let hasJson = false;
-  let hasResource = false;
 
   for (const entry of fileEntries) {
     const extension = getExtension(entry);
@@ -130,16 +129,10 @@ function validatePresetArchive(body: ArrayBuffer): ValidationResult {
     if (extension === ".json") {
       hasJson = true;
     }
-    if (extension === ".wav" || extension === ".nam") {
-      hasResource = true;
-    }
   }
 
   if (!hasJson) {
     return { ok: false, reason: "Preset archive must include at least one JSON file" };
-  }
-  if (!hasResource) {
-    return { ok: false, reason: "Preset archive must include at least one .wav or .nam file" };
   }
 
   return { ok: true };

@@ -241,6 +241,7 @@ private:
     void HandleStopDemoRequest();
     void HandleGetRiffLibraryRequest();
     void HandleSetRiffLibraryPathRequest(const nlohmann::json& payload);
+    void HandleArmRiffCaptureRequest(const nlohmann::json& payload);
     void HandleStartRiffCaptureRequest(const nlohmann::json& payload);
     void HandleStopRiffCaptureRequest(const nlohmann::json& payload);
     void HandleImportRiffWavRequest(const nlohmann::json& payload);
@@ -503,6 +504,11 @@ private:
     {
         bool active = false;
         bool complete = false;
+        // ARM: click playing, waiting for input signal to trigger recording
+        bool armed = false;
+        bool armCountInComplete = false;
+        std::size_t armCountInIndex = 0; // samples counted during arm count-in
+        float armThreshold = 0.001f;     // ~-60 dBFS input level to trigger
         std::string takeId;
         RiffCaptureConfig config;
         std::vector<float> left;
@@ -512,6 +518,10 @@ private:
         std::size_t countInSamples = 0;
         double sampleRate = 0.0;
         int bitsPerSample = 16;
+        // Live waveform during recording (256 peak buckets for up to 16 bars)
+        std::vector<float> livePeaks;
+        std::size_t livePeakBucketSize = 1;
+        std::size_t lastProgressSample = 0;
         std::chrono::steady_clock::time_point startedAt;
         std::chrono::steady_clock::time_point endedAt;
     };

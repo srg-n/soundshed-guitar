@@ -17,6 +17,7 @@ type ToneSharingItem = {
   type: string;
   moderationStatus?: string;
   description?: string | null;
+  tags?: string[] | null;
 };
 
 type ToneSharingPack = {
@@ -30,7 +31,7 @@ type ToneSharingPack = {
 
 type ToneSharingPackDetails = {
   pack: ToneSharingPack;
-  items: Array<{ itemId: string; sortOrder: number; title: string; type: string; description?: string | null }>;
+  items: Array<{ itemId: string; sortOrder: number; title: string; type: string; description?: string | null; tags?: string[] | null }>;
 };
 
 type ToneSharingRow = {
@@ -43,6 +44,7 @@ type ToneSharingRow = {
     title: string;
     type: string | null;
     description?: string | null;
+    tags?: string[] | null;
     thumbnailUrl?: string | null;
     thumbnailAssetId?: string | null;
   }>;
@@ -127,6 +129,7 @@ export function openToneSharingPublishPresetModal(defaultTitle?: string, default
   if (descriptionInput) {
     descriptionInput.value = resolvedDescription;
   }
+  setToneSharingTagsPickerValue(activePreset?.tags ?? []);
 
   setUploadStatus(activePreset ? `Publishing: ${activePreset.name ?? activePreset.id}` : "");
 
@@ -650,6 +653,7 @@ async function renderFeedRows(rows: ToneSharingRow[]): Promise<void> {
                       <div class=\"tone-sharing-card-item-title\">${item.title}</div>
                       <div class=\"tone-sharing-card-item-meta\">${item.kind === "item" ? item.type ?? "preset" : "pack"}</div>
                       ${item.description ? `<div class=\"tone-sharing-card-item-description\">${item.description}</div>` : ""}
+                      ${item.kind === "item" && item.tags && item.tags.length > 0 ? `<div class=\"tone-sharing-card-tags\">${item.tags.map((t) => `<span class=\"tone-sharing-tag-badge\">${t}</span>`).join("")}</div>` : ""}
                     </div>
                     <div class=\"tone-sharing-card-item-actions\">
                       ${item.kind === "item" ? `
@@ -695,6 +699,7 @@ function buildSingleRow(title: string, entries: Array<{ id: string; title: strin
       title: entry.title,
       type: entry.type ?? null,
       description: kind === "pack" ? (entry as ToneSharingPack).description ?? null : (entry as ToneSharingItem).description ?? null,
+      tags: kind === "item" ? (entry as ToneSharingItem).tags ?? null : null,
       thumbnailUrl: kind === "pack"
         ? ((entry as ToneSharingPack).thumbnailUrl ?? ((entry as ToneSharingPack).thumbnailAssetId ? `/packs/${entry.id}/thumbnail` : null))
         : null
@@ -752,6 +757,7 @@ async function renderPackDetail(details: ToneSharingPackDetails): Promise<void> 
               <div class=\"tone-sharing-pack-preset-title\">${escapeHtml(item.title)}</div>
               ${item.type ? `<div class=\"tone-sharing-pack-preset-type\">${escapeHtml(item.type)}</div>` : ""}
               ${item.description ? `<div class=\"tone-sharing-pack-preset-desc\">${escapeHtml(item.description)}</div>` : ""}
+              ${item.tags && item.tags.length > 0 ? `<div class=\"tone-sharing-pack-preset-tags\">${item.tags.map((t) => `<span class=\"tone-sharing-tag-badge\">${escapeHtml(t)}</span>`).join("")}</div>` : ""}
             </div>
             <div class=\"tone-sharing-pack-preset-actions\">
               <button class=\"btn btn-secondary tone-sharing-card-btn\" type=\"button\"
@@ -991,9 +997,27 @@ function renderPackItemSelection(items: ToneSharingItem[], checked = new Set<str
     .join("");
 }
 
+function getToneSharingTagsPickerValue(): string[] {
+  const picker = element<HTMLElement>("tone-sharing-tags-picker");
+  if (!picker) return [];
+  return Array.from(picker.querySelectorAll<HTMLButtonElement>(".tone-sharing-tag-chip.active"))
+    .map((btn) => btn.dataset.tag ?? "")
+    .filter(Boolean);
+}
+
+function setToneSharingTagsPickerValue(tags: string[]): void {
+  const picker = element<HTMLElement>("tone-sharing-tags-picker");
+  if (!picker) return;
+  const tagSet = new Set(tags);
+  picker.querySelectorAll<HTMLButtonElement>(".tone-sharing-tag-chip").forEach((btn) => {
+    btn.classList.toggle("active", tagSet.has(btn.dataset.tag ?? ""));
+  });
+}
+
 async function uploadAndPublishItem(): Promise<void> {
   let title = element<HTMLInputElement>("tone-sharing-item-title")?.value.trim() ?? "";
   let description = element<HTMLTextAreaElement>("tone-sharing-item-description")?.value.trim() ?? "";
+  const selectedTags = getToneSharingTagsPickerValue();
 
   const activePreset = uiState.presetCache.get(uiState.activePresetId ?? "") ?? null;
   if (!activePreset) {
@@ -1014,6 +1038,16 @@ async function uploadAndPublishItem(): Promise<void> {
   }
   if (!title) {
     setUploadStatus("Title is required.");
+    return;
+  }
+
+  // Validate signal chain: requires input + output + at least one effect node
+  const graphNodes = activePreset.graph?.nodes ?? [];
+  const hasInput = graphNodes.some((n) => n.type === "input");
+  const hasOutput = graphNodes.some((n) => n.type === "output");
+  const effectNodes = graphNodes.filter((n) => n.type !== "input" && n.type !== "output");
+  if (!hasInput || !hasOutput || effectNodes.length === 0) {
+    setUploadStatus("Preset must have a signal chain with at least one effect node to publish.");
     return;
   }
 
@@ -1066,6 +1100,7 @@ async function uploadAndPublishItem(): Promise<void> {
         type: "preset",
         title,
         description,
+        tags: selectedTags.length > 0 ? selectedTags : undefined,
         payloadAssetId: complete.assetId
       })
     });
@@ -1437,6 +1472,11 @@ function bindTopControls(): void {
         setUploadStatus(`Download failed: ${(error as Error).message}`);
       }
     }
+  });
+
+  // Tag chip toggles in publish modal
+  element<HTMLElement>("tone-sharing-tags-picker")?.querySelectorAll<HTMLButtonElement>(".tone-sharing-tag-chip").forEach((btn) => {
+    btn.addEventListener("click", () => btn.classList.toggle("active"));
   });
 
   // Publish preset modal (opened from preset chooser)
