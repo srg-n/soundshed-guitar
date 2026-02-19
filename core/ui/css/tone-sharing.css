@@ -298,6 +298,61 @@
   gap: 10px;
 }
 
+.tone-sharing-publish-modal .tone-sharing-grid-form {
+  gap: 8px;
+}
+
+.tone-sharing-publish-modal .tone-sharing-grid-form label {
+  color: var(--text-dark-secondary);
+  margin-top: 4px;
+}
+
+.tone-sharing-publish-modal .tone-sharing-grid-form input:not([type="file"]),
+.tone-sharing-publish-modal .tone-sharing-grid-form select,
+.tone-sharing-publish-modal .tone-sharing-grid-form textarea {
+  background: var(--bg-dark-tertiary);
+  border-color: var(--border-dark-medium);
+  color: var(--text-dark-primary);
+}
+
+.tone-sharing-publish-modal .tone-sharing-grid-form input::placeholder,
+.tone-sharing-publish-modal .tone-sharing-grid-form textarea::placeholder {
+  color: var(--text-dark-muted);
+}
+
+.tone-sharing-publish-modal .tone-sharing-grid-form input:focus,
+.tone-sharing-publish-modal .tone-sharing-grid-form textarea:focus,
+.tone-sharing-publish-modal .tone-sharing-grid-form select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(224, 120, 72, 0.2);
+  outline: none;
+}
+
+.tone-sharing-publish-modal .tone-sharing-preset-chooser select {
+  background: var(--bg-dark-tertiary);
+  border-color: var(--border-dark-medium);
+  color: var(--text-dark-primary);
+}
+
+.tone-sharing-publish-modal .tone-sharing-status {
+  color: var(--text-dark-muted);
+}
+
+.tone-sharing-preset-chooser {
+  display: grid;
+  gap: 6px;
+}
+
+.tone-sharing-preset-chooser select {
+  width: 100%;
+  background: var(--bg-control);
+  border: 1px solid var(--border-medium);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 6px;
+  font-size: 12px;
+}
+
 .tone-sharing-publish-modal .modal-footer button {
   min-width: 120px;
 }

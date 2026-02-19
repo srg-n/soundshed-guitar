@@ -1,5 +1,8 @@
 import { postMessage, setAppSetting } from "./bridge.js";
-import { uiState } from "./state.js";
+import { showConfirm } from "./dialogs.js";
+import { buildPresetArchiveBlob } from "./presets.js";
+import { clonePreset, uiState } from "./state.js";
+import type { Preset } from "./types.js";
 
 type ToneSharingUser = {
   id: string;
@@ -106,12 +109,20 @@ export function openToneSharingPublishPresetModal(defaultTitle?: string, default
 
   const titleInput = element<HTMLInputElement>("tone-sharing-item-title");
   const descriptionInput = element<HTMLTextAreaElement>("tone-sharing-item-description");
-  if (titleInput && defaultTitle && !titleInput.value.trim()) {
-    titleInput.value = defaultTitle;
+
+  // Pre-fill from active preset if not overridden
+  const activePreset = uiState.presetCache.get(uiState.activePresetId ?? "") ?? null;
+  const resolvedTitle = defaultTitle ?? activePreset?.name ?? "";
+  const resolvedDescription = defaultDescription ?? activePreset?.description ?? "";
+
+  if (titleInput) {
+    titleInput.value = resolvedTitle;
   }
-  if (descriptionInput && defaultDescription && !descriptionInput.value.trim()) {
-    descriptionInput.value = defaultDescription;
+  if (descriptionInput) {
+    descriptionInput.value = resolvedDescription;
   }
+
+  setUploadStatus(activePreset ? `Publishing: ${activePreset.name ?? activePreset.id}` : "");
 
   modal.style.display = "flex";
 }
@@ -151,6 +162,11 @@ function normalizeBase(input: string): string {
     return "https://api.soundshed.com/v1";
   }
   return trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
+}
+
+function sanitizePublishFileName(raw: string): string {
+  const cleaned = raw.trim().replace(/[^a-z0-9\-_. ]/gi, "").replace(/\s+/g, "-").replace(/\.+$/, "");
+  return cleaned || "preset";
 }
 
 function buildApiUrl(pathOrUrl: string): string {
@@ -639,21 +655,40 @@ function renderPackItemSelection(items: ToneSharingItem[]): void {
 }
 
 async function uploadAndPublishItem(): Promise<void> {
-  const title = element<HTMLInputElement>("tone-sharing-item-title")?.value.trim() ?? "";
-  const type = (element<HTMLSelectElement>("tone-sharing-item-type")?.value ?? "preset") as ToneSharingItem["type"];
-  const description = element<HTMLTextAreaElement>("tone-sharing-item-description")?.value.trim() ?? "";
-  const file = element<HTMLInputElement>("tone-sharing-item-file")?.files?.[0] ?? null;
+  let title = element<HTMLInputElement>("tone-sharing-item-title")?.value.trim() ?? "";
+  let description = element<HTMLTextAreaElement>("tone-sharing-item-description")?.value.trim() ?? "";
+
+  const activePreset = uiState.presetCache.get(uiState.activePresetId ?? "") ?? null;
+  if (!activePreset) {
+    setUploadStatus("No preset selected.");
+    return;
+  }
+
+  if (!title) {
+    title = activePreset.name ?? activePreset.id;
+  }
+  if (!description) {
+    description = activePreset.description ?? "";
+  }
 
   if (!state.user) {
     setUploadStatus("Sign in first.");
     return;
   }
-  if (!title || !file) {
-    setUploadStatus("Title and file are required.");
+  if (!title) {
+    setUploadStatus("Title is required.");
     return;
   }
 
-  setUploadStatus("Uploading...");
+  let uploadPayload: Blob;
+  try {
+    uploadPayload = await buildPresetArchiveBlob(clonePreset(activePreset));
+  } catch (error) {
+    setUploadStatus(`Publish failed: ${(error as Error).message}`);
+    return;
+  }
+
+  setUploadStatus("Building & uploading archive...");
 
   try {
     const init = await apiFetch<{ uploadId: string }>("/uploads/init", {
@@ -661,24 +696,24 @@ async function uploadAndPublishItem(): Promise<void> {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         kind: "item_payload",
-        mimeType: file.type || "application/octet-stream",
-        byteSize: file.size
+        mimeType: uploadPayload.type || "application/octet-stream",
+        byteSize: uploadPayload.size
       })
     });
 
     const uploadResponse = await fetch(buildApiUrl(`/uploads/${init.uploadId}`), {
       method: "PUT",
       headers: {
-        "content-type": file.type || "application/octet-stream",
+        "content-type": uploadPayload.type || "application/octet-stream",
         ...(state.sessionId ? { "x-session-id": state.sessionId } : {})
       },
-      body: file,
+      body: uploadPayload,
       credentials: "include"
     });
 
-    const uploadPayload = await uploadResponse.json();
-    if (!uploadResponse.ok || uploadPayload?.ok === false) {
-      throw new Error(uploadPayload?.error?.message || `Upload failed (${uploadResponse.status})`);
+    const uploadResult = await uploadResponse.json();
+    if (!uploadResponse.ok || uploadResult?.ok === false) {
+      throw new Error(uploadResult?.error?.message || `Upload failed (${uploadResponse.status})`);
     }
 
     const complete = await apiFetch<{ assetId: string }>("/uploads/complete", {
@@ -691,7 +726,7 @@ async function uploadAndPublishItem(): Promise<void> {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        type,
+        type: "preset",
         title,
         description,
         payloadAssetId: complete.assetId
@@ -893,15 +928,18 @@ function bindBrowseActions(): void {
 
     if (button.dataset.action === "delete") {
       const title = card.querySelector(".tone-sharing-card-item-title")?.textContent?.trim() || `${kind} ${id}`;
-      const confirmed = window.confirm(`Delete ${kind} \"${title}\"? This cannot be undone.`);
+      const confirmed = await showConfirm(`Delete ${kind} \"${title}\"? This cannot be undone.`);
       if (!confirmed) {
         return;
       }
 
       try {
+        setUploadStatus(`Deleting ${kind === "item" ? "preset" : "pack"}...`);
         await deleteAsset(kind, id);
         setUploadStatus(`${kind === "item" ? "Preset" : "Pack"} deleted.`);
-        await Promise.all([loadMine(), loadBrowse()]);
+        await loadMine();
+        void loadBrowse().catch(() => {
+        });
       } catch (error) {
         setUploadStatus(`Delete failed: ${(error as Error).message}`);
       }

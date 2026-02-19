@@ -2162,25 +2162,16 @@ async function exportSelectedPresetCollectionArchive(): Promise<void> {
   await exportActivePresetFolderArchive();
 }
 
-async function exportCurrentPresetArchive(): Promise<void> {
-  const presetId = uiState.activePresetId ?? "";
-  const preset = uiState.presetCache.get(presetId) ?? null;
-  if (!preset) {
-    showNotification("Export failed", "No preset selected");
-    return;
-  }
-
+export async function buildPresetArchiveBlob(preset: Preset): Promise<Blob> {
   const zipLib = window.JSZip;
   if (!zipLib) {
-    showNotification("Export failed", "Archive library not available");
-    return;
+    throw new Error("Archive library not available");
   }
 
   const zip = new zipLib();
   const resourcesFolder = zip.folder("resources");
   if (!resourcesFolder) {
-    showNotification("Export failed", "Unable to create archive");
-    return;
+    throw new Error("Unable to create archive");
   }
 
   const blendIds = collectPresetBlendIds(preset);
@@ -2191,17 +2182,11 @@ async function exportCurrentPresetArchive(): Promise<void> {
   for (const ref of resourceRefs) {
     const resourceType = ref.resourceType ?? ref.type ?? "";
     const resourceId = ref.resourceId ?? ref.id ?? "";
-    if (!resourceType || !resourceId) {
-      continue;
-    }
+    if (!resourceType || !resourceId) continue;
     const resource = getLibraryResource(resourceType, resourceId);
-    if (!resource) {
-      continue;
-    }
+    if (!resource) continue;
     const data = await requestResourceData(resourceType, resourceId);
-    if (!data) {
-      continue;
-    }
+    if (!data) continue;
     const hash = await sha256HexFromBase64(data);
     const fileName = buildArchiveFileNameWithHash(resource, resourceType, hash);
     resourcesFolder.file(fileName, data, { base64: true });
@@ -2215,6 +2200,10 @@ async function exportCurrentPresetArchive(): Promise<void> {
     });
   }
 
+  if (!exportResources.length) {
+    throw new Error("Preset has no resources (NAM model or IR cab) to publish");
+  }
+
   const archive: PresetArchive = {
     formatVersion: 1,
     preset: clonePreset(preset),
@@ -2223,7 +2212,25 @@ async function exportCurrentPresetArchive(): Promise<void> {
   };
 
   zip.file("preset.json", JSON.stringify(archive, null, 2));
-  const blob = await zip.generateAsync({ type: "blob" });
+  return zip.generateAsync({ type: "blob" });
+}
+
+async function exportCurrentPresetArchive(): Promise<void> {
+  const presetId = uiState.activePresetId ?? "";
+  const preset = uiState.presetCache.get(presetId) ?? null;
+  if (!preset) {
+    showNotification("Export failed", "No preset selected");
+    return;
+  }
+
+  let blob: Blob;
+  try {
+    blob = await buildPresetArchiveBlob(preset);
+  } catch (error) {
+    showNotification("Export failed", (error as Error).message);
+    return;
+  }
+
   const buffer = await blob.arrayBuffer();
   const data = arrayBufferToBase64(buffer);
   const normalizeArchiveExportBaseName = (raw: string, fallback: string): string => {

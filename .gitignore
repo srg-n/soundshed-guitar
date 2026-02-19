@@ -79,3 +79,5 @@ core/ui/node_modules/
 api/node_modules/
 
 juce/ASIOSDK/
+
+api/.wrangler/
