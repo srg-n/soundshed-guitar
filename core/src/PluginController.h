@@ -271,6 +271,7 @@ private:
     void HandleSetSetlistsRequest(const nlohmann::json& payload);
     void HandleGetThemeRequest();
     void HandleSetThemeRequest(const nlohmann::json& payload);
+    void HandleGetAppInfoRequest();
     void HandleGetGlobalChainRequest();
     void HandleSetGlobalChainRequest(const nlohmann::json& payload);
     void HandleSetNodeEnabledRequest(const nlohmann::json& payload);

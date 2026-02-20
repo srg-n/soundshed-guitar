@@ -15,6 +15,11 @@ bool MessageDispatcher::DispatchStateAndLists(PluginController& c,
         c.HandleStateRequest();
         return true;
     }
+    if (type == "getAppInfo")
+    {
+        c.HandleGetAppInfoRequest();
+        return true;
+    }
     if (type == "getGlobalChain")
     {
         c.HandleGetGlobalChainRequest();

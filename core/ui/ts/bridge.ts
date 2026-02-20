@@ -188,3 +188,7 @@ export function importRiffWav(payload: {
 export function trimCapturedRiff(startRatio: number, endRatio: number): void {
   postMessage({ type: "trimCapturedRiff", startRatio, endRatio });
 }
+
+export function requestAppInfo(): void {
+  postMessage({ type: "getAppInfo" });
+}

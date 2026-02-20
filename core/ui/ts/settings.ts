@@ -48,6 +48,7 @@ const libraryTabPanels = Array.from(document.querySelectorAll(".library-tab-pane
 const libraryExportButton = document.getElementById("library-export-btn");
 const libraryExportResourcesSelect = document.getElementById("library-export-resources") as HTMLSelectElement | null;
 const advancedOptionsToggle = document.getElementById("advanced-options-toggle") as HTMLInputElement | null;
+const updateCheckToggle = document.getElementById("update-check-toggle") as HTMLInputElement | null;
 const advancedTabButton = document.querySelector('.library-tab-btn[data-library-tab="advanced"]') as HTMLElement | null;
 let settingsInitialized = false;
 let libraryFiltersInitialized = false;
@@ -71,6 +72,7 @@ export function initSettingsPanel(): void {
   initDiagnosticsToggle();
   initInterfaceCalibrationControls();
   initAdvancedOptionsToggle();
+  initUpdateCheckToggle();
   initEquipmentTabs();
   initLibraryFilters();
   initLibraryCleanup();
@@ -296,6 +298,8 @@ function applyAdvancedSubTab(tabId: string, subTabButtons: HTMLElement[], subTab
   updateSettingsViewState({ advancedTab: tabId });
 }
 
+const UPDATE_CHECK_ENABLED_SETTING = "app.updateCheckEnabled";
+
 function initAdvancedOptionsToggle(): void {
   if (!advancedOptionsToggle || advancedOptionsToggle.dataset.bound === "true") return;
   advancedOptionsToggle.dataset.bound = "true";
@@ -304,6 +308,16 @@ function initAdvancedOptionsToggle(): void {
     uiState.appSettings[ADVANCED_OPTIONS_SETTING] = enabled;
     setAppSetting(ADVANCED_OPTIONS_SETTING, enabled);
     updateAdvancedTabVisibility();
+  });
+}
+
+function initUpdateCheckToggle(): void {
+  if (!updateCheckToggle || updateCheckToggle.dataset.bound === "true") return;
+  updateCheckToggle.dataset.bound = "true";
+  updateCheckToggle.addEventListener("change", () => {
+    const enabled = Boolean(updateCheckToggle.checked);
+    uiState.appSettings[UPDATE_CHECK_ENABLED_SETTING] = enabled;
+    setAppSetting(UPDATE_CHECK_ENABLED_SETTING, enabled);
   });
 }
 
@@ -356,6 +370,10 @@ export function refreshSettingsView(): void {
   }
   if (advancedOptionsToggle) {
     advancedOptionsToggle.checked = Boolean(getSettingValue(ADVANCED_OPTIONS_SETTING));
+  }
+  if (updateCheckToggle) {
+    const updateCheckEnabled = getSettingValue(UPDATE_CHECK_ENABLED_SETTING);
+    updateCheckToggle.checked = updateCheckEnabled === null ? true : Boolean(updateCheckEnabled);
   }
   updateAdvancedTabVisibility();
   updateSessionStatus();

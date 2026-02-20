@@ -4826,6 +4826,33 @@ void PluginController::HandleSetThemeRequest(const nlohmann::json& payload)
     SaveAppSettings();
 }
 
+void PluginController::HandleGetAppInfoRequest()
+{
+    nlohmann::json msg;
+    msg["type"] = "appInfo";
+    msg["version"] = "1.0.1"; // TODO: Get from build system
+    
+#if defined(_WIN32)
+    msg["os"] = "Windows";
+#elif defined(__APPLE__)
+    msg["os"] = "macOS";
+#elif defined(__linux__)
+    msg["os"] = "Linux";
+#else
+    msg["os"] = "Unknown";
+#endif
+
+#if defined(__x86_64__) || defined(_M_X64)
+    msg["cpu"] = "x64";
+#elif defined(__aarch64__) || defined(_M_ARM64)
+    msg["cpu"] = "arm64";
+#else
+    msg["cpu"] = "Unknown";
+#endif
+
+    SendMessageToUI(msg.dump());
+}
+
 void PluginController::HandleGetGlobalChainRequest()
 {
     SendGlobalChainStateToUI();

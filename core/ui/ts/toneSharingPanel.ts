@@ -213,6 +213,10 @@ function mergeInstalledPackMetadata(entry: InstalledPackMetadata): void {
   persistInstalledPacks();
 }
 
+export function getApiBaseUrl(): string {
+  return state.apiBase;
+}
+
 export function registerInstalledToneSharingPack(entry: InstalledPackMetadata): void {
   mergeInstalledPackMetadata(entry);
   if (browseMode === "installed") {
@@ -514,7 +518,7 @@ function updateAuthButtonVisibility(): void {
 function normalizeBase(input: string): string {
   const trimmed = input.trim();
   if (!trimmed) {
-    return "https://api.soundshed.com/v1";
+    return "https://api.guitar.soundshed.com/v1";
   }
   return trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
 }

@@ -209,3 +209,30 @@ CREATE INDEX IF NOT EXISTS idx_featured_row_items_row_sort ON featured_row_items
 CREATE INDEX IF NOT EXISTS idx_downloads_item_created ON downloads(item_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_downloads_pack_created ON downloads(pack_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_reports_status_created ON reports(status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS app_instances (
+  id TEXT PRIMARY KEY,
+  os TEXT NOT NULL,
+  cpu TEXT NOT NULL,
+  current_version TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS app_update_checks (
+  id TEXT PRIMARY KEY,
+  instance_id TEXT NOT NULL,
+  version_checked TEXT NOT NULL,
+  is_standalone INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (instance_id) REFERENCES app_instances(id)
+);
+
+CREATE TABLE IF NOT EXISTS app_releases (
+  version TEXT PRIMARY KEY,
+  download_url TEXT NOT NULL,
+  release_notes TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+

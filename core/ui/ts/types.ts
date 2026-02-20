@@ -290,6 +290,9 @@ export interface SignalLevelDiagnostics {
 
 export interface EnvironmentState {
   standalone: boolean;
+  version?: string;
+  os?: string;
+  cpu?: string;
 }
 
 export interface MetronomeClickTypeOption {

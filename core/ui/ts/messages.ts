@@ -208,9 +208,14 @@ export function handleIncomingMessage(message: string): void {
         uiState.uiViewState = uiViewState;
         applyUiViewState(uiViewState);
       }
-      const environment = (payload as { environment?: { standalone?: boolean } }).environment;
+      const environment = (payload as { environment?: { standalone?: boolean; version?: string; os?: string; cpu?: string } }).environment;
       if (environment) {
-        applyEnvironmentState({ standalone: Boolean(environment.standalone) });
+        applyEnvironmentState({ 
+          standalone: Boolean(environment.standalone),
+          version: environment.version,
+          os: environment.os,
+          cpu: environment.cpu
+        });
       }
       const metronome = (payload as { metronome?: { bpm?: number; enabled?: boolean; editable?: boolean; source?: string; volumeDb?: number; pan?: number; clickType?: string; clickTypes?: Array<{ id?: string; label?: string }> } }).metronome;
       if (metronome) {
@@ -690,6 +695,22 @@ export function handleIncomingMessage(message: string): void {
         uiState.filteredPresets = uiState.presets.slice();
         populatePresetDropdown();
         renderActivePreset();
+      }
+      break;
+    }
+    case "appInfo": {
+      const infoPayload = payload as { version?: string; os?: string; cpu?: string };
+      if (uiState.environment) {
+        uiState.environment.version = infoPayload.version;
+        uiState.environment.os = infoPayload.os;
+        uiState.environment.cpu = infoPayload.cpu;
+      } else {
+        uiState.environment = {
+          standalone: false,
+          version: infoPayload.version,
+          os: infoPayload.os,
+          cpu: infoPayload.cpu
+        };
       }
       break;
     }
