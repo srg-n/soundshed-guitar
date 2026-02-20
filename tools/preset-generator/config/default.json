@@ -1,0 +1,28 @@
+{
+  "runIdPrefix": "gen",
+  "outputRoot": "output",
+  "seedFile": "samples/seed-resources.json",
+  "generation": {
+    "maxPresets": 10,
+    "maxPairsPerNam": 3,
+    "minPopularity": 0.35,
+    "includeDelayAndReverbRate": 0.4
+  },
+  "pack": {
+    "packId": "soundshed-generated",
+    "packVersion": "2026.02.19",
+    "minimumAppVersion": "0.9.0"
+  },
+  "cache": {
+    "apiTtlSeconds": 21600,
+    "refresh": false
+  },
+  "tone3000": {
+    "enabled": true,
+    "apiBaseUrl": "https://www.tone3000.com/api/v1",
+    "apiKeyEnvVar": "TONE3000_API_KEY",
+    "limit": 200,
+    "requestDelayMinMs": 5000,
+    "requestDelayMaxMs": 10000
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "soundshed-preset-generator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "generate": "tsx src/index.ts generate --config config/default.json",
+    "validate": "tsx src/index.ts validate --config config/default.json",
+    "pack": "tsx src/index.ts pack --config config/default.json"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}

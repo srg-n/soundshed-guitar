@@ -1,0 +1,58 @@
+{
+  "resources": [
+    {
+      "id": "nam:vintage-brit-800",
+      "kind": "nam",
+      "name": "Vintage Brit 800",
+      "category": "rock",
+      "tags": ["rock", "brit", "crunch"],
+      "popularity": 0.82,
+      "source": "seed"
+    },
+    {
+      "id": "nam:modern-hi-gain-x",
+      "kind": "nam",
+      "name": "Modern Hi Gain X",
+      "category": "metal",
+      "tags": ["metal", "tight", "modern"],
+      "popularity": 0.88,
+      "source": "seed"
+    },
+    {
+      "id": "nam:clean-american-65",
+      "kind": "nam",
+      "name": "Clean American 65",
+      "category": "clean",
+      "tags": ["clean", "glass", "american"],
+      "popularity": 0.77,
+      "source": "seed"
+    },
+    {
+      "id": "ir:4x12-v30-sm57",
+      "kind": "ir",
+      "name": "4x12 V30 SM57",
+      "category": "rock",
+      "tags": ["rock", "v30", "sm57"],
+      "popularity": 0.85,
+      "source": "seed"
+    },
+    {
+      "id": "ir:4x12-tight-md421",
+      "kind": "ir",
+      "name": "4x12 Tight MD421",
+      "category": "metal",
+      "tags": ["metal", "tight", "md421"],
+      "popularity": 0.83,
+      "source": "seed"
+    },
+    {
+      "id": "ir:2x12-open-r121",
+      "kind": "ir",
+      "name": "2x12 Open R121",
+      "category": "clean",
+      "tags": ["clean", "open", "r121"],
+      "popularity": 0.74,
+      "source": "seed"
+    }
+  ]
+}
