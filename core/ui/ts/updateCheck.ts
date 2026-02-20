@@ -8,7 +8,12 @@ const UPDATE_CHECK_ENABLED_SETTING = "app.updateCheckEnabled";
 const INSTANCE_ID_SETTING = "app.instanceId";
 const LAST_UPDATE_CHECK_SETTING = "app.lastUpdateCheck";
 
-export function initUpdateCheck(): void {
+let hasCheckedForUpdates = false;
+
+export function triggerUpdateCheck(): void {
+  if (hasCheckedForUpdates) return;
+  hasCheckedForUpdates = true;
+
   // Request app info from backend first
   requestAppInfo();
 

@@ -5,11 +5,11 @@ compatibility_date = "2026-02-17"
 workers_dev = false
 
 routes = [
-  { pattern = "api.guitar.soundshed.com/*", zone_name = "soundshed.com" }
+  { pattern = "api-guitar.soundshed.com/*", zone_name = "soundshed.com" }
 ]
 
 [vars]
-APP_BASE_URL = "https://app.soundshed.com"
+APP_BASE_URL = "https://guitar.soundshed.com"
 WEB_BASE_URL = "https://soundshed.com"
 COOKIE_NAME = "ss_session"
 SESSION_TTL_SECONDS = "2592000"

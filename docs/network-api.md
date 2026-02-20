@@ -15,7 +15,7 @@ This document covers plugin format wrappers (VST3, AU, AAX, Standalone).
 
 ### Base URL
 ```
-Production: https://api.guitarfx.io/v1
+Production: https://api.guitar.soundshed.com/v1
 ```
 
 ### Common Headers

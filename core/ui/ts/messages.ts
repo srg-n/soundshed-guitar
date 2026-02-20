@@ -27,6 +27,7 @@ import { enterCompositeEditState, updateCompositeEditState, exitCompositeEditSta
 import { EffectTypeRegistry } from "./presetV2.js";
 import { themeSwitcher } from "./theme-switcher.js";
 import { applyUiViewState } from "./navigation.js";
+import { triggerUpdateCheck } from "./updateCheck.js";
 
 function normalizeResourceRef(ref?: ResourceRef | null): void {
   if (!ref) return;
@@ -191,6 +192,7 @@ export function handleIncomingMessage(message: string): void {
         uiState.appSettings = appSettings as import("./types.js").AppSettings;
         applyStoredInputChannel();
         applyToneSharingAppSettings(appSettings);
+        triggerUpdateCheck();
       }
       const globalSignalChain = (payload as { globalSignalChain?: GlobalSignalChainConfig }).globalSignalChain;
       if (globalSignalChain) {
