@@ -62,7 +62,7 @@ namespace
         if (result.empty())
             return result;
 
-        stream.read (result.data(), result.size());
+        stream.read (result.data(), static_cast<int> (result.size()));
         return result;
     }
 

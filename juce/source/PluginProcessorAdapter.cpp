@@ -316,9 +316,9 @@ void PluginProcessorAdapter::NotifyStateChanged()
 
 double PluginProcessorAdapter::GetHostTempo() const
 {
-    if (auto* playHead = const_cast<PluginProcessorAdapter*>(this)->getPlayHead())
+    if (auto* ph = const_cast<PluginProcessorAdapter*>(this)->getPlayHead())
     {
-        if (auto pos = playHead->getPosition())
+        if (auto pos = ph->getPosition())
         {
             if (auto bpm = pos->getBpm())
                 return *bpm;
@@ -329,9 +329,9 @@ double PluginProcessorAdapter::GetHostTempo() const
 
 bool PluginProcessorAdapter::IsHostPlaying() const
 {
-    if (auto* playHead = const_cast<PluginProcessorAdapter*>(this)->getPlayHead())
+    if (auto* ph = const_cast<PluginProcessorAdapter*>(this)->getPlayHead())
     {
-        if (auto pos = playHead->getPosition())
+        if (auto pos = ph->getPosition())
             return pos->getIsPlaying();
     }
     return false;

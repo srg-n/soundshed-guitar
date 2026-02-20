@@ -97,7 +97,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: juce/JUCE
-          key: ${{ runner.os }}-juce-source-v1
+          key: ${{ runner.os }}-juce-source-v2
 
       - name: Fetch JUCE source
         shell: pwsh
@@ -263,7 +263,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: juce/JUCE
-          key: ${{ runner.os }}-juce-source-v1
+          key: ${{ runner.os }}-juce-source-v2
 
       - name: Fetch JUCE source
         run: |
