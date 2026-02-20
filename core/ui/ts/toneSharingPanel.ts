@@ -1,8 +1,8 @@
 import { postMessage, setAppSetting } from "./bridge.js";
 import { showConfirm } from "./dialogs.js";
-import { buildPresetArchiveBlob } from "./presets.js";
+import { buildPresetArchiveBlob, importPackWithConfirmation } from "./presets.js";
 import { clonePreset, uiState } from "./state.js";
-import type { Preset } from "./types.js";
+import type { Preset, PresetFolder } from "./types.js";
 import { escapeHtml, idAccentColor } from "./utils.js";
 
 type ToneSharingUser = {
@@ -34,6 +34,30 @@ type ToneSharingPackDetails = {
   items: Array<{ itemId: string; sortOrder: number; title: string; type: string; description?: string | null; tags?: string[] | null }>;
 };
 
+type ItemArchiveResource = {
+  id: string;
+  name?: string;
+  category?: string;
+  type: string;
+  fileName: string;
+  hash?: string;
+};
+
+type ItemArchive = {
+  formatVersion: number;
+  preset: Record<string, unknown>;
+  resources: ItemArchiveResource[];
+  blends?: Array<Record<string, unknown>>;
+};
+
+type ItemCollectionArchive = {
+  formatVersion: number;
+  createdAt: string;
+  presets: Array<Record<string, unknown>>;
+  resources: ItemArchiveResource[];
+  blends?: Array<Record<string, unknown>>;
+};
+
 type ToneSharingRow = {
   id: string;
   slug: string;
@@ -50,21 +74,42 @@ type ToneSharingRow = {
   }>;
 };
 
+type InstalledPackSource = "zipImport" | "toneSharingApi" | "generatedPack";
+
+type InstalledPackResourceRef = {
+  type: string;
+  id: string;
+};
+
+export type InstalledPackMetadata = {
+  id: string;
+  title: string;
+  source: InstalledPackSource;
+  importedAt: string;
+  packId?: string;
+  archivePath?: string;
+  archiveFileName?: string;
+  presetIds: string[];
+  resources: InstalledPackResourceRef[];
+};
+
 const storageKeys = {
   apiBase: "toneSharing.apiBase",
-  sessionId: "toneSharing.sessionId"
+  sessionId: "toneSharing.sessionId",
+  installedPacks: "toneSharing.installedPacks"
 };
 
 const state = {
   apiBase: "http://127.0.0.1:8787/v1", //https://api.soundshed.com/v1",
   sessionId: "",
   user: null as ToneSharingUser | null,
-  myItems: [] as ToneSharingItem[]
+  myItems: [] as ToneSharingItem[],
+  installedPacks: [] as InstalledPackMetadata[]
 };
 
 const packThumbnailObjectUrls = new Map<string, string>();
 
-let browseMode: "featured" | "items" | "packs" | "mine" = "featured";
+let browseMode: "featured" | "items" | "packs" | "installed" | "mine" = "featured";
 let editingPackId: string | null = null;
 let previewingItemId: string | null = null;
 let previewingItemTitle = "";
@@ -103,6 +148,100 @@ function persistToneSharingSession(value: string): void {
   }
   localStorage.removeItem(storageKeys.sessionId);
   setAppSetting(storageKeys.sessionId, null);
+}
+
+function normalizeInstalledPackMetadata(raw: unknown): InstalledPackMetadata | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const value = raw as Record<string, unknown>;
+  const id = typeof value.id === "string" ? value.id.trim() : "";
+  const title = typeof value.title === "string" ? value.title.trim() : "";
+  const source = value.source === "zipImport" || value.source === "toneSharingApi" || value.source === "generatedPack"
+    ? value.source
+    : "zipImport";
+  const importedAt = typeof value.importedAt === "string" && value.importedAt
+    ? value.importedAt
+    : new Date().toISOString();
+  const presetIds = Array.isArray(value.presetIds)
+    ? value.presetIds.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    : [];
+  const resources = Array.isArray(value.resources)
+    ? value.resources
+        .filter((entry) => entry && typeof entry === "object")
+        .map((entry) => {
+          const resource = entry as Record<string, unknown>;
+          return {
+            type: typeof resource.type === "string" ? resource.type.trim() : "",
+            id: typeof resource.id === "string" ? resource.id.trim() : "",
+          };
+        })
+        .filter((entry) => entry.type.length > 0 && entry.id.length > 0)
+    : [];
+
+  if (!id || !title) {
+    return null;
+  }
+
+  return {
+    id,
+    title,
+    source,
+    importedAt,
+    packId: typeof value.packId === "string" && value.packId ? value.packId : undefined,
+    archivePath: typeof value.archivePath === "string" && value.archivePath ? value.archivePath : undefined,
+    archiveFileName: typeof value.archiveFileName === "string" && value.archiveFileName ? value.archiveFileName : undefined,
+    presetIds: Array.from(new Set(presetIds)),
+    resources,
+  };
+}
+
+function persistInstalledPacks(): void {
+  const serialized = JSON.stringify(state.installedPacks);
+  localStorage.setItem(storageKeys.installedPacks, serialized);
+  setAppSetting(storageKeys.installedPacks, state.installedPacks);
+}
+
+function mergeInstalledPackMetadata(entry: InstalledPackMetadata): void {
+  const existingIndex = state.installedPacks.findIndex((pack) => pack.id === entry.id);
+  if (existingIndex >= 0) {
+    state.installedPacks[existingIndex] = entry;
+  } else {
+    state.installedPacks.unshift(entry);
+  }
+  persistInstalledPacks();
+}
+
+export function registerInstalledToneSharingPack(entry: InstalledPackMetadata): void {
+  mergeInstalledPackMetadata(entry);
+  if (browseMode === "installed") {
+    void renderInstalledPacks();
+  }
+}
+
+export function registerInstalledToneSharingPackFromImport(info: {
+  packId?: string;
+  fileName?: string;
+  path?: string;
+}): void {
+  const packId = info.packId?.trim() ?? "";
+  const fileName = info.fileName?.trim() || (packId ? `tone-sharing-pack-${packId}.zip` : "tone-sharing-pack.zip");
+  const generatedId = packId
+    ? `tone-sharing-api:${packId}`
+    : `tone-sharing-api:${fileName.toLowerCase()}`;
+
+  registerInstalledToneSharingPack({
+    id: generatedId,
+    title: fileName.replace(/\.zip$/i, ""),
+    source: "toneSharingApi",
+    importedAt: new Date().toISOString(),
+    packId: packId || undefined,
+    archivePath: info.path?.trim() || undefined,
+    archiveFileName: fileName,
+    presetIds: [],
+    resources: [],
+  });
 }
 
 export function isToneSharingSignedIn(): boolean {
@@ -719,6 +858,7 @@ async function renderPackDetail(details: ToneSharingPackDetails): Promise<void> 
   if (!modal) {
     return;
   }
+  modal.dataset.packId = details.pack.id;
 
   const pack = details.pack;
   const heroEl = element<HTMLElement>("tone-sharing-pack-view-hero");
@@ -742,6 +882,15 @@ async function renderPackDetail(details: ToneSharingPackDetails): Promise<void> 
   }
 
   setText("tone-sharing-pack-view-count", `${details.items.length} preset${details.items.length !== 1 ? "s" : ""}`);
+  const actionsEl = element<HTMLElement>("tone-sharing-pack-view-actions");
+  if (actionsEl) {
+    actionsEl.innerHTML = `
+      <button class="btn btn-primary tone-sharing-card-btn" type="button" data-pack-action="download-pack">
+        <svg class="tone-sharing-btn-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1a1 1 0 011 1v6.172l1.586-1.586a1 1 0 111.414 1.414l-3.293 3.293a1 1 0 01-1.414 0L3.999 8.001a1 1 0 111.414-1.414L7.001 8.172V2A1 1 0 018 1z"/><rect x="2" y="12.5" width="12" height="2" rx="1"/></svg>
+        Download Pack
+      </button>
+    `;
+  }
 
   const presetsEl = element<HTMLElement>("tone-sharing-pack-view-presets");
   if (presetsEl) {
@@ -806,6 +955,134 @@ async function readPresetFromArchive(buffer: ArrayBuffer): Promise<Record<string
   const text = new TextDecoder().decode(buffer);
   const parsed = JSON.parse(text) as Record<string, unknown>;
   return (parsed.preset as Record<string, unknown>) ?? parsed;
+}
+
+async function parseApiErrorMessage(response: Response): Promise<string> {
+  const fallback = `Request failed (${response.status})`;
+  try {
+    const payload = await response.json() as { error?: { message?: string } };
+    return payload?.error?.message || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function buildPackArchiveFromDetails(details: ToneSharingPackDetails): Promise<{ blob: Blob; fileName: string }> {
+  const zipLib = window.JSZip;
+  if (!zipLib) {
+    throw new Error("Archive library not available");
+  }
+
+  const mergedPresets: Array<Record<string, unknown>> = [];
+  const mergedResources = new Map<string, { entry: ItemArchiveResource; bytes: Uint8Array }>();
+  const mergedBlends = new Map<string, Record<string, unknown>>();
+
+  const sortedItems = [...details.items].sort((a, b) => a.sortOrder - b.sortOrder);
+  for (const item of sortedItems) {
+    const response = await fetch(buildApiUrl(`/items/${item.itemId}/download`), {
+      headers: state.sessionId ? { "x-session-id": state.sessionId } : {},
+      credentials: "include"
+    });
+
+    if (!response.ok) {
+      const message = await parseApiErrorMessage(response);
+      throw new Error(`Failed to download pack item ${item.title}: ${message}`);
+    }
+
+    const buffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    const isZip = bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b;
+    if (!isZip) {
+      mergedPresets.push(await readPresetFromArchive(buffer));
+      continue;
+    }
+
+    const zip = await zipLib.loadAsync(buffer);
+    const presetEntry = zip.file("preset.json");
+    const presetsEntry = zip.file("presets.json");
+
+    if (presetEntry) {
+      const parsed = JSON.parse(await presetEntry.async("text")) as ItemArchive;
+      if (parsed.preset) {
+        mergedPresets.push(parsed.preset);
+      }
+      for (const resource of parsed.resources ?? []) {
+        const file = zip.file(`resources/${resource.fileName}`) ?? zip.file(resource.fileName);
+        if (!file) {
+          continue;
+        }
+        const key = `${resource.type}:${resource.hash ?? resource.fileName}`;
+        if (mergedResources.has(key)) {
+          continue;
+        }
+        mergedResources.set(key, {
+          entry: resource,
+          bytes: new Uint8Array(await file.async("arraybuffer")),
+        });
+      }
+      for (const blend of parsed.blends ?? []) {
+        const blendId = typeof blend.id === "string" ? blend.id : "";
+        if (blendId && !mergedBlends.has(blendId)) {
+          mergedBlends.set(blendId, blend);
+        }
+      }
+      continue;
+    }
+
+    if (presetsEntry) {
+      const parsed = JSON.parse(await presetsEntry.async("text")) as ItemCollectionArchive;
+      mergedPresets.push(...(parsed.presets ?? []));
+      for (const resource of parsed.resources ?? []) {
+        const file = zip.file(`resources/${resource.fileName}`) ?? zip.file(resource.fileName);
+        if (!file) {
+          continue;
+        }
+        const key = `${resource.type}:${resource.hash ?? resource.fileName}`;
+        if (mergedResources.has(key)) {
+          continue;
+        }
+        mergedResources.set(key, {
+          entry: resource,
+          bytes: new Uint8Array(await file.async("arraybuffer")),
+        });
+      }
+      for (const blend of parsed.blends ?? []) {
+        const blendId = typeof blend.id === "string" ? blend.id : "";
+        if (blendId && !mergedBlends.has(blendId)) {
+          mergedBlends.set(blendId, blend);
+        }
+      }
+      continue;
+    }
+
+    mergedPresets.push(await readPresetFromArchive(buffer));
+  }
+
+  if (!mergedPresets.length) {
+    throw new Error("Pack has no importable presets");
+  }
+
+  const outZip = new zipLib();
+  const resourcesFolder = outZip.folder("resources");
+  for (const resource of mergedResources.values()) {
+    resourcesFolder?.file(resource.entry.fileName, resource.bytes);
+  }
+
+  const archive: ItemCollectionArchive = {
+    formatVersion: 1,
+    createdAt: new Date().toISOString(),
+    presets: mergedPresets,
+    resources: Array.from(mergedResources.values()).map((entry) => entry.entry),
+    blends: Array.from(mergedBlends.values()),
+  };
+  outZip.file("presets.json", JSON.stringify(archive, null, 2));
+
+  const safeTitle = (details.pack.title || "tone-sharing-pack").trim().replace(/[^a-z0-9\-_ ]/gi, "").replace(/\s+/g, "-");
+  const fileName = `${safeTitle || "tone-sharing-pack"}.zip`;
+  return {
+    blob: await outZip.generateAsync({ type: "blob" }),
+    fileName,
+  };
 }
 
 function showPreviewIndicator(title: string): void {
@@ -930,10 +1207,77 @@ async function loadBrowse(): Promise<void> {
       return;
     }
 
+    if (browseMode === "installed") {
+      await renderInstalledPacks();
+      return;
+    }
+
     await loadMine();
   } catch (error) {
     feed.innerHTML = `<div class="tone-sharing-status">Load failed: ${(error as Error).message}</div>`;
   }
+}
+
+function formatInstalledSource(source: InstalledPackSource): string {
+  if (source === "toneSharingApi") {
+    return "Tone Sharing";
+  }
+  if (source === "generatedPack") {
+    return "Generated Pack";
+  }
+  return "Imported Zip";
+}
+
+function formatInstalledTimestamp(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "unknown";
+  }
+  return parsed.toLocaleString();
+}
+
+async function renderInstalledPacks(): Promise<void> {
+  const feed = element<HTMLElement>("tone-sharing-feed");
+  if (!feed) {
+    return;
+  }
+
+  clearPackDetail();
+  if (!state.installedPacks.length) {
+    feed.innerHTML = `<div class="tone-sharing-status">No installed packs yet. Import a zip or Tone Sharing pack first.</div>`;
+    return;
+  }
+
+  const cards = state.installedPacks.map((pack) => {
+    const subtitle = `${formatInstalledSource(pack.source)} · ${formatInstalledTimestamp(pack.importedAt)}`;
+    const details = `${pack.presetIds.length} preset${pack.presetIds.length === 1 ? "" : "s"} · ${pack.resources.length} resource${pack.resources.length === 1 ? "" : "s"}`;
+    const archiveDetail = pack.archiveFileName
+      ? `<div class="tone-sharing-card-item-description">Archive: ${escapeHtml(pack.archiveFileName)}</div>`
+      : "";
+
+    return `
+      <div class="tone-sharing-card-item tone-sharing-pack-hero" data-kind="installed" data-id="${escapeHtml(pack.id)}">
+        <div class="tone-sharing-card-item-content">
+          <div class="tone-sharing-card-item-title">${escapeHtml(pack.title)}</div>
+          <div class="tone-sharing-card-item-meta">${escapeHtml(subtitle)}</div>
+          <div class="tone-sharing-card-item-description">${escapeHtml(details)}</div>
+          ${archiveDetail}
+        </div>
+        <div class="tone-sharing-card-item-actions">
+          <button class="btn btn-secondary tone-sharing-card-btn" type="button" data-action="delete-installed">Delete</button>
+        </div>
+      </div>
+    `;
+  });
+
+  feed.innerHTML = `
+    <div class="tone-sharing-row">
+      <div class="tone-sharing-row-title">Installed Packs</div>
+      <div class="tone-sharing-row-track">
+        ${cards.join("")}
+      </div>
+    </div>
+  `;
 }
 
 async function loadMine(): Promise<void> {
@@ -1141,8 +1485,9 @@ async function downloadAsset(kind: "item" | "pack", id: string): Promise<void> {
     credentials: "include"
   });
 
-  if (!response.ok) {
-    throw new Error(`Download failed (${response.status})`);
+  if (!response.ok && !(kind === "pack" && response.status === 409)) {
+    const message = await parseApiErrorMessage(response);
+    throw new Error(message);
   }
 
   const disposition = response.headers.get("content-disposition") || "";
@@ -1150,20 +1495,22 @@ async function downloadAsset(kind: "item" | "pack", id: string): Promise<void> {
   const fileName = fileMatch?.[1] || `${kind}-${id}${kind === "pack" ? ".zip" : ""}`;
 
   if (kind === "pack") {
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    const chunkSize = 0x8000;
-    let binary = "";
-    for (let index = 0; index < bytes.length; index += chunkSize) {
-      binary += String.fromCharCode(...bytes.subarray(index, Math.min(index + chunkSize, bytes.length)));
+    let importBlob: Blob;
+    let importFileName = fileName;
+    if (response.ok) {
+      importBlob = await response.blob();
+    } else {
+      const details = await apiFetch<ToneSharingPackDetails>(`/packs/${id}`);
+      const synthesized = await buildPackArchiveFromDetails(details);
+      importBlob = synthesized.blob;
+      importFileName = synthesized.fileName;
     }
-    const data = btoa(binary);
 
-    postMessage({
-      type: "importToneSharingPack",
+    const importFile = new File([importBlob], importFileName, { type: importBlob.type || "application/zip" });
+    await importPackWithConfirmation(importFile, {
+      source: "toneSharingApi",
       packId: id,
-      fileName,
-      mimeType: response.headers.get("content-type") || "application/zip",
-      data
+      titleHint: importFileName.replace(/\.zip$/i, ""),
     });
     return;
   }
@@ -1185,6 +1532,90 @@ async function deleteAsset(kind: "item" | "pack", id: string): Promise<void> {
   await apiFetch(path, { method: "DELETE" });
 }
 
+function removePresetIdsFromFolders(folder: PresetFolder, toRemove: Set<string>): void {
+  if (Array.isArray(folder.presetIds)) {
+    folder.presetIds = folder.presetIds.filter((presetId) => !toRemove.has(presetId));
+  }
+  if (Array.isArray(folder.children)) {
+    folder.children.forEach((child) => removePresetIdsFromFolders(child, toRemove));
+  }
+}
+
+async function deleteInstalledPackById(id: string): Promise<void> {
+  const pack = state.installedPacks.find((entry) => entry.id === id);
+  if (!pack) {
+    throw new Error("Installed pack not found");
+  }
+
+  const presetIds = Array.from(new Set(pack.presetIds));
+  const resourceEntries = Array.from(new Map(pack.resources.map((entry) => [`${entry.type}:${entry.id}`, entry])).values());
+
+  for (const presetId of presetIds) {
+    postMessage({ type: "deletePreset", presetId });
+  }
+
+  if (presetIds.length > 0) {
+    const toRemove = new Set(presetIds);
+    uiState.presets = uiState.presets.filter((preset) => !toRemove.has(preset.id));
+    uiState.filteredPresets = uiState.filteredPresets.filter((preset) => !toRemove.has(preset.id));
+    presetIds.forEach((presetId) => {
+      uiState.presetCache.delete(presetId);
+    });
+
+    if (Array.isArray(uiState.presetFolders)) {
+      uiState.presetFolders.forEach((folder) => removePresetIdsFromFolders(folder, toRemove));
+      postMessage({
+        type: "setPresetFolders",
+        folders: uiState.presetFolders,
+        activeFolderId: uiState.activePresetFolderId ?? "__all__",
+      });
+    }
+
+    if (uiState.presetFavorites) {
+      const nextFavorites = new Set(uiState.presetFavorites);
+      presetIds.forEach((presetId) => nextFavorites.delete(presetId));
+      uiState.presetFavorites = nextFavorites;
+      postMessage({ type: "setPresetFavorites", favorites: Array.from(nextFavorites) });
+    }
+
+    if (uiState.presetRatings) {
+      const nextRatings = { ...uiState.presetRatings };
+      presetIds.forEach((presetId) => {
+        delete nextRatings[presetId];
+      });
+      uiState.presetRatings = nextRatings;
+      postMessage({ type: "setPresetRatings", ratings: nextRatings });
+    }
+
+    if (uiState.activePresetId && toRemove.has(uiState.activePresetId)) {
+      const nextPreset = uiState.presets[0] ?? null;
+      if (nextPreset) {
+        uiState.activePresetId = nextPreset.id;
+        postMessage({ type: "loadPreset", preset: clonePreset(nextPreset), presetId: nextPreset.id });
+      } else {
+        uiState.activePresetId = null;
+      }
+    }
+  }
+
+  if (resourceEntries.length > 0) {
+    postMessage({
+      type: "cleanupResourceLibrary",
+      scope: "all",
+      removeFiles: true,
+      resources: resourceEntries,
+    });
+  }
+
+  if (pack.archivePath) {
+    postMessage({ type: "deleteImportedToneSharingPack", path: pack.archivePath });
+  }
+
+  state.installedPacks = state.installedPacks.filter((entry) => entry.id !== id);
+  persistInstalledPacks();
+  await renderInstalledPacks();
+}
+
 function bindBrowseActions(): void {
   const feed = element<HTMLElement>("tone-sharing-feed");
   if (!feed) {
@@ -1202,6 +1633,30 @@ function bindBrowseActions(): void {
     const kind = (card.dataset.kind ?? "item") as "item" | "pack";
     const id = card.dataset.id ?? "";
     if (!id) {
+      return;
+    }
+
+    if (button.dataset.action === "delete-installed") {
+      const title = card.querySelector(".tone-sharing-card-item-title")?.textContent?.trim() || id;
+      const pack = state.installedPacks.find((entry) => entry.id === id);
+      const presetCount = pack?.presetIds.length ?? 0;
+      const resourceCount = pack?.resources.length ?? 0;
+      const archiveLine = pack?.archiveFileName ? `\nArchive: ${pack.archiveFileName}` : "";
+      const confirmed = await showConfirm(
+        `Delete installed pack \"${title}\"?\nPresets to remove: ${presetCount}\nResources to remove: ${resourceCount}${archiveLine}\n\nThis cannot be undone.`,
+        "Delete Installed Pack",
+      );
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        setUploadStatus("Deleting installed pack...");
+        await deleteInstalledPackById(id);
+        setUploadStatus("Installed pack deleted.");
+      } catch (error) {
+        setUploadStatus(`Delete failed: ${(error as Error).message}`);
+      }
       return;
     }
 
@@ -1266,6 +1721,7 @@ function bindBrowseModeButtons(): void {
     { id: "tone-sharing-browse-featured", mode: "featured" },
     { id: "tone-sharing-browse-items", mode: "items" },
     { id: "tone-sharing-browse-packs", mode: "packs" },
+    { id: "tone-sharing-browse-installed", mode: "installed" },
     { id: "tone-sharing-browse-mine", mode: "mine" }
   ];
 
@@ -1302,8 +1758,10 @@ function restoreLocalState(): void {
   const appSettings = uiState.appSettings ?? {};
   const persistedBase = normalizeSettingString(appSettings[storageKeys.apiBase]);
   const persistedSession = normalizeSettingString(appSettings[storageKeys.sessionId]);
+  const persistedInstalled = appSettings[storageKeys.installedPacks];
   const storedBase = localStorage.getItem(storageKeys.apiBase);
   const storedSession = localStorage.getItem(storageKeys.sessionId);
+  const storedInstalled = localStorage.getItem(storageKeys.installedPacks);
   if (persistedBase) {
     state.apiBase = normalizeBase(persistedBase);
   } else if (storedBase) {
@@ -1315,6 +1773,27 @@ function restoreLocalState(): void {
   } else if (storedSession) {
     state.sessionId = storedSession;
     setAppSetting(storageKeys.sessionId, state.sessionId);
+  }
+
+  const parseInstalled = (value: unknown): InstalledPackMetadata[] => {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value
+      .map((entry) => normalizeInstalledPackMetadata(entry))
+      .filter((entry): entry is InstalledPackMetadata => entry !== null);
+  };
+
+  if (Array.isArray(persistedInstalled)) {
+    state.installedPacks = parseInstalled(persistedInstalled);
+  } else if (storedInstalled) {
+    try {
+      const parsed = JSON.parse(storedInstalled) as unknown;
+      state.installedPacks = parseInstalled(parsed);
+      setAppSetting(storageKeys.installedPacks, state.installedPacks);
+    } catch {
+      state.installedPacks = [];
+    }
   }
 
   const apiInput = element<HTMLInputElement>("tone-sharing-api-base");
@@ -1331,6 +1810,7 @@ export function applyToneSharingAppSettings(settings?: Record<string, unknown>):
   let changed = false;
   const persistedBase = normalizeSettingString(settings[storageKeys.apiBase]);
   const persistedSession = normalizeSettingString(settings[storageKeys.sessionId]);
+  const persistedInstalled = settings[storageKeys.installedPacks];
 
   if (persistedBase) {
     const normalizedBase = normalizeBase(persistedBase);
@@ -1347,6 +1827,18 @@ export function applyToneSharingAppSettings(settings?: Record<string, unknown>):
   if (persistedSession !== state.sessionId) {
     state.sessionId = persistedSession;
     changed = true;
+  }
+
+  if (Array.isArray(persistedInstalled)) {
+    const normalizedInstalled = persistedInstalled
+      .map((entry) => normalizeInstalledPackMetadata(entry))
+      .filter((entry): entry is InstalledPackMetadata => entry !== null);
+    const currentSerialized = JSON.stringify(state.installedPacks);
+    const nextSerialized = JSON.stringify(normalizedInstalled);
+    if (currentSerialized !== nextSerialized) {
+      state.installedPacks = normalizedInstalled;
+      changed = true;
+    }
   }
 
   if (!changed) {
@@ -1436,6 +1928,25 @@ function bindTopControls(): void {
   element<HTMLElement>("tone-sharing-pack-view-modal")?.addEventListener("mousedown", (event) => {
     if (event.target === event.currentTarget) {
       clearPackDetail();
+    }
+  });
+  element<HTMLElement>("tone-sharing-pack-view-actions")?.addEventListener("click", async (event) => {
+    const target = event.target as HTMLElement;
+    const button = target.closest("[data-pack-action='download-pack']") as HTMLButtonElement | null;
+    if (!button) {
+      return;
+    }
+
+    const modal = element<HTMLElement>("tone-sharing-pack-view-modal");
+    const packId = modal?.dataset.packId ?? "";
+    if (!packId) {
+      return;
+    }
+
+    try {
+      await downloadAsset("pack", packId);
+    } catch (error) {
+      setUploadStatus(`Download failed: ${(error as Error).message}`);
     }
   });
   element<HTMLElement>("tone-sharing-pack-view-presets")?.addEventListener("click", async (event) => {

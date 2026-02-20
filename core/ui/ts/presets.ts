@@ -11,7 +11,8 @@ import { bindDemoAudioControls } from "./demoAudio.js";
 import { postMessage } from "./bridge.js";
 import { renderSignalPathBar } from "./signalPath.js";
 import { showConfirm } from "./dialogs.js";
-import { isToneSharingSignedIn, openToneSharingPublishPresetModal } from "./toneSharingPanel.js";
+import { isToneSharingSignedIn, openToneSharingPublishPresetModal, registerInstalledToneSharingPack } from "./toneSharingPanel.js";
+import type { InstalledPackMetadata } from "./toneSharingPanel.js";
 
 const presetChooserLabel = document.getElementById("preset-chooser-label") as HTMLButtonElement | null;
 const presetFavoriteToggle = document.getElementById("preset-favorite");
@@ -2018,6 +2019,151 @@ type PresetCollectionArchive = {
   blends?: BlendDefinition[];
 };
 
+type ImportPackSource = "zipImport" | "toneSharingApi" | "generatedPack";
+
+type ImportPackContext = {
+  source: ImportPackSource;
+  packId?: string;
+  titleHint?: string;
+};
+
+type ImportPackSummary = {
+  format: "generatedPack" | "presetArchive";
+  title: string;
+  presetCount: number;
+  resourceCount: number;
+  blendCount: number;
+  packId?: string;
+};
+
+function buildImportSummaryMessage(summary: ImportPackSummary): string {
+  const lines = [
+    `Import pack \"${summary.title}\"?`,
+    `Format: ${summary.format === "generatedPack" ? "Generated Pack" : "Preset Archive"}`,
+    `Presets: ${summary.presetCount}`,
+    `Resources: ${summary.resourceCount}`,
+    `Blends: ${summary.blendCount}`,
+  ];
+  if (summary.packId) {
+    lines.push(`Pack ID: ${summary.packId}`);
+  }
+  lines.push("This will import resources and presets into your local library.");
+  return lines.join("\n");
+}
+
+async function inspectImportPack(file: File, context: ImportPackContext): Promise<ImportPackSummary> {
+  const zipLib = window.JSZip;
+  if (!zipLib) {
+    throw new Error("Archive library not available");
+  }
+
+  const buffer = await file.arrayBuffer();
+  const zip = await zipLib.loadAsync(buffer);
+  const manifestEntry = zip.file("pack-manifest.json");
+  if (manifestEntry) {
+    const indexEntry = zip.file("resources/indexes/resources-index.json");
+
+    let manifest: GeneratorPackManifest = {};
+    try {
+      manifest = JSON.parse(await manifestEntry.async("text")) as GeneratorPackManifest;
+    } catch {
+      manifest = {};
+    }
+
+    let generatedResourceCount = 0;
+    if (indexEntry) {
+      try {
+        const parsed = JSON.parse(await indexEntry.async("text")) as GeneratorResourceIndex;
+        generatedResourceCount = Array.isArray(parsed.items) ? parsed.items.length : 0;
+      } catch {
+        generatedResourceCount = 0;
+      }
+    }
+
+    const presetCount = Object.keys(zip.files).filter(
+      (name) => name.startsWith("presets/") && name.endsWith(".json") && !zip.files[name].dir,
+    ).length;
+
+    return {
+      format: "generatedPack",
+      title: context.titleHint ?? manifest.packId ?? file.name.replace(/\.zip$/i, ""),
+      presetCount,
+      resourceCount: generatedResourceCount,
+      blendCount: 0,
+      packId: context.packId ?? manifest.packId,
+    };
+  }
+
+  const presetEntry = zip.file("preset.json");
+  const presetsEntry = zip.file("presets.json");
+  if (!presetEntry && !presetsEntry) {
+    throw new Error("Archive is missing preset.json, presets.json, or pack-manifest.json");
+  }
+
+  let presetCount = 0;
+  let resourceCount = 0;
+  let blendCount = 0;
+
+  if (presetEntry) {
+    const archive = JSON.parse(await presetEntry.async("text")) as PresetArchive;
+    presetCount = archive.preset ? 1 : 0;
+    resourceCount = Array.isArray(archive.resources) ? archive.resources.length : 0;
+    blendCount = Array.isArray(archive.blends) ? archive.blends.length : 0;
+  } else if (presetsEntry) {
+    const archive = JSON.parse(await presetsEntry.async("text")) as PresetCollectionArchive;
+    presetCount = Array.isArray(archive.presets) ? archive.presets.length : 0;
+    resourceCount = Array.isArray(archive.resources) ? archive.resources.length : 0;
+    blendCount = Array.isArray(archive.blends) ? archive.blends.length : 0;
+  }
+
+  return {
+    format: "presetArchive",
+    title: context.titleHint ?? file.name.replace(/\.zip$/i, ""),
+    presetCount,
+    resourceCount,
+    blendCount,
+    packId: context.packId,
+  };
+}
+
+function toInstalledPackSource(source: ImportPackSource, format: ImportPackSummary["format"]): InstalledPackMetadata["source"] {
+  if (source === "toneSharingApi") {
+    return "toneSharingApi";
+  }
+  if (format === "generatedPack" || source === "generatedPack") {
+    return "generatedPack";
+  }
+  return "zipImport";
+}
+
+export async function importPackWithConfirmation(file: File, context: ImportPackContext = { source: "zipImport" }): Promise<void> {
+  try {
+    const summary = await inspectImportPack(file, context);
+    const confirmed = await showConfirm(buildImportSummaryMessage(summary), "Import Pack");
+    if (!confirmed) {
+      return;
+    }
+
+    const installedSource = toInstalledPackSource(context.source, summary.format);
+    if (summary.format === "generatedPack") {
+      await importGeneratedPack(file, {
+        source: installedSource,
+        packId: context.packId,
+        titleHint: summary.title,
+      });
+      return;
+    }
+
+    await importPresetArchive(file, {
+      source: installedSource,
+      packId: context.packId,
+      titleHint: summary.title,
+    });
+  } catch (error) {
+    showNotification("Import failed", error instanceof Error ? error.message : String(error));
+  }
+}
+
 function getLibraryResource(resourceType: string, resourceId: string): LibraryResource | undefined {
   const resources = uiState.resourceLibrary[resourceType] ?? [];
   return resources.find((res) => res.id === resourceId);
@@ -2301,7 +2447,24 @@ async function exportCurrentPresetArchive(): Promise<void> {
   });
 }
 
-async function importPresetArchive(file: File): Promise<void> {
+type ArchiveImportContext = {
+  source: InstalledPackMetadata["source"];
+  packId?: string;
+  titleHint?: string;
+};
+
+function buildInstalledPackEntryId(file: File, context: ArchiveImportContext): string {
+  if (context.source === "toneSharingApi" && context.packId) {
+    return `tone-sharing-api:${context.packId}`;
+  }
+  if (context.source === "generatedPack" && context.packId) {
+    return `generated:${context.packId}`;
+  }
+  const base = (context.titleHint || file.name).trim().toLowerCase();
+  return `${context.source}:${base}:${file.size}`;
+}
+
+async function importPresetArchive(file: File, context: ArchiveImportContext = { source: "zipImport" }): Promise<void> {
   const zipLib = window.JSZip;
   if (!zipLib) {
     showNotification("Import failed", "Archive library not available");
@@ -2353,11 +2516,13 @@ async function importPresetArchive(file: File): Promise<void> {
   });
 
   const idMap = new Map<string, string>();
+  const importedResources: Array<{ type: string; id: string }> = [];
   for (const resource of resourcesToImport) {
     const fileName = resource.fileName ?? "";
     const existing = getLibraryResourceByHash(resource.type, resource.hash);
     if (existing) {
       idMap.set(resource.id, existing.id);
+      importedResources.push({ type: resource.type, id: existing.id });
       continue;
     }
     const entry = fileMap.get(fileName);
@@ -2368,6 +2533,7 @@ async function importPresetArchive(file: File): Promise<void> {
     const data = arrayBufferToBase64(dataBuffer);
     const newId = generateResourceId(fileName);
     idMap.set(resource.id, newId);
+    importedResources.push({ type: resource.type, id: newId });
 
     postMessage({
       type: "importRemoteResource",
@@ -2469,9 +2635,236 @@ async function importPresetArchive(file: File): Promise<void> {
   populatePresetDropdown();
   renderPresetUI(clonePreset(latestPreset));
   updatePresetDropdownSelection();
+  const importedPresetIds = importedPresets.map((preset) => preset.id);
+  const uniqueResources = Array.from(new Map(importedResources.map((entry) => [`${entry.type}:${entry.id}`, entry])).values());
+  registerInstalledToneSharingPack({
+    id: buildInstalledPackEntryId(file, context),
+    title: context.titleHint ?? file.name.replace(/\.zip$/i, ""),
+    source: context.source,
+    importedAt: new Date().toISOString(),
+    packId: context.packId,
+    archiveFileName: file.name,
+    presetIds: importedPresetIds,
+    resources: uniqueResources,
+  });
   showNotification(importedPresets.length === 1 ? "Preset imported" : "Presets imported", importedPresets.length === 1
     ? (latestPreset.name ?? "")
     : `${importedPresets.length} presets imported`);
+  updatePresetActionButtons();
+}
+
+interface GeneratorPackManifest {
+  packId?: string;
+  packVersion?: string;
+  formatVersion?: number;
+}
+
+interface GeneratorResourceIndexItem {
+  resourceId: string;
+  resourceType: "nam" | "ir";
+  provider: string;
+  contentHash: string;
+  fileExt: string;
+  filePath: string;
+  displayName: string;
+  originalFileName: string;
+}
+
+interface GeneratorResourceIndex {
+  items: GeneratorResourceIndexItem[];
+}
+
+interface GeneratorPackNode {
+  id: string;
+  type: string;
+  params?: Record<string, number>;
+  resource?: { resourceType: string; resourceId: string };
+}
+
+interface GeneratorPresetV2 {
+  id: string;
+  name: string;
+  category?: string;
+  description?: string;
+  tags?: string[];
+  global?: { inputTrim?: number; outputTrim?: number };
+  graph: {
+    nodes: GeneratorPackNode[];
+    edges: Array<{ from: string; to: string }>;
+  };
+}
+
+export async function importGeneratedPack(file: File, context: ArchiveImportContext = { source: "generatedPack" }): Promise<void> {
+  const zipLib = window.JSZip;
+  if (!zipLib) {
+    showNotification("Import failed", "Archive library not available");
+    return;
+  }
+
+  const buffer = await file.arrayBuffer();
+  const zip = await zipLib.loadAsync(buffer);
+
+  // Detect generator pack by presence of pack-manifest.json; fall back to preset archive.
+  const manifestEntry = zip.file("pack-manifest.json");
+  if (!manifestEntry) {
+    await importPresetArchive(file, context);
+    return;
+  }
+
+  let manifest: GeneratorPackManifest;
+  try {
+    manifest = JSON.parse(await manifestEntry.async("text")) as GeneratorPackManifest;
+  } catch {
+    showNotification("Import failed", "Invalid pack manifest");
+    return;
+  }
+
+  const indexEntry = zip.file("resources/indexes/resources-index.json");
+  if (!indexEntry) {
+    showNotification("Import failed", "Pack is missing resource index");
+    return;
+  }
+
+  let index: GeneratorResourceIndex;
+  try {
+    index = JSON.parse(await indexEntry.async("text")) as GeneratorResourceIndex;
+  } catch {
+    showNotification("Import failed", "Invalid resource index");
+    return;
+  }
+
+  // Import resource blobs first so they are on disk before presets are saved.
+  let resourcesSkipped = 0;
+  const importedResources: Array<{ type: string; id: string }> = [];
+  for (const item of index.items) {
+    const blobEntry = zip.file(item.filePath);
+    if (!blobEntry) {
+      resourcesSkipped++;
+      continue;
+    }
+    const data = arrayBufferToBase64(await blobEntry.async("arraybuffer"));
+    postMessage({
+      type: "importRemoteResource",
+      provider: item.provider || "generated",
+      resourceType: item.resourceType,
+      resourceId: item.resourceId,
+      name: item.displayName,
+      description: "",
+      category: "",
+      subfolder: `generated/${item.resourceType}`,
+      fileName: item.originalFileName,
+      hash: item.contentHash,
+      data,
+    });
+    importedResources.push({ type: item.resourceType, id: item.resourceId });
+  }
+
+  // Import each preset JSON from the presets/ directory.
+  const presetEntryNames = Object.keys(zip.files).filter(
+    (name) => name.startsWith("presets/") && name.endsWith(".json") && !zip.files[name].dir
+  );
+
+  const importedPresets: Preset[] = [];
+  for (const entryName of presetEntryNames) {
+    const entry = zip.file(entryName);
+    if (!entry) continue;
+
+    let genPreset: GeneratorPresetV2;
+    try {
+      genPreset = JSON.parse(await entry.async("text")) as GeneratorPresetV2;
+    } catch {
+      continue;
+    }
+
+    const importedId = generateResourceId(genPreset.id || genPreset.name || "preset");
+    const importedName = genPreset.name
+      ? `${genPreset.name} (Imported)`
+      : "Generated Preset (Imported)";
+
+    const appPreset: Preset = {
+      id: importedId,
+      name: importedName,
+      category: genPreset.category ?? "Generated",
+      description: genPreset.description ?? "",
+      tags: genPreset.tags,
+      formatVersion: 2,
+      globals: {
+        inputTrim: genPreset.global?.inputTrim ?? 0,
+        outputTrim: genPreset.global?.outputTrim ?? 0,
+        masterVolume: 1,
+        autoLevelInput: false,
+        autoLevelOutput: false,
+      },
+      graph: {
+        nodes: genPreset.graph.nodes.map((node) => ({
+          id: node.id,
+          type: node.type,
+          displayName: node.type,
+          category: "",
+          bypassed: false,
+          params: (node.params ?? {}) as Record<string, number>,
+          config: {},
+          resources: node.resource
+            ? [{ resourceType: node.resource.resourceType, resourceId: node.resource.resourceId }]
+            : undefined,
+        })),
+        edges: genPreset.graph.edges.map((edge) => ({
+          from: edge.from,
+          to: edge.to,
+          fromPort: 0,
+          toPort: 0,
+          gain: 1,
+        })),
+      },
+    };
+
+    postMessage({
+      type: "savePreset",
+      presetId: importedId,
+      name: importedName,
+      category: appPreset.category,
+      description: appPreset.description,
+      includeGlobalSignalChain: false,
+      preset: appPreset,
+    });
+
+    cachePresetInMemory(appPreset);
+    uiState.presets.unshift(appPreset);
+    addPresetToImportedFolder(importedId);
+    uiState.presetCache.set(importedId, appPreset);
+    importedPresets.push(appPreset);
+  }
+
+  if (!importedPresets.length) {
+    showNotification("Import failed", "No presets found in pack");
+    return;
+  }
+
+  uiState.filteredPresets = getFilteredPresets(presetSearchElement?.value ?? "");
+  const latestPreset = importedPresets[0];
+  uiState.activePresetId = latestPreset.id;
+  populatePresetDropdown();
+  renderPresetUI(clonePreset(latestPreset));
+  updatePresetDropdownSelection();
+  registerInstalledToneSharingPack({
+    id: buildInstalledPackEntryId(file, {
+      ...context,
+      packId: context.packId ?? manifest.packId,
+    }),
+    title: context.titleHint ?? manifest.packId ?? file.name.replace(/\.zip$/i, ""),
+    source: context.source,
+    importedAt: new Date().toISOString(),
+    packId: context.packId ?? manifest.packId,
+    archiveFileName: file.name,
+    presetIds: importedPresets.map((preset) => preset.id),
+    resources: Array.from(new Map(importedResources.map((entry) => [`${entry.type}:${entry.id}`, entry])).values()),
+  });
+  const packLabel = manifest.packId ?? file.name;
+  const suffix = resourcesSkipped > 0 ? ` (${resourcesSkipped} resource file${resourcesSkipped !== 1 ? "s" : ""} missing in pack)` : "";
+  showNotification(
+    importedPresets.length === 1 ? "Preset imported" : `${importedPresets.length} presets imported`,
+    `${packLabel}${suffix}`
+  );
   updatePresetActionButtons();
 }
 
@@ -2766,7 +3159,7 @@ export function initializePresetActionButtons(): void {
       const file = importInput.files?.[0];
       importInput.value = "";
       if (file) {
-        void importPresetArchive(file);
+        void importPackWithConfirmation(file, { source: "zipImport" });
       }
     });
   }

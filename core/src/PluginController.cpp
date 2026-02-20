@@ -3114,6 +3114,70 @@ void PluginController::HandleImportToneSharingPackRequest(const nlohmann::json& 
     AppendSessionLog("Imported tone sharing pack " + (packId.empty() ? std::string{"(unknown)"} : packId) + " -> " + targetPath.generic_string());
 }
 
+void PluginController::HandleDeleteImportedToneSharingPackRequest(const nlohmann::json& payload)
+{
+    const std::string rawPath = payload.value("path", "");
+    if (rawPath.empty())
+    {
+        SendMessageToUI(nlohmann::json{{"type", "toneSharingPackDeleteFailed"}, {"message", "Missing pack path"}}.dump());
+        return;
+    }
+
+    const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
+    const auto importsDir = settingsDir / "imports" / "tone-sharing";
+    const auto requestedPath = std::filesystem::path(rawPath);
+
+    std::error_code ec;
+    const auto canonicalImports = std::filesystem::weakly_canonical(importsDir, ec);
+    if (ec)
+    {
+        SendMessageToUI(nlohmann::json{{"type", "toneSharingPackDeleteFailed"}, {"message", "Unable to resolve import directory"}}.dump());
+        return;
+    }
+
+    ec.clear();
+    const auto canonicalRequested = std::filesystem::weakly_canonical(requestedPath, ec);
+    if (ec)
+    {
+        SendMessageToUI(nlohmann::json{{"type", "toneSharingPackDeleteFailed"}, {"message", "Imported pack path is invalid"}}.dump());
+        return;
+    }
+
+    auto requestedIt = canonicalRequested.begin();
+    bool insideImports = true;
+    for (auto importsIt = canonicalImports.begin(); importsIt != canonicalImports.end(); ++importsIt)
+    {
+        if (requestedIt == canonicalRequested.end() || *requestedIt != *importsIt)
+        {
+            insideImports = false;
+            break;
+        }
+        ++requestedIt;
+    }
+
+    if (!insideImports)
+    {
+        SendMessageToUI(nlohmann::json{{"type", "toneSharingPackDeleteFailed"}, {"message", "Refusing to delete outside tone-sharing imports"}}.dump());
+        return;
+    }
+
+    ec.clear();
+    const bool removed = std::filesystem::remove(canonicalRequested, ec);
+    if (ec)
+    {
+        SendMessageToUI(nlohmann::json{{"type", "toneSharingPackDeleteFailed"}, {"message", "Failed to delete imported pack"}}.dump());
+        return;
+    }
+
+    nlohmann::json result;
+    result["type"] = "toneSharingPackDeleted";
+    result["path"] = canonicalRequested.generic_string();
+    result["removed"] = removed;
+    SendMessageToUI(result.dump());
+
+    AppendSessionLog("Deleted imported tone sharing pack -> " + canonicalRequested.generic_string());
+}
+
 void PluginController::HandlePreviewRemoteResourceRequest(const nlohmann::json& payload)
 {
     const std::string resourceType = payload.value("resourceType", "");

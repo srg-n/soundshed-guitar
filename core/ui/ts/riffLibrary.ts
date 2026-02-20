@@ -1,6 +1,7 @@
 import { armRiffCapture, deleteRiff, getRiffLibrary, importRiffWav, loadRiffTakeForEdit, markRiffUsed, previewCapturedRiffRange, previewRiffTake, saveRiffTake, setRiffFavorite, setRiffLibraryPath, startRiffCapture, stopPreviewPlayback, stopRiffCapture, trimCapturedRiff } from "./bridge.js";
 import { appendLog } from "./logging.js";
 import { showNotification } from "./notifications.js";
+import { importPackWithConfirmation } from "./presets.js";
 import { uiState } from "./state.js";
 import type { RiffCaptureState, RiffLibrary } from "./types.js";
 import { arrayBufferToBase64, parseWavMetadata } from "./utils.js";
@@ -956,6 +957,15 @@ function bindRiffLibraryActions(): void {
 
       const files = Array.from(event.dataTransfer?.files ?? []);
       if (!files.length) {
+        return;
+      }
+
+      // Route ZIP files to the pack/preset importer.
+      const zipFile = files.find((file) =>
+        file.name.toLowerCase().endsWith(".zip") || file.type === "application/zip"
+      );
+      if (zipFile) {
+        await importPackWithConfirmation(zipFile, { source: "zipImport" });
         return;
       }
 

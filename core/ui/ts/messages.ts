@@ -12,7 +12,7 @@ import { applyRiffCaptureProgress, applyRiffCaptureState, applyRiffLibraryState,
 import { refreshSelectedNodeParams, renderSignalPathBar } from "./signalPath.js";
 import { refreshFxSelector } from "./fxSelector.js";
 import { applyEnvironmentState, applyMetronomeState } from "./metronome.js";
-import { applyToneSharingAppSettings } from "./toneSharingPanel.js";
+import { applyToneSharingAppSettings, registerInstalledToneSharingPackFromImport } from "./toneSharingPanel.js";
 import type { GlobalSignalChainConfig, Preset, PresetFolder, ResourceRef, Setlist, UiSettings } from "./types.js";
 import { handleResourceDataMessage } from "./archiveUtils.js";
 import { layoutDesigner } from "./layoutDesigner.js";
@@ -605,6 +605,7 @@ export function handleIncomingMessage(message: string): void {
       const info = payload as { fileName?: string; path?: string; byteSize?: number };
       const detail = info.path ?? info.fileName ?? "";
       appendLog(`tone sharing pack imported ← ${detail}`);
+      registerInstalledToneSharingPackFromImport(info);
       showNotification("Pack imported", detail);
       break;
     }
