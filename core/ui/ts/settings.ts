@@ -408,6 +408,7 @@ export function refreshSettingsView(): void {
   updateSessionStatus();
   updateSignalDiagnosticsView();
   renderLibraryView();
+  refreshSettingsUpdateBanner();
 }
 
 async function saveApiKey(): Promise<void> {
@@ -1365,4 +1366,37 @@ function getSettingValue(key: string): AppSettingValue {
 
 export function updateSettingsSessionStatus(): void {
   updateSessionStatus();
+}
+
+export function refreshSettingsUpdateBanner(): void {
+  const banner = document.getElementById("settings-update-banner");
+  if (!banner) return;
+
+  const update = uiState.availableUpdate;
+  if (!update) {
+    banner.style.display = "none";
+    return;
+  }
+
+  const titleEl = document.getElementById("settings-update-banner-title");
+  const notesEl = document.getElementById("settings-update-banner-notes");
+  const linkEl = document.getElementById("settings-update-banner-link") as HTMLAnchorElement | null;
+
+  if (titleEl) {
+    titleEl.textContent = `Software Update Version ${update.version} is available`;
+  }
+
+  if (notesEl && update.releaseNotes) {
+    const firstLine = update.releaseNotes
+      .split("\n")
+      .map((l) => l.trim())
+      .find((l) => l.length > 0) ?? "";
+    notesEl.textContent = firstLine.replace(/^#+\s*/, "").replace(/\*\*/g, "");
+  }
+
+  if (linkEl && update.downloadUrl) {
+    linkEl.href = update.downloadUrl;
+  }
+
+  banner.style.display = "";
 }

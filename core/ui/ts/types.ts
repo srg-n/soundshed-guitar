@@ -410,6 +410,8 @@ export interface UiState {
   compositeEditDefinition?: CompositeEffectDefinition | null;
   /** Synthetic preset wrapping the composite's inner graph for signal path rendering. */
   compositeEditPreset?: Preset | null;
+  /** Available software update, populated when update check finds a newer version. */
+  availableUpdate?: { version: string; downloadUrl: string; releaseNotes: string } | null;
 }
 
 declare global {

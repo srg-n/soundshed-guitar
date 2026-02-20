@@ -635,12 +635,25 @@
       <div class="tab-panel" id="panel-settings">
         <div class="panel-content settings-panel">
 
+          <!-- Update available banner — shown when a newer version is detected -->
+          <div id="settings-update-banner" class="settings-update-banner" style="display: none;" role="alert">
+            <div class="settings-update-banner-icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10M12 2l-4 4M12 2l4 4"/><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/></svg>
+            </div>
+            <div class="settings-update-banner-body">
+              <strong id="settings-update-banner-title">Software Update Available</strong>
+              <span id="settings-update-banner-notes" class="settings-update-banner-notes"></span>
+            </div>
+            <a id="settings-update-banner-link" href="#" target="_blank" rel="noopener noreferrer" class="settings-update-banner-btn">Download</a>
+          </div>
+
           <div class="equipment-tabs tab-bar">
             <button class="equipment-tab-btn tab-btn active" data-equipment-tab="settings">General</button>
             <button class="equipment-tab-btn tab-btn" data-equipment-tab="performance">DSP Performance</button>
           </div>
 
           <div class="equipment-tab-panel active" id="equipment-tab-settings">
+
             <h2>Audio</h2>
             <div class="settings-section">
               <h3>Audio Device</h3>
@@ -649,7 +662,7 @@
                 <button id="open-audio-preferences" type="button">Open Audio Preferences</button>
               </div>
               <div class="settings-hint">Opens the native audio/MIDI device settings dialog for the standalone app.</div>
-               <div class="settings-row">
+              <div class="settings-row">
                 <label for="run-signal-test">Signal Path Test</label>
                 <button id="run-signal-test" type="button">Run Signal Path Test</button>
               </div>
@@ -671,7 +684,6 @@
               <div class="settings-hint">Sets the analog reference level used to align NAM input metadata to digital
                 peak levels, for the first NAM effect/amp in the chain. When Auto Level Input is enabled on a NAM amp and the model has a known training input level, the calibration reference is used to compute an input gain correction to normalize your interface's headroom to what the model expects.</div>
             </div>
-
             <div class="settings-section">
               <h3>IR Quality</h3>
               <div class="settings-row settings-row-two">
@@ -688,6 +700,17 @@
               </div>
             </div>
 
+            <h2>Tone3000</h2>
+            <div class="settings-section">
+              <h3>Tone3000 API</h3>
+              <div class="settings-row">
+                <label for="tone3000-api-key-input">API Key</label>
+                <input type="password" id="tone3000-api-key-input" placeholder="Enter your Tone3000 API key" />
+                <button id="tone3000-api-key-save">Save</button>
+                <button id="tone3000-api-key-clear" class="secondary">Clear</button>
+              </div>
+              <div class="settings-hint" id="tone3000-session-status">Session not started.</div>
+            </div>
 
             <h2>User Interface</h2>
             <div class="settings-section">
@@ -701,7 +724,6 @@
               </div>
               <div class="settings-hint">Shows the Advanced tab in the Library panel and the layout editor for effects.</div>
             </div>
-
             <div class="settings-section">
               <h3>Experimental Features</h3>
               <div class="settings-row">
@@ -712,46 +734,6 @@
                 </label>
               </div>
               <div class="settings-hint">Enables experimental features: Composite Effect editing and Custom Effect Layout editing. These features may be unstable.</div>
-            </div>
-
-            <h2>Updates</h2>
-            <div class="settings-section">
-              <h3>App Updates</h3>
-              <div class="settings-row">
-                <label for="update-check-toggle">Check for updates on startup</label>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="update-check-toggle" checked />
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-              <div class="settings-hint">Automatically checks if a new version of Soundshed Guitar is available.</div>
-            </div>
-
-            <h2>Tone3000</h2>
-            <div class="settings-section">
-              <h3>Tone3000 API</h3>
-              <div class="settings-row">
-                <label for="tone3000-api-key-input">API Key</label>
-                <input type="password" id="tone3000-api-key-input" placeholder="Enter your Tone3000 API key" />
-                <button id="tone3000-api-key-save">Save</button>
-                <button id="tone3000-api-key-clear" class="secondary">Clear</button>
-              </div>
-              <div class="settings-hint" id="tone3000-session-status">Session not started.</div>
-            </div>
-
-            <h2>Library Export</h2>
-            <div class="settings-section">
-              <h3>Export All Presets + Blends</h3>
-              <div class="settings-row">
-                <label for="library-export-resources">Resources</label>
-                <select id="library-export-resources">
-                  <option value="used" selected>Only resources used by presets</option>
-                  <option value="all">All resources in library</option>
-                </select>
-                <button id="library-export-btn" type="button">Export Library</button>
-                <span class="settings-unit">.soundshed-library.zip</span>
-              </div>
-              <div class="settings-hint">Exports all presets and blends, plus IR/NAM files from the library based on the selected scope.</div>
             </div>
 
             <h2>Riff Library</h2>
@@ -765,6 +747,35 @@
               </div>
               <div class="settings-hint">Sets where riff takes and riff metadata are stored on disk.</div>
             </div>
+
+            <h2>Library</h2>
+            <div class="settings-section">
+              <h3>Export Presets &amp; Blends</h3>
+              <div class="settings-row">
+                <label for="library-export-resources">Resources</label>
+                <select id="library-export-resources">
+                  <option value="used" selected>Only resources used by presets</option>
+                  <option value="all">All resources in library</option>
+                </select>
+                <button id="library-export-btn" type="button">Export Library</button>
+                <span class="settings-unit">.soundshed-library.zip</span>
+              </div>
+              <div class="settings-hint">Exports all presets and blends, plus IR/NAM files from the library based on the selected scope.</div>
+            </div>
+
+            <h2>Software Updates</h2>
+            <div class="settings-section">
+              <h3>App Updates</h3>
+              <div class="settings-row">
+                <label for="update-check-toggle">Check for updates on startup</label>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="update-check-toggle" checked />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="settings-hint">Automatically checks if a new version of Soundshed Guitar is available.</div>
+            </div>
+
           </div>
 
           <div class="equipment-tab-panel" id="equipment-tab-performance">

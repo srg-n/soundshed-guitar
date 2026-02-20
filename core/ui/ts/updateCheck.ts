@@ -3,6 +3,7 @@ import { setAppSetting, requestAppInfo } from "./bridge.js";
 import { appendLog } from "./logging.js";
 import { showNotification } from "./notifications.js";
 import { getApiBaseUrl } from "./toneSharingPanel.js";
+import { refreshSettingsUpdateBanner } from "./settings.js";
 
 const UPDATE_CHECK_ENABLED_SETTING = "app.updateCheckEnabled";
 const INSTANCE_ID_SETTING = "app.instanceId";
@@ -83,6 +84,14 @@ interface UpdateCheckResult {
 }
 
 function showUpdateAvailable(data: UpdateCheckResult): void {
+  // Store in UI state so settings panel can show the banner
+  uiState.availableUpdate = {
+    version: data.latest_version,
+    downloadUrl: data.download_url,
+    releaseNotes: data.release_notes ?? "",
+  };
+  refreshSettingsUpdateBanner();
+
   // Create badge in UI
   const settingsBtn = document.getElementById("footer-settings-btn");
   if (settingsBtn) {
