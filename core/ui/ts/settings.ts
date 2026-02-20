@@ -236,7 +236,7 @@ export function activateLibraryTab(tabId: string): void {
     panel.classList.toggle("active", isMatch);
   });
 
-  if (tabId === "resources") {
+  if (tabId === "resources" && !suppressViewStateUpdates) {
     postMessage({ type: "requestState" });
   }
 

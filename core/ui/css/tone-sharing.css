@@ -17,33 +17,6 @@
   border-bottom: 1px solid var(--border-medium);
 }
 
-.tone-sharing-browse-tabs {
-  display: flex;
-  gap: 2px;
-}
-
-.tone-sharing-browse-tabs button {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--text-muted);
-  padding: 5px 11px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.tone-sharing-browse-tabs button:hover {
-  background: var(--button-bg);
-  color: var(--button-text);
-}
-
-.tone-sharing-browse-tabs button.active {
-  background: var(--button-bg);
-  color: var(--button-text);
-  border-color: var(--accent-primary);
-  box-shadow: inset 0 0 0 1px var(--accent-primary);
-}
-
 .tone-sharing-toolbar-actions {
   display: flex;
   align-items: center;

@@ -7,35 +7,7 @@
 }
 
 .library-tabs {
-  display: flex;
-  gap: 8px;
   margin-bottom: 8px;
-  border-bottom: 1px solid var(--border-medium);
-}
-
-.library-tab-btn {
-  padding: 8px 12px;
-  border-radius: 4px 4px 0 0;
-  border: 1px solid transparent;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
-}
-
-.library-tab-btn.active {
-  background: var(--bg-browser-card);
-  color: var(--text-primary);
-  border-color: var(--border-browser);
-  border-bottom-color: var(--color-primary);
-}
-
-.library-tab-btn:hover {
-  color: var(--text-primary);
 }
 
 .library-tab-panel {
@@ -49,35 +21,7 @@
 }
 
 .equipment-tabs {
-  display: flex;
-  gap: 8px;
   margin-bottom: 8px;
-  border-bottom: 1px solid var(--border-medium);
-}
-
-.equipment-tab-btn {
-  padding: 8px 12px;
-  border-radius: 4px 4px 0 0;
-  border: 1px solid transparent;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
-}
-
-.equipment-tab-btn.active {
-  background: var(--bg-browser-card);
-  color: var(--text-primary);
-  border-color: var(--border-browser);
-  border-bottom-color: var(--color-primary);
-}
-
-.equipment-tab-btn:hover {
-  color: var(--text-primary);
 }
 
 .equipment-tab-panel {

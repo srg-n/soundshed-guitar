@@ -402,11 +402,11 @@
       <div class="tab-panel" id="panel-library">
         <div class="panel-content">
 
-          <div class="library-tabs">
-            <button class="library-tab-btn active" data-library-tab="tone3000">Tone 3000</button>
-            <button class="library-tab-btn" data-library-tab="resources">Resource Library</button>
-            <button class="library-tab-btn" data-library-tab="riffs">Riff Library</button>
-            <button class="library-tab-btn" data-library-tab="advanced">Advanced</button>
+          <div class="library-tabs tab-bar">
+            <button class="library-tab-btn tab-btn active" data-library-tab="tone3000">Tone 3000</button>
+            <button class="library-tab-btn tab-btn" data-library-tab="resources">Resource Library</button>
+            <button class="library-tab-btn tab-btn" data-library-tab="riffs">Riff Library</button>
+            <button class="library-tab-btn tab-btn" data-library-tab="advanced">Advanced</button>
           </div>
 
           <div class="library-tab-panel active" id="library-tab-tone3000">
@@ -499,10 +499,10 @@
           <!-- Advanced Tab Panel -->
           <div class="library-tab-panel" id="library-tab-advanced">
             <div class="advanced-panel">
-              <div class="advanced-sub-tabs">
-                <button class="advanced-sub-tab-btn active" data-advanced-tab="composites">Composite Effects</button>
-                <button class="advanced-sub-tab-btn" data-advanced-tab="blends">Blends</button>
-                <button class="advanced-sub-tab-btn" data-advanced-tab="layouts">Effect Layouts</button>
+              <div class="advanced-sub-tabs tab-bar">
+                <button class="advanced-sub-tab-btn tab-btn active" data-advanced-tab="composites">Composite Effects</button>
+                <button class="advanced-sub-tab-btn tab-btn" data-advanced-tab="blends">Blends</button>
+                <button class="advanced-sub-tab-btn tab-btn" data-advanced-tab="layouts">Effect Layouts</button>
               </div>
 
               <!-- Composite Effects Sub-Tab -->
@@ -610,12 +610,12 @@
       <div class="tab-panel" id="panel-sharing">
         <div class="panel-content tone-sharing-panel">
           <div class="tone-sharing-toolbar">
-            <div class="tone-sharing-browse-tabs">
-              <button id="tone-sharing-browse-featured" type="button" class="active">Featured</button>
-              <button id="tone-sharing-browse-items" type="button">Presets</button>
-              <button id="tone-sharing-browse-packs" type="button">Packs</button>
-              <button id="tone-sharing-browse-installed" type="button">Installed</button>
-              <button id="tone-sharing-browse-mine" type="button">My Content</button>
+            <div class="tone-sharing-browse-tabs tab-bar">
+              <button id="tone-sharing-browse-featured" type="button" class="tab-btn active">Featured</button>
+              <button id="tone-sharing-browse-items" type="button" class="tab-btn">Presets</button>
+              <button id="tone-sharing-browse-packs" type="button" class="tab-btn">Packs</button>
+              <button id="tone-sharing-browse-installed" type="button" class="tab-btn">Installed</button>
+              <button id="tone-sharing-browse-mine" type="button" class="tab-btn">My Content</button>
             </div>
             <div class="tone-sharing-toolbar-actions">
               <button id="tone-sharing-open-pack-modal" type="button" class="tone-sharing-toolbar-btn" disabled>+ Create Pack</button>
@@ -635,9 +635,9 @@
       <div class="tab-panel" id="panel-settings">
         <div class="panel-content settings-panel">
 
-          <div class="equipment-tabs">
-            <button class="equipment-tab-btn active" data-equipment-tab="settings">General</button>
-            <button class="equipment-tab-btn" data-equipment-tab="performance">DSP Performance</button>
+          <div class="equipment-tabs tab-bar">
+            <button class="equipment-tab-btn tab-btn active" data-equipment-tab="settings">General</button>
+            <button class="equipment-tab-btn tab-btn" data-equipment-tab="performance">DSP Performance</button>
           </div>
 
           <div class="equipment-tab-panel active" id="equipment-tab-settings">
@@ -669,7 +669,7 @@
                 <span class="settings-unit">dBu @ 0 dBFS peak</span>
               </div>
               <div class="settings-hint">Sets the analog reference level used to align NAM input metadata to digital
-                peak levels.</div>
+                peak levels, for the first NAM effect/amp in the chain. When Auto Level Input is enabled on a NAM amp and the model has a known training input level, the calibration reference is used to compute an input gain correction to normalize your interface's headroom to what the model expects.</div>
             </div>
 
             <div class="settings-section">
@@ -1332,9 +1332,9 @@
           <button class="modal-close" id="blend-editor-modal-close">×</button>
         </div>
         <div class="modal-body">
-          <div class="blend-tabs">
-            <button class="blend-tab-btn active" data-blend-tab="settings" type="button">Blend Settings</button>
-            <button class="blend-tab-btn" data-blend-tab="test" type="button">Test Blend</button>
+          <div class="blend-tabs tab-bar">
+            <button class="blend-tab-btn tab-btn active" data-blend-tab="settings" type="button">Blend Settings</button>
+            <button class="blend-tab-btn tab-btn" data-blend-tab="test" type="button">Test Blend</button>
           </div>
           <div class="blend-tab-panel active" data-blend-tab-panel="settings">
             <div class="form-group">
@@ -1492,9 +1492,9 @@
           <button class="modal-close" id="save-preset-modal-close">×</button>
         </div>
         <div class="modal-body">
-          <div class="preset-modal-tabs">
-            <button class="preset-modal-tab-btn active" data-preset-modal-tab="details" type="button">Details</button>
-            <button class="preset-modal-tab-btn" data-preset-modal-tab="advanced" type="button">Advanced</button>
+          <div class="preset-modal-tabs tab-bar">
+            <button class="preset-modal-tab-btn tab-btn active" data-preset-modal-tab="details" type="button">Details</button>
+            <button class="preset-modal-tab-btn tab-btn" data-preset-modal-tab="advanced" type="button">Advanced</button>
           </div>
           <div class="preset-modal-tab-panel active" data-preset-modal-tab-panel="details">
             <div class="form-group">
