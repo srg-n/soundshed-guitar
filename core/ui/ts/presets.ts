@@ -2635,9 +2635,7 @@ async function importPresetArchive(file: File, context: ArchiveImportContext = {
   for (const sourcePreset of presetsToImport) {
     const importedPreset = clonePreset(sourcePreset);
     importedPreset.id = generateResourceId(importedPreset.id || importedPreset.name || "preset");
-    importedPreset.name = importedPreset.name?.endsWith(" (Imported)")
-      ? importedPreset.name
-      : `${importedPreset.name || "Imported Preset"} (Imported)`;
+    importedPreset.name = importedPreset.name || "Imported Preset";
 
     if (importedPreset.graph?.nodes) {
       importedPreset.graph.nodes.forEach((node) => {
@@ -2831,9 +2829,7 @@ export async function importGeneratedPack(file: File, context: ArchiveImportCont
     }
 
     const importedId = generateResourceId(genPreset.id || genPreset.name || "preset");
-    const importedName = genPreset.name
-      ? `${genPreset.name} (Imported)`
-      : "Generated Preset (Imported)";
+    const importedName = genPreset.name ?? "Generated Preset";
 
     const appPreset: Preset = {
       id: importedId,
