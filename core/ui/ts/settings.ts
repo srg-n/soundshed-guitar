@@ -1012,6 +1012,8 @@ function renderGroupedLibraryView(filtered: LibraryItem[], totalCount: number): 
               <span>${escapeHtml(originLabel)}</span>
               <span>${escapeHtml(group.groupId)}</span>
               <span>${escapeHtml(modelCountLabel)}</span>
+              ${group.items[0]?.metadata?.authorUsername ? `<span>by: ${escapeHtml(group.items[0].metadata.authorUsername)}</span>` : ""}
+              ${(group.items[0]?.metadata?.sourceUrl ?? "").startsWith("https://www.tone3000.com/") ? `<a href="${escapeHtml(group.items[0].metadata!.sourceUrl!)}" target="_blank" rel="noopener noreferrer">↗ tone3000</a>` : ""}
             </div>
           </div>
           <div class="equipment-library-item-actions">
@@ -1344,6 +1346,8 @@ function buildMetadataBadges(metadata?: Record<string, string>): string {
   const gear = metadata.gear;
   const modelName = metadata.modelName;
   const entryName = metadata.entryName;
+  const sourceUrl = metadata.sourceUrl;
+  const authorUsername = metadata.authorUsername;
 
   if (provider) badges.push(`<span>${escapeHtml(provider)}</span>`);
   if (toneTitle) badges.push(`<span>tone: ${escapeHtml(toneTitle)}</span>`);
@@ -1352,6 +1356,9 @@ function buildMetadataBadges(metadata?: Record<string, string>): string {
   if (gear) badges.push(`<span>gear: ${escapeHtml(gear)}</span>`);
   if (modelName) badges.push(`<span>model: ${escapeHtml(modelName)}</span>`);
   if (entryName) badges.push(`<span>file: ${escapeHtml(entryName)}</span>`);
+  if (authorUsername) badges.push(`<span>by: ${escapeHtml(authorUsername)}</span>`);
+  const safeTone3000Url = sourceUrl?.startsWith("https://www.tone3000.com/") ? sourceUrl : null;
+  if (safeTone3000Url) badges.push(`<a href="${escapeHtml(safeTone3000Url)}" target="_blank" rel="noopener noreferrer">↗ tone3000</a>`);
 
   return badges.join("");
 }

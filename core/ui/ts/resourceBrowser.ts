@@ -32,6 +32,7 @@ interface Tone3000Tone {
   id: string;
   title: string;
   name?: string;
+  slug?: string;
   description?: string;
   gear?: string;
   platform?: string;
@@ -384,6 +385,10 @@ export class ResourceBrowserModal {
         const metadata = res.metadata ?? {};
         const provider = metadata.provider ?? "";
         const providerBadge = provider ? `<span class="resource-browser-provider">${escapeHtml(provider)}</span>` : "";
+        const authorUsername = metadata.authorUsername ?? "";
+        const sourceUrl = metadata.sourceUrl ?? "";
+        const authorBadge = authorUsername ? `<span class="resource-browser-author">by: ${escapeHtml(authorUsername)}</span>` : "";
+        const sourceLinkBadge = sourceUrl.startsWith("https://www.tone3000.com/") ? `<a class="resource-browser-attribution-link" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">↗ tone3000</a>` : "";
         
         return `
           <div class="${selectedClass}" data-resource-id="${escapeHtml(res.id)}" data-source="library">
@@ -391,7 +396,7 @@ export class ResourceBrowserModal {
               <div class="resource-browser-item-title">${escapeHtml(title)}</div>
               <div class="resource-browser-item-meta">
                 <span>${escapeHtml(categoryLabel)}</span>
-                ${providerBadge}
+                ${providerBadge}${authorBadge}${sourceLinkBadge}
               </div>
             </div>
             <button class="resource-browser-item-select" type="button">${isSelected ? "✓ Selected" : "Select"}</button>
@@ -1038,6 +1043,8 @@ export class ResourceBrowserModal {
             modelId: String(modelId),
             modelName: modelName ?? "",
             entryName: entry.name,
+            sourceUrl: `https://www.tone3000.com/tones/${tone.slug ?? tone.id}`,
+            authorUsername: tone.user?.username ?? "",
           },
           data,
         });
@@ -1079,6 +1086,8 @@ export class ResourceBrowserModal {
           platform: tone.platform ?? "",
           modelId: String(modelId),
           modelName: modelName ?? "",
+          sourceUrl: `https://www.tone3000.com/tones/${tone.slug ?? tone.id}`,
+          authorUsername: tone.user?.username ?? "",
         },
         data,
       });

@@ -385,6 +385,19 @@
   text-align: center;
 }
 
+/* Attribution links in the resource library list */
+.equipment-library-item-meta a {
+  color: var(--color-primary);
+  text-decoration: none;
+  opacity: 0.85;
+  transition: opacity 0.15s;
+}
+
+.equipment-library-item-meta a:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
 .riff-capture-row {
   grid-template-columns: 120px minmax(120px, 1fr) auto minmax(120px, 1fr);
 }
@@ -559,14 +572,31 @@
   min-width: 120px;
 }
 
+.tone3000-search button {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: none;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+
+.tone3000-search button:hover {
+  opacity: 0.88;
+}
+
 .tone3000-item {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
-  
+  border-radius: 8px;
   background: var(--bg-browser-card);
-  border: 1px solid  var(--bg-browser-card);
+  border: 1px solid var(--border-browser);
   transition: border-color 0.2s ease, background 0.2s ease;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -580,11 +610,12 @@
 .tone3000-item-image {
   width: 56px;
   height: 56px;
+  flex: 0 0 56px;
   border-radius: 8px;
   overflow: hidden;
   background: var(--bg-input);
   border: 1px solid var(--border-light);
-  flex: 0 0 auto;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -645,7 +645,7 @@
   padding: 12px 16px;
   border: none;
   background: transparent;
-  color: var(--text-dark-muted);
+  color: var(--modal-text-muted);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -654,7 +654,7 @@
 }
 
 .resource-browser-tab-btn:hover {
-  color: var(--text-dark-primary);
+  color: var(--modal-text);
   background: var(--bg-browser-hover);
 }
 
@@ -689,7 +689,7 @@
   border-radius: 6px;
   border: 1px solid var(--border-browser);
   background: var(--bg-browser-input);
-  color: var(--text-dark-primary);
+  color: var(--modal-text);
   font-size: 12px;
 }
 
@@ -723,7 +723,7 @@
   padding: 20px;
   border-radius: 8px;
   border: 1px dashed var(--border-browser);
-  color: var(--text-dark-muted);
+  color: var(--modal-text-muted);
   font-size: 12px;
   text-align: center;
 }
@@ -760,7 +760,7 @@
 .resource-browser-item-title {
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-dark-primary);
+  color: var(--modal-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -770,8 +770,10 @@
   display: flex;
   gap: 8px;
   font-size: 10px;
-  color: var(--text-dark-muted);
+  color: var(--modal-text-muted);
   margin-top: 2px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .resource-browser-provider {
@@ -788,7 +790,7 @@
   border-radius: 6px;
   border: none;
   background: var(--bg-browser-input);
-  color: var(--text-dark-primary);
+  color: var(--modal-text);
   font-size: 11px;
   cursor: pointer;
   transition: all 0.2s;
@@ -856,7 +858,7 @@
 .resource-browser-tone-title {
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-dark-primary);
+  color: var(--modal-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -866,7 +868,7 @@
   display: flex;
   gap: 12px;
   font-size: 10px;
-  color: var(--text-dark-muted);
+  color: var(--modal-text-muted);
   margin-top: 2px;
 }
 
@@ -875,7 +877,7 @@
   border-radius: 6px;
   border: none;
   background: var(--bg-browser-input);
-  color: var(--text-dark-primary);
+  color: var(--modal-text);
   font-size: 11px;
   cursor: pointer;
   white-space: nowrap;
@@ -926,7 +928,7 @@
 .resource-browser-model-name {
   flex: 1;
   font-size: 11px;
-  color: var(--text-dark-primary);
+  color: var(--modal-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -948,8 +950,8 @@
 }
 
 .resource-browser-model-preview {
-  background: var(--bg-dark-tertiary);
-  color: var(--text-dark-primary);
+  background: var(--bg-browser-input);
+  color: var(--modal-text);
 }
 
 .resource-browser-model-preview:hover {
@@ -1018,7 +1020,7 @@
   border-radius: 6px;
   border: 1px solid var(--border-browser);
   background: var(--bg-browser-card);
-  color: var(--text-dark-primary);
+  color: var(--modal-text);
   font-size: 11px;
   cursor: pointer;
   transition: all 0.2s;
@@ -1036,7 +1038,27 @@
 
 .resource-browser-pagination span {
   font-size: 11px;
-  color: var(--text-dark-muted);
+  color: var(--modal-text-muted);
+}
+
+/* Attribution links inside resource browser */
+.resource-browser-item-meta a,
+.resource-browser-attribution-link {
+  color: var(--color-primary);
+  text-decoration: none;
+  opacity: 0.85;
+  transition: opacity 0.15s;
+}
+
+.resource-browser-item-meta a:hover,
+.resource-browser-attribution-link:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.resource-browser-author {
+  color: var(--modal-text-secondary);
+  font-style: italic;
 }
 
 .blend-model-row button {

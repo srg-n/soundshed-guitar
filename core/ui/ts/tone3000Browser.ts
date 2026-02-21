@@ -38,6 +38,7 @@ interface Tone3000Tone {
   id: string;
   title: string;
   name?: string;
+  slug?: string;
   description?: string;
   gear?: string;
   platform?: string;
@@ -381,7 +382,7 @@ function renderResults(tones: Tone3000Tone[]): void {
             <img src="${escapeHtml(equipmentImageUrl)}" alt="${escapeHtml(tone.gear ?? "Equipment")}" loading="lazy" />
           </div>
         `
-        : "";
+        : `<div class="tone3000-item-image tone3000-item-image-placeholder"></div>`;
       return `
         <div class="tone3000-item" data-tone-id="${String(tone.id)}">
           ${imageMarkup}
@@ -739,6 +740,8 @@ async function importZipBuffer(
         modelId: String(options.modelId),
         modelName: options.nameHint ?? "",
         entryName: entry.name,
+        sourceUrl: `https://www.tone3000.com/tones/${tone.slug ?? tone.id}`,
+        authorUsername: tone.user?.username ?? "",
       },
       data,
     });
@@ -825,6 +828,8 @@ async function importToneModelsList(
           platform: tone.platform ?? "",
           modelId: String(model.id),
           modelName: model.name ?? "",
+          sourceUrl: `https://www.tone3000.com/tones/${tone.slug ?? tone.id}`,
+          authorUsername: tone.user?.username ?? "",
         },
         data,
       });
