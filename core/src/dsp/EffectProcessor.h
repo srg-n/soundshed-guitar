@@ -29,11 +29,11 @@ namespace guitarfx
     virtual void SetParam(const std::string &key, double value) = 0;
     virtual void SetConfig(const std::string &key, const std::string &value) = 0;
     [[nodiscard]] virtual double GetParam(const std::string &key) const = 0;
-    [[nodiscard]] virtual std::string GetConfig(const std::string &key) const { return ""; }
+    [[nodiscard]] virtual std::string GetConfig(const std::string & /*key*/) const { return ""; }
 
     // Resource loading (for effects that need external files)
-    virtual bool LoadResource(const std::filesystem::path &path) { return true; }
-    virtual bool LoadResources(const std::vector<ResourceRef> &refs,
+    virtual bool LoadResource(const std::filesystem::path & /*path*/) { return true; }
+    virtual bool LoadResources(const std::vector<ResourceRef> & /*refs*/,
                                const std::vector<std::filesystem::path> &paths)
     {
       if (!paths.empty())

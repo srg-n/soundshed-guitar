@@ -234,7 +234,9 @@ juce::Rectangle<int> PluginEditor::loadStandaloneWindowSize() const
 
     if (auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
     {
-        const auto userBounds = display->totalArea.getSmallestIntegerContainer();
+        JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+        const auto userBounds = display->totalArea;
+        JUCE_END_IGNORE_DEPRECATION_WARNINGS
         if (width > userBounds.getWidth())
             width = userBounds.getWidth();
         if (height > userBounds.getHeight())
