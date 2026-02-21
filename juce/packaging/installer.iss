@@ -111,13 +111,13 @@ begin
     end;
 end;
 
-function CreateDirectoryJunction(const LinkPath: string; const TargetPath: string): Boolean;
+function CreateDirectorySymlink(const LinkPath: string; const TargetPath: string): Boolean;
 var
     ResultCode: Integer;
 begin
     if not DirExists(TargetPath) then
     begin
-        Log('Junction target does not exist: ' + TargetPath);
+        Log('Symlink target does not exist: ' + TargetPath);
         Result := False;
         Exit;
     end;
@@ -138,14 +138,14 @@ begin
     end;
 
     Result := Exec(ExpandConstant('{cmd}'),
-                   '/C mklink /J "' + LinkPath + '" "' + TargetPath + '"',
+                   '/C mklink /D "' + LinkPath + '" "' + TargetPath + '"',
                    '',
                    SW_HIDE,
                    ewWaitUntilTerminated,
                    ResultCode) and (ResultCode = 0);
 
     if not Result then
-        Log('Failed to create junction. Link=' + LinkPath + ' Target=' + TargetPath + ' ExitCode=' + IntToStr(ResultCode));
+        Log('Failed to create symlink. Link=' + LinkPath + ' Target=' + TargetPath + ' ExitCode=' + IntToStr(ResultCode));
 end;
 
 function CopyDirectoryTree(const SourcePath: string; const DestPath: string): Boolean;
@@ -187,7 +187,7 @@ end;
 
 procedure EnsureUiAtPath(const LinkPath: string; const SharedUiPath: string);
 begin
-    if CreateDirectoryJunction(LinkPath, SharedUiPath) then
+    if CreateDirectorySymlink(LinkPath, SharedUiPath) then
         Exit;
 
     Log('Falling back to physical UI copy at: ' + LinkPath);
