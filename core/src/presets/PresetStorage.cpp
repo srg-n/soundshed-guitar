@@ -297,6 +297,8 @@ namespace guitarfx
       json["modifiedAt"] = preset.modifiedAt;
     if (!preset.tags.empty())
       json["tags"] = preset.tags;
+    if (preset.designedPeakInputDbfs.has_value())
+      json["designedPeakInputDbfs"] = preset.designedPeakInputDbfs.value();
 
     // Global settings
     nlohmann::json global;
@@ -380,6 +382,8 @@ namespace guitarfx
           preset.tags.push_back(tag.get<std::string>());
         }
       }
+      if (json.contains("designedPeakInputDbfs") && json["designedPeakInputDbfs"].is_number())
+        preset.designedPeakInputDbfs = json["designedPeakInputDbfs"].get<double>();
 
       // Global settings (support both "global" and "globals" for compatibility)
       nlohmann::json globalJson;

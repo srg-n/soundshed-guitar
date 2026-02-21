@@ -6491,6 +6491,7 @@ void PluginController::SendSignalDiagnosticsToUI()
         };
     };
 
+    msg["rawInput"] = buildLevelJson(snapshot.rawInput);
     msg["input"] = buildLevelJson(snapshot.input);
     msg["output"] = buildLevelJson(snapshot.output);
 

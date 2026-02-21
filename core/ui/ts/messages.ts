@@ -1,5 +1,5 @@
 import { uiState, clonePreset, getActivePresetForRender, setActivePresetDraft, setActivePresetSnapshot, setPresetDirty } from "./state.js";
-import { renderActivePreset, applyPresetFromLibrary, populatePresetDropdown, updatePresetDropdownSelection, cachePresetInMemory, updatePresetActionButtons, applyPresetFoldersFromBackend, applyPresetFavoritesFromBackend, applyPresetRatingsFromBackend, applySetlistsFromBackend, handlePresetDataMessage } from "./presets.js";
+import { renderActivePreset, applyPresetFromLibrary, populatePresetDropdown, updatePresetDropdownSelection, cachePresetInMemory, updatePresetActionButtons, applyPresetFoldersFromBackend, applyPresetFavoritesFromBackend, applyPresetRatingsFromBackend, applySetlistsFromBackend, handlePresetDataMessage, refreshSavePresetModalPeakInfoIfOpen } from "./presets.js";
 import { syncControlsFromState, handleInputModeChanged, handleAmpCabStateChanged, syncAutoLevelControlsFromState, applyStoredInputChannel } from "./controls.js";
 import { showNotification } from "./notifications.js";
 import { appendLog } from "./logging.js";
@@ -868,6 +868,7 @@ export function handleIncomingMessage(message: string): void {
       if (diagnostics && diagnostics.input && diagnostics.output) {
         uiState.signalDiagnostics = diagnostics;
         updateSignalDiagnosticsView();
+        refreshSavePresetModalPeakInfoIfOpen();
       }
       break;
     }

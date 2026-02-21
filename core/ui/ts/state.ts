@@ -230,6 +230,7 @@ export const uiState: UiState = {
   dspPerformanceHistory: [],
   globalSignalChain: { ...DEFAULT_GLOBAL_SIGNAL_CHAIN },
   signalDiagnostics: null,
+  signalPeakHold: null,
   environment: { standalone: false },
   namCalibrationStatus: {},
   missingNodeResources: [],

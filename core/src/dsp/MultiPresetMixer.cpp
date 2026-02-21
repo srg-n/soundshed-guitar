@@ -177,6 +177,9 @@ namespace guitarfx
     mTunerSampleCounter = other.mTunerSampleCounter;
 
     mSignalDiagnosticsEnabled.store(other.mSignalDiagnosticsEnabled.load(std::memory_order_acquire), std::memory_order_release);
+    mRawInputLevels.peak.store(other.mRawInputLevels.peak.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    mRawInputLevels.rms.store(other.mRawInputLevels.rms.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    mRawInputLevels.clipCount.store(other.mRawInputLevels.clipCount.load(std::memory_order_relaxed), std::memory_order_relaxed);
     mInputLevels.peak.store(other.mInputLevels.peak.load(std::memory_order_relaxed), std::memory_order_relaxed);
     mInputLevels.rms.store(other.mInputLevels.rms.load(std::memory_order_relaxed), std::memory_order_relaxed);
     mInputLevels.clipCount.store(other.mInputLevels.clipCount.load(std::memory_order_relaxed), std::memory_order_relaxed);
@@ -773,6 +776,14 @@ namespace guitarfx
     float *processInL = inputs ? inputs[0] : nullptr;
     float *processInR = inputs ? inputs[1] : nullptr;
 
+    if (diagnosticsEnabled)
+    {
+      const auto rawStats = ComputeLevelStats(processInL, processInR, numSamples);
+      mRawInputLevels.peak.store(rawStats.peak, std::memory_order_relaxed);
+      mRawInputLevels.rms.store(rawStats.rms, std::memory_order_relaxed);
+      mRawInputLevels.clipCount.store(rawStats.clipCount, std::memory_order_relaxed);
+    }
+
     if (mMonoMode && processInL && processInR)
     {
       // Apply mono mode: select input channel or sum to mono
@@ -1011,6 +1022,10 @@ namespace guitarfx
   MultiPresetMixer::SignalDiagnosticsSnapshot MultiPresetMixer::GetSignalDiagnosticsSnapshot() const
   {
     SignalDiagnosticsSnapshot snapshot;
+    snapshot.rawInput.peak = mRawInputLevels.peak.load(std::memory_order_relaxed);
+    snapshot.rawInput.rms = mRawInputLevels.rms.load(std::memory_order_relaxed);
+    snapshot.rawInput.clipCount = mRawInputLevels.clipCount.load(std::memory_order_relaxed);
+
     snapshot.input.peak = mInputLevels.peak.load(std::memory_order_relaxed);
     snapshot.input.rms = mInputLevels.rms.load(std::memory_order_relaxed);
     snapshot.input.clipCount = mInputLevels.clipCount.load(std::memory_order_relaxed);

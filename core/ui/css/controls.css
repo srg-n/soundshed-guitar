@@ -475,6 +475,17 @@
   box-shadow: 0 4px 8px var(--overlay-darker);
 }
 
+.theme-light .btn-primary,
+.theme-classic .btn-primary {
+  background: linear-gradient(180deg, var(--color-accent-dark) 0%, #8a2010 100%);
+  color: #fff;
+}
+
+.theme-light .btn-primary:hover,
+.theme-classic .btn-primary:hover {
+  background: linear-gradient(180deg, var(--color-accent) 0%, var(--color-accent-dark) 100%);
+}
+
 .btn-secondary {
   background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
   color: var(--text-primary);

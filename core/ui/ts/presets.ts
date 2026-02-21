@@ -1738,7 +1738,6 @@ export function openSavePresetModal(): void {
   const nameInput = document.getElementById("preset-name-input") as HTMLInputElement | null;
   const categoryInput = document.getElementById("preset-category-input") as HTMLInputElement | null;
   const descriptionInput = document.getElementById("preset-description-input") as HTMLTextAreaElement | null;
-  const includeGlobalFxInput = document.getElementById("preset-include-global-fx") as HTMLInputElement | null;
 
   const activeFolderId = uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID;
   const defaultFolderId = activeFolderId === PRESET_FOLDER_FAVORITES_ID ? PRESET_FOLDER_ALL_ID : activeFolderId;
@@ -1748,11 +1747,6 @@ export function openSavePresetModal(): void {
   if (categoryInput) categoryInput.value = "User";
   if (descriptionInput) descriptionInput.value = "";
   setPresetTagsPickerValue([]);
-  if (includeGlobalFxInput) {
-    const activePreset = getActivePresetForRender();
-    const hasGlobalFx = Boolean((activePreset as Preset & { globalSignalChain?: unknown })?.globalSignalChain);
-    includeGlobalFxInput.checked = activePreset ? hasGlobalFx : true;
-  }
 
   initPresetModalTabs(modal);
   initPresetModalAdvancedActions(modal);
@@ -1761,6 +1755,8 @@ export function openSavePresetModal(): void {
   updatePresetModalJson(activePreset);
   updatePresetModalReport([]);
   delete modal.dataset.cleanedPreset;
+  delete modal.dataset.stagedDesignedPeak;
+  updateSavePresetModalPeakInfo(modal);
 
   modal.style.display = "flex";
 }
@@ -1806,7 +1802,6 @@ export function saveCurrentPreset(): void {
   const nameInput = document.getElementById("preset-name-input") as HTMLInputElement | null;
   const categoryInput = document.getElementById("preset-category-input") as HTMLInputElement | null;
   const descriptionInput = document.getElementById("preset-description-input") as HTMLTextAreaElement | null;
-  const includeGlobalFxInput = document.getElementById("preset-include-global-fx") as HTMLInputElement | null;
 
   const name = nameInput?.value?.trim() || "";
   const category = categoryInput?.value?.trim() || "User";
@@ -1824,7 +1819,9 @@ export function saveCurrentPreset(): void {
   const selectedFolderId = folderSelect?.value || PRESET_FOLDER_ALL_ID;
   const activePreset = getActivePresetForRender();
   const baseAttachments = buildAttachmentsFromPreset(activePreset ?? {} as Preset);
-  const includeGlobalFx = includeGlobalFxInput ? includeGlobalFxInput.checked : true;
+  const includeGlobalFx = true;
+  const stagedPeakStr = modal?.dataset.stagedDesignedPeak;
+  const stagedDesignedPeak = stagedPeakStr !== undefined ? parseFloat(stagedPeakStr) : undefined;
   let cleanedPreset: Preset | null = null;
   if (modal?.dataset.cleanedPreset) {
     try {
@@ -1847,6 +1844,9 @@ export function saveCurrentPreset(): void {
         tags: tags.length > 0 ? tags : undefined,
         attachments: baseAttachments,
       };
+      if (stagedDesignedPeak !== undefined && isFinite(stagedDesignedPeak)) {
+        updatedPreset.designedPeakInputDbfs = Math.round(stagedDesignedPeak * 10) / 10;
+      }
       if (includeGlobalFx) {
         updatedPreset.globalSignalChain = uiState.globalSignalChain;
       } else {
@@ -1900,6 +1900,9 @@ export function saveCurrentPreset(): void {
     tags: tags.length > 0 ? tags : undefined,
     attachments: baseAttachments,
   };
+  if (stagedDesignedPeak !== undefined && isFinite(stagedDesignedPeak)) {
+    newPreset.designedPeakInputDbfs = Math.round(stagedDesignedPeak * 10) / 10;
+  }
   if (includeGlobalFx) {
     newPreset.globalSignalChain = uiState.globalSignalChain;
   } else {
@@ -1954,6 +1957,44 @@ function setPresetTagsPickerValue(tags: string[]): void {
   });
 }
 
+function formatPeakDb(value: number | null | undefined): string {
+  if (value == null || !isFinite(value)) return "\u2014";
+  return `${value.toFixed(1)} dBFS`;
+}
+
+export function refreshSavePresetModalPeakInfoIfOpen(): void {
+  const modal = document.getElementById("save-preset-modal");
+  if (!modal || modal.style.display === "none" || modal.style.display === "") return;
+  updateSavePresetModalPeakInfo(modal);
+}
+
+function updateSavePresetModalPeakInfo(modal: HTMLElement): void {
+  const rawPeakEl = document.getElementById("preset-modal-raw-peak");
+  const designedPeakEl = document.getElementById("preset-modal-designed-peak");
+
+  // Live 10s raw input peak
+  const rawPeak = uiState.signalPeakHold?.rawInput.peakDbfs;
+  if (rawPeakEl) rawPeakEl.textContent = formatPeakDb(rawPeak ?? null);
+
+  // Staged designed peak takes priority over stored value
+  const stagedStr = modal.dataset.stagedDesignedPeak;
+  if (stagedStr !== undefined) {
+    const staged = parseFloat(stagedStr);
+    if (designedPeakEl) designedPeakEl.textContent = formatPeakDb(staged);
+    return;
+  }
+
+  // Stored designed peak from active preset
+  const activePreset = uiState.activePresetId
+    ? (uiState.presetCache.get(uiState.activePresetId) ?? uiState.presets.find((p) => p.id === uiState.activePresetId))
+    : null;
+  const editingId = modal.dataset.editingPresetId;
+  const sourcePreset = editingId
+    ? (uiState.presetCache.get(editingId) ?? uiState.presets.find((p) => p.id === editingId))
+    : activePreset;
+  if (designedPeakEl) designedPeakEl.textContent = formatPeakDb(sourcePreset?.designedPeakInputDbfs ?? null);
+}
+
 export function initializeSavePresetModal(): void {
   const closeBtn = document.getElementById("save-preset-modal-close");
   const cancelBtn = document.getElementById("save-preset-cancel");
@@ -1984,6 +2025,19 @@ export function initializeSavePresetModal(): void {
       if (event.target === modal) {
         closeSavePresetModal();
       }
+    });
+  }
+
+  const applyPeakBtn = document.getElementById("preset-modal-apply-peak");
+  if (applyPeakBtn && modal) {
+    applyPeakBtn.addEventListener("click", () => {
+      const rawPeak = uiState.signalPeakHold?.rawInput.peakDbfs;
+      if (rawPeak == null || !isFinite(rawPeak)) {
+        showNotification("No peak data available yet");
+        return;
+      }
+      modal.dataset.stagedDesignedPeak = String(rawPeak);
+      updateSavePresetModalPeakInfo(modal);
     });
   }
 }
@@ -3031,15 +3085,11 @@ export function openEditPresetModal(): void {
   const nameInput = document.getElementById("preset-name-input") as HTMLInputElement | null;
   const categoryInput = document.getElementById("preset-category-input") as HTMLInputElement | null;
   const descriptionInput = document.getElementById("preset-description-input") as HTMLTextAreaElement | null;
-  const includeGlobalFxInput = document.getElementById("preset-include-global-fx") as HTMLInputElement | null;
 
   if (nameInput) nameInput.value = preset.name;
   if (categoryInput) categoryInput.value = preset.category || "User";
   if (descriptionInput) descriptionInput.value = preset.description || "";
   setPresetTagsPickerValue(preset.tags ?? []);
-  if (includeGlobalFxInput) {
-    includeGlobalFxInput.checked = Boolean((preset as Preset & { globalSignalChain?: unknown }).globalSignalChain);
-  }
 
   initPresetModalTabs(modal);
   initPresetModalAdvancedActions(modal);
@@ -3047,6 +3097,8 @@ export function openEditPresetModal(): void {
   updatePresetModalJson(preset);
   updatePresetModalReport([]);
   delete modal.dataset.cleanedPreset;
+  delete modal.dataset.stagedDesignedPeak;
+  updateSavePresetModalPeakInfo(modal);
 
   // Store that we're editing, not creating
   modal.dataset.editingPresetId = activePresetId;

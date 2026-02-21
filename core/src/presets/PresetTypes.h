@@ -178,6 +178,9 @@ namespace guitarfx
     std::string modifiedAt;
     std::vector<std::string> tags;
 
+    // Design metadata
+    std::optional<double> designedPeakInputDbfs; // Peak input level (dBFS) during design
+
     // Settings
     GlobalSettings global;
     std::optional<GlobalSignalChainConfig> globalSignalChain;

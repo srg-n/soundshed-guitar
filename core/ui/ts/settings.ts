@@ -368,6 +368,39 @@ export function initDiagnosticsToggle(): void {
 
   diagnosticsToggle.dataset.bound = "true";
   diagnosticsToggle.addEventListener("change", () => void updateDiagnosticsSetting());
+
+  const applyBtn = document.getElementById("apply-designed-peak-btn") as HTMLButtonElement | null;
+  if (applyBtn && applyBtn.dataset.bound !== "true") {
+    applyBtn.dataset.bound = "true";
+    applyBtn.addEventListener("click", () => {
+      const peakDbfs = (applyBtn as HTMLButtonElement & { _peakDbfs?: number })._peakDbfs;
+      if (peakDbfs == null || !isFinite(peakDbfs)) {
+        showNotification("No peak value available — enable diagnostics and play first");
+        return;
+      }
+      const activeId = uiState.activePresetId;
+      if (!activeId) {
+        showNotification("No active preset");
+        return;
+      }
+      const preset = clonePreset(
+        uiState.presetCache.get(activeId) ??
+        uiState.presets.find((p) => p.id === activeId) ??
+        ({} as import("./types.js").Preset)
+      );
+      preset.designedPeakInputDbfs = Math.round(peakDbfs * 10) / 10;
+      uiState.presetCache.set(activeId, preset);
+      postMessage({
+        type: "savePreset",
+        presetId: preset.id,
+        name: preset.name ?? "",
+        category: preset.category ?? "",
+        description: preset.description ?? "",
+        preset,
+      });
+      showNotification(`Designed peak input set to ${preset.designedPeakInputDbfs.toFixed(1)} dBFS`);
+    });
+  }
 }
 
 export function refreshSettingsView(): void {
@@ -443,6 +476,7 @@ function updateDiagnosticsSetting(): void {
   setAppSetting(DIAGNOSTICS_SETTING, enabled);
   if (!enabled) {
     uiState.signalDiagnostics = null;
+    uiState.signalPeakHold = null;
   }
   updateSignalDiagnosticsView();
 }

@@ -66,7 +66,23 @@ if(GUITARFX_CORE_FETCH_DEPS AND NOT TARGET NeuralAmpModelerCore AND NOT TARGET n
     endif()
 
     if(MSVC)
-        foreach(_nam_tool benchmodel loadmodel run_tests tools)
+        # neuralampmodelercore/tools/CMakeLists.txt sets -Wno-error on NAM sources as a
+        # GCC/Clang workaround for an Eigen warning. That flag is invalid on MSVC (D8021).
+        # Clear it from the tools directory scope (requires CMake >= 3.18).
+        if(DEFINED NeuralAmpModelerCore_SOURCE_DIR)
+            foreach(_src
+                    "${NeuralAmpModelerCore_SOURCE_DIR}/NAM/dsp.cpp"
+                    "${NeuralAmpModelerCore_SOURCE_DIR}/NAM/conv1d.cpp")
+                if(EXISTS "${_src}")
+                    set_source_files_properties("${_src}"
+                        DIRECTORY "${NeuralAmpModelerCore_SOURCE_DIR}/tools"
+                        PROPERTIES COMPILE_FLAGS "")
+                endif()
+            endforeach()
+        endif()
+        # Exclude all NAM tool executables from the default build on MSVC.
+        # 'render' was added upstream after the original list was written.
+        foreach(_nam_tool benchmodel loadmodel render run_tests tools)
             if(TARGET ${_nam_tool})
                 set_property(TARGET ${_nam_tool} PROPERTY EXCLUDE_FROM_ALL TRUE)
                 set_property(TARGET ${_nam_tool} PROPERTY EXCLUDE_FROM_DEFAULT_BUILD TRUE)

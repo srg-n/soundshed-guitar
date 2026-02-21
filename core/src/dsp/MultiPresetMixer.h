@@ -65,6 +65,7 @@ namespace guitarfx
 
     struct SignalDiagnosticsSnapshot
     {
+      SignalLevelStats rawInput; // Before any gain/trim/mono processing
       SignalLevelStats input;
       SignalLevelStats output;
       std::vector<NodeSignalLevel> nodes;
@@ -269,6 +270,7 @@ namespace guitarfx
     };
 
     std::atomic<bool> mSignalDiagnosticsEnabled{false};
+    AtomicLevelStats mRawInputLevels;
     AtomicLevelStats mInputLevels;
     AtomicLevelStats mOutputLevels;
   };

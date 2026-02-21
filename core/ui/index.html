@@ -857,6 +857,17 @@
             </div>
             <div class="performance-details">
               <h3>Per-Node Levels (dBFS)</h3>
+              <div class="designed-peak-input-section" id="designed-peak-input-section">
+                <div class="performance-metric">
+                  <span class="metric-label">Preset Designed Peak Input:</span>
+                  <span class="metric-value" id="designed-peak-stored-value">&mdash;</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Current Raw Input Peak (10s hold):</span>
+                  <span class="metric-value" id="designed-peak-current-value">&mdash;</span>
+                </div>
+                <button type="button" id="apply-designed-peak-btn" class="settings-row-btn" disabled>Apply as Designed Peak Input to Preset</button>
+              </div>
               <div id="signal-diagnostics-list">
                 <!-- Signal diagnostics details will be populated here -->
               </div>
@@ -1548,11 +1559,17 @@
                 <button type="button" class="preset-tag-chip" data-tag="atmospheric">atmospheric</button>
               </div>
             </div>
-            <div class="form-group">
-              <label class="toggle">
-                <input type="checkbox" id="preset-include-global-fx" checked />
-                Include Global FX Settings
-              </label>
+            <div class="form-group preset-peak-info">
+              <label>Input Peak Level</label>
+              <div class="preset-peak-grid">
+                <span class="preset-peak-col-label">Raw Input Peak (10s)</span>
+                <span id="preset-modal-raw-peak" class="preset-peak-col-value">—</span>
+                <span class="preset-peak-col-label">Designed Peak</span>
+                <div class="preset-peak-action-cell">
+                  <span id="preset-modal-designed-peak" class="preset-peak-col-value">—</span>
+                  <button type="button" class="btn btn-secondary btn-sm" id="preset-modal-apply-peak">Apply Current</button>
+                </div>
+              </div>
             </div>
           </div>
           <div class="preset-modal-tab-panel" data-preset-modal-tab-panel="advanced">

@@ -57,6 +57,7 @@ export interface Preset {
   category?: string;
   description?: string;
   tags?: string[];
+  designedPeakInputDbfs?: number | null;
   attachments?: Attachment[];
   fxChain?: string[];
   audioFxModelId?: string | null;
@@ -282,10 +283,24 @@ export interface SignalLevelNodeMetrics {
 }
 
 export interface SignalLevelDiagnostics {
+  rawInput?: SignalLevelMetrics; // Before any gain/trim/mono processing
   input: SignalLevelMetrics;
   output: SignalLevelMetrics;
   nodes: SignalLevelNodeMetrics[];
   timestamp?: number;
+}
+
+export interface SignalPeakHoldEntry {
+  peakDbfs: number;
+  windowStartedAt: number;
+}
+
+export interface SignalPeakHold {
+  presetId: string | null;
+  rawInput: SignalPeakHoldEntry;
+  input: SignalPeakHoldEntry;
+  output: SignalPeakHoldEntry;
+  nodes: Record<string, SignalPeakHoldEntry>;
 }
 
 export interface EnvironmentState {
@@ -396,6 +411,7 @@ export interface UiState {
   dspPerformanceHistory: DSPPerformanceStats[];
   globalSignalChain?: GlobalSignalChainConfig;
   signalDiagnostics?: SignalLevelDiagnostics | null;
+  signalPeakHold?: SignalPeakHold | null;
   environment?: EnvironmentState;
   metronome?: MetronomeState;
   riffLibrary?: RiffLibrary;

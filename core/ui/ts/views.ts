@@ -711,6 +711,76 @@ function formatDb(value: number): string {
   return value.toFixed(1);
 }
 
+const PEAK_HOLD_WINDOW_MS = 10_000;
+
+function updateSignalPeakHold(diagnostics: import("./types.js").SignalLevelDiagnostics): void {
+  const now = Date.now();
+  const currentPresetId = uiState.activePresetId ?? null;
+  const hold = uiState.signalPeakHold;
+
+  const makeEntry = (peakDbfs: number): import("./types.js").SignalPeakHoldEntry => ({
+    peakDbfs,
+    windowStartedAt: now,
+  });
+
+  if (!hold || hold.presetId !== currentPresetId) {
+    uiState.signalPeakHold = {
+      presetId: currentPresetId,
+      rawInput: makeEntry(diagnostics.rawInput?.peakDbfs ?? diagnostics.input.peakDbfs),
+      input: makeEntry(diagnostics.input.peakDbfs),
+      output: makeEntry(diagnostics.output.peakDbfs),
+      nodes: Object.fromEntries(
+        (diagnostics.nodes ?? []).map((n) => [n.nodeId, makeEntry(n.levels.peakDbfs)])
+      ),
+    };
+    return;
+  }
+
+  // Raw input
+  const rawPeak = diagnostics.rawInput?.peakDbfs ?? diagnostics.input.peakDbfs;
+  if (now - hold.rawInput.windowStartedAt > PEAK_HOLD_WINDOW_MS) {
+    hold.rawInput = makeEntry(rawPeak);
+  } else if (rawPeak >= hold.rawInput.peakDbfs) {
+    hold.rawInput.peakDbfs = rawPeak;
+  }
+
+  // Input
+  if (now - hold.input.windowStartedAt > PEAK_HOLD_WINDOW_MS) {
+    hold.input = makeEntry(diagnostics.input.peakDbfs);
+  } else if (diagnostics.input.peakDbfs >= hold.input.peakDbfs) {
+    hold.input.peakDbfs = diagnostics.input.peakDbfs;
+  }
+
+  // Output
+  if (now - hold.output.windowStartedAt > PEAK_HOLD_WINDOW_MS) {
+    hold.output = makeEntry(diagnostics.output.peakDbfs);
+  } else if (diagnostics.output.peakDbfs >= hold.output.peakDbfs) {
+    hold.output.peakDbfs = diagnostics.output.peakDbfs;
+  }
+
+  // Per-node
+  for (const node of diagnostics.nodes ?? []) {
+    const existing = hold.nodes[node.nodeId];
+    if (!existing) {
+      hold.nodes[node.nodeId] = makeEntry(node.levels.peakDbfs);
+    } else if (now - existing.windowStartedAt > PEAK_HOLD_WINDOW_MS) {
+      hold.nodes[node.nodeId] = makeEntry(node.levels.peakDbfs);
+    } else if (node.levels.peakDbfs >= existing.peakDbfs) {
+      existing.peakDbfs = node.levels.peakDbfs;
+    }
+  }
+}
+
+function setClipStatusText(el: HTMLElement, text: string): void {
+  const nodes = el.childNodes;
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    if (nodes[i].nodeType === Node.TEXT_NODE) {
+      nodes[i].textContent = ` ${text}`;
+      break;
+    }
+  }
+}
+
 export function updateSignalDiagnosticsView(): void {
   const diagnostics = uiState.signalDiagnostics;
   const enabled = Boolean(uiState.appSettings?.["diagnostics.signalLevelsEnabled"]);
@@ -739,11 +809,7 @@ export function updateSignalDiagnosticsView(): void {
     if (inputClip) {
       inputClip.classList.remove("clip-on");
       inputClip.classList.add("clip-off");
-      inputClip.childNodes.forEach((node) => {
-        if (node.nodeType === Node.TEXT_NODE) {
-          node.textContent = "—";
-        }
-      });
+      setClipStatusText(inputClip, "—");
     }
     if (outputPeak) outputPeak.textContent = "—";
     if (outputRms) outputRms.textContent = "—";
@@ -751,11 +817,7 @@ export function updateSignalDiagnosticsView(): void {
     if (outputClip) {
       outputClip.classList.remove("clip-on");
       outputClip.classList.add("clip-off");
-      outputClip.childNodes.forEach((node) => {
-        if (node.nodeType === Node.TEXT_NODE) {
-          node.textContent = "—";
-        }
-      });
+      setClipStatusText(outputClip, "—");
     }
     if (listEl) listEl.innerHTML = "<div class=\"performance-detail-item\">Diagnostics disabled.</div>";
     return;
@@ -776,57 +838,94 @@ export function updateSignalDiagnosticsView(): void {
     clipCount: 0,
   };
 
-  if (inputPeak) inputPeak.textContent = `${formatDb(input.peakDbfs)} dBFS`;
+  updateSignalPeakHold(diagnostics);
+  const hold = uiState.signalPeakHold;
+
+  if (inputPeak) inputPeak.textContent = `${formatDb(hold?.input.peakDbfs ?? input.peakDbfs)} dBFS`;
   if (inputRms) inputRms.textContent = `${formatDb(input.rmsDbfs)} dBFS`;
   if (inputHeadroom) inputHeadroom.textContent = `${formatDb(input.headroomDb)} dB`;
   if (inputClip) {
     inputClip.classList.toggle("clip-on", input.clipped);
     inputClip.classList.toggle("clip-off", !input.clipped);
-    inputClip.childNodes.forEach((node) => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        node.textContent = input.clipped ? `Clipping (${input.clipCount})` : "OK";
-      }
-    });
+    setClipStatusText(inputClip, input.clipped ? `Clipping (${input.clipCount})` : "OK");
   }
 
-  if (outputPeak) outputPeak.textContent = `${formatDb(output.peakDbfs)} dBFS`;
+  if (outputPeak) outputPeak.textContent = `${formatDb(hold?.output.peakDbfs ?? output.peakDbfs)} dBFS`;
   if (outputRms) outputRms.textContent = `${formatDb(output.rmsDbfs)} dBFS`;
   if (outputHeadroom) outputHeadroom.textContent = `${formatDb(output.headroomDb)} dB`;
   if (outputClip) {
     outputClip.classList.toggle("clip-on", output.clipped);
     outputClip.classList.toggle("clip-off", !output.clipped);
-    outputClip.childNodes.forEach((node) => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        node.textContent = output.clipped ? `Clipping (${output.clipCount})` : "OK";
-      }
-    });
+    setClipStatusText(outputClip, output.clipped ? `Clipping (${output.clipCount})` : "OK");
+  }
+
+  // Update the designed peak input control
+  const designedPeakCurrentEl = document.getElementById("designed-peak-current-value");
+  const designedPeakStoredEl = document.getElementById("designed-peak-stored-value");
+  const applyDesignedPeakBtn = document.getElementById("apply-designed-peak-btn") as HTMLButtonElement | null;
+  if (!enabled || !diagnostics) {
+    if (designedPeakCurrentEl) designedPeakCurrentEl.textContent = "\u2014";
+    if (applyDesignedPeakBtn) applyDesignedPeakBtn.disabled = true;
+  } else {
+    const rawPeakDbfs = hold?.rawInput.peakDbfs ?? diagnostics.rawInput?.peakDbfs ?? input.peakDbfs;
+    if (designedPeakCurrentEl) designedPeakCurrentEl.textContent = `${formatDb(rawPeakDbfs)} dBFS`;
+    if (applyDesignedPeakBtn) applyDesignedPeakBtn.disabled = false;
+    if (applyDesignedPeakBtn) (applyDesignedPeakBtn as HTMLButtonElement & { _peakDbfs?: number })._peakDbfs = rawPeakDbfs;
+  }
+  // Show stored value from active preset
+  if (designedPeakStoredEl) {
+    const activePreset = uiState.activePresetId
+      ? (uiState.presetCache.get(uiState.activePresetId) ?? uiState.presets.find((p) => p.id === uiState.activePresetId))
+      : null;
+    const stored = activePreset?.designedPeakInputDbfs;
+    designedPeakStoredEl.textContent = stored != null ? `${formatDb(stored)} dBFS` : "\u2014";
   }
 
   if (listEl) {
-    const rows = (diagnostics.nodes ?? [])
+    const makeNodeRow = (
+      scope: string,
+      label: string,
+      peakDbfs: number,
+      headroomDb: number,
+      clipped: boolean,
+      clipCount: number
+    ): string => {
+      const clipClass = clipped ? "clip-on" : "clip-off";
+      const clipText = clipped ? `Clipping (${clipCount})` : "OK";
+      return `
+        <div class="signal-diagnostics-item">
+          <span class="signal-diagnostics-cell scope">${escapeHtml(scope)}</span>
+          <span class="signal-diagnostics-cell node">${label}</span>
+          <span class="signal-diagnostics-cell">${formatDb(peakDbfs)} dBFS</span>
+          <span class="signal-diagnostics-cell">${formatDb(headroomDb)} dB</span>
+          <span class="signal-diagnostics-cell clip ${clipClass}">
+            <span class="clip-indicator"></span>
+            ${clipText}
+          </span>
+        </div>
+      `;
+    };
+
+    const inputRow = makeNodeRow(
+      "in",
+      "chain input",
+      hold?.input.peakDbfs ?? input.peakDbfs,
+      input.headroomDb,
+      input.clipped,
+      input.clipCount
+    );
+
+    const nodeRows = (diagnostics.nodes ?? [])
       .map((node) => {
-        const scopeLabel = escapeHtml(node.scope);
         const presetLabel = node.presetId ? `${escapeHtml(node.presetId)} · ` : "";
         const nodeLabel = `${presetLabel}${escapeHtml(node.nodeId)} (${escapeHtml(node.nodeType)})`;
         const levels = node.levels ?? { peakDbfs: Number.NaN, headroomDb: Number.NaN, clipped: false, clipCount: 0 };
-        const peak = formatDb(levels.peakDbfs);
-        const headroom = formatDb(levels.headroomDb);
-        const clipClass = levels.clipped ? "clip-on" : "clip-off";
-        const clipText = levels.clipped ? `Clipping (${levels.clipCount})` : "OK";
-        return `
-          <div class=\"signal-diagnostics-item\">
-            <span class=\"signal-diagnostics-cell scope\">${scopeLabel}</span>
-            <span class=\"signal-diagnostics-cell node\">${nodeLabel}</span>
-            <span class=\"signal-diagnostics-cell\">${peak} dBFS</span>
-            <span class=\"signal-diagnostics-cell\">${headroom} dB</span>
-            <span class=\"signal-diagnostics-cell clip ${clipClass}\">
-              <span class=\"clip-indicator\"></span>
-              ${clipText}
-            </span>
-          </div>
-        `;
+        const holdEntry = hold?.nodes[node.nodeId];
+        return makeNodeRow(node.scope, nodeLabel, holdEntry?.peakDbfs ?? levels.peakDbfs, levels.headroomDb, levels.clipped, levels.clipCount);
       })
       .join("");
+
+    const rows = inputRow + nodeRows;
 
     listEl.innerHTML = `
       <div class=\"signal-diagnostics-header\">

@@ -336,6 +336,38 @@
   border-color: var(--modal-border);
 }
 
+.preset-peak-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 16px;
+  align-items: center;
+  background: var(--modal-bg-raised);
+  border: 1px solid var(--modal-border-medium);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.preset-peak-col-label {
+  font-size: 12px;
+  color: var(--modal-text-secondary);
+  font-weight: 500;
+}
+
+.preset-peak-col-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--modal-text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.preset-peak-action-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .preset-modal-tabs {
   margin-bottom: 12px;
 }
