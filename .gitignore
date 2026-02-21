@@ -81,3 +81,5 @@ api/node_modules/
 juce/ASIOSDK/
 
 api/.wrangler/
+
+resources/metal-presets/
