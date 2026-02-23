@@ -119,6 +119,24 @@ function getToneImportStatus(tone: Tone3000Tone): { status: "imported" | "partia
   return { status: "none", importedCount };
 }
 
+/**
+ * Navigate the tone3000 browser to a specific query and optional category,
+ * called externally (e.g. from the AI Tone Search panel).
+ */
+export function setTone3000Search(query: string, categoryId?: string): void {
+  if (categoryId) {
+    const next = CATEGORIES.find((cat) => cat.id === categoryId);
+    if (next) {
+      activeCategory = next;
+      renderCategories();
+    }
+  }
+  if (searchInputEl) {
+    searchInputEl.value = query;
+  }
+  void runSearch();
+}
+
 export function initTone3000Browser(): void {
   renderCategories();
   if (resultsEl) {
