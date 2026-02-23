@@ -224,6 +224,7 @@ target_compile_definitions(SharedCode
     # Use WebView2 on Windows
     JUCE_USE_WIN_WEBVIEW2=1
     JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1
+    JUCE_WEBVIEW2_DEVTOOLS_ENABLED=1
 
     # Uncomment if you are paying for a an Indie/Pro license or releasing under GPLv3
     # JUCE_DISPLAY_SPLASH_SCREEN=0
