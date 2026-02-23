@@ -7,6 +7,7 @@ import { fail } from "./lib/http";
 import { healthRoutes } from "./routes/health";
 import { itemRoutes } from "./routes/items";
 import { packRoutes } from "./routes/packs";
+import { toneAdvisorRoutes } from "./routes/tone-advisor";
 import { uploadRoutes } from "./routes/uploads";
 import { Env } from "./types/env";
 
@@ -34,6 +35,7 @@ app.route("/v1", discoveryRoutes());
 app.route("/v1/items", itemRoutes());
 app.route("/v1/packs", packRoutes());
 app.route("/v1/uploads", uploadRoutes());
+app.route("/v1", toneAdvisorRoutes());
 
 app.notFound((c) => fail(c, "NOT_FOUND", "Route not found", 404));
 

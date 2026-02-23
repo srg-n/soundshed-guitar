@@ -19,3 +19,6 @@ database_id = "80cb9fa4-d0bf-4ea8-9aaf-8d7b414cabb8"
 [[r2_buckets]]
 binding = "ASSETS"
 bucket_name = "soundshed-guitar-assets-prod"
+
+[ai]
+binding = "AI"

@@ -1,6 +1,7 @@
 export type Env = {
   DB: D1Database;
   ASSETS: R2Bucket;
+  AI: Ai;
   COOKIE_NAME: string;
   ENVIRONMENT: "development" | "production";
   SESSION_TTL_SECONDS: string;
