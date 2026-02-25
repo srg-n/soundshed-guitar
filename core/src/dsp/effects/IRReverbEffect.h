@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <iostream>
 #include <vector>
 
 namespace guitarfx
@@ -144,12 +145,28 @@ namespace guitarfx
 
     bool LoadResource(const std::filesystem::path &resourcePath) override
     {
-      if (!LoadWavFile(resourcePath))
+      if (!std::filesystem::exists(resourcePath))
+      {
+        std::cerr << "[IRReverbEffect] ERROR: IR file not found: " << resourcePath << "\n";
         return false;
+      }
+
+      if (!LoadWavFile(resourcePath))
+      {
+        std::cerr << "[IRReverbEffect] ERROR: Failed to load/parse IR WAV file: " << resourcePath << "\n";
+        return false;
+      }
 
       mIRPath = resourcePath;
       ApplyPendingQuality();
-      return InitializeConvolvers();
+
+      if (!InitializeConvolvers())
+      {
+        std::cerr << "[IRReverbEffect] ERROR: Failed to initialize convolvers for: " << resourcePath << "\n";
+        return false;
+      }
+
+      return true;
     }
 
     [[nodiscard]] bool HasResource() const override
@@ -158,6 +175,11 @@ namespace guitarfx
     }
 
     [[nodiscard]] std::filesystem::path GetResourcePath() const override { return mIRPath; }
+
+    [[nodiscard]] int GetLatencySamples() const override
+    {
+      return mConvolverLL.IsInitialized() ? mConvolverLL.GetLatency() : 0;
+    }
 
     [[nodiscard]] std::string GetType() const override { return "reverb_ir"; }
     [[nodiscard]] std::string GetCategory() const override { return "reverb"; }
@@ -257,7 +279,17 @@ namespace guitarfx
     {
       IRWavData data;
       if (!irwav::LoadWavFile(path, data))
+      {
+        std::cerr << "[IRReverbEffect] Failed to parse WAV data from: " << path << "\n";
         return false;
+      }
+
+      if (data.channels < 2)
+      {
+        std::cerr << "[IRReverbEffect] ERROR: IR file has insufficient channels (need >=2, got " 
+                  << data.channels << "): " << path << "\n";
+        return false;
+      }
 
       mIRSampleRate = data.sampleRate;
       mIRChannels = data.channels;
@@ -266,6 +298,11 @@ namespace guitarfx
       {
         irwav::SplitToQuad(data, mImpulseLL, mImpulseLR, mImpulseRL, mImpulseRR);
         mHasTrueStereo = !mImpulseLL.empty() && !mImpulseLR.empty() && !mImpulseRL.empty() && !mImpulseRR.empty();
+        
+        if (!mHasTrueStereo)
+        {
+          std::cerr << "[IRReverbEffect] WARNING: 4-channel IR file has empty channels: " << path << "\n";
+        }
       }
       else
       {
@@ -275,7 +312,13 @@ namespace guitarfx
         mHasTrueStereo = false;
       }
 
-      return !mImpulseLL.empty() && !mImpulseRR.empty();
+      if (mImpulseLL.empty() || mImpulseRR.empty())
+      {
+        std::cerr << "[IRReverbEffect] ERROR: IR file missing required stereo channels: " << path << "\n";
+        return false;
+      }
+
+      return true;
     }
 
     bool InitializeConvolvers()

@@ -46,6 +46,9 @@ namespace guitarfx
       const float center = 700.0f;
       const float range = 1200.0f * depth;
 
+      float prevFreq = -1.0f;
+      float cachedCoeff = 0.0f;
+
       for (int i = 0; i < numSamples; ++i)
       {
         const float inL = inputs[0] ? inputs[0][i] : 0.0f;
@@ -53,15 +56,21 @@ namespace guitarfx
 
         const float lfo = static_cast<float>(0.5 * (1.0 + std::sin(mPhase)));
         const float freq = std::clamp(center + range * lfo, 200.0f, 3500.0f);
-        const float a = ComputeAllpassCoeff(freq);
+
+        // Cache all-pass coefficient: only recompute when frequency changes significantly
+        if (std::abs(freq - prevFreq) > 1.0f)
+        {
+          cachedCoeff = ComputeAllpassCoeff(freq);
+          prevFreq = freq;
+        }
 
         float xL = inL + mFeedbackL * feedback;
         float xR = inR + mFeedbackR * feedback;
 
         for (std::size_t stage = 0; stage < kStages; ++stage)
         {
-          xL = ProcessAllpass(xL, mStateL[stage], a);
-          xR = ProcessAllpass(xR, mStateR[stage], a);
+          xL = ProcessAllpass(xL, mStateL[stage], cachedCoeff);
+          xR = ProcessAllpass(xR, mStateR[stage], cachedCoeff);
         }
 
         mFeedbackL = xL;
@@ -76,8 +85,9 @@ namespace guitarfx
           outputs[1][i] = outR;
 
         mPhase += phaseInc;
+        // Wrap phase to prevent floating-point precision drift over long runtimes
         if (mPhase >= 2.0 * kPi)
-          mPhase -= 2.0 * kPi;
+          mPhase = std::fmod(mPhase, 2.0 * kPi);
       }
     }
 

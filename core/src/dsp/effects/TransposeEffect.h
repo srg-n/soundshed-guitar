@@ -125,6 +125,11 @@ namespace guitarfx
     [[nodiscard]] std::string GetType() const override { return "transpose"; }
     [[nodiscard]] std::string GetCategory() const override { return "modulation"; }
 
+    [[nodiscard]] int GetLatencySamples() const override
+    {
+      return mConfigured ? static_cast<int>(mStretch.inputLatency()) : 0;
+    }
+
   private:
     void ApplyTranspose()
     {

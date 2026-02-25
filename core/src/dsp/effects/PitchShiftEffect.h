@@ -143,6 +143,12 @@ namespace guitarfx
     [[nodiscard]] std::string GetType() const override { return "pitch_shift"; }
     [[nodiscard]] std::string GetCategory() const override { return "modulation"; }
 
+    [[nodiscard]] int GetLatencySamples() const override
+    {
+      // Signalsmith Stretch introduces latency (typically ~1024 samples); report it
+      return mConfigured ? static_cast<int>(mStretch.inputLatency()) : 0;
+    }
+
   private:
     double GetMappedSemitones() const
     {

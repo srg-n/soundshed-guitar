@@ -59,8 +59,9 @@ namespace guitarfx
           outputs[1][i] = outR;
 
         mPhase += phaseInc;
+        // Wrap phase to prevent floating-point precision drift over long runtimes
         if (mPhase >= 2.0 * kPi)
-          mPhase -= 2.0 * kPi;
+          mPhase = std::fmod(mPhase, 2.0 * kPi);
       }
     }
 

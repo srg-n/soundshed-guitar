@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cmath>
 #include <filesystem>
+#include <iostream>
 #include <vector>
 
 namespace guitarfx
@@ -306,11 +307,20 @@ namespace guitarfx
 
     bool LoadResource(const std::filesystem::path &resourcePath) override
     {
+      if (!std::filesystem::exists(resourcePath))
+      {
+        std::cerr << "[IRCabEffect] ERROR: IR file not found: " << resourcePath << "\n";
+        return false;
+      }
+
       CapturePreviousConvolvers();
 
       // Single-resource load path (legacy): load slot A and clear slot B.
       if (!LoadWavFile(resourcePath))
+      {
+        std::cerr << "[IRCabEffect] ERROR: Failed to load/parse IR WAV file: " << resourcePath << "\n";
         return false;
+      }
 
       mIRPath = resourcePath;
       mImpulseBL.clear();
@@ -320,28 +330,46 @@ namespace guitarfx
       mConvolverBR.Reset();
       ApplyPendingQuality();
       const bool loaded = InitializeConvolverA();
-      if (loaded)
+      if (!loaded)
       {
-        BeginResourceTransition();
+        std::cerr << "[IRCabEffect] ERROR: Failed to initialize convolver for: " << resourcePath << "\n";
+        return false;
       }
-      return loaded;
+
+      BeginResourceTransition();
+      return true;
     }
 
     bool LoadResources(const std::vector<ResourceRef> &refs,
                       const std::vector<std::filesystem::path> &paths) override
     {
       if (paths.empty())
+      {
+        std::cerr << "[IRCabEffect] ERROR: LoadResources called with empty paths\n";
         return false;
+      }
+
+      if (!std::filesystem::exists(paths.front()))
+      {
+        std::cerr << "[IRCabEffect] ERROR: IR file not found: " << paths.front() << "\n";
+        return false;
+      }
 
       CapturePreviousConvolvers();
 
       if (!LoadWavFile(paths.front()))
+      {
+        std::cerr << "[IRCabEffect] ERROR: Failed to load IR A: " << paths.front() << "\n";
         return false;
+      }
 
       mIRPath = paths.front();
       ApplyPendingQuality();
       if (!InitializeConvolverA())
+      {
+        std::cerr << "[IRCabEffect] ERROR: Failed to initialize convolver A for: " << paths.front() << "\n";
         return false;
+      }
 
       mImpulseBL.clear();
       mImpulseBR.clear();
@@ -350,7 +378,11 @@ namespace guitarfx
       mConvolverBR.Reset();
       if (paths.size() >= 2)
       {
-        if (LoadWavFileInto(paths[1], mImpulseBL, mImpulseBR, mIRSampleRateB, mIsStereoB))
+        if (!std::filesystem::exists(paths[1]))
+        {
+          std::cerr << "[IRCabEffect] WARNING: IR file B not found: " << paths[1] << "\n";
+        }
+        else if (LoadWavFileInto(paths[1], mImpulseBL, mImpulseBR, mIRSampleRateB, mIsStereoB))
         {
           mIRPathB = paths[1];
           if (refs.size() > 1)
@@ -361,7 +393,14 @@ namespace guitarfx
               mIRBlend = std::clamp(*ref.parameterValue, 0.0, 1.0);
             }
           }
-          InitializeConvolverB();
+          if (!InitializeConvolverB())
+          {
+            std::cerr << "[IRCabEffect] WARNING: Failed to initialize convolver B for: " << paths[1] << "\n";
+          }
+        }
+        else
+        {
+          std::cerr << "[IRCabEffect] WARNING: Failed to load IR B: " << paths[1] << "\n";
         }
       }
 
@@ -392,6 +431,12 @@ namespace guitarfx
       return mConvolverL.IsInitialized() && (!mIsStereo || mConvolverR.IsInitialized());
     }
     [[nodiscard]] std::filesystem::path GetResourcePath() const override { return mIRPath; }
+
+    [[nodiscard]] int GetLatencySamples() const override
+    {
+      // Report the convolver's algorithmic latency (partition size for FFT convolution, 0 for direct)
+      return mConvolverL.IsInitialized() ? mConvolverL.GetLatency() : 0;
+    }
 
     [[nodiscard]] std::string GetType() const override { return "cab_ir"; }
     [[nodiscard]] std::string GetCategory() const override { return "cab"; }

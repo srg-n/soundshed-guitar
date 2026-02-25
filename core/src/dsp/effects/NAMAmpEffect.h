@@ -192,9 +192,18 @@ namespace guitarfx
     {
       try
       {
+        if (!std::filesystem::exists(resourcePath))
+        {
+          std::cerr << "[NAMAmpEffect] ERROR: Model file not found: " << resourcePath << "\n";
+          return false;
+        }
+
         auto model = nam::get_dsp(resourcePath);
         if (!model)
+        {
+          std::cerr << "[NAMAmpEffect] ERROR: Failed to parse NAM model file: " << resourcePath << "\n";
           return false;
+        }
 
         model->Reset(mSampleRate, mMaxBlockSize);
         mModel = std::move(model);
@@ -210,8 +219,14 @@ namespace guitarfx
         }
         return true;
       }
+      catch (const std::exception &e)
+      {
+        std::cerr << "[NAMAmpEffect] ERROR: Exception loading model " << resourcePath << ": " << e.what() << "\n";
+        return false;
+      }
       catch (...)
       {
+        std::cerr << "[NAMAmpEffect] ERROR: Unknown exception loading model " << resourcePath << "\n";
         return false;
       }
     }
