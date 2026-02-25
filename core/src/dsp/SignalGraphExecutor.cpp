@@ -95,6 +95,7 @@ namespace guitarfx
     mNodeStates = std::move(other.mNodeStates);
     mExecutionOrder = std::move(other.mExecutionOrder);
     mIncomingEdgeCount = std::move(other.mIncomingEdgeCount);
+    mIncomingEdgesByNode = std::move(other.mIncomingEdgesByNode);
     mSampleRate = other.mSampleRate;
     mMaxBlockSize = other.mMaxBlockSize;
     mInputTrim = other.mInputTrim;
@@ -160,14 +161,18 @@ namespace guitarfx
       mGraph.nodes.push_back(outputNode);
     }
 
-    // Track incoming edge counts (used for multi-input summing)
+    // Track incoming edge counts and precompute per-node incoming edge index lists
+    mIncomingEdgesByNode.clear();
     for (const auto &node : mGraph.nodes)
     {
       mIncomingEdgeCount[node.id] = 0;
+      mIncomingEdgesByNode[node.id] = {};
     }
-    for (const auto &edge : mGraph.edges)
+    for (std::size_t i = 0; i < mGraph.edges.size(); ++i)
     {
+      const auto &edge = mGraph.edges[i];
       mIncomingEdgeCount[edge.to] += 1;
+      mIncomingEdgesByNode[edge.to].push_back(i);
     }
 
     BuildExecutionOrder();
@@ -471,17 +476,18 @@ namespace guitarfx
       if (!state)
         continue;
 
-      const auto *node = mGraph.FindNode(nodeId);
-      if (!node)
-        continue;
+      // Use cached type from NodeState — avoids O(N) FindNode scan in hot path
+      const std::string &nodeType = state->type;
 
       // Skip canonical input routing node (already fed from host input)
-      if (node->type == kNodeTypeInput)
+      if (nodeType == kNodeTypeInput)
         continue;
 
-      // Gather inputs from incoming edges
-      const int incomingCount = mIncomingEdgeCount.count(nodeId) ? mIncomingEdgeCount[nodeId] : 0;
-      const bool isMixer = (node->type == kNodeTypeMixer);
+      // Gather inputs from incoming edges using precomputed index list
+      const auto inEdgesIt = mIncomingEdgesByNode.find(nodeId);
+      const int incomingCount = (inEdgesIt != mIncomingEdgesByNode.end())
+        ? static_cast<int>(inEdgesIt->second.size()) : 0;
+      const bool isMixer = (nodeType == kNodeTypeMixer);
       const bool shouldAccumulate = isMixer || (incomingCount > 1);
 
       // Get MixerEffect if this is a mixer node
@@ -491,10 +497,11 @@ namespace guitarfx
         mixerEffect = dynamic_cast<MixerEffect *>(state->processor.get());
       }
 
-      for (const auto &edge : mGraph.edges)
+      if (inEdgesIt != mIncomingEdgesByNode.end())
       {
-        if (edge.to == nodeId)
+        for (std::size_t edgeIdx : inEdgesIt->second)
         {
+          const auto &edge = mGraph.edges[edgeIdx];
           auto *sourceState = FindNodeState(edge.from);
           if (sourceState && sourceState->hasInput)
           {
@@ -515,10 +522,8 @@ namespace guitarfx
               const float level = mixerEffect->GetInputLevel(inputPort);
               const float panL = mixerEffect->GetInputPanL(inputPort);
               const float panR = mixerEffect->GetInputPanR(inputPort);
-              const size_t delaySamples = mixerEffect->GetInputDelaySamples(inputPort);
 
-              // For now, apply level and pan without delay (delay requires buffering)
-              // TODO: Implement delay line in executor or use MixerEffect::ProcessInput
+              // Apply level and pan
               const float gainL = edgeGain * level * panL;
               const float gainR = edgeGain * level * panR;
 
@@ -555,11 +560,11 @@ namespace guitarfx
       // Process the node
       if (state->processor && state->hasInput)
       {
-        if (node->type == kNodeTypeSplitter || node->type == kNodeTypeOutput)
+        if (nodeType == kNodeTypeSplitter || nodeType == kNodeTypeOutput)
         {
           // These nodes just pass through (routing handled above)
         }
-        else if (node->type == kNodeTypeMixer)
+        else if (nodeType == kNodeTypeMixer)
         {
           // Mixer: apply master gain via Process()
           if (state->processor->IsEnabled())
@@ -607,8 +612,7 @@ namespace guitarfx
 
     for (const auto &[id, state] : mNodeStates)
     {
-      const auto *node = mGraph.FindNode(id);
-      if (node && (node->type == kNodeTypeOutput || node->id == "__output__") && state.hasInput)
+      if ((state.type == kNodeTypeOutput || id == "__output__") && state.hasInput)
       {
         if (outputs[0])
         {

@@ -23,6 +23,7 @@ namespace guitarfx
     void Reset() override
     {
       mEnvelope = 0.0f;
+      mHoldSamplesRemaining = 0;
     }
 
     void Process(float **inputs, float **outputs, int numSamples) override
@@ -39,6 +40,7 @@ namespace guitarfx
       const float threshold = static_cast<float>(std::pow(10.0, mThresholdDb / 20.0));
       const float attackCoef = static_cast<float>(std::exp(-1.0 / (mSampleRate * mAttackMs * 0.001)));
       const float releaseCoef = static_cast<float>(std::exp(-1.0 / (mSampleRate * mReleaseMs * 0.001)));
+      const int holdSamples = static_cast<int>(mSampleRate * mHoldMs * 0.001);
 
       for (int i = 0; i < numSamples; ++i)
       {
@@ -55,8 +57,22 @@ namespace guitarfx
         else
           mEnvelope = releaseCoef * mEnvelope + (1.0f - releaseCoef) * peak;
 
-        // Gate
-        float gain = (mEnvelope > threshold) ? 1.0f : 0.0f;
+        // Hold: when signal is above threshold, reset hold counter and keep gate open
+        float gain;
+        if (mEnvelope > threshold)
+        {
+          mHoldSamplesRemaining = holdSamples;
+          gain = 1.0f;
+        }
+        else if (mHoldSamplesRemaining > 0)
+        {
+          --mHoldSamplesRemaining;
+          gain = 1.0f;
+        }
+        else
+        {
+          gain = 0.0f;
+        }
 
         // Apply gain
         for (int ch = 0; ch < 2; ++ch)
@@ -105,6 +121,7 @@ namespace guitarfx
     double mHoldMs = 50.0;
     double mReleaseMs = 50.0;
     float mEnvelope = 0.0f;
+    int mHoldSamplesRemaining = 0;
   };
 
   inline void RegisterNoiseGateEffect()

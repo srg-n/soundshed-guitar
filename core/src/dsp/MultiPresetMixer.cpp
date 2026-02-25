@@ -963,7 +963,6 @@ namespace guitarfx
       if (peak > 0.95f)
       {
         const float attenuation = 0.95f / peak;
-        mOutputAutoLevelGain = std::min(mOutputAutoLevelGain, attenuation);
         mOutputAutoLevelGain = mOutputAutoLevelGain * 0.99f + attenuation * 0.01f;
 
         if (outputs[0])

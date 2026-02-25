@@ -35,6 +35,9 @@ namespace guitarfx
 
     void Process(float **inputs, float **outputs, int numSamples) override
     {
+      if (mBufferSize == 0)
+        return;
+
       const double phaseInc = 2.0 * kPi * mRateHz / std::max(1.0, mSampleRate);
 
       for (int i = 0; i < numSamples; ++i)
@@ -124,7 +127,7 @@ namespace guitarfx
     {
       const float delaySamples = delayMs * static_cast<float>(mSampleRate) / 1000.0f;
       float readIndex = static_cast<float>(mWriteIndex) - delaySamples;
-      while (readIndex < 0.0f)
+      if (readIndex < 0.0f)
         readIndex += static_cast<float>(mBufferSize);
 
       const int index0 = static_cast<int>(readIndex);

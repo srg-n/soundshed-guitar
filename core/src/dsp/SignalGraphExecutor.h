@@ -105,6 +105,8 @@ namespace guitarfx
     std::map<std::string, NodeState> mNodeStates;
     std::vector<std::string> mExecutionOrder;
     std::map<std::string, int> mIncomingEdgeCount;
+    // Precomputed per-node incoming edge index lists (into mGraph.edges) for O(1) lookup in Process()
+    std::map<std::string, std::vector<std::size_t>> mIncomingEdgesByNode;
 
     double mSampleRate = 44100.0;
     int mMaxBlockSize = 512;
