@@ -57,7 +57,7 @@ if(GUITARFX_CORE_FETCH_DEPS AND NOT TARGET NeuralAmpModelerCore AND NOT TARGET n
     set(NAM_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(NeuralAmpModelerCore
         GIT_REPOSITORY https://github.com/sdatkinson/NeuralAmpModelerCore.git
-        GIT_TAG main
+        GIT_TAG v0.4.0.rc3
         CMAKE_ARGS -DNAM_BUILD_TOOLS=OFF -DNAM_BUILD_TESTS=OFF)
     FetchContent_MakeAvailable(NeuralAmpModelerCore)
     FetchContent_GetProperties(NeuralAmpModelerCore SOURCE_DIR NAM_SOURCE_DIR BINARY_DIR NAM_BINARY_DIR)

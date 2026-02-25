@@ -253,7 +253,6 @@ target_link_libraries(SharedCode
     INTERFACE
     SoundshedGuitarCore
     nlohmann_json::nlohmann_json
-    $<$<TARGET_EXISTS:NeuralAmpModelerCore>:NeuralAmpModelerCore>
     juce_audio_utils
     juce_audio_processors
     juce_dsp
