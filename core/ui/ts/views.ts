@@ -806,7 +806,7 @@ function updateInputVuMeter(levels: import("./types.js").SignalLevelMetrics | nu
 
   if (!levels || !isFinite(levels.peakDbfs)) {
     vuSegments.forEach((s) => s.classList.remove("active"));
-    if (vuDbValue) vuDbValue.textContent = "—";
+    //if (vuDbValue) vuDbValue.textContent = "—";
     if (vuPeakHold) vuPeakHold.classList.remove("visible");
     return;
   }
@@ -820,9 +820,9 @@ function updateInputVuMeter(levels: import("./types.js").SignalLevelMetrics | nu
   });
 
   // dB readout
-  if (vuDbValue) {
+  /*if (vuDbValue) {
     vuDbValue.textContent = `${dbfs.toFixed(1)}`;
-  }
+  }*/
 
   // Peak-hold tick: update if new peak is higher
   if (dbfs >= vuPeakHoldDbfs) {
@@ -834,14 +834,12 @@ function updateInputVuMeter(levels: import("./types.js").SignalLevelMetrics | nu
       if (vuPeakHold) vuPeakHold.classList.remove("visible");
     }, 2000);
 
-    // Position: each segment is 5px tall + 2px gap = 7px per segment.
-    // The container is flex column-reverse so segment 0 (top of DOM = highest dB) is at the top.
-    // Find the highest lit segment index and position the tick above it.
-    const segHeight = 7; // px per segment (5 + 2 gap)
-    const litCount = vuSegments.filter((s) => s.classList.contains("active")).length;
-    if (litCount > 0 && vuPeakHold) {
-      const bottomOffset = (litCount - 1) * segHeight + 5; // top of that segment
-      vuPeakHold.style.bottom = `${bottomOffset + 20}px`; // +20 accounts for db label
+    // Position peak-hold tick at the top of the topmost lit segment.
+    // With top-to-bottom DOM order (red at top), firstLitIdx is the loudest lit segment.
+    const segHeight = 7; // px per segment (5px height + 2px gap)
+    const firstLitIdx = vuSegments.findIndex((s) => s.classList.contains("active"));
+    if (firstLitIdx >= 0 && vuPeakHold) {
+      vuPeakHold.style.top = `${firstLitIdx * segHeight}px`;
       vuPeakHold.classList.add("visible");
     }
   }

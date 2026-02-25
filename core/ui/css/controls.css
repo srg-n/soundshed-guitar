@@ -745,13 +745,17 @@
   align-items: center;
   gap: 3px;
   position: relative;
+  width: 14px;
+  flex-shrink: 0;
+  margin-top:8px;
 }
 
 .vu-segments {
   display: flex;
-  flex-direction: column-reverse; /* bottom = quiet, top = loud */
+  flex-direction: column; /* top = loud (red), bottom = quiet (green) */
   gap: 2px;
   width: 14px;
+  position: relative;
 }
 
 .vu-seg {
@@ -767,7 +771,7 @@
 .vu-seg.active.vu-seg-yellow { background: #f0c040; box-shadow: 0 0 4px rgba(240,192,64,0.6); }
 .vu-seg.active.vu-seg-red    { background: #f05050; box-shadow: 0 0 4px rgba(240,80,80,0.7); }
 
-/* Peak-hold tick */
+/* Peak-hold tick — positioned inside .vu-segments (position: relative) */
 .vu-peak-hold {
   position: absolute;
   left: 0;
@@ -778,6 +782,7 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.4s;
+  z-index: 1;
 }
 .vu-peak-hold.visible {
   opacity: 0.85;
@@ -785,8 +790,5 @@
 
 /* dB readout below segments */
 .vu-db-value {
-  font-size: 9px;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-tertiary);
-  letter-spacing: 0.2px;
+  display: none;
 }
