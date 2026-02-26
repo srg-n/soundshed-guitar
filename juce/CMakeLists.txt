@@ -272,11 +272,29 @@ target_link_libraries("${PROJECT_NAME}" PRIVATE SharedCode)
 # into the Standalone artefact directory after every build.
 set(_UI_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../core/ui")
 
+# ── Build TypeScript UI bundle before copying resources ──────────────────
+# Runs "npm run build" in core/ui so dist/ is always fresh.
+find_program(_NPM_EXECUTABLE npm)
+if(_NPM_EXECUTABLE)
+    add_custom_target(SoundshedBuildTypeScript
+        COMMAND "${_NPM_EXECUTABLE}" run build
+        WORKING_DIRECTORY "${_UI_SRC_DIR}"
+        COMMENT "Building TypeScript UI bundle (core/ui)"
+    )
+else()
+    message(WARNING "npm not found – TypeScript UI bundle will not be rebuilt automatically")
+endif()
+
 # Helper: create a post-build step that copies the runtime UI bundle for a
 # given JUCE format target.
 function(soundshed_copy_ui_resources FORMAT_TARGET)
     if(NOT TARGET ${FORMAT_TARGET})
         return()
+    endif()
+
+    # Ensure TypeScript is compiled before this target links
+    if(TARGET SoundshedBuildTypeScript)
+        add_dependencies(${FORMAT_TARGET} SoundshedBuildTypeScript)
     endif()
 
     if(APPLE)
@@ -295,7 +313,7 @@ function(soundshed_copy_ui_resources FORMAT_TARGET)
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${_UI_SRC_DIR}/data"      "${_dst_base}/data"
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${_UI_SRC_DIR}/assets"    "${_dst_base}/assets"
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${_UI_SRC_DIR}/metronome" "${_dst_base}/metronome"
-        COMMAND ${CMAKE_COMMAND} -E copy_directory "${_UI_SRC_DIR}/demo" "${_dst_base}/demo"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${_UI_SRC_DIR}/demo"      "${_dst_base}/demo"
     )
 endfunction()
 

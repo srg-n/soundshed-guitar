@@ -443,10 +443,32 @@
 }
 
 .riff-icon-btn {
-  min-width: 36px;
-  padding: 6px 10px;
+  min-width: 32px;
+  padding: 5px 8px;
   font-size: 13px;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.riff-icon-btn svg {
+  display: block;
+  pointer-events: none;
+}
+
+.riff-fav-active {
+  color: var(--color-primary);
+}
+
+.riff-used-active {
+  color: var(--color-primary);
+  opacity: 0.75;
+}
+
+.riff-delete-btn:hover {
+  color: var(--status-error-text);
+  border-color: var(--status-error-border);
 }
 
 .riff-record-btn.recording {

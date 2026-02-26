@@ -258,7 +258,7 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     resourceType: "ir",
     parameters: [
       { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "amount" },
-      { key: "irBlend", name: "IR Blend", default: 0, min: 0, max: 1, unit: "amount" },
+      { key: "irBlend", name: "IR Blend!!", default: 0, min: 0, max: 1, unit: "blend" },
       { key: "lowCutHz", name: "Low Cut", default: 20, min: 20, max: 1000, unit: "Hz" },
       { key: "highCutHz", name: "High Cut", default: 20000, min: 1000, max: 20000, unit: "Hz" },
       { key: "slotAGain", name: "IR A Level", default: 0, min: -24, max: 24, unit: "dB", advanced: true },

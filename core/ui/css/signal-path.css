@@ -1522,6 +1522,60 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Blend A/B range slider */
+.node-param-blend-group {
+  align-items: center;
+}
+
+.blend-slider-container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 90px;
+  padding: 0 2px;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.blend-endpoint-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-primary, #50b878);
+  min-width: 10px;
+  text-align: center;
+  user-select: none;
+}
+
+.node-param-blend-slider {
+  flex: 1;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  outline: none;
+  cursor: pointer;
+  margin: 4px 0;
+}
+
+.node-param-blend-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent-primary, #50b878);
+  cursor: pointer;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.node-param-blend-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent-primary, #50b878);
+  cursor: pointer;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
 .node-param-toggle {
   display: flex;
   flex-direction: column;

@@ -1246,6 +1246,31 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
       `;
     }
 
+    if (unit === "blend") {
+      const blendLabel = value <= 0.01 ? "A" : value >= 0.99 ? "B" : `${Math.round(value * 100)}%`;
+      return `
+        <div class="node-param-group node-param-blend-group">
+          <span class="node-param-label">${label}</span>
+          <div class="blend-slider-container">
+            <span class="blend-endpoint-label">A</span>
+            <input
+              type="range"
+              class="node-param-blend-slider"
+              data-node-id="${node.id}"
+              data-param-key="${key}"
+              min="${min}"
+              max="${max}"
+              step="0.01"
+              value="${value}"
+              data-default="${defaultValue}"
+            >
+            <span class="blend-endpoint-label">B</span>
+          </div>
+          <span class="node-param-value">${blendLabel}</span>
+        </div>
+      `;
+    }
+
     return `
       <div class="node-param-group">
         <span class="node-param-label">${label}</span>
@@ -1805,6 +1830,26 @@ function bindNodeParamControls(node: GraphNode, preset: Preset): void {
               valueEl.textContent = value.toFixed(2);
             }
           }
+        }
+      }
+    });
+  });
+
+  // Bind blend slider inputs (irBlend-style A/B range controls)
+  const blendSliders = nodeParamsPanelElement?.querySelectorAll(".node-param-blend-slider");
+  blendSliders?.forEach((sliderEl) => {
+    const input = sliderEl as HTMLInputElement;
+    input.addEventListener("input", () => {
+      const nodeId = input.dataset.nodeId;
+      const paramKey = input.dataset.paramKey;
+      if (nodeId && paramKey) {
+        const value = parseFloat(input.value);
+        node.params[paramKey] = value;
+        sendSignalPathNodeParamUpdate(nodeId, paramKey, value);
+
+        const valueEl = input.closest(".node-param-blend-group")?.querySelector(".node-param-value") as HTMLElement | null;
+        if (valueEl) {
+          valueEl.textContent = value <= 0.01 ? "A" : value >= 0.99 ? "B" : `${Math.round(value * 100)}%`;
         }
       }
     });

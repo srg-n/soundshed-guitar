@@ -1,4 +1,5 @@
 import { armRiffCapture, deleteRiff, getRiffLibrary, importRiffWav, loadRiffTakeForEdit, markRiffUsed, previewCapturedRiffRange, previewRiffTake, saveRiffTake, setRiffFavorite, setRiffLibraryPath, startRiffCapture, stopPreviewPlayback, stopRiffCapture, trimCapturedRiff } from "./bridge.js";
+import { showConfirm } from "./dialogs.js";
 import { appendLog } from "./logging.js";
 import { showNotification } from "./notifications.js";
 import { importPackWithConfirmation } from "./presets.js";
@@ -1165,8 +1166,7 @@ function bindRiffLibraryActions(): void {
         const riffId = usedButton.dataset.riffId ?? "";
         const currentlyUsed = usedButton.dataset.used === "true";
         if (riffId) {
-          const songTitle = currentlyUsed ? "" : (prompt("Song title (optional)", "") ?? "");
-          markRiffUsed(riffId, !currentlyUsed, songTitle);
+          markRiffUsed(riffId, !currentlyUsed, "");
         }
         return;
       }
@@ -1174,8 +1174,11 @@ function bindRiffLibraryActions(): void {
       const deleteButton = target.closest<HTMLButtonElement>(".riff-delete-btn");
       if (deleteButton) {
         const riffId = deleteButton.dataset.riffId ?? "";
+        const riffTitle = (uiState.riffLibrary?.riffs ?? []).find((r) => r.id === riffId)?.title ?? riffId;
         if (riffId) {
-          deleteRiff(riffId);
+          void showConfirm(`Delete "${riffTitle}"? This cannot be undone.`, "Delete riff").then((confirmed) => {
+            if (confirmed) deleteRiff(riffId);
+          });
         }
       }
     });
@@ -1219,7 +1222,7 @@ export function renderRiffLibraryPanel(): void {
         <div class="equipment-library-item riff-library-item">
           <div class="equipment-library-item-main">
             <div class="equipment-library-item-title">
-              ${riff.favorite ? "★" : "☆"} ${riff.title}
+              ${riff.title}
             </div>
             <div class="equipment-library-item-meta">
               <span>Categories: ${categoriesText}</span>
@@ -1230,11 +1233,11 @@ export function renderRiffLibraryPanel(): void {
             <div class="equipment-library-item-path" title="${take?.filePath ?? ""}">${takeSummary}</div>
           </div>
           <div class="equipment-library-item-actions riff-library-actions">
-            <button class="equipment-library-browse riff-preview-btn riff-icon-btn" data-take-id="${take?.id ?? ""}" ${take ? "" : "disabled"}>▶</button>
-            <button class="equipment-library-browse riff-edit-btn" data-riff-id="${riff.id}" data-take-id="${take?.id ?? ""}">Edit</button>
-            <button class="equipment-library-browse riff-favorite-btn" data-riff-id="${riff.id}" data-favorite="${riff.favorite ? "true" : "false"}">${riff.favorite ? "Unfavorite" : "Favorite"}</button>
-            <button class="equipment-library-browse riff-used-btn" data-riff-id="${riff.id}" data-used="${riff.used ? "true" : "false"}">${riff.used ? "Mark Unused" : "Mark Used"}</button>
-            <button class="equipment-library-browse riff-delete-btn" data-riff-id="${riff.id}">Delete</button>
+            <button class="equipment-library-browse riff-preview-btn riff-icon-btn" data-take-id="${take?.id ?? ""}" ${take ? "" : "disabled"} title="Preview" aria-label="Preview">▶</button>
+            <button class="equipment-library-browse riff-icon-btn riff-edit-btn" data-riff-id="${riff.id}" data-take-id="${take?.id ?? ""}" title="Edit" aria-label="Edit"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+            <button class="equipment-library-browse riff-icon-btn riff-favorite-btn${riff.favorite ? " riff-fav-active" : ""}" data-riff-id="${riff.id}" data-favorite="${riff.favorite ? "true" : "false"}" title="${riff.favorite ? "Remove from favourites" : "Add to favourites"}" aria-label="${riff.favorite ? "Remove from favourites" : "Add to favourites"}"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="${riff.favorite ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+            <button class="equipment-library-browse riff-icon-btn riff-used-btn${riff.used ? " riff-used-active" : ""}" data-riff-id="${riff.id}" data-used="${riff.used ? "true" : "false"}" title="${riff.used ? "Mark as unused" : "Mark as used"}" aria-label="${riff.used ? "Mark as unused" : "Mark as used"}"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${riff.used ? "<circle cx=\"12\" cy=\"12\" r=\"10\"/><line x1=\"15\" y1=\"9\" x2=\"9\" y2=\"15\"/><line x1=\"9\" y1=\"9\" x2=\"15\" y2=\"15\"/>" : "<circle cx=\"12\" cy=\"12\" r=\"10\"/><polyline points=\"9 12 11 14 15 10\"/>"}</svg></button>
+            <button class="equipment-library-browse riff-icon-btn riff-delete-btn" data-riff-id="${riff.id}" title="Delete" aria-label="Delete"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
           </div>
         </div>
       `;

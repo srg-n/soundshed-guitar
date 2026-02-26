@@ -2,6 +2,20 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
+			"label": "Build TypeScript",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"build"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/core/ui"
+			},
+			"group": "build",
+			"problemMatcher": "$tsc"
+		},
+		{
 			"label": "Build SoundshedGuitar Debug",
 			"type": "shell",
 			"command": "cmake",
@@ -199,6 +213,10 @@
 		},
 		{
 			"label": "Build SoundshedGuitar (JUCE) Standalone Release",
+			"dependsOn": [
+				"Build TypeScript"
+			],
+			"dependsOrder": "sequence",
 			"type": "shell",
 			"command": "cmake",
 			"args": [

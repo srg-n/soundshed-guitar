@@ -341,7 +341,7 @@ namespace guitarfx
     }
 
     bool LoadResources(const std::vector<ResourceRef> &refs,
-                      const std::vector<std::filesystem::path> &paths) override
+                       const std::vector<std::filesystem::path> &paths) override
     {
       if (paths.empty())
       {
@@ -577,10 +577,10 @@ namespace guitarfx
     }
 
     bool LoadWavFileInto(const std::filesystem::path &path,
-                        std::vector<float> &outImpulseL,
-                        std::vector<float> &outImpulseR,
-                        double &outSampleRate,
-                        bool &outIsStereo)
+                         std::vector<float> &outImpulseL,
+                         std::vector<float> &outImpulseR,
+                         double &outSampleRate,
+                         bool &outIsStereo)
     {
       IRWavData data;
       if (!irwav::LoadWavFile(path, data))
@@ -705,48 +705,48 @@ namespace guitarfx
       if (HasResource())
       {
         mPrevHasSlotA = InitializeConvolverFromImpulse(
-          mImpulseL,
-          mImpulseR,
-          mIsStereo,
-          mIRSampleRate,
-          mPrevConvolverL,
-          mPrevConvolverR);
+            mImpulseL,
+            mImpulseR,
+            mIsStereo,
+            mIRSampleRate,
+            mPrevConvolverL,
+            mPrevConvolverR);
       }
 
       if (!mImpulseBL.empty() && mConvolverBL.IsInitialized())
       {
         mPrevHasSlotB = InitializeConvolverFromImpulse(
-          mImpulseBL,
-          mImpulseBR,
-          mIsStereoB,
-          mIRSampleRateB,
-          mPrevConvolverBL,
-          mPrevConvolverBR);
+            mImpulseBL,
+            mImpulseBR,
+            mIsStereoB,
+            mIRSampleRateB,
+            mPrevConvolverBL,
+            mPrevConvolverBR);
       }
     }
 
     bool InitializeConvolverA()
     {
       return InitializeConvolverFromImpulse(
-        mImpulseL,
-        mImpulseR,
-        mIsStereo,
-        mIRSampleRate,
-        mConvolverL,
-        mConvolverR,
-        &mIRSlotEnergyA);
+          mImpulseL,
+          mImpulseR,
+          mIsStereo,
+          mIRSampleRate,
+          mConvolverL,
+          mConvolverR,
+          &mIRSlotEnergyA);
     }
 
     bool InitializeConvolverB()
     {
       return InitializeConvolverFromImpulse(
-        mImpulseBL,
-        mImpulseBR,
-        mIsStereoB,
-        mIRSampleRateB,
-        mConvolverBL,
-        mConvolverBR,
-        &mIRSlotEnergyB);
+          mImpulseBL,
+          mImpulseBR,
+          mIsStereoB,
+          mIRSampleRateB,
+          mConvolverBL,
+          mConvolverBR,
+          &mIRSlotEnergyB);
     }
 
     static double ComputeSignalEnergy(const std::vector<float> &samples)
@@ -1023,10 +1023,10 @@ namespace guitarfx
     RealtimeConvolver mPrevConvolverBL;
     RealtimeConvolver mPrevConvolverBR;
 
-    std::vector<float> mImpulseL;     // Original IR samples (left)
-    std::vector<float> mImpulseR;     // Original IR samples (right, optional)
-    std::vector<float> mImpulseBL;    // Optional second IR samples (left)
-    std::vector<float> mImpulseBR;    // Optional second IR samples (right)
+    std::vector<float> mImpulseL;  // Original IR samples (left)
+    std::vector<float> mImpulseR;  // Original IR samples (right, optional)
+    std::vector<float> mImpulseBL; // Optional second IR samples (left)
+    std::vector<float> mImpulseBR; // Optional second IR samples (right)
     std::filesystem::path mIRPath;
     std::filesystem::path mIRPathB;
     double mIRSampleRate = 48000.0;
@@ -1097,7 +1097,7 @@ namespace guitarfx
     info.resourceType = "ir"; // .wav IR files
     info.parameters = {
         {"mix", "Mix", 1.0, 0.0, 1.0, ""},
-        {"irBlend", "IR Blend", 0.0, 0.0, 1.0, ""},
+        {"irBlend", "IR Blend", 0.0, 0.0, 1.0, "blend"},
         {"lowCutHz", "Low Cut", 20.0, 20.0, 1000.0, "Hz"},
         {"highCutHz", "High Cut", 20000.0, 1000.0, 20000.0, "Hz"},
         {"slotAGain", "IR A Level", 0.0, -24.0, 24.0, "dB"},
@@ -1106,8 +1106,8 @@ namespace guitarfx
         {"slotBPolarity", "IR B Invert", 0.0, 0.0, 1.0, "toggle"},
         {"autoGainComp", "Auto Gain", 0.0, 0.0, 1.0, "toggle"},
         {"outputGain", "Output", 0.0, -24.0, 24.0, "dB"},
-      {"air", "Air", 0.0, 0.0, 1.0, "amount"},
-      {"airMode", "Air Mode", 0.0, 0.0, 2.0, "enum"},
+        {"air", "Air", 0.0, 0.0, 1.0, "amount"},
+        {"airMode", "Air Mode", 0.0, 0.0, 2.0, "enum"},
         {"quality", "Quality", 1.0, 0.0, 3.0, ""}}; // 0=Economy, 1=Standard, 2=High, 3=Full
 
     EffectRegistry::Instance().Register("cab_ir", info, []()

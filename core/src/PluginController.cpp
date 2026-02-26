@@ -4507,14 +4507,16 @@ void PluginController::HandleDeleteRiffRequest(const nlohmann::json& payload)
     if (riffId.empty())
         return;
 
-    std::lock_guard<std::mutex> riffLock(mRiffLibraryMutex);
-    if (!mRiffLibraryIndex.is_object() || !mRiffLibraryIndex.contains("riffs") || !mRiffLibraryIndex["riffs"].is_array())
-        return;
+    {
+        std::lock_guard<std::mutex> riffLock(mRiffLibraryMutex);
+        if (!mRiffLibraryIndex.is_object() || !mRiffLibraryIndex.contains("riffs") || !mRiffLibraryIndex["riffs"].is_array())
+            return;
 
-    auto& riffs = mRiffLibraryIndex["riffs"];
-    riffs.erase(std::remove_if(riffs.begin(), riffs.end(),
-        [&](const nlohmann::json& riff) { return riff.value("id", std::string{}) == riffId; }), riffs.end());
-    SaveRiffLibraryIndex(mRiffLibraryIndex);
+        auto& riffs = mRiffLibraryIndex["riffs"];
+        riffs.erase(std::remove_if(riffs.begin(), riffs.end(),
+            [&](const nlohmann::json& riff) { return riff.value("id", std::string{}) == riffId; }), riffs.end());
+        SaveRiffLibraryIndex(mRiffLibraryIndex);
+    }
     SendRiffLibraryStateToUI();
 }
 
@@ -4525,20 +4527,22 @@ void PluginController::HandleSetRiffFavoriteRequest(const nlohmann::json& payloa
         return;
 
     const bool favorite = payload.value("favorite", false);
-    std::lock_guard<std::mutex> riffLock(mRiffLibraryMutex);
-    if (!mRiffLibraryIndex.contains("riffs") || !mRiffLibraryIndex["riffs"].is_array())
-        return;
-
-    for (auto& riff : mRiffLibraryIndex["riffs"])
     {
-        if (!riff.is_object() || riff.value("id", std::string{}) != riffId)
-            continue;
-        riff["favorite"] = favorite;
-        riff["updatedAt"] = BuildTimestampUtcIso();
-        break;
-    }
+        std::lock_guard<std::mutex> riffLock(mRiffLibraryMutex);
+        if (!mRiffLibraryIndex.contains("riffs") || !mRiffLibraryIndex["riffs"].is_array())
+            return;
 
-    SaveRiffLibraryIndex(mRiffLibraryIndex);
+        for (auto& riff : mRiffLibraryIndex["riffs"])
+        {
+            if (!riff.is_object() || riff.value("id", std::string{}) != riffId)
+                continue;
+            riff["favorite"] = favorite;
+            riff["updatedAt"] = BuildTimestampUtcIso();
+            break;
+        }
+
+        SaveRiffLibraryIndex(mRiffLibraryIndex);
+    }
     SendRiffLibraryStateToUI();
 }
 
@@ -4550,30 +4554,32 @@ void PluginController::HandleMarkRiffUsedRequest(const nlohmann::json& payload)
 
     const bool used = payload.value("used", false);
     const std::string songTitle = payload.value("songTitle", std::string{});
-    std::lock_guard<std::mutex> riffLock(mRiffLibraryMutex);
-    if (!mRiffLibraryIndex.contains("riffs") || !mRiffLibraryIndex["riffs"].is_array())
-        return;
-
-    for (auto& riff : mRiffLibraryIndex["riffs"])
     {
-        if (!riff.is_object() || riff.value("id", std::string{}) != riffId)
-            continue;
-        riff["used"] = used;
-        if (used)
-        {
-            riff["usedSongTitle"] = songTitle;
-            riff["usedAt"] = BuildTimestampUtcIso();
-        }
-        else
-        {
-            riff.erase("usedSongTitle");
-            riff.erase("usedAt");
-        }
-        riff["updatedAt"] = BuildTimestampUtcIso();
-        break;
-    }
+        std::lock_guard<std::mutex> riffLock(mRiffLibraryMutex);
+        if (!mRiffLibraryIndex.contains("riffs") || !mRiffLibraryIndex["riffs"].is_array())
+            return;
 
-    SaveRiffLibraryIndex(mRiffLibraryIndex);
+        for (auto& riff : mRiffLibraryIndex["riffs"])
+        {
+            if (!riff.is_object() || riff.value("id", std::string{}) != riffId)
+                continue;
+            riff["used"] = used;
+            if (used)
+            {
+                riff["usedSongTitle"] = songTitle;
+                riff["usedAt"] = BuildTimestampUtcIso();
+            }
+            else
+            {
+                riff.erase("usedSongTitle");
+                riff.erase("usedAt");
+            }
+            riff["updatedAt"] = BuildTimestampUtcIso();
+            break;
+        }
+
+        SaveRiffLibraryIndex(mRiffLibraryIndex);
+    }
     SendRiffLibraryStateToUI();
 }
 
