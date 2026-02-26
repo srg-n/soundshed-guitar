@@ -106,6 +106,12 @@ function stripLegacyGlobals(preset: Preset): Preset {
   return cleaned;
 }
 
+function stripGlobalSignalChainForSave(preset: Preset): Preset {
+  const cleaned = clonePreset(preset);
+  delete (cleaned as Record<string, unknown>).globalSignalChain;
+  return cleaned;
+}
+
 function cloneDefaultGlobalSignalChain(): import("./types.js").GlobalSignalChainConfig {
   return JSON.parse(JSON.stringify(DEFAULT_GLOBAL_SIGNAL_CHAIN)) as import("./types.js").GlobalSignalChainConfig;
 }
@@ -216,6 +222,10 @@ function cleanupPresetForUi(
   if ("global" in cleaned) {
     delete (cleaned as Record<string, unknown>).global;
     removedKeys.push("global");
+  }
+  if ("globalSignalChain" in cleaned) {
+    delete (cleaned as Record<string, unknown>).globalSignalChain;
+    removedKeys.push("globalSignalChain");
   }
 
   PRESET_OPTIONAL_STRING_KEYS.forEach((key) => {
@@ -1820,7 +1830,7 @@ export function saveCurrentPreset(): void {
   const selectedFolderId = folderSelect?.value || PRESET_FOLDER_ALL_ID;
   const activePreset = getActivePresetForRender();
   const baseAttachments = buildAttachmentsFromPreset(activePreset ?? {} as Preset);
-  const includeGlobalFx = true;
+  const includeGlobalFx = false;
   const stagedPeakStr = modal?.dataset.stagedDesignedPeak;
   const stagedDesignedPeak = stagedPeakStr !== undefined ? parseFloat(stagedPeakStr) : undefined;
   let cleanedPreset: Preset | null = null;
@@ -1848,11 +1858,7 @@ export function saveCurrentPreset(): void {
       if (stagedDesignedPeak !== undefined && isFinite(stagedDesignedPeak)) {
         updatedPreset.designedPeakInputDbfs = Math.round(stagedDesignedPeak * 10) / 10;
       }
-      if (includeGlobalFx) {
-        updatedPreset.globalSignalChain = uiState.globalSignalChain;
-      } else {
-        delete (updatedPreset as Record<string, unknown>).globalSignalChain;
-      }
+      delete (updatedPreset as Record<string, unknown>).globalSignalChain;
 
       cachePresetInMemory(updatedPreset);
       // Also persist to disk via the C++ backend
@@ -1863,11 +1869,8 @@ export function saveCurrentPreset(): void {
         category: updatedPreset.category,
         description: updatedPreset.description,
         includeGlobalSignalChain: includeGlobalFx,
-        preset: updatedPreset,
+        preset: stripGlobalSignalChainForSave(updatedPreset),
       };
-      if (includeGlobalFx) {
-        savePayload.globalSignalChain = uiState.globalSignalChain;
-      }
       postMessage(savePayload);
       uiState.presetCache.set(editingPresetId, updatedPreset);
       const index = uiState.presets.findIndex((p) => p.id === editingPresetId);
@@ -1904,11 +1907,7 @@ export function saveCurrentPreset(): void {
   if (stagedDesignedPeak !== undefined && isFinite(stagedDesignedPeak)) {
     newPreset.designedPeakInputDbfs = Math.round(stagedDesignedPeak * 10) / 10;
   }
-  if (includeGlobalFx) {
-    newPreset.globalSignalChain = uiState.globalSignalChain;
-  } else {
-    delete (newPreset as Record<string, unknown>).globalSignalChain;
-  }
+  delete (newPreset as Record<string, unknown>).globalSignalChain;
 
   cachePresetInMemory(newPreset);
   // Also persist to disk via the C++ backend
@@ -1919,11 +1918,8 @@ export function saveCurrentPreset(): void {
     category: newPreset.category,
     description: newPreset.description,
     includeGlobalSignalChain: includeGlobalFx,
-    preset: newPreset,
+    preset: stripGlobalSignalChainForSave(newPreset),
   };
-  if (includeGlobalFx) {
-    savePayload.globalSignalChain = uiState.globalSignalChain;
-  }
   postMessage(savePayload);
   uiState.filteredPresets = uiState.presets.slice();
   uiState.presetCache.set(newPreset.id, newPreset);
@@ -3156,17 +3152,13 @@ export function saveOverwriteCurrentPreset(): void {
 
   // Build updated preset with current parameters from graph nodes
   const baseAttachments = buildAttachmentsFromPreset(existingPreset);
-  const includeGlobalFx = Boolean((existingPreset as Preset & { globalSignalChain?: unknown }).globalSignalChain);
+  const includeGlobalFx = false;
 
   const updatedPreset: Preset = {
     ...existingPreset,
     attachments: baseAttachments,
   };
-  if (includeGlobalFx) {
-    updatedPreset.globalSignalChain = uiState.globalSignalChain;
-  } else {
-    delete (updatedPreset as Record<string, unknown>).globalSignalChain;
-  }
+  delete (updatedPreset as Record<string, unknown>).globalSignalChain;
 
   cachePresetInMemory(updatedPreset);
   // Persist to disk via the C++ backend
@@ -3177,11 +3169,8 @@ export function saveOverwriteCurrentPreset(): void {
     category: updatedPreset.category,
     description: updatedPreset.description,
     includeGlobalSignalChain: includeGlobalFx,
-    preset: updatedPreset,
+    preset: stripGlobalSignalChainForSave(updatedPreset),
   };
-  if (includeGlobalFx) {
-    savePayload.globalSignalChain = uiState.globalSignalChain;
-  }
   postMessage(savePayload);
 
   // Update cache

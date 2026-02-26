@@ -389,6 +389,7 @@ export function initDiagnosticsToggle(): void {
         ({} as import("./types.js").Preset)
       );
       preset.designedPeakInputDbfs = Math.round(peakDbfs * 10) / 10;
+      delete (preset as Record<string, unknown>).globalSignalChain;
       uiState.presetCache.set(activeId, preset);
       postMessage({
         type: "savePreset",
@@ -396,6 +397,7 @@ export function initDiagnosticsToggle(): void {
         name: preset.name ?? "",
         category: preset.category ?? "",
         description: preset.description ?? "",
+        includeGlobalSignalChain: false,
         preset,
       });
       showNotification(`Designed peak input set to ${preset.designedPeakInputDbfs.toFixed(1)} dBFS`);
