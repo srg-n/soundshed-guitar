@@ -258,13 +258,10 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     resourceType: "ir",
     parameters: [
       { key: "mix", name: "Mix", default: 1, min: 0, max: 1, unit: "amount" },
-      { key: "irBlend", name: "IR Blend!!", default: 0, min: 0, max: 1, unit: "blend" },
+      { key: "irBlend", name: "IR Blend", default: 0, min: 0, max: 1, unit: "blend" },
       { key: "lowCutHz", name: "Low Cut", default: 20, min: 20, max: 1000, unit: "Hz" },
       { key: "highCutHz", name: "High Cut", default: 20000, min: 1000, max: 20000, unit: "Hz" },
-      { key: "slotAGain", name: "IR A Level", default: 0, min: -24, max: 24, unit: "dB", advanced: true },
-      { key: "slotBGain", name: "IR B Level", default: 0, min: -24, max: 24, unit: "dB", advanced: true },
-      { key: "slotAPolarity", name: "IR A Invert", default: 0, min: 0, max: 1, unit: "toggle", advanced: true },
-      { key: "slotBPolarity", name: "IR B Invert", default: 0, min: 0, max: 1, unit: "toggle", advanced: true },
+     
       { key: "autoGainComp", name: "Auto Gain", default: 0, min: 0, max: 1, unit: "toggle", advanced: true },
       { key: "outputGain", name: "Output", default: 0, min: -24, max: 24, unit: "dB" },
       { key: "air", name: "Air", default: 0, min: 0, max: 1, unit: "amount", advanced: false },
@@ -277,7 +274,21 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
         unit: "enum",
         step: 1,
         labels: ["Shelf", "Presence", "Shelf+Presence"], advanced: true
-      }
+      },
+      
+      { key: "micEmulation",  name: "Mic Emulation",  default: 0, min: 0, max: 1, unit: "toggle", advanced: true },
+
+      { key: "slotAGain", name: "IR A Level", default: 0, min: -24, max: 24, unit: "dB", advanced: true, group: "IR A" },
+      { key: "slotAPolarity", name: "IR A Invert", default: 0, min: 0, max: 1, unit: "toggle", advanced: true, group: "IR A" },
+      { key: "micRadialA",    name: "Mic A Radial",    default: 0, min: 0, max: 1, unit: "amount", advanced: true, group: "IR A" },
+      { key: "micProximityA", name: "Mic A Proximity", default: 0, min: 0, max: 1, unit: "amount", advanced: true, group: "IR A" },
+  
+      { key: "slotBPolarity", name: "IR B Invert", default: 0, min: 0, max: 1, unit: "toggle", advanced: true, group: "IR B" },
+      { key: "slotBGain", name: "IR B Level", default: 0, min: -24, max: 24, unit: "dB", advanced: true, group: "IR B" },
+      { key: "micRadialB",    name: "Mic B Radial",    default: 0, min: 0, max: 1, unit: "amount", advanced: true, group: "IR B" },
+      { key: "micProximityB", name: "Mic B Proximity", default: 0, min: 0, max: 1, unit: "amount", advanced: true, group: "IR B" },
+      
+      { key: "quality", name: "Quality", default: 1, min: 0, max: 3, unit: "", advanced: true },
     ]
   },
   {

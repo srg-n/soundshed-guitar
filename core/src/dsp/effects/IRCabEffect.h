@@ -31,8 +31,10 @@ namespace guitarfx
 
       UpdateAirCoefficients();
       UpdateCabFilterCoefficients();
+      UpdateMicCoefficients();
       ResetAirState();
       ResetCabFilterState();
+      ResetMicPositionState();
 
       mInputBufferL.resize(static_cast<size_t>(maxBlockSize));
       mInputBufferR.resize(static_cast<size_t>(maxBlockSize));
@@ -70,6 +72,7 @@ namespace guitarfx
       mPrevConvolverBR.Reset();
       ResetAirState();
       ResetCabFilterState();
+      ResetMicPositionState();
       mResourceTransitionSamplesRemaining = 0;
       mPrevHasSlotA = false;
       mPrevHasSlotB = false;
@@ -159,13 +162,27 @@ namespace guitarfx
 
       for (int i = 0; i < numSamples; ++i)
       {
-        double wetL = mOutputBufferL[i] * slotAGain;
-        double wetR = mOutputBufferR[i] * slotAGain;
+        double slotAL = mOutputBufferL[i] * slotAGain;
+        double slotAR = mOutputBufferR[i] * slotAGain;
+        if (mMicEmulationEnabled)
+        {
+          slotAL = ProcessMicPositionSlotA(slotAL, 0);
+          slotAR = ProcessMicPositionSlotA(slotAR, 1);
+        }
+        double wetL = slotAL;
+        double wetR = slotAR;
 
         if (hasB)
         {
-          wetL += mOutputBufferBL[i] * slotBGain;
-          wetR += mOutputBufferBR[i] * slotBGain;
+          double slotBL = mOutputBufferBL[i] * slotBGain;
+          double slotBR = mOutputBufferBR[i] * slotBGain;
+          if (mMicEmulationEnabled)
+          {
+            slotBL = ProcessMicPositionSlotB(slotBL, 0);
+            slotBR = ProcessMicPositionSlotB(slotBR, 1);
+          }
+          wetL += slotBL;
+          wetR += slotBR;
         }
 
         if (transitionActive)
@@ -265,6 +282,28 @@ namespace guitarfx
         mAirMode = static_cast<AirMode>(mode);
         ResetAirState();
       }
+      else if (key == "micEmulation")
+        mMicEmulationEnabled = value > 0.5;
+      else if (key == "micRadialA")
+      {
+        mMicRadialA = std::clamp(value, 0.0, 1.0);
+        UpdateMicCoefficients();
+      }
+      else if (key == "micProximityA")
+      {
+        mMicProximityA = std::clamp(value, 0.0, 1.0);
+        UpdateMicCoefficients();
+      }
+      else if (key == "micRadialB")
+      {
+        mMicRadialB = std::clamp(value, 0.0, 1.0);
+        UpdateMicCoefficients();
+      }
+      else if (key == "micProximityB")
+      {
+        mMicProximityB = std::clamp(value, 0.0, 1.0);
+        UpdateMicCoefficients();
+      }
     }
 
     void SetConfig(const std::string &, const std::string &) override {}
@@ -302,6 +341,11 @@ namespace guitarfx
         return mAir;
       if (key == "airMode")
         return static_cast<double>(mAirMode);
+      if (key == "micEmulation")  return mMicEmulationEnabled ? 1.0 : 0.0;
+      if (key == "micRadialA")    return mMicRadialA;
+      if (key == "micProximityA") return mMicProximityA;
+      if (key == "micRadialB")    return mMicRadialB;
+      if (key == "micProximityB") return mMicProximityB;
       return 0.0;
     }
 
@@ -1014,6 +1058,55 @@ namespace guitarfx
       }
     }
 
+    void UpdateMicCoefficients()
+    {
+      if (mSampleRate <= 0.0) return;
+
+      // Slot A — radial: HF shelf (on-axis=0dB → off-axis=-12dB at 4kHz)
+      //          proximity: low-mid peaking boost (far=0dB → close=+6dB at 150Hz)
+      ComputeHighShelf(4000.0, 0.7, mMicRadialA * -12.0,
+                       mMicAShelfB0, mMicAShelfB1, mMicAShelfB2, mMicAShelfA1, mMicAShelfA2);
+      ComputePeakingEQ(150.0, 1.0, mMicProximityA * 6.0,
+                       mMicAProxB0, mMicAProxB1, mMicAProxB2, mMicAProxA1, mMicAProxA2);
+
+      // Slot B
+      ComputeHighShelf(4000.0, 0.7, mMicRadialB * -12.0,
+                       mMicBShelfB0, mMicBShelfB1, mMicBShelfB2, mMicBShelfA1, mMicBShelfA2);
+      ComputePeakingEQ(150.0, 1.0, mMicProximityB * 6.0,
+                       mMicBProxB0, mMicBProxB1, mMicBProxB2, mMicBProxA1, mMicBProxA2);
+    }
+
+    void ResetMicPositionState()
+    {
+      for (int ch = 0; ch < 2; ++ch)
+      {
+        mMicAShelfS1[ch] = mMicAShelfS2[ch] = 0.0;
+        mMicAProxS1[ch]  = mMicAProxS2[ch]  = 0.0;
+        mMicBShelfS1[ch] = mMicBShelfS2[ch] = 0.0;
+        mMicBProxS1[ch]  = mMicBProxS2[ch]  = 0.0;
+      }
+    }
+
+    double ProcessMicPositionSlotA(double input, int channel)
+    {
+      const double shelf = ProcessBiquad(input,
+          mMicAShelfB0, mMicAShelfB1, mMicAShelfB2, mMicAShelfA1, mMicAShelfA2,
+          mMicAShelfS1[channel], mMicAShelfS2[channel]);
+      return ProcessBiquad(shelf,
+          mMicAProxB0, mMicAProxB1, mMicAProxB2, mMicAProxA1, mMicAProxA2,
+          mMicAProxS1[channel], mMicAProxS2[channel]);
+    }
+
+    double ProcessMicPositionSlotB(double input, int channel)
+    {
+      const double shelf = ProcessBiquad(input,
+          mMicBShelfB0, mMicBShelfB1, mMicBShelfB2, mMicBShelfA1, mMicBShelfA2,
+          mMicBShelfS1[channel], mMicBShelfS2[channel]);
+      return ProcessBiquad(shelf,
+          mMicBProxB0, mMicBProxB1, mMicBProxB2, mMicBProxA1, mMicBProxA2,
+          mMicBProxS1[channel], mMicBProxS2[channel]);
+    }
+
     RealtimeConvolver mConvolverL;
     RealtimeConvolver mConvolverR;
     RealtimeConvolver mConvolverBL;
@@ -1084,6 +1177,23 @@ namespace guitarfx
     double mHighCutB0 = 0, mHighCutB1 = 0, mHighCutB2 = 0, mHighCutA1 = 0, mHighCutA2 = 0;
     std::array<double, 2> mLowCutS1 = {}, mLowCutS2 = {};
     std::array<double, 2> mHighCutS1 = {}, mHighCutS2 = {};
+
+    // Mic position emulation
+    bool mMicEmulationEnabled = false;
+    double mMicRadialA    = 0.0; // 0=on-axis/center, 1=off-axis/edge
+    double mMicProximityA = 0.0; // 0=far/neutral,    1=close-mic
+    double mMicRadialB    = 0.0;
+    double mMicProximityB = 0.0;
+
+    double mMicAShelfB0 = 1, mMicAShelfB1 = 0, mMicAShelfB2 = 0, mMicAShelfA1 = 0, mMicAShelfA2 = 0;
+    double mMicAProxB0  = 1, mMicAProxB1  = 0, mMicAProxB2  = 0, mMicAProxA1  = 0, mMicAProxA2  = 0;
+    double mMicBShelfB0 = 1, mMicBShelfB1 = 0, mMicBShelfB2 = 0, mMicBShelfA1 = 0, mMicBShelfA2 = 0;
+    double mMicBProxB0  = 1, mMicBProxB1  = 0, mMicBProxB2  = 0, mMicBProxA1  = 0, mMicBProxA2  = 0;
+
+    std::array<double, 2> mMicAShelfS1 = {}, mMicAShelfS2 = {};
+    std::array<double, 2> mMicAProxS1  = {}, mMicAProxS2  = {};
+    std::array<double, 2> mMicBShelfS1 = {}, mMicBShelfS2 = {};
+    std::array<double, 2> mMicBProxS1  = {}, mMicBProxS2  = {};
   };
 
   inline void RegisterIRCabEffect()
@@ -1097,7 +1207,6 @@ namespace guitarfx
     info.resourceType = "ir"; // .wav IR files
     info.parameters = {
         {"mix", "Mix", 1.0, 0.0, 1.0, ""},
-        {"irBlend", "IR Blend", 0.0, 0.0, 1.0, "blend"},
         {"lowCutHz", "Low Cut", 20.0, 20.0, 1000.0, "Hz"},
         {"highCutHz", "High Cut", 20000.0, 1000.0, 20000.0, "Hz"},
         {"slotAGain", "IR A Level", 0.0, -24.0, 24.0, "dB"},
@@ -1108,6 +1217,12 @@ namespace guitarfx
         {"outputGain", "Output", 0.0, -24.0, 24.0, "dB"},
         {"air", "Air", 0.0, 0.0, 1.0, "amount"},
         {"airMode", "Air Mode", 0.0, 0.0, 2.0, "enum"},
+        {"irBlend", "IR Blend", 0.0, 0.0, 1.0, "blend"},
+        {"micEmulation",  "Mic Emulation",  0.0, 0.0, 1.0, "toggle"},
+        {"micRadialA",    "Mic A Radial",    0.0, 0.0, 1.0, "amount"},
+        {"micProximityA", "Mic A Proximity", 0.0, 0.0, 1.0, "amount"},
+        {"micRadialB",    "Mic B Radial",    0.0, 0.0, 1.0, "amount"},
+        {"micProximityB", "Mic B Proximity", 0.0, 0.0, 1.0, "amount"},
         {"quality", "Quality", 1.0, 0.0, 3.0, ""}}; // 0=Economy, 1=Standard, 2=High, 3=Full
 
     EffectRegistry::Instance().Register("cab_ir", info, []()
