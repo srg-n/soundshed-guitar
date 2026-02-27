@@ -69,6 +69,25 @@ namespace guitarfx
 
       UpdateParameters();
       Reset();
+
+      // Smooth coefficient: ~15ms ramp to eliminate zipper noise on param changes.
+      mSmoothCoeff = static_cast<float>(1.0 - std::exp(-1.0 / (std::max(1.0, mSampleRate) * 0.015)));
+      // Size scale smoothed at ~200ms — long enough to prevent zipper on delay-length changes.
+      mSizeSmoothCoeff = static_cast<float>(1.0 - std::exp(-1.0 / (std::max(1.0, mSampleRate) * 0.2)));
+      // Snap smoothed params to targets — no ramp on initialization.
+      mFeedback = mFeedbackTarget;
+      mDamp = mDampTarget;
+      mDiffusionGain = mDiffusionGainTarget;
+      mLowpassAlpha = mLowpassAlphaTarget;
+      mHighpassAlpha = mHighpassAlphaTarget;
+      mSizeScaleCurrent = mSizeScaleTarget; // snap size scale so no ramp on load
+      // Clear mode-specific state so no stale values from a previous Prepare.
+      mSpringBpS1 = {};
+      mSpringBpS2 = {};
+      mSpringBp2S1 = {};
+      mSpringBp2S2 = {};
+      mShimmerFbL = mShimmerFbR = 0.0f;
+      mShimmerLpL = mShimmerLpR = 0.0f;
     }
 
     void Reset() override
@@ -103,6 +122,14 @@ namespace guitarfx
       mHpPrevOutR = 0.0f;
       mDuckEnv = 0.0f;
       mModPhase = 0.0;
+      mSpringBpS1 = {};
+      mSpringBpS2 = {};
+      mSpringBp2S1 = {};
+      mSpringBp2S2 = {};
+      mShimmerFbL = 0.0f;
+      mShimmerFbR = 0.0f;
+      mShimmerLpL = 0.0f;
+      mShimmerLpR = 0.0f;
     }
 
     void Process(float **inputs, float **outputs, int numSamples) override
@@ -150,6 +177,15 @@ namespace guitarfx
         const float inL = inputs && inputs[0] ? inputs[0][i] : 0.0f;
         const float inR = inputs && inputs[1] ? inputs[1][i] : inL;
 
+        // Smooth all parameters that can cause zipper noise when changed.
+        mFeedback += (mFeedbackTarget - mFeedback) * mSmoothCoeff;
+        mDamp += (mDampTarget - mDamp) * mSmoothCoeff;
+        mDiffusionGain += (mDiffusionGainTarget - mDiffusionGain) * mSmoothCoeff;
+        mLowpassAlpha += (mLowpassAlphaTarget - mLowpassAlpha) * mSmoothCoeff;
+        mHighpassAlpha += (mHighpassAlphaTarget - mHighpassAlpha) * mSmoothCoeff;
+        // Size scale smoothed at ~200ms to eliminate zipper noise from delay-length changes.
+        mSizeScaleCurrent += (mSizeScaleTarget - mSizeScaleCurrent) * mSizeSmoothCoeff;
+
         const float inputLevel = 0.5f * (std::fabs(inL) + std::fabs(inR));
         const float duckCoeff = (inputLevel > mDuckEnv) ? mDuckAttackCoeff : mDuckReleaseCoeff;
         mDuckEnv += (inputLevel - mDuckEnv) * duckCoeff;
@@ -185,16 +221,20 @@ namespace guitarfx
         float tankInL = ApplyDrive(preL * (1.0f - mEarlyMix) + earlyL * mEarlyMix, drive);
         float tankInR = ApplyDrive(preR * (1.0f - mEarlyMix) + earlyR * mEarlyMix, drive);
 
-        tankInL += mod * mModDepth;
-        tankInR -= mod * mModDepth;
+        tankInL += mod * mModDepthInternal;
+        tankInR -= mod * mModDepthInternal;
 
         float combOutL = 0.0f;
         float combOutR = 0.0f;
 
         for (size_t c = 0; c < kCombCount; ++c)
         {
-          const float delayedL = ReadFromDelay(mCombBufferL[c], mCombWriteL[c], mCombDelaySamplesL[c]);
-          const float delayedR = ReadFromDelay(mCombBufferR[c], mCombWriteR[c], mCombDelaySamplesR[c]);
+          const float dL = std::clamp(mBaseCombSamplesL[c] * mSizeScaleCurrent,
+                                      1.0f, static_cast<float>(mCombBufferL[c].size() - 2));
+          const float dR = std::clamp(mBaseCombSamplesR[c] * mSizeScaleCurrent,
+                                      1.0f, static_cast<float>(mCombBufferR[c].size() - 2));
+          const float delayedL = ReadFromDelayFractional(mCombBufferL[c], mCombWriteL[c], dL);
+          const float delayedR = ReadFromDelayFractional(mCombBufferR[c], mCombWriteR[c], dR);
 
           mCombFilterStoreL[c] = delayedL * (1.0f - mDamp) + mCombFilterStoreL[c] * mDamp;
           mCombFilterStoreR[c] = delayedR * (1.0f - mDamp) + mCombFilterStoreR[c] * mDamp;
@@ -216,8 +256,12 @@ namespace guitarfx
 
         for (size_t a = 0; a < kAllpassCount; ++a)
         {
-          const float delayedL = ReadFromDelay(mAllpassBufferL[a], mAllpassWriteL[a], mAllpassDelaySamplesL[a]);
-          const float delayedR = ReadFromDelay(mAllpassBufferR[a], mAllpassWriteR[a], mAllpassDelaySamplesR[a]);
+          const float dL = std::clamp(mBaseAllpassSamplesL[a] * mSizeScaleCurrent,
+                                      1.0f, static_cast<float>(mAllpassBufferL[a].size() - 2));
+          const float dR = std::clamp(mBaseAllpassSamplesR[a] * mSizeScaleCurrent,
+                                      1.0f, static_cast<float>(mAllpassBufferR[a].size() - 2));
+          const float delayedL = ReadFromDelayFractional(mAllpassBufferL[a], mAllpassWriteL[a], dL);
+          const float delayedR = ReadFromDelayFractional(mAllpassBufferR[a], mAllpassWriteR[a], dR);
 
           const float inputAPF_L = wetL;
           const float inputAPF_R = wetR;
@@ -236,13 +280,34 @@ namespace guitarfx
 
         if (mMode == Mode::Shimmer)
         {
-          const float sparkle = 0.35f + static_cast<float>(mTone) * 0.45f;
-          wetL += std::fabs(wetL) * sparkle * mShimmerAmount;
-          wetR += std::fabs(wetR) * sparkle * mShimmerAmount;
+          // Inject shimmer feedback POST-tank so it never re-enters the comb bank.
+          // Loop gain = sparkle * shimmerAmount (independent of decay), guaranteeing stability
+          // at all decay settings. The reverb's own long decay provides the gradual buildup.
+          wetL += mShimmerFbL;
+          wetR += mShimmerFbR;
+
+          // Extract HF from updated wet signal for the next sample's injection.
+          mShimmerLpL += mShimmerAlpha * (wetL - mShimmerLpL);
+          mShimmerLpR += mShimmerAlpha * (wetR - mShimmerLpR);
+          const float sparkle = 0.15f + static_cast<float>(mTone) * 0.30f; // max 0.45
+          mShimmerFbL = std::clamp((wetL - mShimmerLpL) * mShimmerAmount * sparkle, -0.3f, 0.3f);
+          mShimmerFbR = std::clamp((wetR - mShimmerLpR) * mShimmerAmount * sparkle, -0.3f, 0.3f);
         }
 
         wetL = ProcessFiltersL(wetL);
         wetR = ProcessFiltersR(wetR);
+
+        // Spring mode: blend two bandpass-filtered signals for dispersive "boing" character.
+        // Primary peak (fundamental) + harmonic peak at ~1.75× for authentic spring texture.
+        if (mMode == Mode::Spring)
+        {
+          const float bpL  = static_cast<float>(ProcessSpringBp (static_cast<double>(wetL), 0));
+          const float bpR  = static_cast<float>(ProcessSpringBp (static_cast<double>(wetR), 1));
+          const float bp2L = static_cast<float>(ProcessSpringBp2(static_cast<double>(wetL), 0));
+          const float bp2R = static_cast<float>(ProcessSpringBp2(static_cast<double>(wetR), 1));
+          wetL = wetL * 0.45f + bpL * 0.40f + bp2L * 0.15f;
+          wetR = wetR * 0.45f + bpR * 0.40f + bp2R * 0.15f;
+        }
 
         const float stereoMid = 0.5f * (wetL + wetR);
         const float stereoSide = 0.5f * (wetL - wetR) * width;
@@ -545,7 +610,7 @@ namespace guitarfx
             {10.0, 15.1, 20.7, 27.6},
             {13.0, 21.0, 34.0, 46.0},
             {0.30f, 0.23f, 0.18f, 0.13f},
-            1.32, 0.36, 0.78, 0.84, 0.45, 0.0, 0.24};
+            1.05, 0.36, 0.78, 0.84, 0.45, 0.0, 0.24};
       case Mode::Ambient:
         return {
             {45.8, 50.4, 56.2, 61.9, 67.5, 73.1, 79.6, 85.4},
@@ -592,6 +657,19 @@ namespace guitarfx
       return buffer[readPos];
     }
 
+    // Linear-interpolated delay read — eliminates integer-step zipper noise when delay
+    // length changes smoothly. Caller must ensure delaySamples <= buffer.size() - 2.
+    float ReadFromDelayFractional(const std::vector<float>& buffer, size_t writePos, float delaySamples) const
+    {
+      if (buffer.empty())
+        return 0.0f;
+      const size_t d0 = static_cast<size_t>(delaySamples);
+      const float frac = delaySamples - static_cast<float>(d0);
+      const float s0 = ReadFromDelay(buffer, writePos, d0);
+      const float s1 = ReadFromDelay(buffer, writePos, d0 + 1);
+      return s0 + frac * (s1 - s0);
+    }
+
     float ProcessFiltersL(float sample)
     {
       mLowpassStateL += mLowpassAlpha * (sample - mLowpassStateL);
@@ -610,26 +688,63 @@ namespace guitarfx
       return hpOut;
     }
 
+    // Biquad bandpass used for Spring mode tonal coloring.
+    void ComputeBandpass(double freq, double q,
+                         double &b0, double &b1, double &b2,
+                         double &a1, double &a2) const
+    {
+      if (mSampleRate <= 0.0)
+      {
+        b0 = 1.0; b1 = 0.0; b2 = 0.0; a1 = 0.0; a2 = 0.0;
+        return;
+      }
+      const double w0 = kTwoPi * freq / mSampleRate;
+      const double cosw0 = std::cos(w0);
+      const double sinw0 = std::sin(w0);
+      const double alpha = sinw0 / (2.0 * q);
+      const double a0inv = 1.0 / (1.0 + alpha);
+      b0 = alpha * a0inv;
+      b1 = 0.0;
+      b2 = -alpha * a0inv;
+      a1 = -2.0 * cosw0 * a0inv;
+      a2 = (1.0 - alpha) * a0inv;
+    }
+
+    double ProcessSpringBp(double input, int ch)
+    {
+      const double out = mSpringBpB0 * input + mSpringBpS1[ch];
+      mSpringBpS1[ch] = mSpringBpB1 * input - mSpringBpA1 * out + mSpringBpS2[ch];
+      mSpringBpS2[ch] = mSpringBpB2 * input - mSpringBpA2 * out;
+      return out;
+    }
+
+    double ProcessSpringBp2(double input, int ch)
+    {
+      const double out = mSpringBp2B0 * input + mSpringBp2S1[ch];
+      mSpringBp2S1[ch] = mSpringBp2B1 * input - mSpringBp2A1 * out + mSpringBp2S2[ch];
+      mSpringBp2S2[ch] = mSpringBp2B2 * input - mSpringBp2A2 * out;
+      return out;
+    }
+
     void UpdateParameters()
     {
       const auto profile = GetProfile(mMode);
 
-      const double sizeScale = 0.6 + mSize * 1.4;
+      // Store base delay samples (unscaled, sizeScale=1) for per-sample fractional interpolation.
+      // The current size scale is smoothed in Process() to eliminate integer-step zipper noise.
       for (size_t i = 0; i < kCombCount; ++i)
       {
-        mCombDelaySamplesL[i] = std::max<size_t>(1, DelayMsToSamples(profile.combMsL[i] * sizeScale));
-        mCombDelaySamplesR[i] = std::max<size_t>(1, DelayMsToSamples(profile.combMsR[i] * sizeScale));
-        mCombDelaySamplesL[i] = std::min(mCombDelaySamplesL[i], mCombBufferL[i].empty() ? size_t(1) : mCombBufferL[i].size() - 1);
-        mCombDelaySamplesR[i] = std::min(mCombDelaySamplesR[i], mCombBufferR[i].empty() ? size_t(1) : mCombBufferR[i].size() - 1);
+        mBaseCombSamplesL[i] = static_cast<float>(DelayMsToSamples(profile.combMsL[i]));
+        mBaseCombSamplesR[i] = static_cast<float>(DelayMsToSamples(profile.combMsR[i]));
       }
 
       for (size_t i = 0; i < kAllpassCount; ++i)
       {
-        mAllpassDelaySamplesL[i] = std::max<size_t>(1, DelayMsToSamples(profile.allpassMsL[i] * sizeScale));
-        mAllpassDelaySamplesR[i] = std::max<size_t>(1, DelayMsToSamples(profile.allpassMsR[i] * sizeScale));
-        mAllpassDelaySamplesL[i] = std::min(mAllpassDelaySamplesL[i], mAllpassBufferL[i].empty() ? size_t(1) : mAllpassBufferL[i].size() - 1);
-        mAllpassDelaySamplesR[i] = std::min(mAllpassDelaySamplesR[i], mAllpassBufferR[i].empty() ? size_t(1) : mAllpassBufferR[i].size() - 1);
+        mBaseAllpassSamplesL[i] = static_cast<float>(DelayMsToSamples(profile.allpassMsL[i]));
+        mBaseAllpassSamplesR[i] = static_cast<float>(DelayMsToSamples(profile.allpassMsR[i]));
       }
+
+      mSizeScaleTarget = static_cast<float>(0.6 + mSize * 1.4);
 
       for (size_t t = 0; t < kEarlyTapCount; ++t)
       {
@@ -643,25 +758,26 @@ namespace guitarfx
       mPreDelaySamples = DelayMsToSamples(mPreDelayMs);
       mPreDelaySamples = std::min(mPreDelaySamples, mPreDelayL.empty() ? size_t(1) : mPreDelayL.size() - 1);
 
-      mFeedback = static_cast<float>(std::clamp(0.56 + (mDecay * profile.decayBias) * 0.4, 0.3, 0.985));
+      mFeedbackTarget = static_cast<float>(std::clamp(0.56 + (mDecay * profile.decayBias) * 0.4, 0.3, 0.985));
 
       const double dampBase = std::clamp(0.02 + (mDamping * 0.62) + (1.0 - mTone) * 0.26 + profile.dampBias * 0.08, 0.02, 0.96);
-      mDamp = static_cast<float>(dampBase);
+      mDampTarget = static_cast<float>(dampBase);
 
-      mDiffusionGain = static_cast<float>(std::clamp(0.28 + mDiffusion * 0.58 + profile.diffusionBias * 0.08, 0.2, 0.92));
+      mDiffusionGainTarget = static_cast<float>(std::clamp(0.28 + mDiffusion * 0.58 + profile.diffusionBias * 0.08, 0.2, 0.92));
       mCombGain = 1.0f / static_cast<float>(kCombCount);
 
       const double modBias = std::clamp(profile.modulationBias + mModDepth * 0.8, 0.0, 1.5);
       mModPhaseInc = kTwoPi * std::clamp(mModRateHz, 0.02, 8.0) / std::max(1.0, mSampleRate);
-      mModDepth = std::clamp(0.0002 + mModDepth * 0.004 * modBias, 0.0, 0.02);
+      // mModDepth keeps the user-facing 0–1 value; mModDepthInternal holds the audio-rate scale.
+      mModDepthInternal = static_cast<float>(std::clamp(0.0002 + mModDepth * 0.004 * modBias, 0.0, 0.02));
 
       const double lowCut = std::clamp(mLowCutHz, 20.0, 1200.0);
       const double highCut = std::clamp(mHighCutHz * (0.65 + mTone * 0.7), 1000.0, 20000.0);
       const double dt = 1.0 / std::max(1.0, mSampleRate);
       const double rcLow = 1.0 / (2.0 * 3.14159265358979323846 * lowCut);
       const double rcHigh = 1.0 / (2.0 * 3.14159265358979323846 * highCut);
-      mHighpassAlpha = static_cast<float>(rcLow / (rcLow + dt));
-      mLowpassAlpha = static_cast<float>(dt / (rcHigh + dt));
+      mHighpassAlphaTarget = static_cast<float>(rcLow / (rcLow + dt));
+      mLowpassAlphaTarget = static_cast<float>(dt / (rcHigh + dt));
 
       mShimmerAmount = std::clamp(mShimmer * (profile.shimmerBias + 0.35), 0.0, 1.0);
       mEarlyMix = static_cast<float>(std::clamp(profile.earlyMixBias + mDiffusion * 0.18, 0.08, 0.62));
@@ -670,6 +786,34 @@ namespace guitarfx
       const double duckRelease = 0.11;
       mDuckAttackCoeff = static_cast<float>(1.0 - std::exp(-1.0 / (std::max(1.0, mSampleRate) * duckAttack)));
       mDuckReleaseCoeff = static_cast<float>(1.0 - std::exp(-1.0 / (std::max(1.0, mSampleRate) * duckRelease)));
+
+      // Spring mode: two biquad bandpass filters for dispersive "boing" character.
+      // Real spring tanks have a fundamental resonance and a harmonic above it.
+      // Both centre frequencies track Tone: darker → lower, brighter → higher.
+      if (mMode == Mode::Spring)
+      {
+        const double centerHz = 700.0 + mTone * 1800.0;     // primary:  700–2500 Hz
+        const double q = 0.75 + mTone * 0.60;
+        ComputeBandpass(centerHz, q,
+                        mSpringBpB0, mSpringBpB1, mSpringBpB2,
+                        mSpringBpA1, mSpringBpA2);
+        // Second harmonic peak at ~1.75× primary — adds the characteristic metallic shimmer
+        // of dispersive spring propagation without over-brightening the tail.
+        const double centerHz2 = std::clamp(centerHz * 1.75, 1200.0, 6500.0);
+        const double q2 = 0.50 + mTone * 0.30;             // softer resonance than primary
+        ComputeBandpass(centerHz2, q2,
+                        mSpringBp2B0, mSpringBp2B1, mSpringBp2B2,
+                        mSpringBp2A1, mSpringBp2A2);
+      }
+
+      // Shimmer mode: LP coefficient for HF extraction used in regenerative feedback.
+      // Cut-off tracks Tone: brighter Tone → higher shimmer frequency content.
+      if (mMode == Mode::Shimmer)
+      {
+        const double shimCutHz = std::clamp(1400.0 + mTone * 2600.0, 200.0, 20000.0);
+        const double rcShim = 1.0 / (kTwoPi * shimCutHz);
+        mShimmerAlpha = static_cast<float>(dt / (rcShim + dt));
+      }
     }
 
     void ApplyModeDefaults()
@@ -677,11 +821,11 @@ namespace guitarfx
       switch (mMode)
       {
       case Mode::Hall:
-        mDecay = 0.76;
-        mSize = 0.7;
-        mDamping = 0.46;
+        mDecay = 0.62;      // Reduced from 0.76 — 0.76+decayBias drove feedback to ~0.94, causing "swimming"
+        mSize = 0.55;       // Reduced from 0.70 — medium-large hall, not stadium
+        mDamping = 0.52;    // Increased from 0.46 — slightly more warmth
         mDiffusion = 0.72;
-        mPreDelayMs = 24.0;
+        mPreDelayMs = 22.0;
         mLowCutHz = 120.0;
         mHighCutHz = 12000.0;
         mTone = 0.62;
@@ -691,7 +835,7 @@ namespace guitarfx
         mDucking = 0.12;
         mDrive = 0.0;
         mShimmer = 0.0;
-        mMix = 0.27;
+        mMix = 0.25;
         break;
       case Mode::Plate:
         mDecay = 0.58;
@@ -745,9 +889,9 @@ namespace guitarfx
         mMix = 0.23;
         break;
       case Mode::Shimmer:
-        mDecay = 0.84;
+        mDecay = 0.62;      // Was 0.84 — with decayBias=1.05 gives feedback~0.82, leaving headroom for shimmer loop
         mSize = 0.8;
-        mDamping = 0.28;
+        mDamping = 0.35;    // Slightly more damping to help control HF content
         mDiffusion = 0.82;
         mPreDelayMs = 28.0;
         mLowCutHz = 170.0;
@@ -758,11 +902,11 @@ namespace guitarfx
         mModDepth = 0.34;
         mDucking = 0.18;
         mDrive = 0.0;
-        mShimmer = 0.45;
+        mShimmer = 0.28;    // Was 0.45 — gentler default shimmer amount
         mMix = 0.30;
         break;
       case Mode::Ambient:
-        mDecay = 0.86;
+        mDecay = 0.75;      // Reduced from 0.86 — 0.86+decayBias=1.4 pinned feedback at stability ceiling
         mSize = 0.9;
         mDamping = 0.42;
         mDiffusion = 0.9;
@@ -837,8 +981,9 @@ namespace guitarfx
     std::array<std::vector<float>, kCombCount> mCombBufferR;
     std::array<size_t, kCombCount> mCombWriteL = {};
     std::array<size_t, kCombCount> mCombWriteR = {};
-    std::array<size_t, kCombCount> mCombDelaySamplesL = {};
-    std::array<size_t, kCombCount> mCombDelaySamplesR = {};
+    // Base (unscaled) delay samples for each comb — multiplied by mSizeScaleCurrent per sample.
+    std::array<float, kCombCount> mBaseCombSamplesL = {};
+    std::array<float, kCombCount> mBaseCombSamplesR = {};
     std::array<float, kCombCount> mCombFilterStoreL = {};
     std::array<float, kCombCount> mCombFilterStoreR = {};
 
@@ -846,8 +991,9 @@ namespace guitarfx
     std::array<std::vector<float>, kAllpassCount> mAllpassBufferR;
     std::array<size_t, kAllpassCount> mAllpassWriteL = {};
     std::array<size_t, kAllpassCount> mAllpassWriteR = {};
-    std::array<size_t, kAllpassCount> mAllpassDelaySamplesL = {};
-    std::array<size_t, kAllpassCount> mAllpassDelaySamplesR = {};
+    // Base (unscaled) delay samples for each allpass — multiplied by mSizeScaleCurrent per sample.
+    std::array<float, kAllpassCount> mBaseAllpassSamplesL = {};
+    std::array<float, kAllpassCount> mBaseAllpassSamplesR = {};
 
     std::array<size_t, kEarlyTapCount> mEarlyTapSamples = {};
     std::array<size_t, kEarlyTapCount> mEarlyTapSamplesMirror = {};
@@ -892,6 +1038,43 @@ namespace guitarfx
     float mCombGain = 0.125f;
     float mShimmerAmount = 0.0f;
     float mEarlyMix = 0.3f;
+
+    // Smoothed-parameter targets — set in UpdateParameters(), lerped per-sample in Process().
+    float mFeedbackTarget = 0.78f;
+    float mDampTarget = 0.3f;
+    float mDiffusionGainTarget = 0.6f;
+    float mLowpassAlphaTarget = 0.1f;
+    float mHighpassAlphaTarget = 0.98f;
+    float mSmoothCoeff = 0.002f;
+
+    // Size scale smoothing — eliminates zipper noise when the size parameter is adjusted.
+    // Lerped at ~200ms so integer delay-length steps are inaudible.
+    float mSizeScaleTarget = 1.0f;
+    float mSizeScaleCurrent = 1.0f;
+    float mSizeSmoothCoeff = 0.0001f;
+
+    // Audio-rate modulation depth (scaled from mModDepth user value in UpdateParameters).
+    // Kept separate so GetParam("modDepth") always returns the user-facing 0–1 value.
+    float mModDepthInternal = 0.0008f;
+
+    // Spring mode: primary biquad bandpass state + coefficients for fundamental resonance.
+    std::array<double, 2> mSpringBpS1 = {};
+    std::array<double, 2> mSpringBpS2 = {};
+    double mSpringBpB0 = 1.0, mSpringBpB1 = 0.0, mSpringBpB2 = -1.0;
+    double mSpringBpA1 = 0.0, mSpringBpA2 = 0.0;
+
+    // Spring mode: second biquad bandpass at ~1.75× primary — harmonic dispersive peak.
+    std::array<double, 2> mSpringBp2S1 = {};
+    std::array<double, 2> mSpringBp2S2 = {};
+    double mSpringBp2B0 = 1.0, mSpringBp2B1 = 0.0, mSpringBp2B2 = -1.0;
+    double mSpringBp2A1 = 0.0, mSpringBp2A2 = 0.0;
+
+    // Shimmer mode: HF extraction LP state + feedback signals for regenerative shimmer.
+    float mShimmerFbL = 0.0f;
+    float mShimmerFbR = 0.0f;
+    float mShimmerLpL = 0.0f;
+    float mShimmerLpR = 0.0f;
+    float mShimmerAlpha = 0.1f;
   };
 
   inline void RegisterReverbEffect()
@@ -939,12 +1122,12 @@ namespace guitarfx
         break;
       case ReverbEffect::Mode::Hall:
         info.parameters = {
-            param("decay", "Decay", 0.76, 0.0, 1.0, ""),
-            param("size", "Size", 0.7, 0.0, 1.0, ""),
-            param("preDelay", "Pre Delay", 24.0, 0.0, 220.0, "ms"),
-            param("damping", "Damping", 0.46, 0.0, 1.0, ""),
+            param("decay", "Decay", 0.62, 0.0, 1.0, ""),
+            param("size", "Size", 0.55, 0.0, 1.0, ""),
+            param("preDelay", "Pre Delay", 22.0, 0.0, 220.0, "ms"),
+            param("damping", "Damping", 0.52, 0.0, 1.0, ""),
             param("width", "Width", 1.05, 0.0, 1.2, ""),
-            param("mix", "Mix", 0.27, 0.0, 1.0, "")};
+            param("mix", "Mix", 0.25, 0.0, 1.0, "")};
         break;
       case ReverbEffect::Mode::Plate:
         info.parameters = {
@@ -971,15 +1154,15 @@ namespace guitarfx
         break;
       case ReverbEffect::Mode::Shimmer:
         info.parameters = {
-            param("decay", "Decay", 0.84, 0.0, 1.0, ""),
+            param("decay", "Decay", 0.62, 0.0, 1.0, ""),
             param("size", "Size", 0.8, 0.0, 1.0, ""),
-            param("shimmer", "Shimmer", 0.45, 0.0, 1.0, ""),
+            param("shimmer", "Shimmer", 0.28, 0.0, 1.0, ""),
             param("preDelay", "Pre Delay", 28.0, 0.0, 220.0, "ms"),
             param("mix", "Mix", 0.30, 0.0, 1.0, "")};
         break;
       case ReverbEffect::Mode::Ambient:
         info.parameters = {
-            param("decay", "Decay", 0.86, 0.0, 1.0, ""),
+            param("decay", "Decay", 0.75, 0.0, 1.0, ""),
             param("size", "Size", 0.9, 0.0, 1.0, ""),
             param("diffusion", "Diffusion", 0.9, 0.0, 1.0, ""),
             param("width", "Width", 1.1, 0.0, 1.2, ""),
