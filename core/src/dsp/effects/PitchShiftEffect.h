@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include "signalsmith-stretch.h"
 #include <algorithm>
 #include <cmath>
@@ -10,7 +11,7 @@
 namespace guitarfx
 {
   /**
-   * Pitch shift effect using Signalsmith Stretch.
+   * Pitchshift effect using Signalsmith Stretch.
    * Supports stepped semitones or free-form pitch shift (-12 to +12).
    */
   class PitchShiftEffect : public EffectProcessor
@@ -193,7 +194,8 @@ namespace guitarfx
   inline void RegisterPitchShiftEffect()
   {
     EffectTypeInfo info;
-    info.type = "pitch_shift";
+    info.type = EffectGuids::kPitchShift;
+    info.aliases = {"pitch_shift"};
     info.displayName = "Pitch Shift";
     info.category = "modulation";
     info.description = "Pitch shift with stepped or free-form control";
@@ -204,7 +206,7 @@ namespace guitarfx
       {"maxSemitones", "Max Semitones", 12.0, -12.0, 12.0, "st"},
       {"mix", "Mix", 1.0, 0.0, 1.0, "%"},
       {"stepMode", "Step Mode", 1.0, 0.0, 1.0, "mode"}};
-    EffectRegistry::Instance().Register("pitch_shift", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
                                         { return std::make_unique<PitchShiftEffect>(); });
   }
 

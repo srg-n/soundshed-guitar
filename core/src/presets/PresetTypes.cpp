@@ -115,7 +115,7 @@ SignalGraph GlobalSignalChainConfig::BuildDefaultPreChainGraph()
   // Noise Gate
   GraphNode gateNode;
   gateNode.id = "global_gate";
-  gateNode.type = "dynamics_gate";
+  gateNode.type = EffectGuids::kDynamicsGate;
   gateNode.category = "dynamics";
   gateNode.label = "Noise Gate";
   gateNode.enabled = false;
@@ -125,7 +125,7 @@ SignalGraph GlobalSignalChainConfig::BuildDefaultPreChainGraph()
   // Transpose (Resampled)
   GraphNode transposeNode;
   transposeNode.id = "global_transpose";
-  transposeNode.type = "transpose";
+  transposeNode.type = EffectGuids::kTranspose;
   transposeNode.category = "modulation";
   transposeNode.label = "Transpose";
   transposeNode.enabled = false;
@@ -161,7 +161,7 @@ SignalGraph GlobalSignalChainConfig::BuildDefaultPostChainGraph()
   // Parametric EQ
   GraphNode eqNode;
   eqNode.id = "global_eq";
-  eqNode.type = "eq_parametric";
+  eqNode.type = EffectGuids::kEqParametric;
   eqNode.category = "eq";
   eqNode.label = "Global EQ";
   eqNode.enabled = false;
@@ -171,7 +171,7 @@ SignalGraph GlobalSignalChainConfig::BuildDefaultPostChainGraph()
   // Doubler
   GraphNode doublerNode;
   doublerNode.id = "global_doubler";
-  doublerNode.type = "delay_doubler";
+  doublerNode.type = EffectGuids::kDelayDoubler;
   doublerNode.category = "modulation";
   doublerNode.label = "Doubler";
   doublerNode.enabled = false;

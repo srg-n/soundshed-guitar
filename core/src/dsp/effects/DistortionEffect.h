@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <atomic>
 #include <algorithm>
 #include <cmath>
@@ -163,7 +164,8 @@ namespace guitarfx
   inline void RegisterDistortionEffect()
   {
     EffectTypeInfo info;
-    info.type = "distortion";
+    info.type = EffectGuids::kDistortion;
+    info.aliases = {"distortion"};
     info.displayName = "Distortion";
     info.category = "dynamics";
     info.description = "Hard clipping distortion";
@@ -175,7 +177,7 @@ namespace guitarfx
       {"mix", "Mix", 1.0, 0.0, 1.0, "amount"}
     };
 
-    EffectRegistry::Instance().Register("distortion", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
       { return std::make_unique<DistortionEffect>(); });
   }
 

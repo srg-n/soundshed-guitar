@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <atomic>
 #include <algorithm>
 #include <cmath>
@@ -9,7 +10,7 @@
 namespace guitarfx
 {
   /**
-   * Tremolo effect (amplitude modulation).
+   * Tremoloeffect (amplitude modulation).
    */
   class TremoloEffect : public EffectProcessor
   {
@@ -123,7 +124,8 @@ namespace guitarfx
   inline void RegisterTremoloEffect()
   {
     EffectTypeInfo info;
-    info.type = "tremolo";
+    info.type = EffectGuids::kTremolo;
+    info.aliases = {"tremolo"};
     info.displayName = "Tremolo";
     info.category = "modulation";
     info.description = "Amplitude modulation tremolo";
@@ -135,7 +137,7 @@ namespace guitarfx
       {"mix", "Mix", 1.0, 0.0, 1.0, "amount"}
     };
 
-    EffectRegistry::Instance().Register("tremolo", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
       { return std::make_unique<TremoloEffect>(); });
   }
 

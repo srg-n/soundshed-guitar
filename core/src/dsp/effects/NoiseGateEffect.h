@@ -1,7 +1,8 @@
-#pragma once
+﻿#pragma once
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <algorithm>
 #include <cmath>
 
@@ -129,7 +130,8 @@ namespace guitarfx
   inline void RegisterNoiseGateEffect()
   {
     EffectTypeInfo info;
-    info.type = "dynamics_gate"; // Changed from "gate_noise" to match preset JSON
+    info.type = EffectGuids::kDynamicsGate;
+    info.aliases = {"dynamics_gate", "gate_noise"};
     info.displayName = "Noise Gate";
     info.category = "dynamics";
     info.description = "Simple noise gate";
@@ -139,7 +141,7 @@ namespace guitarfx
         {"attackMs", "Attack", 1.0, 0.1, 50.0, "ms"},
         {"releaseMs", "Release", 50.0, 1.0, 500.0, "ms"}};
 
-    EffectRegistry::Instance().Register("dynamics_gate", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
                                         { return std::make_unique<NoiseGateEffect>(); });
   }
 

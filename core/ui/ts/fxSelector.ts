@@ -6,6 +6,7 @@
  */
 
 import { EffectTypeRegistry, type EffectTypeInfo } from "./presetV2.js";
+import { EffectGuids } from "./effectGuids.js";
 import { uiState, setPresetDirty } from "./state.js";
 import { postMessage } from "./bridge.js";
 import { getBadgeIcon, getFxCategoryIcon, getFxEffectIcon } from "./iconAssets.js";
@@ -47,7 +48,7 @@ const FX_CATEGORIES: FxCategory[] = [
 function getCatalogEffects(): EffectTypeInfo[] {
   return EffectTypeRegistry.getAll().filter((effect) => {
     if (effect.catalogHidden) return false;
-    return effect.type !== "amp_nam" && effect.type !== "amp_nam_blend";
+    return effect.type !== EffectGuids.kAmpNam && effect.type !== EffectGuids.kAmpNamBlend;
   });
 }
 
@@ -243,7 +244,7 @@ function renderFxItem(effect: EffectTypeInfo, categoryColor: string, blendId?: s
       <div class="fx-item-icon">${getFxEffectIcon(effect.type)}</div>
       <div class="fx-item-info">
         <div class="fx-item-name">${effect.displayName}</div>
-        <div class="fx-item-type">${compositeId ? "composite" : effect.type}</div>
+        <div class="fx-item-type">${compositeId ? "composite" : effect.category}</div>
       </div>
       ${resourceBadge}${blendBadge}${compositeBadge}
     </div>
@@ -305,12 +306,12 @@ function getBlendFxItems(): BlendFxItem[] {
   return blends.map((blend) => {
     const mappedCategory = categoryMap[blend.category] ?? "amp";
     return {
-      type: "amp_nam_blend",
+      type: EffectGuids.kAmpNamBlend,
       displayName: blend.name || "Custom Blend",
       category: mappedCategory,
       requiresResource: true,
       resourceType: "nam",
-      parameters: EffectTypeRegistry.get("amp_nam_blend")?.parameters ?? [],
+      parameters: EffectTypeRegistry.get(EffectGuids.kAmpNamBlend)?.parameters ?? [],
       blendId: blend.id,
       blendCategory: blend.category,
     };

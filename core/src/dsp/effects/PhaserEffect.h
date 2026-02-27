@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <atomic>
 #include <algorithm>
 #include <array>
@@ -163,7 +164,8 @@ namespace guitarfx
   inline void RegisterPhaserEffect()
   {
     EffectTypeInfo info;
-    info.type = "phaser";
+    info.type = EffectGuids::kPhaser;
+    info.aliases = {"phaser"};
     info.displayName = "Phaser";
     info.category = "modulation";
     info.description = "Cascaded all-pass phaser";
@@ -175,7 +177,7 @@ namespace guitarfx
       {"mix", "Mix", 0.5, 0.0, 1.0, "amount"}
     };
 
-    EffectRegistry::Instance().Register("phaser", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
       { return std::make_unique<PhaserEffect>(); });
   }
 

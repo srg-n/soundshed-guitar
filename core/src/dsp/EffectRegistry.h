@@ -30,12 +30,15 @@ namespace guitarfx
   /**
    * Describes an available effect type.
    *
-   * Type ID convention: {category}_{variant}  e.g. "dist_fuzz", "mod_chorus", "dynamics_comp_vca"
+   * Type ID convention: UUID v4 string (e.g. "2eb53b40-6139-4696-8820-387ac56ffa91").
+   * All canonical IDs are declared in EffectGuids.h.  Human-readable legacy strings
+   * (e.g. "amp_nam") are kept in EffectTypeInfo::aliases so that existing presets
+   * continue to load.  Never reuse or reassign a UUID once it has been shipped.
    * Recognised categories: amp, cab, eq, dynamics, dist, mod, delay, reverb, pitch, utility, synth
    */
   struct EffectTypeInfo
   {
-    std::string type;        // Unique canonical type ID  (e.g. "dist_fuzz")
+    std::string type;        // Canonical UUID type ID (see EffectGuids.h)
     std::string displayName; // Human-readable name
     std::string category;    // "amp", "cab", "eq", "dynamics", "dist", "mod", "delay", "reverb", "pitch", "utility", "synth"
     std::string description; // User-facing description

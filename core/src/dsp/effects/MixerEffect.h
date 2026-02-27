@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -292,7 +293,8 @@ namespace guitarfx
   inline void RegisterMixerEffect()
   {
     EffectTypeInfo info;
-    info.type = "mixer";
+    info.type = EffectGuids::kMixer;
+    info.aliases = {"mixer"};
     info.displayName = "Mixer";
     info.category = "utility";
     info.description = "Mix parallel branches with per-input level, pan, and delay";
@@ -303,7 +305,7 @@ namespace guitarfx
       // UI will generate controls for level_N, pan_N, delay_N, mute_N
     };
 
-    EffectRegistry::Instance().Register("mixer", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
       { return std::make_unique<MixerEffect>(); });
   }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dsp/EffectGuids.h"
 #include <filesystem>
 #include <map>
 #include <optional>
@@ -271,10 +272,10 @@ namespace guitarfx
   };
 
   // Reserved node types for routing
-  constexpr const char* kNodeTypeInput = "input";
-  constexpr const char* kNodeTypeOutput = "output";
-  constexpr const char* kNodeTypeSplitter = "splitter";
-  constexpr const char* kNodeTypeMixer = "mixer";
+  constexpr const char* kNodeTypeInput    = "input";
+  constexpr const char* kNodeTypeOutput   = "output";
+  constexpr const char* kNodeTypeSplitter = EffectGuids::kSplitter;
+  constexpr const char* kNodeTypeMixer    = EffectGuids::kMixer;
   constexpr const char* kNodeTypeCompositePrefix = "composite:";
 
   /**

@@ -6,7 +6,7 @@ import { buildAttachments, buildAttachmentsFromPreset, getDefaultPresets, initia
 import { arrayBufferToBase64, isRemoteUrl, resolveAttachmentUrl, sha256HexFromBase64 } from "./utils.js";
 import { buildArchiveFileNameWithHash, generateResourceId, requestResourceData, sanitizeFilename } from "./archiveUtils.js";
 import type { Preset, Attachment, BlendDefinition, ResourceRef, LibraryResource, PresetFolder, Setlist, GraphNode } from "./types.js";
-import { createEmptyPresetV2 } from "./presetV2.js";
+import { createEmptyPresetV2, migratePresetNodeTypes } from "./presetV2.js";
 import { bindDemoAudioControls } from "./demoAudio.js";
 import { postMessage } from "./bridge.js";
 import { renderSignalPathBar } from "./signalPath.js";
@@ -2777,6 +2777,7 @@ async function importPresetArchive(file: File, context: ArchiveImportContext = {
   const importedPresets: Preset[] = [];
   for (const sourcePreset of presetsToImport) {
     const importedPreset = clonePreset(sourcePreset);
+    migratePresetNodeTypes(importedPreset);
     importedPreset.id = generateResourceId(importedPreset.id || importedPreset.name || "preset");
     importedPreset.name = importedPreset.name || "Imported Preset";
 

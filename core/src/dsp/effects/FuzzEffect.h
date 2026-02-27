@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <atomic>
 #include <algorithm>
 #include <cmath>
@@ -9,7 +10,7 @@
 namespace guitarfx
 {
   /**
-   * Fuzz effect with aggressive nonlinearity and tone control.
+   * Fuzz effectwith aggressive nonlinearity and tone control.
    */
   class FuzzEffect : public EffectProcessor
   {
@@ -141,7 +142,8 @@ namespace guitarfx
   inline void RegisterFuzzEffect()
   {
     EffectTypeInfo info;
-    info.type = "fuzz";
+    info.type = EffectGuids::kFuzz;
+    info.aliases = {"fuzz"};
     info.displayName = "Fuzz";
     info.category = "dynamics";
     info.description = "Aggressive fuzz distortion";
@@ -153,7 +155,7 @@ namespace guitarfx
       {"mix", "Mix", 1.0, 0.0, 1.0, "amount"}
     };
 
-    EffectRegistry::Instance().Register("fuzz", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
       { return std::make_unique<FuzzEffect>(); });
   }
 

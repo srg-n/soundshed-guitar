@@ -2,13 +2,14 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <algorithm>
 #include <cmath>
 
 namespace guitarfx
 {
   /**
-   * Octave effect with octave up/down blend.
+   * Octaveeffect with octave up/down blend.
    */
   class OctaveEffect : public EffectProcessor
   {
@@ -133,7 +134,8 @@ namespace guitarfx
   inline void RegisterOctaveEffect()
   {
     EffectTypeInfo info;
-    info.type = "octave";
+    info.type = EffectGuids::kOctave;
+    info.aliases = {"octave"};
     info.displayName = "Octave";
     info.category = "modulation";
     info.description = "Octave up/down blend";
@@ -145,7 +147,7 @@ namespace guitarfx
       {"mix", "Mix", 1.0, 0.0, 1.0, "amount"}
     };
 
-    EffectRegistry::Instance().Register("octave", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
       { return std::make_unique<OctaveEffect>(); });
   }
 

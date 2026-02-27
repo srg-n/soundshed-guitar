@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include "signalsmith-stretch.h"
 #include <algorithm>
 #include <cmath>
@@ -10,7 +11,7 @@
 namespace guitarfx
 {
   /**
-   * Transpose effect using Signalsmith Stretch.
+   * Transposeeffect using Signalsmith Stretch.
    * Integer semitone steps (-36 to +12).
    */
   class TransposeEffect : public EffectProcessor
@@ -154,7 +155,8 @@ namespace guitarfx
   inline void RegisterTransposeEffect()
   {
     EffectTypeInfo info;
-    info.type = "transpose";
+    info.type = EffectGuids::kTranspose;
+    info.aliases = {"transpose"};
     info.displayName = "Transpose";
     info.category = "modulation";
     info.description = "High-quality transpose effect";
@@ -162,7 +164,7 @@ namespace guitarfx
     info.parameters = {
         {"semitones", "Semitones", 0.0, -36.0, 12.0, "st"},
         {"mix", "Mix", 1.0, 0.0, 1.0, "%"}};
-    EffectRegistry::Instance().Register("transpose", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
                                         { return std::make_unique<TransposeEffect>(); });
   }
 

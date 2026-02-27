@@ -1,4 +1,5 @@
 #include "dsp/MultiPresetMixer.h"
+#include "dsp/EffectGuids.h"
 #include "resources/ResourceLibrary.h"
 
 #include <cmath>
@@ -312,14 +313,14 @@ namespace guitarfx
   {
     mGlobalChainConfig = config;
     if ((mGlobalChainConfig.preChainGraph.nodes.empty() && mGlobalChainConfig.preChainGraph.edges.empty())
-        || !GraphHasNodeType(mGlobalChainConfig.preChainGraph, "dynamics_gate")
-        || !GraphHasNodeType(mGlobalChainConfig.preChainGraph, "transpose"))
+        || !GraphHasNodeType(mGlobalChainConfig.preChainGraph, EffectGuids::kDynamicsGate)
+        || !GraphHasNodeType(mGlobalChainConfig.preChainGraph, EffectGuids::kTranspose))
     {
       mGlobalChainConfig.preChainGraph = GlobalSignalChainConfig::BuildDefaultPreChainGraph();
     }
     if ((mGlobalChainConfig.postChainGraph.nodes.empty() && mGlobalChainConfig.postChainGraph.edges.empty())
-        || !GraphHasNodeType(mGlobalChainConfig.postChainGraph, "eq_parametric")
-        || !GraphHasNodeType(mGlobalChainConfig.postChainGraph, "delay_doubler"))
+        || !GraphHasNodeType(mGlobalChainConfig.postChainGraph, EffectGuids::kEqParametric)
+        || !GraphHasNodeType(mGlobalChainConfig.postChainGraph, EffectGuids::kDelayDoubler))
     {
       mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
     }
@@ -341,7 +342,7 @@ namespace guitarfx
     {
       mGlobalChainConfig.preChainGraph = GlobalSignalChainConfig::BuildDefaultPreChainGraph();
     }
-    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_gate", "dynamics_gate"))
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_gate", EffectGuids::kDynamicsGate))
     {
       node->enabled = enabled;
       mPreChainExecutor.SetNodeEnabled(node->id, enabled);
@@ -354,7 +355,7 @@ namespace guitarfx
     {
       mGlobalChainConfig.preChainGraph = GlobalSignalChainConfig::BuildDefaultPreChainGraph();
     }
-    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_gate", "dynamics_gate"))
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_gate", EffectGuids::kDynamicsGate))
     {
       node->params["threshold"] = thresholdDb;
       mPreChainExecutor.SetNodeParam(node->id, "threshold", thresholdDb);
@@ -367,7 +368,7 @@ namespace guitarfx
     {
       mGlobalChainConfig.preChainGraph = GlobalSignalChainConfig::BuildDefaultPreChainGraph();
     }
-    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_gate", "dynamics_gate"))
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_gate", EffectGuids::kDynamicsGate))
     {
       node->params["attack"] = attackMs;
       mPreChainExecutor.SetNodeParam(node->id, "attack", attackMs);
@@ -380,7 +381,7 @@ namespace guitarfx
     {
       mGlobalChainConfig.preChainGraph = GlobalSignalChainConfig::BuildDefaultPreChainGraph();
     }
-    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_gate", "dynamics_gate"))
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_gate", EffectGuids::kDynamicsGate))
     {
       node->params["hold"] = holdMs;
       mPreChainExecutor.SetNodeParam(node->id, "hold", holdMs);
@@ -393,7 +394,7 @@ namespace guitarfx
     {
       mGlobalChainConfig.preChainGraph = GlobalSignalChainConfig::BuildDefaultPreChainGraph();
     }
-    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_gate", "dynamics_gate"))
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_gate", EffectGuids::kDynamicsGate))
     {
       node->params["release"] = releaseMs;
       mPreChainExecutor.SetNodeParam(node->id, "release", releaseMs);
@@ -406,7 +407,7 @@ namespace guitarfx
     {
       mGlobalChainConfig.preChainGraph = GlobalSignalChainConfig::BuildDefaultPreChainGraph();
     }
-    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_transpose", "transpose"))
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_transpose", EffectGuids::kTranspose))
     {
       node->enabled = enabled;
       mPreChainExecutor.SetNodeEnabled(node->id, enabled);
@@ -421,7 +422,7 @@ namespace guitarfx
     {
       mGlobalChainConfig.preChainGraph = GlobalSignalChainConfig::BuildDefaultPreChainGraph();
     }
-    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_transpose", "transpose"))
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.preChainGraph, "global_transpose", EffectGuids::kTranspose))
     {
       node->enabled = enabled;
       node->params["semitones"] = value;
@@ -436,7 +437,7 @@ namespace guitarfx
     {
       mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
     }
-    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_eq", "eq_parametric"))
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_eq", EffectGuids::kEqParametric))
     {
       node->enabled = enabled;
       mPostChainExecutor.SetNodeEnabled(node->id, enabled);
@@ -451,7 +452,7 @@ namespace guitarfx
     {
       mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
     }
-    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_eq", "eq_parametric"))
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_eq", EffectGuids::kEqParametric))
     {
       node->params[kParamNames[band]] = dB;
       mPostChainExecutor.SetNodeParam(node->id, kParamNames[band], dB);
@@ -466,7 +467,7 @@ namespace guitarfx
     {
       mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
     }
-    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_eq", "eq_parametric"))
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_eq", EffectGuids::kEqParametric))
     {
       node->params[kParamNames[band]] = freq;
       mPostChainExecutor.SetNodeParam(node->id, kParamNames[band], freq);
@@ -481,7 +482,7 @@ namespace guitarfx
     {
       mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
     }
-    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_eq", "eq_parametric"))
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_eq", EffectGuids::kEqParametric))
     {
       node->params[kParamNames[band]] = q;
       mPostChainExecutor.SetNodeParam(node->id, kParamNames[band], q);
@@ -494,7 +495,7 @@ namespace guitarfx
     {
       mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
     }
-    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_doubler", "delay_doubler"))
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_doubler", EffectGuids::kDelayDoubler))
     {
       node->enabled = enabled;
       mPostChainExecutor.SetNodeEnabled(node->id, enabled);
@@ -508,7 +509,7 @@ namespace guitarfx
     {
       mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
     }
-    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_doubler", "delay_doubler"))
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_doubler", EffectGuids::kDelayDoubler))
     {
       node->params["time"] = clamped;
       mPostChainExecutor.SetNodeParam(node->id, "time", clamped);
@@ -522,7 +523,7 @@ namespace guitarfx
     {
       mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
     }
-    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_doubler", "delay_doubler"))
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_doubler", EffectGuids::kDelayDoubler))
     {
       node->params["mix"] = clamped;
       mPostChainExecutor.SetNodeParam(node->id, "mix", clamped);
@@ -535,7 +536,7 @@ namespace guitarfx
     {
       mGlobalChainConfig.postChainGraph = GlobalSignalChainConfig::BuildDefaultPostChainGraph();
     }
-    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_doubler", "delay_doubler"))
+    if (auto* node = FindNodeByIdOrType(mGlobalChainConfig.postChainGraph, "global_doubler", EffectGuids::kDelayDoubler))
     {
       node->params["detune"] = cents;
       mPostChainExecutor.SetNodeParam(node->id, "detune", cents);
@@ -599,7 +600,7 @@ namespace guitarfx
   {
     for (auto &inst : mInstances)
     {
-      const auto nodeId = inst.executor.FindFirstNodeOfType("amp_nam");
+      const auto nodeId = inst.executor.FindFirstNodeOfType(EffectGuids::kAmpNam);
       if (!nodeId.empty())
       {
         inst.executor.SetNodeParam(nodeId, "inputGain", value);
@@ -611,10 +612,10 @@ namespace guitarfx
   {
     for (auto &inst : mInstances)
     {
-      auto nodeId = inst.executor.FindFirstNodeOfType("cab_ir");
+      auto nodeId = inst.executor.FindFirstNodeOfType(EffectGuids::kCabIr);
       if (nodeId.empty())
       {
-        nodeId = inst.executor.FindFirstNodeOfType("ir_cab");
+        nodeId = inst.executor.FindFirstNodeOfType(EffectGuids::kCabIr);
       }
       if (!nodeId.empty())
       {
@@ -648,7 +649,7 @@ namespace guitarfx
   {
     for (auto &inst : mInstances)
     {
-      const auto nodeId = inst.executor.FindFirstNodeOfType("amp_nam");
+      const auto nodeId = inst.executor.FindFirstNodeOfType(EffectGuids::kAmpNam);
       if (!nodeId.empty())
       {
         inst.executor.SetNodeParam(nodeId, "tone", value);
@@ -675,7 +676,7 @@ namespace guitarfx
 
   void MultiPresetMixer::ApplyNamInterfaceCalibration(SignalGraphExecutor &executor) const
   {
-    static const std::vector<std::string> kNamTypes = {"amp_nam", "amp_nam_optimized", "amp_nam_blend"};
+    static const std::vector<std::string> kNamTypes = {EffectGuids::kAmpNam, EffectGuids::kAmpNamOptimized, EffectGuids::kAmpNamBlend};
     const std::string referenceValue = std::to_string(mNamInterfaceReferenceDbu);
 
     // Disable calibration on every NAM node first — only the first in the

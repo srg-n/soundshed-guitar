@@ -14,6 +14,8 @@ import { refreshFxSelector } from "./fxSelector.js";
 import { applyEnvironmentState, applyMetronomeState } from "./metronome.js";
 import { applyToneSharingAppSettings, registerInstalledToneSharingPackFromImport } from "./toneSharingPanel.js";
 import type { GlobalSignalChainConfig, Preset, PresetFolder, ResourceRef, Setlist, UiSettings } from "./types.js";
+import { EffectGuids } from "./effectGuids.js";
+import { migratePresetNodeTypes } from "./presetV2.js";
 import { handleResourceDataMessage } from "./archiveUtils.js";
 import { layoutDesigner } from "./layoutDesigner.js";
 import type { LayoutLibrary, EffectLayout } from "./layoutTypes.js";
@@ -445,6 +447,7 @@ export function handleIncomingMessage(message: string): void {
     case "presetLoaded": {
       const preset = (payload as { preset?: Preset }).preset;
       if (preset) {
+        migratePresetNodeTypes(preset);
         normalizePresetResources(preset);
         uiState.activePresetId = preset.id;
         uiState.presetCache.set(preset.id, clonePreset(preset));
@@ -719,6 +722,7 @@ export function handleIncomingMessage(message: string): void {
     case "presetData": {
       const presetPayload = payload as { preset?: Preset };
       if (presetPayload.preset) {
+        migratePresetNodeTypes(presetPayload.preset);
         handlePresetDataMessage(presetPayload.preset);
       }
       break;
@@ -1048,7 +1052,7 @@ export function handleIncomingMessage(message: string): void {
             type,
             displayName,
             category,
-            catalogHidden: existing?.catalogHidden ?? (type === "amp_nam" || type === "amp_nam_blend"),
+            catalogHidden: existing?.catalogHidden ?? (type === EffectGuids.kAmpNam || type === EffectGuids.kAmpNamBlend),
             requiresResource,
             resourceType,
             parameters,

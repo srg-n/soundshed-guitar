@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -976,7 +977,8 @@ namespace guitarfx
   inline void RegisterSynthSawEffect()
   {
     EffectTypeInfo info;
-    info.type = "synth_saw";
+    info.type = EffectGuids::kSynthSaw;
+    info.aliases = {"synth_saw"};
     info.displayName = "Synth Saw";
     info.category = "synth";
     info.description = "Converts audio to sawtooth synth wave via pitch tracking";
@@ -994,7 +996,7 @@ namespace guitarfx
       {"voice2Mix", "Voice 2 Mix", 0.0, 0.0, 1.0, "amount"}
     };
 
-    EffectRegistry::Instance().Register("synth_saw", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
       { return std::make_unique<SynthSawEffect>(); });
   }
 

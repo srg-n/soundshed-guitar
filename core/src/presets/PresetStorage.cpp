@@ -1,5 +1,7 @@
 #include "presets/PresetStorage.h"
 #include "presets/PresetTypesJson.h"
+#include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <iostream>
@@ -145,7 +147,7 @@ namespace guitarfx
         }
       }
 
-      const bool isBlendRef = node.type == "amp_nam_blend"
+      const bool isBlendRef = node.type == EffectGuids::kAmpNamBlend
         && node.config.find("blendId") != node.config.end();
       if (!node.resources.empty() && !isBlendRef)
       {
@@ -166,7 +168,8 @@ namespace guitarfx
     {
       GraphNode node;
       node.id = json.value("id", "");
-      node.type = json.value("type", "");
+      // Resolve legacy string IDs to canonical UUIDs for backward compatibility
+      node.type = EffectRegistry::Instance().Resolve(json.value("type", ""));
       node.category = json.value("category", "");
       // Support both "label" and "displayName"
       node.label = json.value("label", json.value("displayName", ""));

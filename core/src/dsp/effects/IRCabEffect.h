@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include "dsp/RealtimeConvolver.h"
 #include "dsp/IRTypes.h"
 #include "dsp/IRWavLoader.h"
@@ -1199,7 +1200,8 @@ namespace guitarfx
   inline void RegisterIRCabEffect()
   {
     EffectTypeInfo info;
-    info.type = "cab_ir";
+    info.type = EffectGuids::kCabIr;
+    info.aliases = {"cab_ir"};
     info.displayName = "IR Cabinet";
     info.category = "cab";
     info.description = "Impulse response cabinet simulation";
@@ -1225,7 +1227,7 @@ namespace guitarfx
         {"micProximityB", "Mic B Proximity", 0.0, 0.0, 1.0, "amount"},
         {"quality", "Quality", 1.0, 0.0, 3.0, ""}}; // 0=Economy, 1=Standard, 2=High, 3=Full
 
-    EffectRegistry::Instance().Register("cab_ir", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
                                         { return std::make_unique<IRCabEffect>(); });
   }
 

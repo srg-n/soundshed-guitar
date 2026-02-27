@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -10,7 +11,7 @@
 namespace guitarfx
 {
   /**
-   * Spring reverb using short combs, dispersion allpass, and a bandpass tone stage.
+   * Spring reverbusing short combs, dispersion allpass, and a bandpass tone stage.
    */
   class SpringReverbEffect : public EffectProcessor
   {
@@ -316,7 +317,8 @@ namespace guitarfx
   inline void RegisterSpringReverbEffect()
   {
     EffectTypeInfo info;
-    info.type = "reverb_spring";
+    info.type = EffectGuids::kReverbSpring;
+    info.aliases = {"reverb_spring"};
     info.displayName = "Spring Reverb";
     info.category = "reverb";
     info.description = "Spring-style reverb with tonal coloration";
@@ -328,7 +330,7 @@ namespace guitarfx
       {"tension", "Tension", 0.4, 0.0, 1.0, ""},
         {"mix", "Mix", 0.3, 0.0, 1.0, ""}};
 
-    EffectRegistry::Instance().Register("reverb_spring", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
                                         { return std::make_unique<SpringReverbEffect>(); });
   }
 

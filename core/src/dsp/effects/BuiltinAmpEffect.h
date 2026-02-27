@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -524,7 +525,8 @@ namespace guitarfx
   inline void RegisterBuiltinAmpEffect()
   {
     EffectTypeInfo info;
-    info.type = "amp_builtin";
+    info.type = EffectGuids::kAmpBuiltin;
+    info.aliases = {"amp_builtin"};
     info.displayName = "Heavy American";
     info.category = "amp";
     info.description = "Built-in amp with smooth Clean/Drive voice and modern tone controls";
@@ -550,7 +552,7 @@ namespace guitarfx
       {"damping", "Damping", 0.5, 0.0, 1.0, "amount"}
     };
 
-    EffectRegistry::Instance().Register("amp_builtin", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
       { return std::make_unique<BuiltinAmpEffect>(); });
   }
 

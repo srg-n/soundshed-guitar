@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include "dsp/simd/SimdMath.h"
 #include "NAM/dsp.h"
 #include "NAM/get_dsp.h"
@@ -348,7 +349,8 @@ namespace guitarfx
     nam::factory::ForceFactoryRegistration();
 
     EffectTypeInfo info;
-    info.type = "amp_nam";
+    info.type = EffectGuids::kAmpNam;
+    info.aliases = {"amp_nam"};
     info.displayName = "Neural Amp";
     info.category = "amp";
     info.description = "Neural Amp Modeler - AI-trained amp simulation";
@@ -362,7 +364,7 @@ namespace guitarfx
       {"calibrationInputLevel", "Calibration Input", -18.0, -60.0, 24.0, "dB"},
       {"calibrationOutputLevel", "Calibration Output", -18.0, -60.0, 24.0, "dB"}};
 
-    EffectRegistry::Instance().Register("amp_nam", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
                                         { return std::make_unique<NAMAmpEffect>(); });
   }
 

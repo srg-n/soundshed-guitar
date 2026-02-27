@@ -15,6 +15,7 @@
 
 #include "OptimizedNAMAmpEffect.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 
 namespace guitarfx
 {
@@ -37,7 +38,8 @@ inline void RegisterOptimizedNAMFXEffect()
   ::nam::factory::ForceFactoryRegistration();
 
   EffectTypeInfo info;
-  info.type = "fx_nam";
+  info.type = EffectGuids::kFxNam;
+  info.aliases = {"fx_nam"};
   info.displayName = "Neural FX (NAM)";
   info.category = "fx";
   info.description = "Neural FX Modeler (NAM) with SIMD-optimized processing";
@@ -57,7 +59,7 @@ inline void RegisterOptimizedNAMFXEffect()
     {"calibrationOutputLevel","Calibration Output", -18.0, -60.0, 24.0,  "dB", "", true}
   };
 
-  EffectRegistry::Instance().Register("fx_nam", info, []()
+  EffectRegistry::Instance().Register(info.type, info, []()
   {
     return std::make_unique<OptimizedNAMFXEffect>();
   });

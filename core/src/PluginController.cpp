@@ -14,6 +14,7 @@
 #include "PluginController.h"
 #include "MessageDispatcher.h"
 #include "controller/DemoPreviewService.h"
+#include "dsp/EffectGuids.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/effects/BuiltinEffects.h"
 #include "util/Base64.h"
@@ -2172,7 +2173,7 @@ void PluginController::HandleLoadModelRequest(const nlohmann::json& payload)
         return;
     }
 
-    if (UpdateResourceForNodeType("amp_nam", "nam", filePath))
+    if (UpdateResourceForNodeType(EffectGuids::kAmpNam, "nam", filePath))
     {
         mAppSettings["lastModelPath"] = filePath.parent_path().string();
         SaveAppSettings();
@@ -2198,7 +2199,7 @@ void PluginController::HandleLoadIRRequest(const nlohmann::json& payload)
         return;
     }
 
-    if (UpdateResourceForNodeType("cab_ir", "ir", filePath))
+    if (UpdateResourceForNodeType(EffectGuids::kCabIr, "ir", filePath))
     {
         mAppSettings["lastIRPath"] = filePath.parent_path().string();
         SaveAppSettings();
@@ -2506,7 +2507,7 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
         }
 
         if (!IsCompositeEditMode()
-            && (target->type == "amp_nam" || target->type == "amp_nam_optimized")
+            && (target->type == EffectGuids::kAmpNam || target->type == EffectGuids::kAmpNamOptimized)
             && !target->resources.empty()
             && target->resources.front().IsValid())
         {
@@ -2536,7 +2537,7 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
             }
 
             if (!IsCompositeEditMode()
-                && (node->type == "amp_nam" || node->type == "amp_nam_optimized")
+                && (node->type == EffectGuids::kAmpNam || node->type == EffectGuids::kAmpNamOptimized)
                 && !node->resources.empty()
                 && node->resources.front().IsValid())
             {
@@ -2551,7 +2552,7 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
     if (mActivePreset)
     {
         auto* node = mActivePreset->graph.FindNode(nodeId);
-        if (node && (node->type == "amp_nam" || node->type == "amp_nam_optimized")
+        if (node && (node->type == EffectGuids::kAmpNam || node->type == EffectGuids::kAmpNamOptimized)
             && !node->resources.empty() && node->resources.front().IsValid())
         {
             QueueNamCalibrationForNode(nodeId, node->resources.front());
@@ -5090,7 +5091,7 @@ void PluginController::ApplyPreset(const Preset& preset)
     // Queue NAM calibrations for nodes that need them
     for (const auto& node : normalizedPreset.graph.nodes)
     {
-        if (!node.resources.empty() && (node.type == "amp_nam" || node.type == "amp_nam_optimized"))
+        if (!node.resources.empty() && (node.type == EffectGuids::kAmpNam || node.type == EffectGuids::kAmpNamOptimized))
             QueueNamCalibrationForNode(node.id, node.resources[0]);
     }
 

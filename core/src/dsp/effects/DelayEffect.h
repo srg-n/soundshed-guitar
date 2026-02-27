@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -9,7 +10,7 @@
 namespace guitarfx
 {
   /**
-   * Digital delay with high/low cut filtering, stereo spread, ping-pong,
+   * Digital delaywith high/low cut filtering, stereo spread, ping-pong,
    * LFO modulation, drive saturation, and ducking.
    */
   class DelayEffect : public EffectProcessor
@@ -257,7 +258,8 @@ namespace guitarfx
   inline void RegisterDelayEffect()
   {
     EffectTypeInfo info;
-    info.type         = "delay_digital";
+    info.type         = EffectGuids::kDelayDigital;
+    info.aliases      = {"delay_digital"};
     info.displayName  = "Digital Delay";
     info.category     = "delay";
     info.description  = "Stereo digital delay with tone shaping, modulation, drive, and ducking";
@@ -275,7 +277,7 @@ namespace guitarfx
         {"modDepth",   "Mod Depth",   0.0,    0.0,    20.0,    "ms",  "", true},
         {"ducking",    "Ducking",     0.0,    0.0,    1.0,     "",    "", true}};
 
-    EffectRegistry::Instance().Register("delay_digital", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
                                         { return std::make_unique<DelayEffect>(); });
   }
 

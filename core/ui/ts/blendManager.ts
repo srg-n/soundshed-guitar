@@ -4,6 +4,7 @@ import { postMessage } from "./bridge.js";
 import { showNotification } from "./notifications.js";
 import { showConfirm } from "./dialogs.js";
 import type { BlendDefinition, Preset } from "./types.js";
+import { EffectGuids } from "./effectGuids.js";
 
 const blendList = document.getElementById("blend-list");
 const blendSearchInput = document.getElementById("blend-search-input") as HTMLInputElement | null;
@@ -133,7 +134,7 @@ function countBlendUsage(blendId: string): number {
     seen.add(preset.id);
     const nodes = preset.graph?.nodes ?? [];
     const used = nodes.some((node) => {
-      if (node.type !== "amp_nam_blend") {
+      if (node.type !== EffectGuids.kAmpNamBlend) {
         return false;
       }
       const nodeBlendId = (node.config?.blendId ?? "").trim();

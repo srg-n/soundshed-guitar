@@ -15,6 +15,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include "dsp/simd/OptimizedNAM.h"
 #include "NAM/dsp.h"
 #include "NAM/get_dsp.h"
@@ -606,7 +607,8 @@ inline void RegisterOptimizedNAMAmpEffect()
   ::nam::factory::ForceFactoryRegistration();
 
   EffectTypeInfo info;
-  info.type = "amp_nam_optimized";
+  info.type = EffectGuids::kAmpNamOptimized;
+  info.aliases = {"amp_nam_optimized"};
   info.displayName = "Neural Amp (NAM)";
   info.category = "amp";
   info.description = "Neural Amp Modeler (NAM) with SIMD-optimized processing";
@@ -626,7 +628,7 @@ inline void RegisterOptimizedNAMAmpEffect()
     {"calibrationOutputLevel","Calibration Output", -18.0, -60.0, 24.0,  "dB"}
   };
 
-  EffectRegistry::Instance().Register("amp_nam_optimized", info, []()
+  EffectRegistry::Instance().Register(info.type, info, []()
   {
     return std::make_unique<OptimizedNAMAmpEffect>();
   });

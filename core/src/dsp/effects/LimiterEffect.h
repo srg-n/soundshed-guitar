@@ -2,13 +2,14 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <algorithm>
 #include <cmath>
 
 namespace guitarfx
 {
   /**
-   * Brickwall limiter with instantaneous attack and smoothed release.
+   * Brickwall limiterwith instantaneous attack and smoothed release.
    * Prevents output from exceeding a ceiling (dBFS).
    */
   class LimiterEffect : public EffectProcessor
@@ -113,7 +114,8 @@ namespace guitarfx
   inline void RegisterLimiterEffect()
   {
     EffectTypeInfo info;
-    info.type = "limiter_brickwall";
+    info.type = EffectGuids::kLimiterBrickwall;
+    info.aliases = {"limiter_brickwall"};
     info.displayName = "Brickwall Limiter";
     info.category = "dynamics";
     info.description = "Instant-attack limiter with adjustable ceiling";
@@ -123,7 +125,7 @@ namespace guitarfx
       {"release", "Release", 50.0, 1.0, 500.0, "ms"}
     };
 
-    EffectRegistry::Instance().Register("limiter_brickwall", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
       { return std::make_unique<LimiterEffect>(); });
   }
 

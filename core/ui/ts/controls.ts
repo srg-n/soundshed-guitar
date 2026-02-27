@@ -13,6 +13,7 @@ import {
   eqBandChangeToParams,
 } from "./eqCurve.js";
 import type { GraphNode, SignalGraph } from "./types.js";
+import { EffectGuids } from "./effectGuids.js";
 
 export interface KnobConfig {
   knobElement: HTMLElement;
@@ -837,16 +838,16 @@ const findGraphNode = (graph: SignalGraph | undefined, id: string, type: string)
 };
 
 const getPreChainGateNode = (): GraphNode | undefined =>
-  findGraphNode(uiState.globalSignalChain?.preChainGraph, "global_gate", "dynamics_gate");
+  findGraphNode(uiState.globalSignalChain?.preChainGraph, "global_gate", EffectGuids.kDynamicsGate);
 
 const getPreChainTransposeNode = (): GraphNode | undefined =>
-  findGraphNode(uiState.globalSignalChain?.preChainGraph, "global_transpose", "transpose");
+  findGraphNode(uiState.globalSignalChain?.preChainGraph, "global_transpose", EffectGuids.kTranspose);
 
 const getPostChainDoublerNode = (): GraphNode | undefined =>
-  findGraphNode(uiState.globalSignalChain?.postChainGraph, "global_doubler", "delay_doubler");
+  findGraphNode(uiState.globalSignalChain?.postChainGraph, "global_doubler", EffectGuids.kDelayDoubler);
 
 const getPostChainEqNode = (): GraphNode | undefined =>
-  findGraphNode(uiState.globalSignalChain?.postChainGraph, "global_eq", "eq_parametric");
+  findGraphNode(uiState.globalSignalChain?.postChainGraph, "global_eq", EffectGuids.kEqParametric);
 
 const GLOBAL_EQ_PARAM_MAP: Record<string, GlobalEqParamBinding> = {
   eq_low_gain: {

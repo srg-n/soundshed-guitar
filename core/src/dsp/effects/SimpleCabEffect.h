@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <array>
 #include <cmath>
 
@@ -222,7 +223,8 @@ namespace guitarfx
   inline void RegisterSimpleCabEffect()
   {
     EffectTypeInfo info;
-    info.type = "cab_simple";
+    info.type = EffectGuids::kCabSimple;
+    info.aliases = {"cab_simple"};
     info.displayName = "Simple Cabinet";
     info.category = "cab";
     info.description = "Filter-based cabinet simulation (no IR required)";
@@ -233,7 +235,7 @@ namespace guitarfx
         {"brightness", "Brightness", 0.5, 0.0, 1.0, ""},
         {"mix", "Mix", 1.0, 0.0, 1.0, ""}};
 
-    EffectRegistry::Instance().Register("cab_simple", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
                                         { return std::make_unique<SimpleCabEffect>(); });
   }
 

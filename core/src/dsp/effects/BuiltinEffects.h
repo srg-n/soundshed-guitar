@@ -2,6 +2,7 @@
 
 // Include all effect implementations
 #include "dsp/EffectProcessor.h"
+#include "dsp/EffectGuids.h"
 #include "dsp/effects/GainEffect.h"
 #include "dsp/effects/NoiseGateEffect.h"
 #include "dsp/effects/ParametricEQEffect.h"
@@ -45,16 +46,18 @@ namespace guitarfx
     RegisterGainEffect();
     {
       EffectTypeInfo splitterInfo;
-      splitterInfo.type = "splitter";
+      splitterInfo.type = EffectGuids::kSplitter;
+      splitterInfo.aliases = {"splitter"};
       splitterInfo.displayName = "Splitter";
       splitterInfo.category = "utility";
       splitterInfo.description = "Split signal into parallel branches";
       splitterInfo.requiresResource = false;
-      EffectRegistry::Instance().Register("splitter", splitterInfo, []()
+      EffectRegistry::Instance().Register(splitterInfo.type, splitterInfo, []()
         { return std::make_unique<PassthroughProcessor>(); });
 
       EffectTypeInfo mixerInfo;
-      mixerInfo.type = "mixer";
+      mixerInfo.type = EffectGuids::kMixer;
+      mixerInfo.aliases = {"mixer"};
       mixerInfo.displayName = "Mixer";
       mixerInfo.category = "utility";
       mixerInfo.description = "Mix parallel branches with per-input level, pan, and delay";
@@ -63,7 +66,7 @@ namespace guitarfx
         {"masterLevel", "Master", 0.0, -60.0, 12.0, "dB"}
         // Per-input params (level_N, pan_N, delay_N, mute_N) are dynamic
       };
-      EffectRegistry::Instance().Register("mixer", mixerInfo, []()
+      EffectRegistry::Instance().Register(mixerInfo.type, mixerInfo, []()
         { return std::make_unique<MixerEffect>(); });
     }
 

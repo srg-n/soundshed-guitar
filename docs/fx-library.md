@@ -10,6 +10,100 @@
 
 The FX library defines available effect types, their parameters, and resource configuration. Effects register with the `EffectRegistry` for dynamic discovery and instantiation. External resources (NAM models, IRs) are referenced via `ResourceRef` with resolution through the `ResourceLibrary`.
 
+## Effect IDs
+
+### UUID-based canonical IDs
+
+All registered effects use a **UUID v4** as their canonical type ID, defined as `constexpr const char*` constants in `core/src/dsp/EffectGuids.h`. UUIDs are permanent — they never change, regardless of renames or refactoring.
+
+```cpp
+// EffectGuids.h
+namespace guitarfx::EffectGuids {
+  constexpr const char* kAmpNam     = "2eb53b40-6139-4696-8820-387ac56ffa91";
+  constexpr const char* kDynamicsGate = "e8388de1-d262-4123-a123-8dbc56f657bc";
+  // ...
+}
+```
+
+Always reference effect types using the `EffectGuids::k*` constants in C++ code — never embed the UUID string literal directly.
+
+### Human-readable aliases
+
+Each effect retains its legacy string ID (e.g. `"amp_nam"`, `"dynamics_gate"`) as an **alias** in `EffectTypeInfo.aliases`. Aliases are resolved to the canonical UUID automatically by `EffectRegistry::Resolve()`, which is called during preset deserialization. This means:
+
+- Old presets with string type IDs load transparently and are normalized to UUIDs in memory.
+- New presets are always written with UUID type IDs.
+- No preset migration tool is needed.
+
+```cpp
+info.type    = EffectGuids::kFuzz;
+info.aliases = {"fuzz"};          // old presets using "fuzz" still load
+EffectRegistry::Instance().Register(info.type, info, factory);
+```
+
+### Routing nodes
+
+The special nodes `input` and `output` are infrastructure-only and are **not** registered effects. They keep their plain string IDs and are never resolved through the registry.
+
+### Registered effect UUID table
+
+All UUID constants are defined in `core/src/dsp/EffectGuids.h`. The table below documents the mapping.
+
+| Constant | UUID | Legacy alias |
+|---|---|---|
+| `kAmpBuiltin` | `1460a632-6690-4fef-ac6d-6432e3b983f8` | `amp_builtin` |
+| `kAmpNam` | `2eb53b40-6139-4696-8820-387ac56ffa91` | `amp_nam` |
+| `kAmpNamOptimized` | `49ea214c-91e6-41f9-bd27-ad6eec0ae90a` | `amp_nam_optimized` |
+| `kAmpNamBlend` | `8a22c0f8-413b-42c1-b9ba-d543cf011d9e` | `amp_nam_blend` |
+| `kFxNam` | `c3263344-65e4-4b7e-b102-ea625700e12f` | `fx_nam` |
+| `kCabIr` | `94fa2577-e904-43b8-968b-9c569c511160` | `cab_ir` |
+| `kCabSimple` | `27e0eaa3-b023-4b5a-b783-cce65254c0d3` | `cab_simple` |
+| `kDynamicsGate` | `e8388de1-d262-4123-a123-8dbc56f657bc` | `dynamics_gate` |
+| `kCompressorVca` | `72af3541-2408-4a5c-a2dc-ba164f17eac9` | `compressor_vca` |
+| `kCompressorOpto` | `9651c79e-6530-4c23-9150-aa4c0ff2f1d8` | `compressor_opto` |
+| `kLimiterBrickwall` | `f4094126-b5de-4c5d-8d05-d56bd8c312d1` | `limiter_brickwall` |
+| `kOverdrive` | `fa9e05a8-168a-4293-aa91-6b770de3da1d` | `overdrive` |
+| `kDistortion` | `686773c9-30ac-4f33-b0f8-9222146d45b1` | `distortion` |
+| `kFuzz` | `3a38b19c-1d97-4989-b5bb-12bcc59d1e6b` | `fuzz` |
+| `kEqParametric` | `4b4025ca-64cd-4180-be79-81873b618dba` | `eq_parametric` |
+| `kDelayDigital` | `673d3e7a-e9ef-4c5d-a4c4-619dff3355ed` | `delay_digital` |
+| `kDelayDoubler` | `778aaef4-40e3-4efa-8782-6a8bfa1d1661` | `delay_doubler` |
+| `kReverbRoom` | `7467cbf1-6c7f-4f07-b5dd-a303d25b475c` | `reverb_room` |
+| `kReverbHall` | `a07ab1a5-37e5-4279-bd08-5ad640886709` | `reverb_hall` |
+| `kReverbPlate` | `9e023b65-5431-48eb-95ff-4f13e7f864a2` | `reverb_plate` |
+| `kReverbChamber` | `4ef25e86-9763-40bc-aca6-636b542df60b` | `reverb_chamber` |
+| `kReverbSpring` | `0df83b32-23d0-4530-a50e-e0824a5ccf01` | `reverb_spring` |
+| `kReverbShimmer` | `7dcbb06d-8925-4f84-b412-232b7c02de26` | `reverb_shimmer` |
+| `kReverbAmbient` | `d663f5d8-0f6e-4721-960d-81621fe41801` | `reverb_ambient` |
+| `kReverbAdvanced` | `92558944-f0da-4d97-ab75-bed8b63abc31` | `reverb_advanced` |
+| `kReverbIr` | `497d3c9d-ed6b-4c71-8e6d-0f9d61564dbc` | `reverb_ir` |
+| `kChorus` | `decdd132-029a-46a5-a362-edcde007a450` | `chorus` |
+| `kFlanger` | `1a3f3793-7e80-4e3d-ab7b-3ce3ce032fe7` | `flanger` |
+| `kPhaser` | `3aa9dc81-31c2-40d5-9b1b-b0b9d1295e9b` | `phaser` |
+| `kTremolo` | `c9debb02-d7e7-43e3-8330-b387be46dcf4` | `tremolo` |
+| `kAutoWah` | `b06c6d84-01b3-4d0a-ad98-40eecb64438e` | `auto_wah` |
+| `kPitchShift` | `0c15f065-8335-4932-9d2f-366d436ec30a` | `pitch_shift` |
+| `kTranspose` | `9b89cc46-e05b-4f06-981e-1d74d1f628cf` | `transpose` |
+| `kOctave` | `2e4d5380-5a79-412f-bfc0-bf84ef74d561` | `octave` |
+| `kGain` | `0bcd895e-5d36-4247-a351-6bed1fcb37a8` | `gain` |
+| `kSynthSaw` | `608e846e-0e60-4064-9c83-37c0df573c38` | `synth_saw` |
+| `kSplitter` | `f5f2541b-fcea-4cfd-9e62-eeddf583ef4e` | `splitter` |
+| `kMixer` | `d7d1e40f-9c79-4582-9a82-d5fa5bbbfb97` | `mixer` |
+
+### Backward Compatibility via Aliases
+
+`EffectTypeInfo` has an `aliases` field — a list of legacy type IDs that resolve to the canonical UUID:
+
+```cpp
+info.type    = EffectGuids::kFuzz;
+info.aliases = {"fuzz"};  // old presets using "fuzz" load correctly
+EffectRegistry::Instance().Register(info.type, info, factory);
+```
+
+`EffectRegistry::Resolve(typeId)` is called during preset deserialization so alias resolution is transparent to all callers.
+
+
+
 ## Effect Registry
 
 ### Registration
@@ -375,12 +469,16 @@ For portable preset sharing, resources can be embedded:
 
 ## Adding New Effects
 
-1. Implement `EffectProcessor` interface
-2. Create a registration function that populates `EffectTypeInfo` and calls `EffectRegistry::Instance().Register()`
-3. Define parameter metadata in `info.parameters`
-4. Place in `src/src/dsp/effects/`
-5. Call registration function from `RegisterAllEffects()` in `BuiltinEffects.h`
-6. Effect appears in UI automatically via registry queries
+1. Generate a new UUID v4 (e.g. `[System.Guid]::NewGuid()` in PowerShell) — this is the permanent ID.
+2. Add a `constexpr const char* kYourEffect = "<uuid>";` constant to `EffectGuids.h`.
+3. Implement the `EffectProcessor` interface.
+4. Create a registration function: set `info.type = EffectGuids::kYourEffect` and add a human-readable `info.aliases = {"category_variant"}` string for debugging/legacy use.
+5. Define parameter metadata in `info.parameters`.
+6. Place in `core/src/dsp/effects/`.
+7. Call the registration function from `RegisterAllEffects()` in `BuiltinEffects.h`.
+8. Effect appears in UI automatically via registry queries.
+
+> **Renaming an existing effect?** The UUID stays the same — just update `info.displayName`. Add the old alias string to `info.aliases` if it was previously used in preset JSON.
 
 ## See Also
 - [Signal Chain](signal-chain.md) — How effects execute in the graph

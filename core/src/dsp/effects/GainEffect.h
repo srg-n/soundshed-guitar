@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <cmath>
 
 namespace guitarfx
@@ -64,7 +65,8 @@ namespace guitarfx
   inline void RegisterGainEffect()
   {
     EffectTypeInfo info;
-    info.type = "gain";
+    info.type = EffectGuids::kGain;
+    info.aliases = {"gain"};
     info.displayName = "Gain";
     info.category = "utility";
     info.description = "Simple gain stage";
@@ -72,7 +74,7 @@ namespace guitarfx
     info.parameters = {
         {"gainDb", "Gain", 0.0, -24.0, 24.0, "dB"}};
 
-    EffectRegistry::Instance().Register("gain", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
                                         { return std::make_unique<GainEffect>(); });
   }
 

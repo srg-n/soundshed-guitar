@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <atomic>
 #include <algorithm>
 #include <cmath>
@@ -9,7 +10,7 @@
 namespace guitarfx
 {
   /**
-   * Overdrive pedal style soft clipper with tone control.
+   * Overdrive pedalstyle soft clipper with tone control.
    */
   class OverdriveEffect : public EffectProcessor
   {
@@ -134,7 +135,8 @@ namespace guitarfx
   inline void RegisterOverdriveEffect()
   {
     EffectTypeInfo info;
-    info.type = "overdrive";
+    info.type = EffectGuids::kOverdrive;
+    info.aliases = {"overdrive"};
     info.displayName = "Overdrive";
     info.category = "dynamics";
     info.description = "Soft clipping overdrive";
@@ -146,7 +148,7 @@ namespace guitarfx
       {"mix", "Mix", 1.0, 0.0, 1.0, "amount"}
     };
 
-    EffectRegistry::Instance().Register("overdrive", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
       { return std::make_unique<OverdriveEffect>(); });
   }
 

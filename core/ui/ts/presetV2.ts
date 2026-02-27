@@ -6,6 +6,7 @@
  */
 
 import type { Preset, GraphNode, GraphEdge, ResourceRef } from "./types.js";
+import { EffectGuids, resolveEffectType } from "./effectGuids.js";
 
 export interface ParameterDef {
   key: string;
@@ -28,6 +29,8 @@ export interface EffectTypeInfo {
   requiresResource: boolean;
   resourceType?: string;
   resourceFilterHint?: string[];
+  /** Legacy string IDs that map to this effect type. */
+  aliases?: string[];
   parameters: ParameterDef[];
   exposedResources?: Array<{
     resourceId: string;
@@ -46,13 +49,25 @@ export interface EffectTypeInfo {
  */
 class EffectRegistry {
   private types = new Map<string, EffectTypeInfo>();
+  private aliasMap = new Map<string, string>();
 
   register(type: string, info: EffectTypeInfo): void {
     this.types.set(type, info);
+    // Register any legacy aliases so Resolve() can find them
+    if (info.aliases) {
+      for (const alias of info.aliases) {
+        this.aliasMap.set(alias, type);
+      }
+    }
+  }
+
+  /** Resolve a legacy alias string to its canonical UUID (or return unchanged). */
+  resolve(type: string): string {
+    return this.aliasMap.get(type) ?? type;
   }
 
   get(type: string): EffectTypeInfo | undefined {
-    return this.types.get(type);
+    return this.types.get(this.resolve(type));
   }
 
   getByCategory(category: string): EffectTypeInfo[] {
@@ -69,7 +84,8 @@ export const EffectTypeRegistry = new EffectRegistry();
 // Built-in effect types definitions
 export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
   {
-    type: "dynamics_gate",
+    type: EffectGuids.kDynamicsGate,
+    aliases: ["dynamics_gate"],
     displayName: "Noise Gate",
     category: "dynamics",
     requiresResource: false,
@@ -81,7 +97,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "compressor_vca",
+    type: EffectGuids.kCompressorVca,
+    aliases: ["compressor_vca"],
     displayName: "VCA Compressor",
     category: "dynamics",
     requiresResource: false,
@@ -96,7 +113,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "compressor_opto",
+    type: EffectGuids.kCompressorOpto,
+    aliases: ["compressor_opto"],
     displayName: "Opto Compressor",
     category: "dynamics",
     requiresResource: false,
@@ -110,7 +128,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "overdrive",
+    type: EffectGuids.kOverdrive,
+    aliases: ["overdrive"],
     displayName: "Overdrive",
     category: "dynamics",
     requiresResource: false,
@@ -122,7 +141,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "distortion",
+    type: EffectGuids.kDistortion,
+    aliases: ["distortion"],
     displayName: "Distortion",
     category: "dynamics",
     requiresResource: false,
@@ -134,7 +154,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "fuzz",
+    type: EffectGuids.kFuzz,
+    aliases: ["fuzz"],
     displayName: "Fuzz",
     category: "dynamics",
     requiresResource: false,
@@ -146,7 +167,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "limiter_brickwall",
+    type: EffectGuids.kLimiterBrickwall,
+    aliases: ["limiter_brickwall"],
     displayName: "Brickwall Limiter",
     category: "dynamics",
     requiresResource: false,
@@ -156,7 +178,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "amp_builtin",
+    type: EffectGuids.kAmpBuiltin,
+    aliases: ["amp_builtin"],
     displayName: "Heavy American",
     category: "amp",
     requiresResource: false,
@@ -182,7 +205,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "amp_nam",
+    type: EffectGuids.kAmpNam,
+    aliases: ["amp_nam"],
     displayName: "NAM Amp/FX Model",
     category: "amp",
     catalogHidden: true,
@@ -198,7 +222,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "amp_nam_optimized",
+    type: EffectGuids.kAmpNamOptimized,
+    aliases: ["amp_nam_optimized"],
     displayName: "Neural Amp",
     category: "amp",
     requiresResource: true,
@@ -218,7 +243,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "fx_nam",
+    type: EffectGuids.kFxNam,
+    aliases: ["fx_nam"],
     displayName: "Neural FX (NAM)",
     category: "fx",
     requiresResource: true,
@@ -238,7 +264,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "amp_nam_blend",
+    type: EffectGuids.kAmpNamBlend,
+    aliases: ["amp_nam_blend"],
     displayName: "NAM Blend",
     category: "amp",
     catalogHidden: true,
@@ -251,7 +278,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "cab_ir",
+    type: EffectGuids.kCabIr,
+    aliases: ["cab_ir"],
     displayName: "IR Cabinet",
     category: "cab",
     requiresResource: true,
@@ -294,7 +322,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "cab_simple",
+    type: EffectGuids.kCabSimple,
+    aliases: ["cab_simple"],
     displayName: "Simple Cabinet",
     category: "cab",
     requiresResource: false,
@@ -306,7 +335,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "eq_parametric",
+    type: EffectGuids.kEqParametric,
+    aliases: ["eq_parametric"],
     displayName: "Parametric EQ",
     category: "eq",
     requiresResource: false,
@@ -344,7 +374,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "gain",
+    type: EffectGuids.kGain,
+    aliases: ["gain"],
     displayName: "Gain",
     category: "utility",
     requiresResource: false,
@@ -354,14 +385,16 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "splitter",
+    type: EffectGuids.kSplitter,
+    aliases: ["splitter"],
     displayName: "Splitter",
     category: "utility",
     requiresResource: false,
     parameters: []
   },
   {
-    type: "mixer",
+    type: EffectGuids.kMixer,
+    aliases: ["mixer"],
     displayName: "Mixer",
     category: "utility",
     requiresResource: false,
@@ -372,7 +405,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "delay_digital",
+    type: EffectGuids.kDelayDigital,
+    aliases: ["delay_digital"],
     displayName: "Digital Delay",
     category: "delay",
     requiresResource: false,
@@ -391,7 +425,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "delay_doubler",
+    type: EffectGuids.kDelayDoubler,
+    aliases: ["delay_doubler"],
     displayName: "Doubler",
     category: "delay",
     requiresResource: false,
@@ -401,7 +436,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "pitch_shift",
+    type: EffectGuids.kPitchShift,
+    aliases: ["pitch_shift"],
     displayName: "Pitch Shift",
     category: "modulation",
     requiresResource: false,
@@ -414,7 +450,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "transpose",
+    type: EffectGuids.kTranspose,
+    aliases: ["transpose"],
     displayName: "Transpose",
     category: "modulation",
     requiresResource: false,
@@ -424,7 +461,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "chorus",
+    type: EffectGuids.kChorus,
+    aliases: ["chorus"],
     displayName: "Chorus",
     category: "modulation",
     requiresResource: false,
@@ -437,7 +475,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "flanger",
+    type: EffectGuids.kFlanger,
+    aliases: ["flanger"],
     displayName: "Flanger",
     category: "modulation",
     requiresResource: false,
@@ -450,7 +489,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "phaser",
+    type: EffectGuids.kPhaser,
+    aliases: ["phaser"],
     displayName: "Phaser",
     category: "modulation",
     requiresResource: false,
@@ -462,7 +502,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "tremolo",
+    type: EffectGuids.kTremolo,
+    aliases: ["tremolo"],
     displayName: "Tremolo",
     category: "modulation",
     requiresResource: false,
@@ -474,7 +515,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "auto_wah",
+    type: EffectGuids.kAutoWah,
+    aliases: ["auto_wah"],
     displayName: "Auto-Wah",
     category: "modulation",
     requiresResource: false,
@@ -487,7 +529,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "octave",
+    type: EffectGuids.kOctave,
+    aliases: ["octave"],
     displayName: "Octave",
     category: "modulation",
     requiresResource: false,
@@ -499,7 +542,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "synth_saw",
+    type: EffectGuids.kSynthSaw,
+    aliases: ["synth_saw"],
     displayName: "Synth Saw",
     category: "synth",
     requiresResource: false,
@@ -517,7 +561,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "reverb_room",
+    type: EffectGuids.kReverbRoom,
+    aliases: ["reverb_room"],
     displayName: "Room Reverb",
     category: "reverb",
     requiresResource: false,
@@ -530,7 +575,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "reverb_hall",
+    type: EffectGuids.kReverbHall,
+    aliases: ["reverb_hall"],
     displayName: "Hall Reverb",
     category: "reverb",
     requiresResource: false,
@@ -544,7 +590,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "reverb_plate",
+    type: EffectGuids.kReverbPlate,
+    aliases: ["reverb_plate"],
     displayName: "Plate Reverb",
     category: "reverb",
     requiresResource: false,
@@ -557,7 +604,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "reverb_chamber",
+    type: EffectGuids.kReverbChamber,
+    aliases: ["reverb_chamber"],
     displayName: "Chamber Reverb",
     category: "reverb",
     requiresResource: false,
@@ -570,7 +618,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "reverb_spring",
+    type: EffectGuids.kReverbSpring,
+    aliases: ["reverb_spring"],
     displayName: "Spring Reverb",
     category: "reverb",
     requiresResource: false,
@@ -582,7 +631,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "reverb_shimmer",
+    type: EffectGuids.kReverbShimmer,
+    aliases: ["reverb_shimmer"],
     displayName: "Shimmer Reverb",
     category: "reverb",
     requiresResource: false,
@@ -595,7 +645,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "reverb_ambient",
+    type: EffectGuids.kReverbAmbient,
+    aliases: ["reverb_ambient"],
     displayName: "Ambient Reverb",
     category: "reverb",
     requiresResource: false,
@@ -608,7 +659,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "reverb_advanced",
+    type: EffectGuids.kReverbAdvanced,
+    aliases: ["reverb_advanced"],
     displayName: "Advanced Reverb",
     category: "reverb",
     requiresResource: false,
@@ -631,7 +683,8 @@ export const BUILTIN_EFFECTS: EffectTypeInfo[] = [
     ]
   },
   {
-    type: "reverb_ir",
+    type: EffectGuids.kReverbIr,
+    aliases: ["reverb_ir"],
     displayName: "IR Reverb",
     category: "reverb",
     requiresResource: true,
@@ -728,7 +781,7 @@ export function createSimplePresetV2(
   // Add noise gate
   const gateNode: GraphNode = {
     id: `gate_${nodeId++}`,
-    type: "dynamics_gate",
+    type: EffectGuids.kDynamicsGate,
     displayName: "Gate",
     category: "dynamics",
     bypassed: false,
@@ -749,7 +802,7 @@ export function createSimplePresetV2(
   if (ampResource) {
     const ampNode: GraphNode = {
       id: `amp_${nodeId++}`,
-      type: "amp_nam",
+      type: EffectGuids.kAmpNam,
       displayName: "Amp",
       category: "amp",
       bypassed: false,
@@ -772,7 +825,7 @@ export function createSimplePresetV2(
   if (cabResource) {
     const cabNode: GraphNode = {
       id: `cab_${nodeId++}`,
-      type: "cab_ir",
+      type: EffectGuids.kCabIr,
       displayName: "Cab",
       category: "cab",
       bypassed: false,
@@ -800,6 +853,18 @@ export function createSimplePresetV2(
     gain: 1
   });
 
+  return preset;
+}
+
+/**
+ * Migrate a preset's graph node types from legacy string IDs to canonical UUIDs.
+ * Safe to call on presets that are already migrated — UUIDs pass through unchanged.
+ */
+export function migratePresetNodeTypes(preset: Preset): Preset {
+  if (!preset.graph?.nodes) return preset;
+  for (const node of preset.graph.nodes) {
+    node.type = resolveEffectType(node.type);
+  }
   return preset;
 }
 

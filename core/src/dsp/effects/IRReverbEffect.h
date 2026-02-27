@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include "dsp/IRTypes.h"
 #include "dsp/IRWavLoader.h"
 #include "dsp/RealtimeConvolver.h"
@@ -408,7 +409,8 @@ namespace guitarfx
   inline void RegisterIRReverbEffect()
   {
     EffectTypeInfo info;
-    info.type = "reverb_ir";
+    info.type = EffectGuids::kReverbIr;
+    info.aliases = {"reverb_ir"};
     info.displayName = "IR Reverb";
     info.category = "reverb";
     info.description = "Impulse response reverb";
@@ -419,7 +421,7 @@ namespace guitarfx
         {"outputGain", "Output", 0.0, -24.0, 24.0, "dB"},
         {"quality", "Quality", 1.0, 0.0, 3.0, ""}};
 
-    EffectRegistry::Instance().Register("reverb_ir", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
                                         { return std::make_unique<IRReverbEffect>(); });
   }
 

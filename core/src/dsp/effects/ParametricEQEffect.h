@@ -9,6 +9,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <array>
 
 namespace guitarfx
@@ -260,7 +261,8 @@ namespace guitarfx
   inline void RegisterParametricEQEffect()
   {
     EffectTypeInfo info;
-    info.type = "eq_parametric";
+    info.type = EffectGuids::kEqParametric;
+    info.aliases = {"eq_parametric"};
     info.displayName = "Parametric EQ";
     info.category = "eq";
     info.description = "4-band parametric equalizer";
@@ -277,7 +279,7 @@ namespace guitarfx
         {"highGain", "High Gain", 0.0, -12.0, 12.0, "dB"},
         {"highFreq", "High Freq", 8000.0, 2000.0, 16000.0, "Hz"}};
 
-    EffectRegistry::Instance().Register("eq_parametric", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
                                         { return std::make_unique<ParametricEQEffect>(); });
   }
 

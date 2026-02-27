@@ -1,4 +1,5 @@
 import type { Attachment, AudioFxModelEntry, IrLibraryEntry, Preset, GraphNode } from "./types.js";
+import { EffectGuids } from "./effectGuids.js";
 
 export const REMOTE_BASE_URL = window.AUDIOFX_REMOTE_BASE_URL ?? "";
 
@@ -91,8 +92,8 @@ function extractResourceIdsFromGraph(
 export function buildAttachmentsFromPreset(preset: Preset): Attachment[] {
   // For v2 presets, extract from graph nodes
   if (preset.formatVersion === 2 && preset.graph?.nodes) {
-    const modelIds = extractResourceIdsFromGraph(preset, "amp_nam", "nam");
-    const irIds = extractResourceIdsFromGraph(preset, "cab_ir", "ir");
+    const modelIds = extractResourceIdsFromGraph(preset, EffectGuids.kAmpNam, "nam");
+    const irIds = extractResourceIdsFromGraph(preset, EffectGuids.kCabIr, "ir");
 
     // Use first model and IR found (for attachment compatibility)
     const modelId = modelIds.length > 0 ? modelIds[0] : null;

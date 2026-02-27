@@ -12,6 +12,7 @@ import type {
 import { postMessage } from "./bridge.js";
 import { showNotification } from "./notifications.js";
 import { EffectTypeRegistry, type EffectTypeInfo } from "./presetV2.js";
+import { EffectGuids } from "./effectGuids.js";
 import { getBadgeIcon, getFxCategoryIcon, getFxEffectIcon, renderIcon } from "./iconAssets.js";
 import { sendAddSignalPathNode, sendAddSignalPathNodeOnEdge, type SignalPathEdgeRef } from "./fxSelector.js";
 import { GenericKnob } from "./controls.js";
@@ -113,7 +114,12 @@ function updateEffectVisualization(node?: GraphNode): void {
     effectVisualizationTitle.textContent = displayName || DEFAULT_VISUALIZATION_TITLE;
   }
   if (effectVisualizationSubtitle) {
-    effectVisualizationSubtitle.textContent = `${categoryLabel} · ${node.type}`;
+    const effectTypeName = typeInfo?.displayName;
+    // Omit type name when it would duplicate the title
+    const subtitle = effectTypeName && effectTypeName !== displayName
+      ? `${categoryLabel} · ${effectTypeName}`
+      : categoryLabel;
+    effectVisualizationSubtitle.textContent = subtitle;
   }
 }
 
@@ -623,7 +629,7 @@ function renderGraphSignalPath(preset: Preset): void {
     }
 
     const joinNode = nodeById.get(joinId);
-    const canCollapse = nodeById.get(splitterId)?.type === "splitter" && joinNode?.type === "mixer";
+    const canCollapse = nodeById.get(splitterId)?.type === EffectGuids.kSplitter && joinNode?.type === EffectGuids.kMixer;
 
     const renderBranch = (firstEdge: EdgeRef): string => {
       let html = "";
@@ -642,7 +648,7 @@ function renderGraphSignalPath(preset: Preset): void {
         }
 
         html += renderNodeElement(node);
-        if (node.type === "splitter" || isSplitPoint(node.id)) {
+        if (node.type === EffectGuids.kSplitter || isSplitPoint(node.id)) {
           // Nested splits are not yet rendered; stop at the node.
           break;
         }
@@ -710,7 +716,7 @@ function renderGraphSignalPath(preset: Preset): void {
         visited.add(currentId);
 
         const node = nodeById.get(currentId);
-        if (node && (node.type === "splitter" || isSplitPoint(currentId))) {
+        if (node && (node.type === EffectGuids.kSplitter || isSplitPoint(currentId))) {
           const { html: parallelHtml, mixerId } = renderParallelForSplitter(currentId);
           if (parallelHtml && mixerId) {
             html += parallelHtml;
@@ -800,8 +806,13 @@ function renderNodeElement(node: GraphNode): string {
   const selectedClass = selectedNodeId === node.id ? "selected" : "";
   const missingEntries = getMissingResourceEntries(node);
   const missingClass = missingEntries.length ? "missing-resource" : "";
-  const allowDelete = node.type !== "splitter" && node.type !== "mixer";
+  const allowDelete = node.type !== EffectGuids.kSplitter && node.type !== EffectGuids.kMixer;
   const displayName = getNodeDisplayName(node);
+  const nodeTypeInfo = EffectTypeRegistry.get(node.type);
+  // Show effect type name only when it adds info (not a duplicate of the node name)
+  const effectTypeName = nodeTypeInfo?.displayName && nodeTypeInfo.displayName !== displayName
+    ? nodeTypeInfo.displayName
+    : "";
   const isCalibrating = uiState.namCalibrationStatus?.[node.id] === "calibrating";
   const missingTooltip = buildMissingResourceTooltip(missingEntries);
   const missingBadge = missingEntries.length
@@ -823,7 +834,7 @@ function renderNodeElement(node: GraphNode): string {
       <div class="node-icon">${icon}</div>
       <div class="node-info">
         <div class="node-name">${displayName}</div>
-        <div class="node-type">${node.type}</div>
+        ${effectTypeName ? `<div class="node-type">${effectTypeName}</div>` : ""}
         ${resourceLabel}
       </div>
       <span class="node-clip-indicator clip-inactive" aria-hidden="true"></span>
@@ -1005,13 +1016,13 @@ function bindNodeClickHandlers(preset: Preset): void {
       
       if (resourceGroupPayload && targetNodeId && preset.graph) {
         const targetNode = preset.graph.nodes.find((n) => n.id === targetNodeId);
-        if (targetNode && targetNode.type === "amp_nam_blend") {
+        if (targetNode && targetNode.type === EffectGuids.kAmpNamBlend) {
           handleResourceGroupDrop(resourceGroupPayload, targetNodeId, true);
         } else {
           handleResourceGroupDrop(resourceGroupPayload, targetNodeId, false);
         }
       } else if ((fxEffectType || fxBlendId) && targetNodeId && preset.graph) {
-        const resolvedType = fxEffectType || "amp_nam_blend";
+        const resolvedType = fxEffectType || EffectGuids.kAmpNamBlend;
         // Dropping FX library item onto existing node - replace if same category
         const targetNode = preset.graph.nodes.find((n) => n.id === targetNodeId);
         const effectTypeInfo = EffectTypeRegistry.get(resolvedType);
@@ -1031,7 +1042,7 @@ function bindNodeClickHandlers(preset: Preset): void {
         // Reordering existing nodes
         const draggedNode = getGraphNode(draggedNodeId);
         const targetNode = getGraphNode(targetNodeId);
-        const blockedTypes = new Set(["splitter", "mixer"]);
+        const blockedTypes = new Set<string>([EffectGuids.kSplitter, EffectGuids.kMixer]);
         if (draggedNode && targetNode && !blockedTypes.has(draggedNode.type) && !blockedTypes.has(targetNode.type)) {
           sendSignalPathNodeReorder(draggedNodeId, targetNodeId);
         }
@@ -1056,7 +1067,7 @@ function bindNodeClickHandlers(preset: Preset): void {
         e.preventDefault();
 
         const node = getGraphNode(nodeId);
-        if (node && (node.type === "splitter" || node.type === "mixer")) {
+        if (node && (node.type === EffectGuids.kSplitter || node.type === EffectGuids.kMixer)) {
           // Avoid corrupting the graph; use the collapse split button instead.
           return;
         }
@@ -1121,7 +1132,7 @@ function bindConnectorDropHandlers(preset: Preset): void {
       if (resourceGroupPayload && preset.graph) {
         handleResourceGroupDrop(resourceGroupPayload, null, false, edge);
       } else if ((fxEffectType || fxBlendId) && preset.graph) {
-        const resolvedType = fxEffectType || "amp_nam_blend";
+        const resolvedType = fxEffectType || EffectGuids.kAmpNamBlend;
         sendAddEffectAtEdgeOrFallback(resolvedType, edge, "__input__", {
           config: fxBlendId ? { blendId: fxBlendId } : undefined,
           label: fxBlendName || undefined,
@@ -1129,7 +1140,7 @@ function bindConnectorDropHandlers(preset: Preset): void {
         });
       } else if (signalNodeId && edge && preset.graph) {
         const node = preset.graph.nodes.find((n) => n.id === signalNodeId);
-        if (node && node.type !== "splitter" && node.type !== "mixer") {
+        if (node && node.type !== EffectGuids.kSplitter && node.type !== EffectGuids.kMixer) {
           sendMoveSignalPathNodeToEdge(signalNodeId, edge);
         }
       }
@@ -1345,7 +1356,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
 
   // Build mixer input controls for mixer nodes
   let mixerInputControls = "";
-  if (node.type === "mixer" && preset.graph?.nodes && preset.graph?.edges) {
+  if (node.type === EffectGuids.kMixer && preset.graph?.nodes && preset.graph?.edges) {
     try {
       const { incoming } = buildGraphMaps(preset.graph);
       const incomingEdges = incoming.get(node.id) ?? [];
@@ -1461,7 +1472,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
     </button>
   `;
 
-  const canRecalibrate = node.type === "fx_nam" || node.type === "amp_nam" ||node.type === "amp_nam_optimized";
+  const canRecalibrate = node.type === EffectGuids.kFxNam || node.type === EffectGuids.kAmpNam || node.type === EffectGuids.kAmpNamOptimized;
   const recalibrateButton = canRecalibrate
     ? `
       <button class="node-calibrate-btn" data-node-id="${node.id}">Recalibrate</button>
@@ -1632,7 +1643,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
       `;
     };
 
-      if (node.type === "amp_nam_blend") {
+      if (node.type === EffectGuids.kAmpNamBlend) {
         const items = (node as unknown as { resources?: unknown[] }).resources ?? [];
         const modelSelectors = items.length ? items.map((_, index) => {
           const paramValue = getNodeResourceAtIndex(node, index).parameterValue ?? index;
@@ -1651,7 +1662,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
           </div>
         `;
         resourceSelector = modelSelectors;
-      } else if (node.type === "cab_ir") {
+      } else if (node.type === EffectGuids.kCabIr) {
         const irSlotA = buildSelector(0, "IR A", true);
         const irSlotB = buildSelector(1, "IR B", true);
         resourceSelector = `${irSlotA}${irSlotB}`;
@@ -2552,7 +2563,7 @@ function showEffectSelectionDropdown(buttonElement: HTMLElement, edge: EdgeRef |
             </div>
           `).join('')}
           ${blendEntries.map((blend) => `
-            <div class="effect-dropdown-item" data-effect-type="amp_nam_blend" data-blend-id="${blend.id}" data-blend-name="${escapeHtml(blend.name)}" data-blend-category="${blend.originalCategory}">
+            <div class="effect-dropdown-item" data-effect-type="${EffectGuids.kAmpNamBlend}" data-blend-id="${blend.id}" data-blend-name="${escapeHtml(blend.name)}" data-blend-category="${blend.originalCategory}">
               <span class="effect-dropdown-icon">${getBadgeIcon("blend", "Custom blend")}</span>
               <span class="effect-dropdown-name">${escapeHtml(blend.name)}</span>
             </div>
@@ -2667,7 +2678,7 @@ function handleResourceGroupDrop(
   });
 
   if (updateOnly && targetNodeId) {
-    sendReplaceSignalPathNode(targetNodeId, "amp_nam_blend", {
+    sendReplaceSignalPathNode(targetNodeId, EffectGuids.kAmpNamBlend, {
       config: { blendId },
       label: blendName,
       category: payload.category,
@@ -2676,7 +2687,7 @@ function handleResourceGroupDrop(
   }
 
   if (targetNodeId) {
-    sendReplaceSignalPathNode(targetNodeId, "amp_nam_blend", {
+    sendReplaceSignalPathNode(targetNodeId, EffectGuids.kAmpNamBlend, {
       config: { blendId },
       label: blendName,
       category: payload.category,
@@ -2685,7 +2696,7 @@ function handleResourceGroupDrop(
   }
 
   const normalizedEdge = edge ? { ...edge, gain: edge.gain ?? 1.0 } : null;
-  sendAddEffectAtEdgeOrFallback("amp_nam_blend", normalizedEdge, edge?.from ?? "__input__", {
+  sendAddEffectAtEdgeOrFallback(EffectGuids.kAmpNamBlend, normalizedEdge, edge?.from ?? "__input__", {
     config: { blendId },
     label: blendName,
     category: payload.category,

@@ -1,7 +1,8 @@
-#pragma once
+﻿#pragma once
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <algorithm>
 #include <cmath>
 
@@ -152,7 +153,8 @@ namespace guitarfx
   inline void RegisterAutoWahEffect()
   {
     EffectTypeInfo info;
-    info.type = "auto_wah";
+    info.type = EffectGuids::kAutoWah;
+    info.aliases = {"auto_wah"};
     info.displayName = "Auto-Wah";
     info.category = "modulation";
     info.description = "Envelope-controlled bandpass filter";
@@ -165,7 +167,7 @@ namespace guitarfx
       {"mix", "Mix", 1.0, 0.0, 1.0, "amount"}
     };
 
-    EffectRegistry::Instance().Register("auto_wah", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
       { return std::make_unique<AutoWahEffect>(); });
   }
 

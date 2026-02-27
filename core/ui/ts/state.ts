@@ -1,6 +1,7 @@
 import type { DemoSample, GlobalSignalChainConfig, Preset, SignalGraph, UiState } from "./types.js";
 import type { CompositeEffectDefinition } from "./compositeTypes.js";
 import { createEmptyLayoutLibrary } from "./layoutTypes.js";
+import { EffectGuids } from "./effectGuids.js";
 
 export const LOG_ENTRY_LIMIT = 200;
 
@@ -45,7 +46,7 @@ const DEFAULT_PRE_CHAIN_GRAPH: SignalGraph = {
     },
     {
       id: "global_gate",
-      type: "dynamics_gate",
+      type: EffectGuids.kDynamicsGate,
       displayName: "Noise Gate",
       category: "dynamics",
       bypassed: true,

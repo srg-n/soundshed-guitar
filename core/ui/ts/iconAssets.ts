@@ -1,4 +1,5 @@
 const ICON_BASE = "images/icons";
+import { EffectGuids, resolveEffectType } from "./effectGuids.js";
 
 export type IconKey =
   | "amp"
@@ -47,64 +48,60 @@ const categoryIcons: Record<string, IconKey> = {
 
 const effectIcons: Record<string, IconKey> = {
   // Dynamics
-  dynamics_gate: "door",
-  compressor_vca: "meter",
-  compressor_opto: "bulb",
-  compressor_fet: "bolt",
-  overdrive: "flame",
-  distortion: "flame",
-  fuzz: "flame",
+  [EffectGuids.kDynamicsGate]:     "door",
+  [EffectGuids.kCompressorVca]:    "meter",
+  [EffectGuids.kCompressorOpto]:   "bulb",
+  [EffectGuids.kOverdrive]:        "flame",
+  [EffectGuids.kDistortion]:       "flame",
+  [EffectGuids.kFuzz]:             "flame",
 
   // Amps
-  amp_builtin: "amp",
-  amp_nam: "amp",
-  amp_nam_optimized: "amp",
-  fx_nam: "sparkle",
-  amp_nam_blend: "blend",
-  amp_clean: "amp",
-  amp_crunch: "amp",
+  [EffectGuids.kAmpBuiltin]:       "amp",
+  [EffectGuids.kAmpNam]:           "amp",
+  [EffectGuids.kAmpNamOptimized]:  "amp",
+  [EffectGuids.kFxNam]:            "sparkle",
+  [EffectGuids.kAmpNamBlend]:      "blend",
 
   // Cabs
-  cab_ir: "speaker",
-  cab_simple: "speaker",
+  [EffectGuids.kCabIr]:            "speaker",
+  [EffectGuids.kCabSimple]:        "speaker",
 
   // EQ
-  eq_parametric: "sliders",
-  eq_graphic: "sliders",
-  eq_tilt: "split",
+  [EffectGuids.kEqParametric]:     "sliders",
 
   // Modulation
-  chorus_analog: "wave",
-  chorus_digital: "wave",
-  flanger: "wave",
-  phaser: "wave",
-  tremolo: "wave",
-  auto_wah: "mixer",
-  octave: "note",
-  vibrato: "wave",
+  [EffectGuids.kChorus]:           "wave",
+  [EffectGuids.kFlanger]:          "wave",
+  [EffectGuids.kPhaser]:           "wave",
+  [EffectGuids.kTremolo]:          "wave",
+  [EffectGuids.kAutoWah]:          "mixer",
+  [EffectGuids.kOctave]:           "note",
+  [EffectGuids.kPitchShift]:       "note",
+  [EffectGuids.kTranspose]:        "note",
 
   // Delay
-  delay_digital: "clock",
-  delay_tape: "clock",
-  delay_analog: "clock",
+  [EffectGuids.kDelayDigital]:     "clock",
+  [EffectGuids.kDelayDoubler]:     "clock",
 
   // Reverb
-  reverb_room: "hall",
-  reverb_hall: "hall",
-  reverb_plate: "hall",
-  reverb_chamber: "hall",
-  reverb_spring: "hall",
-  reverb_shimmer: "sparkle",
-  reverb_ambient: "sparkle",
-  reverb_advanced: "sparkle",
+  [EffectGuids.kReverbRoom]:       "hall",
+  [EffectGuids.kReverbHall]:       "hall",
+  [EffectGuids.kReverbPlate]:      "hall",
+  [EffectGuids.kReverbChamber]:    "hall",
+  [EffectGuids.kReverbSpring]:     "hall",
+  [EffectGuids.kReverbShimmer]:    "sparkle",
+  [EffectGuids.kReverbAmbient]:    "sparkle",
+  [EffectGuids.kReverbAdvanced]:   "sparkle",
+  [EffectGuids.kReverbIr]:         "hall",
 
   // Synth
-  synth_saw: "note",
+  [EffectGuids.kSynthSaw]:         "note",
 
   // Utility
-  gain: "megaphone",
-  splitter: "split",
-  mixer: "mixer",
+  [EffectGuids.kGain]:             "megaphone",
+  [EffectGuids.kSplitter]:         "split",
+  [EffectGuids.kMixer]:            "mixer",
+  [EffectGuids.kLimiterBrickwall]: "bolt",
 };
 
 export function getFxCategoryIcon(categoryId: string): string {
@@ -113,7 +110,7 @@ export function getFxCategoryIcon(categoryId: string): string {
 }
 
 export function getFxEffectIcon(effectType: string): string {
-  const icon = effectIcons[effectType] ?? "gear";
+  const icon = effectIcons[resolveEffectType(effectType)] ?? "gear";
   return renderIcon(icon, "fx-effect-icon");
 }
 

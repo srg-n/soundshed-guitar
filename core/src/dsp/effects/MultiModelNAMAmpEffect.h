@@ -11,6 +11,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include "dsp/simd/OptimizedNAM.h"
 #include "NAM/dsp.h"
 #include "NAM/get_dsp.h"
@@ -712,7 +713,8 @@ inline void RegisterMultiModelNAMAmpEffect()
   ::nam::factory::ForceFactoryRegistration();
 
   EffectTypeInfo info;
-  info.type = "amp_nam_blend";
+  info.type = EffectGuids::kAmpNamBlend;
+  info.aliases = {"amp_nam_blend"};
   info.displayName = "NAM Blend";
   info.category = "amp";
   info.description = "Blend between multiple NAM models";
@@ -724,7 +726,7 @@ inline void RegisterMultiModelNAMAmpEffect()
     {"outputGain", "Output Gain", 0.0, -24.0, 24.0, "dB"}
   };
 
-  EffectRegistry::Instance().Register("amp_nam_blend", info, []()
+  EffectRegistry::Instance().Register(info.type, info, []()
   {
     return std::make_unique<MultiModelNAMAmpEffect>();
   });

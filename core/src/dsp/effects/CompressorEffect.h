@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <atomic>
 #include <cmath>
 #include <algorithm>
@@ -334,7 +335,8 @@ namespace guitarfx
     // VCA compressor
     {
       EffectTypeInfo info;
-      info.type = "compressor_vca";
+      info.type = EffectGuids::kCompressorVca;
+      info.aliases = {"compressor_vca"};
       info.displayName = "VCA Compressor";
       info.category = "dynamics";
       info.description = "Clean, precise VCA-style compressor";
@@ -348,14 +350,15 @@ namespace guitarfx
           {"makeup", "Makeup", 0.0, 0.0, 24.0, "dB"},
           {"mix", "Mix", 1.0, 0.0, 1.0, ""}};
 
-      EffectRegistry::Instance().Register("compressor_vca", info, []()
+      EffectRegistry::Instance().Register(info.type, info, []()
                                           { return std::make_unique<CompressorEffect>(); });
     }
 
     // Opto compressor
     {
       EffectTypeInfo info;
-      info.type = "compressor_opto";
+      info.type = EffectGuids::kCompressorOpto;
+      info.aliases = {"compressor_opto"};
       info.displayName = "Opto Compressor";
       info.category = "dynamics";
       info.description = "Smooth optical-style compressor";
@@ -368,7 +371,7 @@ namespace guitarfx
           {"makeup", "Makeup", 0.0, 0.0, 24.0, "dB"},
           {"mix", "Mix", 1.0, 0.0, 1.0, ""}};
 
-      EffectRegistry::Instance().Register("compressor_opto", info, []()
+      EffectRegistry::Instance().Register(info.type, info, []()
                                           { return std::make_unique<OptoCompressorEffect>(); });
     }
   }

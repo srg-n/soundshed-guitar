@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <atomic>
 #include <algorithm>
 #include <cmath>
@@ -10,7 +11,7 @@
 namespace guitarfx
 {
   /**
-   * Chorus effect using modulated delay lines.
+   * Chorus effectusing modulated delay lines.
    */
   class ChorusEffect : public EffectProcessor
   {
@@ -169,7 +170,8 @@ namespace guitarfx
   inline void RegisterChorusEffect()
   {
     EffectTypeInfo info;
-    info.type = "chorus";
+    info.type = EffectGuids::kChorus;
+    info.aliases = {"chorus"};
     info.displayName = "Chorus";
     info.category = "modulation";
     info.description = "Modulated delay chorus";
@@ -182,7 +184,7 @@ namespace guitarfx
       {"mix", "Mix", 0.4, 0.0, 1.0, "amount"}
     };
 
-    EffectRegistry::Instance().Register("chorus", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
       { return std::make_unique<ChorusEffect>(); });
   }
 

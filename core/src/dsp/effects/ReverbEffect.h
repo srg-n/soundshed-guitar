@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -447,6 +448,30 @@ namespace guitarfx
       }
     }
 
+    static const char* ModeGuid(Mode mode)
+    {
+      switch (mode)
+      {
+      case Mode::Hall:
+        return EffectGuids::kReverbHall;
+      case Mode::Plate:
+        return EffectGuids::kReverbPlate;
+      case Mode::Chamber:
+        return EffectGuids::kReverbChamber;
+      case Mode::Spring:
+        return EffectGuids::kReverbSpring;
+      case Mode::Shimmer:
+        return EffectGuids::kReverbShimmer;
+      case Mode::Ambient:
+        return EffectGuids::kReverbAmbient;
+      case Mode::Advanced:
+        return EffectGuids::kReverbAdvanced;
+      case Mode::Room:
+      default:
+        return EffectGuids::kReverbRoom;
+      }
+    }
+
   private:
     static constexpr size_t kCombCount = 8;
     static constexpr size_t kAllpassCount = 4;
@@ -884,7 +909,8 @@ namespace guitarfx
     for (const auto mode : modes)
     {
       EffectTypeInfo info;
-      info.type = ReverbEffect::ModeType(mode);
+      info.type = ReverbEffect::ModeGuid(mode);
+      info.aliases = {ReverbEffect::ModeType(mode)};
       info.displayName = ReverbEffect::ModeName(mode) + " Reverb";
       info.category = "reverb";
       info.description = ReverbEffect::ModeName(mode) + " algorithmic reverb";
@@ -961,7 +987,6 @@ namespace guitarfx
         break;
       case ReverbEffect::Mode::Advanced:
         info.displayName = "Advanced Reverb";
-        info.type = "reverb_advanced";
         info.description = "Algorithmic reverb with full common and advanced controls";
         info.parameters = {
             param("decay", "Decay", 0.64, 0.0, 1.0, "", "Common"),

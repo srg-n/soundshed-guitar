@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <atomic>
 #include <algorithm>
 #include <cmath>
@@ -10,7 +11,7 @@
 namespace guitarfx
 {
   /**
-   * Flanger effect using short modulated delay with feedback.
+   * Flanger effectusing short modulated delay with feedback.
    */
   class FlangerEffect : public EffectProcessor
   {
@@ -169,7 +170,8 @@ namespace guitarfx
   inline void RegisterFlangerEffect()
   {
     EffectTypeInfo info;
-    info.type = "flanger";
+    info.type = EffectGuids::kFlanger;
+    info.aliases = {"flanger"};
     info.displayName = "Flanger";
     info.category = "modulation";
     info.description = "Short modulated delay flanger";
@@ -182,7 +184,7 @@ namespace guitarfx
       {"mix", "Mix", 0.5, 0.0, 1.0, "amount"}
     };
 
-    EffectRegistry::Instance().Register("flanger", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
       { return std::make_unique<FlangerEffect>(); });
   }
 

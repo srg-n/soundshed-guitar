@@ -2,6 +2,7 @@
 
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/EffectGuids.h"
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -9,7 +10,7 @@
 namespace guitarfx
 {
   /**
-   * Doubler effect — two independently delayed voices (L/R) derived from the
+   * Doubler effect— two independently delayed voices (L/R) derived from the
    * mono sum of the input.  Each voice has its own delay time set by
    * `time ± spread/2`, a slow LFO for organic pitch/time variation, and a
    * one-pole low-pass to keep the doubled voices sitting under the dry signal.
@@ -207,7 +208,8 @@ namespace guitarfx
   inline void RegisterDoublerEffect()
   {
     EffectTypeInfo info;
-    info.type        = "delay_doubler";
+    info.type        = EffectGuids::kDelayDoubler;
+    info.aliases     = {"delay_doubler"};
     info.displayName = "Doubler";
     info.category    = "delay";
     info.description = "Stereo doubler — two modulated delayed voices for organic width and thickness";
@@ -219,7 +221,7 @@ namespace guitarfx
         {"modRate",  "Mod Rate",  0.0,     0.0,    5.0,     "Hz",  "", true},
         {"modDepth", "Mod Depth", 0.0,     0.0,    5.0,     "ms",  "", true},
         {"highCut",  "High Cut",  10000.0, 1000.0, 20000.0, "Hz",  "", true}};
-    EffectRegistry::Instance().Register("delay_doubler", info, []()
+    EffectRegistry::Instance().Register(info.type, info, []()
                                         { return std::make_unique<DoublerEffect>(); });
   }
 
