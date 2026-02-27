@@ -13,17 +13,36 @@ namespace guitarfx
   {
     mTypeInfo[type] = info;
     mFactories[type] = std::move(factory);
+    for (const auto &alias : info.aliases)
+    {
+      mAliases[alias] = type;
+    }
   }
 
   void EffectRegistry::Unregister(const std::string &type)
   {
+    // Remove any aliases that pointed to this type
+    for (auto it = mAliases.begin(); it != mAliases.end();)
+    {
+      if (it->second == type)
+        it = mAliases.erase(it);
+      else
+        ++it;
+    }
     mTypeInfo.erase(type);
     mFactories.erase(type);
   }
 
+  std::string EffectRegistry::Resolve(const std::string &type) const
+  {
+    auto it = mAliases.find(type);
+    return (it != mAliases.end()) ? it->second : type;
+  }
+
   std::unique_ptr<EffectProcessor> EffectRegistry::Create(const std::string &type) const
   {
-    auto it = mFactories.find(type);
+    const std::string canonical = Resolve(type);
+    auto it = mFactories.find(canonical);
     if (it != mFactories.end())
     {
       return it->second();
@@ -71,12 +90,12 @@ namespace guitarfx
 
   bool EffectRegistry::HasType(const std::string &type) const
   {
-    return mFactories.count(type) > 0;
+    return mFactories.count(Resolve(type)) > 0;
   }
 
   std::optional<EffectTypeInfo> EffectRegistry::GetTypeInfo(const std::string &type) const
   {
-    auto it = mTypeInfo.find(type);
+    auto it = mTypeInfo.find(Resolve(type));
     if (it != mTypeInfo.end())
     {
       return it->second;

@@ -29,17 +29,23 @@ namespace guitarfx
 
   /**
    * Describes an available effect type.
+   *
+   * Type ID convention: {category}_{variant}  e.g. "dist_fuzz", "mod_chorus", "dynamics_comp_vca"
+   * Recognised categories: amp, cab, eq, dynamics, dist, mod, delay, reverb, pitch, utility, synth
    */
   struct EffectTypeInfo
   {
-    std::string type;        // Unique type ID
+    std::string type;        // Unique canonical type ID  (e.g. "dist_fuzz")
     std::string displayName; // Human-readable name
-    std::string category;    // "amp", "cab", "eq", etc.
+    std::string category;    // "amp", "cab", "eq", "dynamics", "dist", "mod", "delay", "reverb", "pitch", "utility", "synth"
     std::string description; // User-facing description
     bool requiresResource = false;
     std::string resourceType; // "nam", "ir", etc. (if requiresResource is true)
     std::vector<std::string> resourceFilterHint; // Equipment type filter ("amp", "full-rig", "pedal", etc.)
     std::vector<ParameterDef> parameters;
+    // Legacy IDs that resolve to this effect (for preset backward-compatibility).
+    // Populated by RegisterAlias() or set directly before calling Register().
+    std::vector<std::string> aliases;
   };
 
   /**
@@ -60,6 +66,9 @@ namespace guitarfx
     void Register(const std::string &type, const EffectTypeInfo &info, EffectFactory factory);
     void Unregister(const std::string &type);
 
+    // Resolve a type ID or legacy alias to the canonical type ID. Returns the input unchanged if not an alias.
+    [[nodiscard]] std::string Resolve(const std::string &type) const;
+
     // Factory
     [[nodiscard]] std::unique_ptr<EffectProcessor> Create(const std::string &type) const;
 
@@ -75,6 +84,8 @@ namespace guitarfx
 
     std::map<std::string, EffectTypeInfo> mTypeInfo;
     std::map<std::string, EffectFactory> mFactories;
+    // Maps legacy/alias IDs → canonical type ID
+    std::map<std::string, std::string> mAliases;
   };
 
 /**
