@@ -41,6 +41,7 @@ function getMetronomeElements(): {
   footerBpmSlider: HTMLInputElement | null;
   footerBpmValue: HTMLElement | null;
   soundSelect: HTMLSelectElement | null;
+  patternInput: HTMLInputElement | null;
   modal: HTMLElement | null;
   closeButton: HTMLElement | null;
   iconButton: HTMLButtonElement | null;
@@ -64,6 +65,7 @@ function getMetronomeElements(): {
     footerBpmSlider: footerPanel?.querySelector<HTMLInputElement>("#footer-bpm-slider") ?? null,
     footerBpmValue: document.getElementById("footer-bpm-value"),
     soundSelect: panel?.querySelector<HTMLSelectElement>("#metronome-sound-select") ?? null,
+    patternInput: panel?.querySelector<HTMLInputElement>("#metronome-accent-pattern") ?? null,
     modal: panel,
     closeButton: document.getElementById("metronome-close-btn"),
     iconButton: document.querySelector<HTMLButtonElement>(
@@ -95,6 +97,7 @@ function syncMetronomeControls(): void {
     footerBpmValue,
     footerBpmPanel,
     soundSelect,
+    patternInput,
   } = getMetronomeElements();
   const state = uiState.metronome ?? {
     bpm: 120,
@@ -191,6 +194,11 @@ function syncMetronomeControls(): void {
     }
     soundSelect.value = state.clickType ?? "click";
     soundSelect.disabled = !editable;
+  }
+
+  if (patternInput) {
+    patternInput.value = state.beatPattern ?? "";
+    patternInput.disabled = !editable;
   }
 
   if (bpmUpButton) bpmUpButton.disabled = !editable;
@@ -340,6 +348,24 @@ function updateClickType(nextType: string): void {
   setMetronome({ clickType: nextType });
 }
 
+function updateBeatPattern(pattern: string): void {
+  if (!isEditable()) return;
+  uiState.metronome = {
+    ...(uiState.metronome ?? {
+      bpm: 120,
+      enabled: false,
+      editable: true,
+      source: "app",
+      volumeDb: -12,
+      pan: 0,
+      clickType: "click",
+      clickTypes: [],
+    }),
+    beatPattern: pattern,
+  };
+  setMetronome({ beatPattern: pattern });
+}
+
 function openMetronome(): void {
   if (!metronomeModal) return;
   metronomeModal.style.display = "flex";
@@ -484,6 +510,15 @@ export function initializeMetronome(): void {
   if (soundSelect) {
     soundSelect.addEventListener("change", () => {
       updateClickType(soundSelect.value);
+    });
+  }
+
+  const { patternInput } = getMetronomeElements();
+  if (patternInput) {
+    patternInput.addEventListener("change", () => {
+      const normalized = patternInput.value.toUpperCase().replace(/[^HLS\-.]/g, "");
+      patternInput.value = normalized;
+      updateBeatPattern(normalized);
     });
   }
 

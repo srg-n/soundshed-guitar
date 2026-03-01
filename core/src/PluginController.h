@@ -487,6 +487,9 @@ private:
     int mRiffGuidanceBeatsPerBar = 4;
     double mRiffGuidanceBeatScale = 1.0;
     std::shared_ptr<MetronomeClickSamples> mRiffGuidanceClickSamples;
+    std::string mRiffGuidanceBeatPattern;
+    bool mRiffGuidancePreviewWasActive = false;
+    std::string mMetronomeBeatPattern; // e.g. "HLLL"
 
     std::unique_ptr<DemoPreviewService> mDemoPreview;
 
@@ -499,6 +502,7 @@ private:
         int countInBars = 1;
         std::string patternType = "click";
         std::string patternId;
+        std::string beatPattern; // e.g. "HLLL" (H=High L=Low S=Silent)
         std::string presetId;
         std::string presetName;
     };
@@ -525,6 +529,7 @@ private:
         std::vector<float> livePeaks;
         std::size_t livePeakBucketSize = 1;
         std::size_t lastProgressSample = 0;
+        std::size_t armPostCountInSamples = 0; // samples elapsed in detection phase after count-in
         std::chrono::steady_clock::time_point startedAt;
         std::chrono::steady_clock::time_point endedAt;
     };

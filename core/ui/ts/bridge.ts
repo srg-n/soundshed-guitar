@@ -82,6 +82,7 @@ export function setMetronome(payload: {
   volumeDb?: number;
   pan?: number;
   clickType?: string;
+  beatPattern?: string;
   clickConfig?: Array<{ id: string; label?: string; lowPath?: string; highPath?: string }>;
 }): void {
   postMessage({ type: "setMetronome", ...payload });
@@ -99,9 +100,11 @@ export function armRiffCapture(payload: {
   tempoBpm: number;
   timeSigNum: number;
   timeSigDen: number;
+  bars: number;
   countInBars: number;
   patternType: "click" | "drum";
   patternId?: string;
+  beatPattern?: string;
 }): void {
   postMessage({ type: "armRiffCapture", ...payload });
 }
@@ -114,6 +117,7 @@ export function startRiffCapture(payload: {
   countInBars: number;
   patternType: "click" | "drum";
   patternId?: string;
+  beatPattern?: string;
 }): void {
   postMessage({ type: "startRiffCapture", ...payload });
 }

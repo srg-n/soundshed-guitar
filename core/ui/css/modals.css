@@ -72,6 +72,34 @@
   border-top: 1px solid var(--modal-border-medium);
 }
 
+.modal-footer button {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.modal-footer button.secondary {
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color, #444);
+}
+
+.modal-footer button:hover {
+  transform: translateY(-1px);
+}
+
+.modal-footer button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
 /* Alert/Confirm Dialog */
 .dialog-modal .dialog-content {
   width: 520px;

@@ -999,6 +999,7 @@
       <div class="modal-content riff-capture-modal-content">
         <div class="modal-header">
           <h3>New Riff</h3>
+          <span class="riff-rec-indicator" aria-hidden="true">● REC</span>
           <button id="riff-capture-modal-close" class="modal-close" type="button">&times;</button>
         </div>
         <div class="modal-body">
@@ -1006,6 +1007,7 @@
             <label for="riff-capture-tempo">Tempo</label>
             <input type="number" id="riff-capture-tempo" min="30" max="300" step="1" value="120" />
             <span class="settings-unit">BPM</span>
+            <button id="riff-sync-metronome-btn" type="button" class="secondary riff-sync-metro-btn" title="Copy current metronome tempo">↩ Metro</button>
           </div>
           <div class="settings-row riff-capture-row">
             <label for="riff-capture-timesig-num">Time Signature</label>
@@ -1032,10 +1034,19 @@
             <span class="settings-unit">bars</span>
             <span id="riff-capture-status" class="settings-unit">Idle</span>
           </div>
+          <div class="settings-row riff-capture-row">
+            <label for="riff-capture-metro-volume">Click Volume</label>
+            <input type="range" id="riff-capture-metro-volume" min="-60" max="6" step="1" value="-12" />
+            <span class="settings-unit" id="riff-capture-metro-volume-label">-12 dB</span>
+          </div>
+          <div class="settings-row riff-capture-row">
+            <label for="riff-capture-accent">Beat Pattern</label>
+            <input type="text" id="riff-capture-accent" maxlength="16" placeholder="HLLL" title="H=High L=Low S=Silent" />
+            <span class="settings-unit">H=High L=Low S=Silent</span>
+          </div>
           <div class="settings-row">
             <label>Actions</label>
             <div class="riff-capture-actions">
-              <button id="riff-capture-arm" type="button" class="riff-arm-btn" title="Arm: start click and begin recording when input signal is detected">⏺ Arm</button>
               <button id="riff-capture-record-toggle" type="button">● Record</button>
               <button id="riff-capture-play" type="button" class="secondary">▶</button>
             </div>
@@ -1059,10 +1070,36 @@
             <canvas id="riff-capture-waveform" class="riff-capture-waveform" width="640" height="120" tabindex="0" aria-label="Riff trim waveform"></canvas>
           </div>
           <div class="settings-hint">Drag the vertical trim markers in the waveform to set loop/crop start and end.</div>
+          <div id="riff-capture-save-section" class="riff-capture-save-section" style="display: none;">
+            <div class="riff-capture-save-divider">Save Take</div>
+            <div class="settings-row riff-capture-row">
+              <label for="riff-capture-save-title">Title</label>
+              <input type="text" id="riff-capture-save-title" placeholder="Palm-muted verse riff" />
+              <label class="toggle-switch">
+                <input type="checkbox" id="riff-capture-save-favorite" />
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="settings-unit">Fav</span>
+            </div>
+            <div class="settings-row riff-capture-row">
+              <label for="riff-capture-save-categories">Categories</label>
+              <input type="text" id="riff-capture-save-categories" placeholder="metal, rhythm" />
+              <span class="settings-unit">CSV</span>
+            </div>
+            <div class="settings-row riff-capture-row">
+              <label for="riff-capture-save-tags">Tags</label>
+              <input type="text" id="riff-capture-save-tags" placeholder="drop C, tight, intro" />
+              <span class="settings-unit">CSV</span>
+            </div>
+            <div class="settings-row riff-capture-row">
+              <label for="riff-capture-save-notes">Notes</label>
+              <input type="text" id="riff-capture-save-notes" placeholder="Works with modern high-gain presets" />
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
           <button id="riff-capture-modal-cancel" class="secondary" type="button">Cancel</button>
-          <button id="riff-capture-modal-save-take" type="button">Save Take</button>
+          <button id="riff-capture-modal-save-take" type="button" disabled>Save Take</button>
         </div>
       </div>
     </div>
@@ -1168,6 +1205,10 @@
               <button class="metronome-play" id="metronome-toggle" aria-label="Toggle metronome">
                 <span class="metronome-play-icon">▶</span>
               </button>
+            </div>
+            <div class="metronome-pattern-row">
+              <label class="metronome-label">Beat Pattern</label>
+              <input type="text" id="metronome-accent-pattern" maxlength="16" placeholder="HLLL" class="metronome-pattern-input" title="H=High  L=Low  S=Silent" />
             </div>
             <div class="metronome-footer">
               <span id="metronome-status">Stopped</span>

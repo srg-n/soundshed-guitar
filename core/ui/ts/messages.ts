@@ -221,7 +221,7 @@ export function handleIncomingMessage(message: string): void {
           cpu: environment.cpu
         });
       }
-      const metronome = (payload as { metronome?: { bpm?: number; enabled?: boolean; editable?: boolean; source?: string; volumeDb?: number; pan?: number; clickType?: string; clickTypes?: Array<{ id?: string; label?: string }> } }).metronome;
+      const metronome = (payload as { metronome?: { bpm?: number; enabled?: boolean; editable?: boolean; source?: string; volumeDb?: number; pan?: number; clickType?: string; beatPattern?: string; clickTypes?: Array<{ id?: string; label?: string }> } }).metronome;
       if (metronome) {
         applyMetronomeState({
           bpm: typeof metronome.bpm === "number" ? metronome.bpm : uiState.metronome?.bpm ?? 120,
@@ -231,6 +231,7 @@ export function handleIncomingMessage(message: string): void {
           volumeDb: typeof metronome.volumeDb === "number" ? metronome.volumeDb : uiState.metronome?.volumeDb ?? -12,
           pan: typeof metronome.pan === "number" ? metronome.pan : uiState.metronome?.pan ?? 0,
           clickType: typeof metronome.clickType === "string" ? metronome.clickType : uiState.metronome?.clickType ?? "click",
+          beatPattern: typeof metronome.beatPattern === "string" ? metronome.beatPattern : uiState.metronome?.beatPattern,
           clickTypes: Array.isArray(metronome.clickTypes)
             ? metronome.clickTypes
                 .filter((entry) => entry && typeof entry.id === "string")
@@ -374,6 +375,9 @@ export function handleIncomingMessage(message: string): void {
         timeSigDen: (payload as { timeSigDen?: number }).timeSigDen ?? uiState.riffCapture?.timeSigDen ?? 4,
         hasAudio: false,
         waveformPeaks: [],
+        barAlignOffsetSamples: typeof (payload as { barAlignOffsetSamples?: number }).barAlignOffsetSamples === "number"
+          ? (payload as { barAlignOffsetSamples?: number }).barAlignOffsetSamples
+          : 0,
       });
       showNotification("Riff capture started");
       break;

@@ -326,6 +326,7 @@ export interface MetronomeState {
   pan: number;
   clickType: string;
   clickTypes?: MetronomeClickTypeOption[];
+  beatPattern?: string;
 }
 
 export interface RiffTake {
@@ -338,6 +339,7 @@ export interface RiffTake {
   timeSigDen: number;
   patternType?: string;
   patternId?: string;
+  beatPattern?: string;
   presetId?: string;
   presetName?: string;
   sampleRate?: number;
@@ -379,6 +381,9 @@ export interface RiffCaptureState {
   sampleRate: number;
   hasAudio?: boolean;
   waveformPeaks?: number[];
+  /** Samples from the start of recording to the nearest bar boundary (from arm trigger phase).
+   * Non-zero when recording started mid-bar in arm mode; used to auto-set the trim start. */
+  barAlignOffsetSamples?: number;
 }
 
 export interface UiState {

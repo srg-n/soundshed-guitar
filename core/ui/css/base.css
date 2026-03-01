@@ -409,6 +409,26 @@ body:not(.is-standalone) .main-content .metronome-only {
   font-size: 22px;
 }
 
+.metronome-pattern-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.metronome-pattern-input {
+  flex: 1;
+  font-family: monospace;
+  font-size: 13px;
+  padding: 4px 6px;
+  border: 1px solid var(--border-color, #444);
+  border-radius: 4px;
+  background: var(--input-bg, #2a2a2a);
+  color: var(--text-primary, #eee);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
 .metronome-footer {
   font-size: 12px;
   color: var(--text-dark-secondary);

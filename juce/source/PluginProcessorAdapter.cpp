@@ -180,7 +180,18 @@ void PluginProcessorAdapter::setStateInformation(const void* data, int sizeInByt
 
 void PluginProcessorAdapter::SendMessageToUI(const std::string& jsonMessage)
 {
-    sendMessageToUI(juce::String(jsonMessage));
+    // evaluateJavascript must be called on the message thread.
+    // When called from the audio thread (e.g. riffCaptureStarted/Progress/Stopped),
+    // dispatch asynchronously; when already on the message thread call directly.
+    auto msg = juce::String(jsonMessage);
+    if (juce::MessageManager::getInstance()->isThisTheMessageThread())
+    {
+        sendMessageToUI(msg);
+    }
+    else
+    {
+        juce::MessageManager::callAsync([this, msg]() { sendMessageToUI(msg); });
+    }
 }
 
 void PluginProcessorAdapter::BrowseFileAsync(

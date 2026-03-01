@@ -70,7 +70,21 @@ namespace
     constexpr double kMetronomeDefaultPan = 0.0;
     constexpr int kMetronomeBeatsPerBar = 4;
     constexpr const char* kMetronomeDefaultClickType = "click";
+    constexpr const char* kMetronomeBeatPatternSettingKey = "metronome.beatPattern";
     constexpr double kMetronomeClickSeconds = 0.02;
+
+    // Returns 'H' (High/accent), 'L' (Low), or 'S' (Silent) for a beat position.
+    // Empty pattern = first beat High, rest Low.
+    static char BeatAccent(const std::string& pattern, int beatIndex)
+    {
+        if (pattern.empty())
+            return (beatIndex == 0) ? 'H' : 'L';
+        const std::size_t idx = static_cast<std::size_t>(beatIndex) % pattern.size();
+        const char c = static_cast<char>(std::toupper(static_cast<unsigned char>(pattern[idx])));
+        if (c == 'H') return 'H';
+        if (c == 'S' || c == '-' || c == '.') return 'S';
+        return 'L';
+    }
     constexpr double kMetronomeClickFrequencyHz = 1800.0;
     constexpr double kTwoPi = 6.28318530717958647692;
     constexpr const char* kRiffLibraryPathSettingKey = "riffLibrary.path";
@@ -659,6 +673,8 @@ void PluginController::ActivateRiffGuidance(const RiffCaptureConfig& config, boo
 
     mRiffGuidanceActive = true;
     mRiffGuidanceForPreview = forPreview;
+    mRiffGuidancePreviewWasActive = false;
+    mRiffGuidanceBeatPattern = config.beatPattern;
     mRiffGuidanceBpm = ClampValue(config.tempoBpm > 0.0 ? config.tempoBpm : GetEffectiveTempoBpm(),
                                   kMetronomeMinBpm,
                                   kMetronomeMaxBpm);
@@ -712,7 +728,8 @@ bool PluginController::ProcessAudio(float** inputs, float** outputs, int numSamp
     // ARM mode: click is playing, waiting for input signal to trigger recording
     if (mRiffCapture.armed && !mRiffCapture.active && !mRiffCapture.complete)
     {
-        const bool hasInput = (inputs && inputs[0] && inputs[1]);
+        const bool hasInput = (inputs && inputs[0]);
+        const float* inputR = (inputs && inputs[1]) ? inputs[1] : (inputs ? inputs[0] : nullptr);
         if (!mRiffCapture.armCountInComplete)
         {
             // Track count-in progress
@@ -725,10 +742,21 @@ bool PluginController::ProcessAudio(float** inputs, float** outputs, int numSamp
             // Count-in done; watch for input signal above threshold
             for (int i = 0; i < numSamples; ++i)
             {
-                const float level = std::max(std::abs(inputs[0][i]), std::abs(inputs[1][i]));
+                const float level = std::max(std::abs(inputs[0][i]), std::abs(inputR[i]));
                 if (level >= mRiffCapture.armThreshold)
                 {
-                    // Trigger: start recording immediately, skipping count-in
+                    // Compute bar phase at trigger for snapping the trim start to the bar boundary
+                    const double beatScaleTrig = 4.0 / static_cast<double>(std::max(1, mRiffCapture.config.timeSigDen));
+                    const double samplesPerBeatTrig = mRiffCapture.sampleRate
+                        * (60.0 / std::max(1.0, mRiffCapture.config.tempoBpm)) * beatScaleTrig;
+                    const double samplesPerBarTrig = samplesPerBeatTrig
+                        * static_cast<double>(std::max(1, mRiffCapture.config.timeSigNum));
+                    const std::size_t barSamples = static_cast<std::size_t>(std::max(1.0, samplesPerBarTrig));
+                    const std::size_t triggerOffset = mRiffCapture.armPostCountInSamples
+                        + static_cast<std::size_t>(i);
+                    const std::size_t barAlignOffset = triggerOffset % barSamples;
+
+                    // Trigger: start recording — audio from trigger point is captured
                     mRiffCapture.armed = false;
                     mRiffCapture.active = true;
                     mRiffCapture.writeIndex = mRiffCapture.countInSamples; // already past count-in
@@ -741,17 +769,22 @@ bool PluginController::ProcessAudio(float** inputs, float** outputs, int numSamp
                     startMsg["timeSigNum"] = mRiffCapture.config.timeSigNum;
                     startMsg["timeSigDen"] = mRiffCapture.config.timeSigDen;
                     startMsg["countInBars"] = 0;
+                    startMsg["barAlignOffsetSamples"] = barAlignOffset;
                     SendMessageToUI(startMsg.dump());
                     break;
                 }
             }
+            // Only track detection-phase samples when still waiting (no trigger this block)
+            if (mRiffCapture.armed)
+                mRiffCapture.armPostCountInSamples += static_cast<std::size_t>(numSamples);
         }
     }
 
     if (mRiffCapture.active && !mRiffCapture.complete)
     {
-        const std::size_t channelsReady = (inputs && inputs[0] && inputs[1]) ? 2u : 0u;
-        if (channelsReady == 2u && mRiffCapture.writeIndex < mRiffCapture.targetSamples)
+        const bool hasInputCh0 = (inputs && inputs[0]);
+        const float* capInputR = (inputs && inputs[1]) ? inputs[1] : (hasInputCh0 ? inputs[0] : nullptr);
+        if (hasInputCh0 && mRiffCapture.writeIndex < mRiffCapture.targetSamples)
         {
             const std::size_t countInSamples = mRiffCapture.countInSamples;
             const std::size_t bucketSize = std::max<std::size_t>(1, mRiffCapture.livePeakBucketSize);
@@ -763,9 +796,9 @@ bool PluginController::ProcessAudio(float** inputs, float** outputs, int numSamp
                     if (captureIndex < mRiffCapture.left.size() && captureIndex < mRiffCapture.right.size())
                     {
                         mRiffCapture.left[captureIndex] = inputs[0][i];
-                        mRiffCapture.right[captureIndex] = inputs[1][i];
+                        mRiffCapture.right[captureIndex] = capInputR[i];
                         // Update live waveform peak bucket
-                        const float peakVal = std::max(std::abs(inputs[0][i]), std::abs(inputs[1][i]));
+                        const float peakVal = std::max(std::abs(inputs[0][i]), std::abs(capInputR[i]));
                         const std::size_t bucket = captureIndex / bucketSize;
                         if (bucket < mRiffCapture.livePeaks.size())
                             mRiffCapture.livePeaks[bucket] = std::max(mRiffCapture.livePeaks[bucket], peakVal);
@@ -819,9 +852,17 @@ bool PluginController::ProcessAudio(float** inputs, float** outputs, int numSamp
     if (mDemoPreview)
         mDemoPreview->MixIntoInput(inputs, numSamples);
 
-    if (mRiffGuidanceForPreview && (!mDemoPreview || !mDemoPreview->IsPreviewActive()))
+    // Deactivate guidance for preview only once the preview has been active and then stopped.
+    // This avoids a race where guidance is deactivated before DemoPreview has loaded the buffer.
+    if (mRiffGuidanceForPreview && mDemoPreview)
     {
-        DeactivateRiffGuidance(true);
+        if (mDemoPreview->IsPreviewActive())
+            mRiffGuidancePreviewWasActive = true;
+        else if (mRiffGuidancePreviewWasActive)
+        {
+            DeactivateRiffGuidance(true);
+            mRiffGuidancePreviewWasActive = false;
+        }
     }
 
     // Signal path test tone injection
@@ -930,24 +971,38 @@ void PluginController::RenderMetronome(float** outputs, int numSamples)
         && ((!clickSampleSet->low.empty() && !clickSampleSet->low.front().empty())
             || (!clickSampleSet->high.empty() && !clickSampleSet->high.front().empty()));
 
+    const std::string& activeBeatPattern = riffGuidanceActive ? mRiffGuidanceBeatPattern : mMetronomeBeatPattern;
+
     for (int frame = 0; frame < numSamples; ++frame)
     {
         if (mMetronomeSamplesUntilClick <= 0.0)
         {
+            const char accent = BeatAccent(activeBeatPattern, mMetronomeBeatIndex);
+            const bool useHigh = (accent == 'H');
+            const bool silent  = (accent == 'S');
+
             if (hasSampleClick)
             {
-                const bool useHigh = (mMetronomeBeatIndex % beatsPerBar) == 0;
-                const auto& preferred = useHigh ? clickSampleSet->high : clickSampleSet->low;
-                const auto& fallback = useHigh ? clickSampleSet->low : clickSampleSet->high;
-                const auto& selected = (!preferred.empty() && !preferred.front().empty()) ? preferred : fallback;
-                mMetronomeClickSamplesRemaining = selected.empty() ? 0 : static_cast<int>(selected.front().size());
-                mMetronomeClickSamplePosition = 0;
-                mMetronomeClickUseHigh = useHigh;
+                if (!silent)
+                {
+                    const auto& preferred = useHigh ? clickSampleSet->high : clickSampleSet->low;
+                    const auto& fallback  = useHigh ? clickSampleSet->low  : clickSampleSet->high;
+                    const auto& selected  = (!preferred.empty() && !preferred.front().empty()) ? preferred : fallback;
+                    mMetronomeClickSamplesRemaining = selected.empty() ? 0 : static_cast<int>(selected.front().size());
+                    mMetronomeClickSamplePosition = 0;
+                    mMetronomeClickUseHigh = useHigh;
+                }
+                else
+                {
+                    mMetronomeClickSamplesRemaining = 0;
+                }
                 mMetronomeBeatIndex = (mMetronomeBeatIndex + 1) % beatsPerBar;
             }
             else
             {
-                mMetronomeClickSamplesRemaining = clickSamples;
+                mMetronomeClickSamplesRemaining = silent ? 0 : clickSamples;
+                if (!silent) mMetronomeBeatIndex = (mMetronomeBeatIndex + 1) % beatsPerBar;
+                else         mMetronomeBeatIndex = (mMetronomeBeatIndex + 1) % beatsPerBar;
             }
             mMetronomeSamplesUntilClick += samplesPerBeat;
         }
@@ -1035,6 +1090,11 @@ void PluginController::ApplyMetronomeSettingsFromAppSettings()
     if (!clickType.empty())
         mMetronomeClickType = clickType;
     mAppSettings[kMetronomeClickTypeSettingKey] = mMetronomeClickType;
+
+    mMetronomeBeatPattern.clear();
+    if (mAppSettings.contains(kMetronomeBeatPatternSettingKey) && mAppSettings[kMetronomeBeatPatternSettingKey].is_string())
+        mMetronomeBeatPattern = mAppSettings[kMetronomeBeatPatternSettingKey].get<std::string>();
+    mAppSettings[kMetronomeBeatPatternSettingKey] = mMetronomeBeatPattern;
 
     UpdateMetronomeClickConfigFromSettings();
     RefreshMetronomeClickSamples(mHost.GetSampleRate());
@@ -2146,6 +2206,21 @@ void PluginController::HandleSetMetronomeRequest(const nlohmann::json& payload)
             stateChanged = true;
             settingsChanged = true;
         }
+    }
+
+    if (payload.contains("beatPattern") && payload["beatPattern"].is_string())
+    {
+        std::string validated;
+        for (const char ch : payload.value("beatPattern", std::string{}))
+        {
+            const char upper = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+            if (upper == 'H' || upper == 'L' || upper == 'S' || upper == '-' || upper == '.')
+                validated += upper;
+        }
+        mMetronomeBeatPattern = validated;
+        mAppSettings[kMetronomeBeatPatternSettingKey] = validated;
+        stateChanged = true;
+        settingsChanged = true;
     }
 
     if (stateChanged)
@@ -3983,6 +4058,7 @@ void PluginController::HandleStartRiffCaptureRequest(const nlohmann::json& paylo
     config.countInBars = std::max(0, payload.value("countInBars", 1));
     config.patternType = payload.value("patternType", std::string("click"));
     config.patternId = payload.value("patternId", std::string{});
+    config.beatPattern = payload.value("beatPattern", mMetronomeBeatPattern); // use UI value or fall back to global
     config.presetId = mActivePresetId;
     config.presetName = mActivePreset ? mActivePreset->name : std::string{};
 
@@ -4048,9 +4124,11 @@ void PluginController::HandleArmRiffCaptureRequest(const nlohmann::json& payload
     config.timeSigDen = std::max(1, payload.value("timeSigDen", 4));
     // ARM mode: no fixed bar count; allocate 16 bars max
     config.bars = 16;
+    config.bars = std::max(1, std::min(64, payload.value("bars", 16)));
     config.countInBars = std::max(0, payload.value("countInBars", 1));
     config.patternType = payload.value("patternType", std::string("click"));
     config.patternId = payload.value("patternId", std::string{});
+    config.beatPattern = payload.value("beatPattern", mMetronomeBeatPattern);
     config.presetId = mActivePresetId;
     config.presetName = mActivePreset ? mActivePreset->name : std::string{};
 
@@ -4081,6 +4159,7 @@ void PluginController::HandleArmRiffCaptureRequest(const nlohmann::json& payload
     mRiffCapture.livePeaks.assign(kLivePeakBuckets, 0.0f);
     mRiffCapture.livePeakBucketSize = std::max<std::size_t>(1, maxCaptureSamples / kLivePeakBuckets);
     mRiffCapture.lastProgressSample = 0;
+    mRiffCapture.armPostCountInSamples = 0;
     mRiffCapture.startedAt = std::chrono::steady_clock::now();
     // Start click playing via guidance (count-in pattern), don't start recording yet
     ActivateRiffGuidance(config, false);
@@ -4092,6 +4171,7 @@ void PluginController::HandleArmRiffCaptureRequest(const nlohmann::json& payload
     msg["timeSigNum"] = config.timeSigNum;
     msg["timeSigDen"] = config.timeSigDen;
     msg["countInBars"] = config.countInBars;
+    msg["bars"] = config.bars;
     SendMessageToUI(msg.dump());
 }
 
@@ -4422,6 +4502,8 @@ void PluginController::HandleSaveRiffTakeRequest(const nlohmann::json& payload)
     takeJson["patternType"] = capture.config.patternType;
     if (!capture.config.patternId.empty())
         takeJson["patternId"] = capture.config.patternId;
+    if (!capture.config.beatPattern.empty())
+        takeJson["beatPattern"] = capture.config.beatPattern;
     if (!capture.config.presetId.empty())
         takeJson["presetId"] = capture.config.presetId;
     if (!capture.config.presetName.empty())
@@ -4637,6 +4719,7 @@ void PluginController::HandlePreviewRiffTakeRequest(const nlohmann::json& payloa
     guideConfig.timeSigDen = std::max(1, take->value("timeSigDen", 4));
     guideConfig.patternType = take->value("patternType", std::string("click"));
     guideConfig.patternId = take->value("patternId", std::string{});
+    guideConfig.beatPattern = take->value("beatPattern", mMetronomeBeatPattern);
 
     if (mDemoPreview)
     {
@@ -6569,6 +6652,7 @@ void PluginController::SendMetronomeStateToUI()
     msg["volumeDb"] = mMetronomeVolumeDb.load();
     msg["pan"] = mMetronomePan.load();
     msg["clickType"] = mMetronomeClickType;
+    msg["beatPattern"] = mMetronomeBeatPattern;
     nlohmann::json clickTypes = nlohmann::json::array();
     for (const auto& config : mMetronomeClickConfig)
         clickTypes.push_back({ {"id", config.id}, {"label", config.label} });

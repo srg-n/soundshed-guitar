@@ -492,8 +492,62 @@
   animation: riff-arm-blink 1s ease-in-out infinite;
 }
 
+/* REC indicator badge — hidden by default, pulses red while recording is active */
+.riff-rec-indicator {
+  display: none;
+  margin-left: auto;
+  margin-right: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--status-error-text);
+  background: var(--status-error-bg, rgba(220, 60, 60, 0.15));
+  border: 1px solid var(--status-error-border);
+  border-radius: 4px;
+  padding: 2px 7px;
+  user-select: none;
+  animation: riff-rec-blink 1s ease-in-out infinite;
+}
+
+@keyframes riff-rec-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+.riff-capture-modal-content.recording .riff-rec-indicator,
+.riff-capture-modal-content.armed .riff-rec-indicator {
+  display: inline-block;
+}
+
+.riff-capture-modal-content.recording,
+.riff-capture-modal-content.armed {
+  border-color: var(--status-error-border);
+}
+
+/* Sync-from-metronome mini button next to tempo input */
+.riff-sync-metro-btn {
+  padding: 3px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .riff-capture-waveform {
   cursor: ew-resize;
+}
+
+.riff-capture-save-section {
+  margin-top: 14px;
+  border-top: 1px solid var(--border-medium);
+  padding-top: 10px;
+}
+
+.riff-capture-save-divider {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
 }
 
 .riff-save-modal {
