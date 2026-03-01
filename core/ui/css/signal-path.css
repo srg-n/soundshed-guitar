@@ -1525,8 +1525,6 @@
 /* Blend A/B range slider */
 .node-param-blend-group {
   flex: 0 0 128px;
-  width: 128px;
-  max-width: 128px;
   align-items: center;
   margin-bottom: 6px;
   margin-right: auto;
@@ -1535,10 +1533,10 @@
 .blend-slider-container {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   flex: 1;
   width: 100%;
-  padding: 0 2px;
+  padding: 0 6px;
   box-sizing: border-box;
   min-width: 0;
 }

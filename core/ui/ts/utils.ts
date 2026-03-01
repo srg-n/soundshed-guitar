@@ -82,6 +82,8 @@ export interface WavMetadata {
   channels: number;
   sampleRate: number;
   bitsPerSample: number;
+  /** Number of audio frames (samples per channel) parsed from the data chunk. */
+  numFrames: number;
 }
 
 export function parseWavMetadata(arrayBuffer: ArrayBuffer): WavMetadata | null {
@@ -110,6 +112,7 @@ export function parseWavMetadata(arrayBuffer: ArrayBuffer): WavMetadata | null {
   let channels = 0;
   let sampleRate = 0;
   let bitsPerSample = 0;
+  let numFrames = 0;
 
   while (offset + 8 <= view.byteLength) {
     const id = String.fromCharCode(
@@ -128,7 +131,9 @@ export function parseWavMetadata(arrayBuffer: ArrayBuffer): WavMetadata | null {
       channels = view.getUint16(chunkStart + 2, true);
       sampleRate = view.getUint32(chunkStart + 4, true);
       bitsPerSample = view.getUint16(chunkStart + 14, true);
-      break;
+    } else if (id === "data") {
+      const bytesPerFrame = Math.max(1, channels) * Math.max(1, Math.ceil(bitsPerSample / 8));
+      numFrames = bytesPerFrame > 0 ? Math.floor(size / bytesPerFrame) : 0;
     }
     offset = chunkStart + size + (size % 2);
   }
@@ -137,7 +142,7 @@ export function parseWavMetadata(arrayBuffer: ArrayBuffer): WavMetadata | null {
     return null;
   }
 
-  return { channels, sampleRate, bitsPerSample };
+  return { channels, sampleRate, bitsPerSample, numFrames };
 }
 
 export function isRemoteUrl(url: string | null | undefined): boolean {

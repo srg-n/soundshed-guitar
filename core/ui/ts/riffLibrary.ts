@@ -38,7 +38,7 @@ function openRiffCaptureModal(): void {
     }
   }
   const accentInput = document.getElementById("riff-capture-accent") as HTMLInputElement | null;
-  if (accentInput) accentInput.value = uiState.metronome?.beatPattern ?? "";
+  if (accentInput) accentInput.value = uiState.metronome?.beatPattern ?? "LHLH";
   const volumeDb = uiState.metronome?.volumeDb ?? -12;
   const metroVolumeSlider = document.getElementById("riff-capture-metro-volume") as HTMLInputElement | null;
   const metroVolumeLabel = document.getElementById("riff-capture-metro-volume-label") as HTMLElement | null;
@@ -312,6 +312,12 @@ function updateTrimLabels(): void {
   const range = clampTrimRange(trimStartRatio, trimEndRatio);
   startLabel.textContent = `${(totalDuration * range.start).toFixed(2)}s`;
   endLabel.textContent = `${(totalDuration * range.end).toFixed(2)}s`;
+
+  const barsDisplay = document.getElementById("riff-capture-bars-display");
+  if (barsDisplay) {
+    const hasAudio = Boolean(uiState.riffCapture?.hasAudio);
+    barsDisplay.textContent = hasAudio ? `${computeBarsFromTrimWindow()} bars` : "— bars";
+  }
 }
 
 function syncTrimControlsFromState(): void {
@@ -419,12 +425,13 @@ function renderCapturedWaveform(): void {
     : (uiState.riffCapture?.waveformPeaks ?? []);
   const hasAudio = peaks.length > 0 && (Boolean(uiState.riffCapture?.hasAudio) || isRecording);
   // For live rendering, compute how far through the 16-bar max buffer we are
+  // 64 bars is the max capture buffer allocated by armRiffCapture
   const liveFillRatio = isRecording && uiState.riffCapture && uiState.riffCapture.sampleRate > 0
     ? Math.min(1, uiState.riffCapture.capturedSamples / Math.max(1, liveWaveformPeaks.length
         * Math.max(1, Math.ceil((uiState.riffCapture.sampleRate
           * (60 / Math.max(1, uiState.riffCapture.tempoBpm))
           * (4 / Math.max(1, uiState.riffCapture.timeSigDen))
-          * uiState.riffCapture.timeSigNum * 16) / 256))))
+          * uiState.riffCapture.timeSigNum * 64) / 256))))
     : 1;
 
   const dpr = window.devicePixelRatio || 1;
@@ -588,14 +595,14 @@ async function importDroppedRiffWav(file: File): Promise<void> {
   const tempoInput = document.getElementById("riff-capture-tempo") as HTMLInputElement | null;
   const numInput = document.getElementById("riff-capture-timesig-num") as HTMLInputElement | null;
   const denInput = document.getElementById("riff-capture-timesig-den") as HTMLInputElement | null;
-  const barsInput = document.getElementById("riff-capture-bars") as HTMLInputElement | null;
   const patternTypeSelect = document.getElementById("riff-capture-pattern-type") as HTMLSelectElement | null;
   const patternIdInput = document.getElementById("riff-capture-pattern-id") as HTMLInputElement | null;
 
   const tempoBpm = Math.max(30, Math.min(300, Number(tempoInput?.value ?? 120)));
   const timeSigNum = Math.max(1, Number(numInput?.value ?? 4));
   const timeSigDen = Math.max(1, Number(denInput?.value ?? 4));
-  const bars = Math.max(1, Number(barsInput?.value ?? 1));
+  // Compute bars from WAV duration and tempo rather than relying on user input
+  const bars = computeBarsFromSamples(wavInfo.numFrames, wavInfo.sampleRate, tempoBpm, timeSigNum, timeSigDen);
   const patternType = (patternTypeSelect?.value === "drum" ? "drum" : "click") as "click" | "drum";
   const patternId = patternIdInput?.value.trim() || undefined;
 
@@ -610,7 +617,7 @@ async function importDroppedRiffWav(file: File): Promise<void> {
     patternId,
   });
 
-  appendLog(`riff wav import requested → ${file.name} (${wavInfo.sampleRate} Hz, ${wavInfo.channels} ch)`);
+  appendLog(`riff wav import requested → ${file.name} (${wavInfo.sampleRate} Hz, ${wavInfo.channels} ch, ${bars} bars)`);
   showNotification("Importing WAV into current take", file.name);
 }
 
@@ -709,6 +716,23 @@ function computeBarsFromSamples(capturedSamples: number, sampleRate: number, tem
   return Math.max(1, Math.round(capturedSamples / samplesPerBar));
 }
 
+/** Compute bar count from the current trim window + tempo inputs. Used for saving. */
+function computeBarsFromTrimWindow(): number {
+  const trimDurationSec = getTrimWindowDurationSec();
+  if (trimDurationSec <= 0) {
+    return uiState.riffCapture?.bars ?? 1;
+  }
+  const tempoInput = document.getElementById("riff-capture-tempo") as HTMLInputElement | null;
+  const numInput = document.getElementById("riff-capture-timesig-num") as HTMLInputElement | null;
+  const denInput = document.getElementById("riff-capture-timesig-den") as HTMLInputElement | null;
+  const tempo = Math.max(30, Math.min(300, Number(tempoInput?.value ?? uiState.riffCapture?.tempoBpm ?? 120)));
+  const timeSigNum = Math.max(1, Number(numInput?.value ?? uiState.riffCapture?.timeSigNum ?? 4));
+  const timeSigDen = Math.max(1, Number(denInput?.value ?? uiState.riffCapture?.timeSigDen ?? 4));
+  const sampleRate = uiState.riffCapture?.sampleRate ?? 44100;
+  const trimSamples = Math.round(trimDurationSec * sampleRate);
+  return computeBarsFromSamples(trimSamples, sampleRate, tempo, timeSigNum, timeSigDen);
+}
+
 
 function bindRiffLibraryActions(): void {
   const pathInput = document.getElementById("riff-library-path") as HTMLInputElement | null;
@@ -788,11 +812,8 @@ function bindRiffLibraryActions(): void {
 
   if (captureModal && captureModal.dataset.bound !== "true") {
     captureModal.dataset.bound = "true";
-    captureModal.addEventListener("click", (event) => {
-      if (event.target === captureModal) {
-        closeRiffCaptureModal();
-      }
-    });
+    // Intentionally no backdrop-click dismiss: dragging waveform trim markers outside the
+    // dialog would otherwise close it. Only the Cancel button or a completed save closes this modal.
   }
 
   const openSaveModal = (editing = false) => {
@@ -839,7 +860,6 @@ function bindRiffLibraryActions(): void {
       const tempoInput = document.getElementById("riff-capture-tempo") as HTMLInputElement | null;
       const numInput = document.getElementById("riff-capture-timesig-num") as HTMLInputElement | null;
       const denInput = document.getElementById("riff-capture-timesig-den") as HTMLInputElement | null;
-      const barsInput = document.getElementById("riff-capture-bars") as HTMLInputElement | null;
       const patternTypeSelect = document.getElementById("riff-capture-pattern-type") as HTMLSelectElement | null;
       const patternIdInput = document.getElementById("riff-capture-pattern-id") as HTMLInputElement | null;
 
@@ -860,13 +880,13 @@ function bindRiffLibraryActions(): void {
         tempoBpm: Math.max(30, Math.min(300, Number(tempoInput?.value ?? uiState.riffCapture?.tempoBpm ?? 120))),
         timeSigNum: Math.max(1, Number(numInput?.value ?? uiState.riffCapture?.timeSigNum ?? 4)),
         timeSigDen: Math.max(1, Number(denInput?.value ?? uiState.riffCapture?.timeSigDen ?? 4)),
-        bars: Math.max(1, Number(barsInput?.value ?? uiState.riffCapture?.bars ?? 1)),
+        bars: computeBarsFromTrimWindow(),
         patternType: (patternTypeSelect?.value === "drum" ? "drum" : "click") as "click" | "drum",
         patternId: patternIdInput?.value.trim() ?? "",
         presetId: uiState.activePresetId ?? undefined,
       });
       closeRiffCaptureModal();
-      appendLog(`riff save requested \u2192 ${title}`);
+      appendLog(`riff save requested \u2192 ${title} (${computeBarsFromTrimWindow()} bars)`);
     });
   }
 
@@ -882,7 +902,7 @@ function bindRiffLibraryActions(): void {
 
   if (saveModal && saveModal.dataset.bound !== "true") {
     saveModal.dataset.bound = "true";
-    saveModal.addEventListener("click", (event) => {
+    saveModal.addEventListener("mousedown", (event) => {
       if (event.target === saveModal) {
         closeSaveModal();
       }
@@ -904,7 +924,6 @@ function bindRiffLibraryActions(): void {
       const tempoInput = document.getElementById("riff-capture-tempo") as HTMLInputElement | null;
       const numInput = document.getElementById("riff-capture-timesig-num") as HTMLInputElement | null;
       const denInput = document.getElementById("riff-capture-timesig-den") as HTMLInputElement | null;
-      const barsInput = document.getElementById("riff-capture-bars") as HTMLInputElement | null;
       const countInInput = document.getElementById("riff-capture-countin") as HTMLInputElement | null;
       const patternTypeSelect = document.getElementById("riff-capture-pattern-type") as HTMLSelectElement | null;
       const patternIdInput = document.getElementById("riff-capture-pattern-id") as HTMLInputElement | null;
@@ -913,7 +932,8 @@ function bindRiffLibraryActions(): void {
       const tempo = Math.max(30, Math.min(300, Number(tempoInput?.value ?? 120)));
       const timeSigNum = Math.max(1, Number(numInput?.value ?? 4));
       const timeSigDen = Math.max(1, Number(denInput?.value ?? 4));
-      const bars = Math.max(1, Number(barsInput?.value ?? 1));
+      // Allocate 64-bar buffer; recording is unlimited until the user clicks Stop
+      const bars = 64;
       const countInBars = Math.max(0, Number(countInInput?.value ?? 1));
       const patternType = (patternTypeSelect?.value === "drum" ? "drum" : "click") as "click" | "drum";
       const patternId = patternIdInput?.value.trim() || undefined;
@@ -921,7 +941,7 @@ function bindRiffLibraryActions(): void {
 
       armRiffCapture({ tempoBpm: tempo, timeSigNum, timeSigDen, bars, countInBars, patternType, patternId, beatPattern });
       isArmed = true;
-      appendLog(`riff capture armed → ${bars} bars @ ${tempo} bpm (${timeSigNum}/${timeSigDen}), count-in: ${countInBars} bars (waiting for signal)`);
+      appendLog(`riff capture armed → unlimited (64-bar buffer) @ ${tempo} bpm (${timeSigNum}/${timeSigDen}), count-in: ${countInBars} bars (waiting for signal)`);
       renderRiffCaptureStatus();
     });
   }
@@ -952,7 +972,6 @@ function bindRiffLibraryActions(): void {
       const tempoInput = document.getElementById("riff-capture-tempo") as HTMLInputElement | null;
       const numInput = document.getElementById("riff-capture-timesig-num") as HTMLInputElement | null;
       const denInput = document.getElementById("riff-capture-timesig-den") as HTMLInputElement | null;
-      const barsInput = document.getElementById("riff-capture-bars") as HTMLInputElement | null;
       const patternTypeSelect = document.getElementById("riff-capture-pattern-type") as HTMLSelectElement | null;
       const patternIdInput = document.getElementById("riff-capture-pattern-id") as HTMLInputElement | null;
 
@@ -972,7 +991,7 @@ function bindRiffLibraryActions(): void {
         tempoBpm: Math.max(30, Math.min(300, Number(tempoInput?.value ?? uiState.riffCapture?.tempoBpm ?? 120))),
         timeSigNum: Math.max(1, Number(numInput?.value ?? uiState.riffCapture?.timeSigNum ?? 4)),
         timeSigDen: Math.max(1, Number(denInput?.value ?? uiState.riffCapture?.timeSigDen ?? 4)),
-        bars: Math.max(1, Number(barsInput?.value ?? uiState.riffCapture?.bars ?? 1)),
+        bars: computeBarsFromTrimWindow(),
         patternType: (patternTypeSelect?.value === "drum" ? "drum" : "click") as "click" | "drum",
         patternId: patternIdInput?.value.trim() ?? "",
         presetId: uiState.activePresetId ?? undefined,
@@ -1207,14 +1226,12 @@ function bindRiffLibraryActions(): void {
           const tempoInput = document.getElementById("riff-capture-tempo") as HTMLInputElement | null;
           const numInput = document.getElementById("riff-capture-timesig-num") as HTMLInputElement | null;
           const denInput = document.getElementById("riff-capture-timesig-den") as HTMLInputElement | null;
-          const barsInput = document.getElementById("riff-capture-bars") as HTMLInputElement | null;
           const patternTypeSelect = document.getElementById("riff-capture-pattern-type") as HTMLSelectElement | null;
           const patternIdInput = document.getElementById("riff-capture-pattern-id") as HTMLInputElement | null;
 
           if (tempoInput) tempoInput.value = String(Math.round(take.tempoBpm ?? 120));
           if (numInput) numInput.value = String(take.timeSigNum ?? 4);
           if (denInput) denInput.value = String(take.timeSigDen ?? 4);
-          if (barsInput) barsInput.value = String(Math.max(1, take.bars ?? 1));
           if (patternTypeSelect) patternTypeSelect.value = take.patternType === "drum" ? "drum" : "click";
           if (patternIdInput) patternIdInput.value = take.patternId ?? "";
 
