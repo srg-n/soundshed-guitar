@@ -163,7 +163,7 @@ namespace guitarfx
     info.requiresResource = false;
     info.parameters = {
         {"semitones", "Semitones", 0.0, -36.0, 12.0, "st", "", false, 1.0},
-        {"mix", "Mix", 1.0, 0.0, 1.0, "%"}};
+        {"mix", "Mix", 1.0, 0.0, 1.0, "amount"}};
     EffectRegistry::Instance().Register(info.type, info, []()
                                         { return std::make_unique<TransposeEffect>(); });
   }

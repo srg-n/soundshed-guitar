@@ -266,16 +266,16 @@ namespace guitarfx
     info.requiresResource = false;
     info.parameters = {
         {"time",       "Time",        300.0,  1.0,    2000.0,  "ms"},
-        {"feedback",   "Feedback",    0.3,    0.0,    0.95,    ""},
-        {"mix",        "Mix",         0.3,    0.0,    1.0,     ""},
+        {"feedback",   "Feedback",    0.4,    0.0,    0.95,    "amount"},
+        {"mix",        "Mix",         0.3,    0.0,    1.0,     "amount"},
         {"highCut",    "High Cut",    8000.0, 200.0,  20000.0, "Hz"},
         {"lowCut",     "Low Cut",     20.0,   20.0,   5000.0,  "Hz"},
-        {"drive",      "Drive",       0.0,    0.0,    1.0,     ""},
-        {"stereoMode", "Stereo Mode", 0.0,    0.0,    1.0,     ""},
-        {"spread",     "Spread",      0.0,    0.0,    50.0,    "ms",  "", true},
-        {"modRate",    "Mod Rate",    0.0,    0.0,    10.0,    "Hz",  "", true},
-        {"modDepth",   "Mod Depth",   0.0,    0.0,    20.0,    "ms",  "", true},
-        {"ducking",    "Ducking",     0.0,    0.0,    1.0,     "",    "", true}};
+        {"drive",      "Drive",       0.0,    0.0,    1.0,     "amount"},
+        {"stereoMode", "Stereo",      0.0,    0.0,    1.0,     "enum",  "", false, 1.0, {"Normal", "Ping-Pong"}},
+        {"spread",     "Spread",      0.0,    0.0,    50.0,    "ms",    "", true},
+        {"modRate",    "Mod Rate",    0.0,    0.0,    10.0,    "Hz",    "", true},
+        {"modDepth",   "Mod Depth",   0.0,    0.0,    20.0,    "ms",    "", true},
+        {"ducking",    "Ducking",     0.0,    0.0,    1.0,     "amount","", true}};
 
     EffectRegistry::Instance().Register(info.type, info, []()
                                         { return std::make_unique<DelayEffect>(); });

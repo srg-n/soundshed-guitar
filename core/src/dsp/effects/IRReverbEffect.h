@@ -417,7 +417,7 @@ namespace guitarfx
     info.requiresResource = true;
     info.resourceType = "ir";
     info.parameters = {
-        {"mix", "Mix", 1.0, 0.0, 1.0, ""},
+        {"mix", "Mix", 1.0, 0.0, 1.0, "amount"},
         {"outputGain", "Output", 0.0, -24.0, 24.0, "dB"},
         {"quality", "Quality", 1.0, 0.0, 3.0, ""}};
 

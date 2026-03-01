@@ -230,10 +230,10 @@ namespace guitarfx
     info.description = "Filter-based cabinet simulation (no IR required)";
     info.requiresResource = false;
     info.parameters = {
-        {"bass", "Bass", 0.5, 0.0, 1.0, ""},
-        {"presence", "Presence", 0.5, 0.0, 1.0, ""},
-        {"brightness", "Brightness", 0.5, 0.0, 1.0, ""},
-        {"mix", "Mix", 1.0, 0.0, 1.0, ""}};
+        {"bass", "Bass", 0.5, 0.0, 1.0, "amount"},
+        {"presence", "Presence", 0.5, 0.0, 1.0, "amount"},
+        {"brightness", "Brightness", 0.5, 0.0, 1.0, "amount"},
+        {"mix", "Mix", 1.0, 0.0, 1.0, "amount"}};
 
     EffectRegistry::Instance().Register(info.type, info, []()
                                         { return std::make_unique<SimpleCabEffect>(); });

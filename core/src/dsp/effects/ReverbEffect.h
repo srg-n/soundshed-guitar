@@ -1114,79 +1114,79 @@ namespace guitarfx
       {
       case ReverbEffect::Mode::Room:
         info.parameters = {
-            param("decay", "Decay", 0.46, 0.0, 1.0, ""),
-            param("size", "Size", 0.42, 0.0, 1.0, ""),
-            param("damping", "Damping", 0.56, 0.0, 1.0, ""),
+            param("decay", "Decay", 0.46, 0.0, 1.0, "amount"),
+            param("size", "Size", 0.42, 0.0, 1.0, "amount"),
+            param("damping", "Damping", 0.56, 0.0, 1.0, "amount"),
             param("preDelay", "Pre Delay", 8.0, 0.0, 220.0, "ms"),
-            param("mix", "Mix", 0.22, 0.0, 1.0, "")};
+            param("mix", "Mix", 0.22, 0.0, 1.0, "amount")};
         break;
       case ReverbEffect::Mode::Hall:
         info.parameters = {
-            param("decay", "Decay", 0.62, 0.0, 1.0, ""),
-            param("size", "Size", 0.55, 0.0, 1.0, ""),
+            param("decay", "Decay", 0.62, 0.0, 1.0, "amount"),
+            param("size", "Size", 0.55, 0.0, 1.0, "amount"),
             param("preDelay", "Pre Delay", 22.0, 0.0, 220.0, "ms"),
-            param("damping", "Damping", 0.52, 0.0, 1.0, ""),
-            param("width", "Width", 1.05, 0.0, 1.2, ""),
-            param("mix", "Mix", 0.25, 0.0, 1.0, "")};
+            param("damping", "Damping", 0.52, 0.0, 1.0, "amount"),
+            param("width", "Width", 1.05, 0.0, 1.2, "amount"),
+            param("mix", "Mix", 0.25, 0.0, 1.0, "amount")};
         break;
       case ReverbEffect::Mode::Plate:
         info.parameters = {
-            param("decay", "Decay", 0.58, 0.0, 1.0, ""),
+            param("decay", "Decay", 0.58, 0.0, 1.0, "amount"),
             param("preDelay", "Pre Delay", 12.0, 0.0, 220.0, "ms"),
-            param("tone", "Tone", 0.76, 0.0, 1.0, ""),
-            param("damping", "Damping", 0.35, 0.0, 1.0, ""),
-            param("mix", "Mix", 0.24, 0.0, 1.0, "")};
+            param("tone", "Tone", 0.76, 0.0, 1.0, "amount"),
+            param("damping", "Damping", 0.35, 0.0, 1.0, "amount"),
+            param("mix", "Mix", 0.24, 0.0, 1.0, "amount")};
         break;
       case ReverbEffect::Mode::Chamber:
         info.parameters = {
-            param("decay", "Decay", 0.6, 0.0, 1.0, ""),
-            param("size", "Size", 0.56, 0.0, 1.0, ""),
-            param("tone", "Tone", 0.52, 0.0, 1.0, ""),
+            param("decay", "Decay", 0.6, 0.0, 1.0, "amount"),
+            param("size", "Size", 0.56, 0.0, 1.0, "amount"),
+            param("tone", "Tone", 0.52, 0.0, 1.0, "amount"),
             param("preDelay", "Pre Delay", 15.0, 0.0, 220.0, "ms"),
-            param("mix", "Mix", 0.24, 0.0, 1.0, "")};
+            param("mix", "Mix", 0.24, 0.0, 1.0, "amount")};
         break;
       case ReverbEffect::Mode::Spring:
         info.parameters = {
-            param("decay", "Decay", 0.5, 0.0, 1.0, ""),
-            param("tone", "Tone", 0.68, 0.0, 1.0, ""),
-            param("drive", "Drive", 0.22, 0.0, 1.0, ""),
-            param("mix", "Mix", 0.23, 0.0, 1.0, "")};
+            param("decay", "Decay", 0.5, 0.0, 1.0, "amount"),
+            param("tone", "Tone", 0.68, 0.0, 1.0, "amount"),
+            param("drive", "Drive", 0.22, 0.0, 1.0, "amount"),
+            param("mix", "Mix", 0.23, 0.0, 1.0, "amount")};
         break;
       case ReverbEffect::Mode::Shimmer:
         info.parameters = {
-            param("decay", "Decay", 0.62, 0.0, 1.0, ""),
-            param("size", "Size", 0.8, 0.0, 1.0, ""),
-            param("shimmer", "Shimmer", 0.28, 0.0, 1.0, ""),
+            param("decay", "Decay", 0.62, 0.0, 1.0, "amount"),
+            param("size", "Size", 0.8, 0.0, 1.0, "amount"),
+            param("shimmer", "Shimmer", 0.28, 0.0, 1.0, "amount"),
             param("preDelay", "Pre Delay", 28.0, 0.0, 220.0, "ms"),
-            param("mix", "Mix", 0.30, 0.0, 1.0, "")};
+            param("mix", "Mix", 0.30, 0.0, 1.0, "amount")};
         break;
       case ReverbEffect::Mode::Ambient:
         info.parameters = {
-            param("decay", "Decay", 0.75, 0.0, 1.0, ""),
-            param("size", "Size", 0.9, 0.0, 1.0, ""),
-            param("diffusion", "Diffusion", 0.9, 0.0, 1.0, ""),
-            param("width", "Width", 1.1, 0.0, 1.2, ""),
-            param("mix", "Mix", 0.32, 0.0, 1.0, "")};
+            param("decay", "Decay", 0.75, 0.0, 1.0, "amount"),
+            param("size", "Size", 0.9, 0.0, 1.0, "amount"),
+            param("diffusion", "Diffusion", 0.9, 0.0, 1.0, "amount"),
+            param("width", "Width", 1.1, 0.0, 1.2, "amount"),
+            param("mix", "Mix", 0.32, 0.0, 1.0, "amount")};
         break;
       case ReverbEffect::Mode::Advanced:
         info.displayName = "Advanced Reverb";
         info.description = "Algorithmic reverb with full common and advanced controls";
         info.parameters = {
-            param("decay", "Decay", 0.64, 0.0, 1.0, "", "Common"),
-            param("size", "Size", 0.55, 0.0, 1.0, "", "Common"),
-            param("mix", "Mix", 0.24, 0.0, 1.0, "", "Common"),
-            param("damping", "Damping", 0.46, 0.0, 1.0, "", "Common"),
+            param("decay", "Decay", 0.64, 0.0, 1.0, "amount", "Common"),
+            param("size", "Size", 0.55, 0.0, 1.0, "amount", "Common"),
+            param("mix", "Mix", 0.24, 0.0, 1.0, "amount", "Common"),
+            param("damping", "Damping", 0.46, 0.0, 1.0, "amount", "Common"),
             param("preDelay", "Pre Delay", 16.0, 0.0, 220.0, "ms", "Common"),
-            param("tone", "Tone", 0.62, 0.0, 1.0, "", "Common"),
-            param("width", "Width", 1.0, 0.0, 1.2, "", "Common"),
-            param("diffusion", "Diffusion", 0.7, 0.0, 1.0, "", "Advanced", true),
+            param("tone", "Tone", 0.62, 0.0, 1.0, "amount", "Common"),
+            param("width", "Width", 1.0, 0.0, 1.2, "amount", "Common"),
+            param("diffusion", "Diffusion", 0.7, 0.0, 1.0, "amount", "Advanced", true),
             param("lowCut", "Low Cut", 140.0, 20.0, 1200.0, "Hz", "Advanced", true),
             param("highCut", "High Cut", 12000.0, 1000.0, 20000.0, "Hz", "Advanced", true),
             param("modRate", "Mod Rate", 0.45, 0.02, 8.0, "Hz", "Advanced", true),
-            param("modDepth", "Mod Depth", 0.18, 0.0, 1.0, "", "Advanced", true),
-            param("ducking", "Ducking", 0.08, 0.0, 1.0, "", "Advanced", true),
-            param("drive", "Drive", 0.0, 0.0, 1.0, "", "Advanced", true),
-            param("shimmer", "Shimmer", 0.0, 0.0, 1.0, "", "Advanced", true)};
+            param("modDepth", "Mod Depth", 0.18, 0.0, 1.0, "amount", "Advanced", true),
+            param("ducking", "Ducking", 0.08, 0.0, 1.0, "amount", "Advanced", true),
+            param("drive", "Drive", 0.0, 0.0, 1.0, "amount", "Advanced", true),
+            param("shimmer", "Shimmer", 0.0, 0.0, 1.0, "amount", "Advanced", true)};
         break;
       }
 

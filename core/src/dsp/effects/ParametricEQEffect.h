@@ -268,16 +268,16 @@ namespace guitarfx
     info.description = "4-band parametric equalizer";
     info.requiresResource = false;
     info.parameters = {
-        {"lowGain", "Low Gain", 0.0, -12.0, 12.0, "dB"},
-        {"lowFreq", "Low Freq", 100.0, 20.0, 500.0, "Hz"},
-        {"lowMidGain", "Low Mid Gain", 0.0, -12.0, 12.0, "dB"},
-        {"lowMidFreq", "Low Mid Freq", 400.0, 100.0, 2000.0, "Hz"},
-        {"lowMidQ", "Low Mid Q", 1.0, 0.1, 10.0, ""},
-        {"highMidGain", "High Mid Gain", 0.0, -12.0, 12.0, "dB"},
-        {"highMidFreq", "High Mid Freq", 2000.0, 500.0, 8000.0, "Hz"},
-        {"highMidQ", "High Mid Q", 1.0, 0.1, 10.0, ""},
-        {"highGain", "High Gain", 0.0, -12.0, 12.0, "dB"},
-        {"highFreq", "High Freq", 8000.0, 2000.0, 16000.0, "Hz"}};
+        {"lowGain",    "Low Gain",      0.0, -12.0,  12.0,   "dB",     "Low"},
+        {"lowFreq",    "Low Freq",    100.0,  20.0,  500.0,   "Hz",     "Low"},
+        {"lowMidGain", "Low-Mid Gain",  0.0, -12.0,  12.0,   "dB",     "Low Mid"},
+        {"lowMidFreq", "Low-Mid Freq",400.0, 100.0, 2000.0,  "Hz",     "Low Mid"},
+        {"lowMidQ",    "Low-Mid Q",     1.0,   0.1,   10.0,   "amount", "Low Mid"},
+        {"highMidGain","High-Mid Gain", 0.0, -12.0,  12.0,   "dB",     "High Mid"},
+        {"highMidFreq","High-Mid Freq",2000.0,500.0,8000.0,  "Hz",     "High Mid"},
+        {"highMidQ",   "High-Mid Q",    1.0,   0.1,   10.0,   "amount", "High Mid"},
+        {"highGain",   "High Gain",     0.0, -12.0,  12.0,   "dB",     "High"},
+        {"highFreq",   "High Freq",  8000.0,2000.0,16000.0,  "Hz",     "High"}};
 
     EffectRegistry::Instance().Register(info.type, info, []()
                                         { return std::make_unique<ParametricEQEffect>(); });

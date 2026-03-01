@@ -133,7 +133,7 @@ namespace guitarfx
     info.requiresResource = false;
     info.parameters = {
         {"time", "Delay Time", 6.0, 0.0, 100.0, "ms"},
-        {"mix", "Mix", 0.3, 0.0, 1.0, "%"}};
+        {"mix", "Mix", 0.3, 0.0, 1.0, "amount"}};
     EffectRegistry::Instance().Register(info.type, info, []()
                                         { return std::make_unique<DoublerEffect>(); });
   }

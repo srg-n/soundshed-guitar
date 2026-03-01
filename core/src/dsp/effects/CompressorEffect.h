@@ -348,7 +348,7 @@ namespace guitarfx
           {"release", "Release", 100.0, 10.0, 2000.0, "ms"},
           {"knee", "Knee", 6.0, 0.0, 24.0, "dB"},
           {"makeup", "Makeup", 0.0, 0.0, 24.0, "dB"},
-          {"mix", "Mix", 1.0, 0.0, 1.0, ""}};
+          {"mix", "Mix", 1.0, 0.0, 1.0, "amount"}};
 
       EffectRegistry::Instance().Register(info.type, info, []()
                                           { return std::make_unique<CompressorEffect>(); });
@@ -369,7 +369,7 @@ namespace guitarfx
           {"attack", "Attack", 20.0, 5.0, 200.0, "ms"},
           {"release", "Release", 300.0, 50.0, 3000.0, "ms"},
           {"makeup", "Makeup", 0.0, 0.0, 24.0, "dB"},
-          {"mix", "Mix", 1.0, 0.0, 1.0, ""}};
+          {"mix", "Mix", 1.0, 0.0, 1.0, "amount"}};
 
       EffectRegistry::Instance().Register(info.type, info, []()
                                           { return std::make_unique<OptoCompressorEffect>(); });

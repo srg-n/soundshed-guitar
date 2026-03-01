@@ -721,9 +721,9 @@ inline void RegisterMultiModelNAMAmpEffect()
   info.requiresResource = true;
   info.resourceType = "nam";
   info.parameters = {
-    {"blend", "Blend", 0.0, 0.0, 1.0, ""},
-    {"inputGain", "Input Gain", 0.0, -24.0, 24.0, "dB"},
-    {"outputGain", "Output Gain", 0.0, -24.0, 24.0, "dB"}
+    {"blend", "Blend", 0.0, 0.0, 1.0, "amount"},
+    {"inputGain", "Input", 0.0, -24.0, 24.0, "dB"},
+    {"outputGain", "Output", 0.0, -24.0, 24.0, "dB"}
   };
 
   EffectRegistry::Instance().Register(info.type, info, []()
