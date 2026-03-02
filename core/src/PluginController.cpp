@@ -2735,14 +2735,15 @@ void PluginController::HandleAddSignalPathNodeRequest(const nlohmann::json& payl
         return;
     }
 
-    if (effectType == "splitter")
+    const std::string resolvedEffectType = EffectRegistry::Instance().Resolve(effectType);
+    if (resolvedEffectType == EffectGuids::kSplitter)
     {
         auto& graph = *targetGraph;
         const std::string splitterId = MakeUniqueNodeId(graph, "split");
         const std::string mixerId = MakeUniqueNodeId(graph, "mix");
 
-        GraphNode splitter; splitter.id = splitterId; splitter.type = "splitter"; splitter.category = "utility"; splitter.label = "Splitter"; splitter.enabled = true;
-        GraphNode mixer; mixer.id = mixerId; mixer.type = "mixer"; mixer.category = "utility"; mixer.label = "Mixer"; mixer.enabled = true;
+        GraphNode splitter; splitter.id = splitterId; splitter.type = EffectGuids::kSplitter; splitter.category = "utility"; splitter.label = "Splitter"; splitter.enabled = true;
+        GraphNode mixer; mixer.id = mixerId; mixer.type = EffectGuids::kMixer; mixer.category = "utility"; mixer.label = "Mixer"; mixer.enabled = true;
 
         const std::string nextNodeId = chosenEdgeIt->to;
         const int preservedToPort = chosenEdgeIt->toPort;
@@ -2829,8 +2830,8 @@ void PluginController::HandleSplitSignalPathEdgeRequest(const nlohmann::json& pa
     const std::string splitterId = MakeUniqueNodeId(*targetGraph, "split");
     const std::string mixerId = MakeUniqueNodeId(*targetGraph, "mix");
 
-    GraphNode splitter; splitter.id = splitterId; splitter.type = "splitter"; splitter.category = "utility"; splitter.label = "Splitter"; splitter.enabled = true;
-    GraphNode mixer; mixer.id = mixerId; mixer.type = "mixer"; mixer.category = "utility"; mixer.label = "Mixer"; mixer.enabled = true;
+    GraphNode splitter; splitter.id = splitterId; splitter.type = EffectGuids::kSplitter; splitter.category = "utility"; splitter.label = "Splitter"; splitter.enabled = true;
+    GraphNode mixer; mixer.id = mixerId; mixer.type = EffectGuids::kMixer; mixer.category = "utility"; mixer.label = "Mixer"; mixer.enabled = true;
 
     const std::string nextNodeId = targetEdgeIt->to;
     const int preservedToPort = targetEdgeIt->toPort;
@@ -2958,7 +2959,7 @@ void PluginController::HandleReorderSignalPathNodeRequest(const nlohmann::json& 
 
     const GraphNode* node = targetGraph->FindNode(nodeId);
     if (!node) { ReportErrorToUI("Reorder node failed", "Node not found"); return; }
-    if (node->type == "splitter" || node->type == "mixer") { ReportErrorToUI("Reorder node failed", "Cannot move splitter/mixer nodes"); return; }
+    if (node->type == "splitter" || node->type == "mixer" || node->type == EffectGuids::kSplitter || node->type == EffectGuids::kMixer) { ReportErrorToUI("Reorder node failed", "Cannot move splitter/mixer nodes"); return; }
 
     auto& edges = targetGraph->edges;
 
