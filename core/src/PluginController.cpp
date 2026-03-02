@@ -5196,7 +5196,7 @@ void PluginController::ApplyBlendDefinitions(Preset& preset)
 
     for (auto& node : preset.graph.nodes)
     {
-        if (node.type != "amp_nam_blend") continue;
+        if (node.type != EffectGuids::kAmpNamBlend) continue;
 
         const auto blendIt = node.config.find("blendId");
         if (blendIt == node.config.end()) continue;
