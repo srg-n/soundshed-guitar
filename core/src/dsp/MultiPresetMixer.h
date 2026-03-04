@@ -8,7 +8,9 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <condition_variable>
 #include <functional>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
@@ -301,6 +303,8 @@ namespace guitarfx
     std::atomic<int>      mParallelDoneCount{0};
     std::atomic<uint32_t> mParallelGeneration{0};
     std::atomic<bool>     mParallelQuit{false};
+    std::mutex              mParallelMutex;
+    std::condition_variable mParallelCv;
     std::vector<std::thread> mWorkerThreads;
 
     void StartWorkers(int count);

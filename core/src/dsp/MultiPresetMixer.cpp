@@ -4,6 +4,8 @@
 
 #include <array>
 #include <cmath>
+#include <condition_variable>
+#include <mutex>
 #include <thread>
 
 namespace guitarfx
@@ -745,8 +747,11 @@ namespace guitarfx
   {
     StopWorkers();
 
-    mParallelQuit.store(false, std::memory_order_relaxed);
-    mParallelGeneration.store(0, std::memory_order_relaxed);
+    {
+      std::lock_guard<std::mutex> lock(mParallelMutex);
+      mParallelQuit.store(false, std::memory_order_relaxed);
+      mParallelGeneration.store(0, std::memory_order_relaxed);
+    }
 
     const int numWorkers = std::min(count, kMaxParallelWorkers);
     mWorkerThreads.reserve(static_cast<size_t>(numWorkers));
@@ -759,9 +764,11 @@ namespace guitarfx
     if (mWorkerThreads.empty())
       return;
 
-    mParallelQuit.store(true, std::memory_order_release);
-    // Bump generation to wake any spinning workers so they can see the quit flag.
-    mParallelGeneration.fetch_add(1, std::memory_order_release);
+    {
+      std::lock_guard<std::mutex> lock(mParallelMutex);
+      mParallelQuit.store(true, std::memory_order_relaxed);
+    }
+    mParallelCv.notify_all();
     for (auto &t : mWorkerThreads)
     {
       if (t.joinable())
@@ -773,18 +780,21 @@ namespace guitarfx
   void MultiPresetMixer::WorkerLoop()
   {
     uint32_t lastGen = 0;
-    while (!mParallelQuit.load(std::memory_order_acquire))
+    while (true)
     {
-      const uint32_t gen = mParallelGeneration.load(std::memory_order_acquire);
-      if (gen == lastGen)
       {
-        CpuRelax();
-        continue;
+        std::unique_lock<std::mutex> lock(mParallelMutex);
+        mParallelCv.wait(lock, [&]
+        {
+          return mParallelQuit.load(std::memory_order_relaxed)
+              || mParallelGeneration.load(std::memory_order_relaxed) != lastGen;
+        });
       }
-      lastGen = gen;
 
       if (mParallelQuit.load(std::memory_order_acquire))
         break;
+
+      lastGen = mParallelGeneration.load(std::memory_order_acquire);
 
       const int total = mParallelTaskCount.load(std::memory_order_acquire);
       while (true)
@@ -1029,11 +1039,14 @@ namespace guitarfx
       }
 
       // Publish tasks and wake workers.
-      mParallelTaskHead.store(0, std::memory_order_relaxed);
-      mParallelDoneCount.store(0, std::memory_order_relaxed);
-      mParallelTaskCount.store(wi, std::memory_order_relaxed);
-      std::atomic_thread_fence(std::memory_order_release);
-      mParallelGeneration.fetch_add(1, std::memory_order_acq_rel);
+      {
+        std::lock_guard<std::mutex> lock(mParallelMutex);
+        mParallelTaskHead.store(0, std::memory_order_relaxed);
+        mParallelDoneCount.store(0, std::memory_order_relaxed);
+        mParallelTaskCount.store(wi, std::memory_order_relaxed);
+        mParallelGeneration.fetch_add(1, std::memory_order_relaxed);
+      }
+      mParallelCv.notify_all();
 
       // Audio thread steals tasks alongside workers.
       while (true)
