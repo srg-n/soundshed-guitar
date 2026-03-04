@@ -49,12 +49,12 @@ Every node in the chain has a **bypass toggle**. When bypassed, the signal passe
 The chain does not have to be purely linear. You can split your signal into two or more parallel paths using a **Splitter** node, then merge them back with a **Mixer** node:
 
 ```
-               ┌─→ [Cab IR 1] ─→┐
+               ┌─→ [Effects] ─→┐
 Amp ─→ Splitter─┤                 ├─→ Mixer ─→ Output
-               └─→ [Cab IR 2] ─→┘
+               └─→ [Effects] ─→┘
 ```
 
-This is useful for blending two different cabinet sounds, or running a dry signal in parallel with a heavily effected wet signal.
+This is useful for blending two different amp sounds, or running a dry signal in parallel with a heavily effected wet signal.
 
 ---
 

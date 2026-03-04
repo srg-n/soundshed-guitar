@@ -66,7 +66,7 @@ To split your signal and process it through two separate paths simultaneously:
 2. The Splitter fans out to two paths. Add effects to each path independently.
 3. A **Mixer** node is added automatically at the end of the parallel paths to combine them back.
 
-Use this to blend two cabinet IRs, or to keep a dry signal alongside a wet effect path.
+Use this to blend two different tones, or to keep a dry signal alongside a wet effect path.
 
 ---
 

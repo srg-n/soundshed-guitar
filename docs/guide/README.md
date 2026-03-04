@@ -39,6 +39,7 @@ Each effect is documented with a description, full parameter reference, and prac
 ### Amplifiers
 - [Neural Amp Model (NAM)](effects/amp-nam.md)
 - [NAM Blend](effects/amp-nam-blend.md)
+- [Built-in Amp](effects/amp-builtin.md)
 
 ### Cabinets
 - [IR Cabinet](effects/cab-ir.md)
@@ -71,6 +72,7 @@ Each effect is documented with a description, full parameter reference, and prac
 - [Phaser](effects/phaser.md)
 - [Tremolo](effects/tremolo.md)
 - [Auto-Wah](effects/auto-wah.md)
+- [Auto Arpeggiator](effects/auto-arp.md)
 
 ### Pitch
 - [Pitch Shift](effects/pitch-shift.md)
@@ -79,3 +81,6 @@ Each effect is documented with a description, full parameter reference, and prac
 
 ### Utility
 - [Gain Stage](effects/gain.md)
+
+### Synth
+- [Synth Saw](effects/synth-saw.md)

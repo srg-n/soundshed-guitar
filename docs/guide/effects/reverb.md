@@ -14,7 +14,7 @@ All reverb types share these controls:
 |-----------|-------|--------------|
 | **Decay** | 0–100% (or in seconds, varies per type) | How long the reverb tail rings out before fading to silence. Short Decay = tight, close space; long Decay = huge, cavernous wash |
 | **Mix** | 0–100% | Blends the reverb (wet) signal with the dry signal. Keep Mix moderate (10–30%) for most guitar use — too much washes out note definition |
-| **Pre-Delay** | 0–100 ms | A short silence between the dry note and the onset of reverb. Adding a few ms of Pre-Delay (10–30 ms) separates the dry attack from the reverb wash, preserving clarity while still sounding spacious |
+| **Pre-Delay** | 0–220 ms | A short silence between the dry note and the onset of reverb. Adding a few ms of Pre-Delay (10–30 ms) separates the dry attack from the reverb wash, preserving clarity while still sounding spacious |
 
 ---
 
@@ -101,7 +101,7 @@ Chamber reverb sits between Room and Hall in size — intimate but not tight. Th
 
 Spring reverb has a very distinct, characterful sound. The mechanical nature of a spring tank creates a slightly sharp, dripping character — particularly noticeable on transients and in the reverb tail. It is the signature sound of surf guitar, vintage country, and rockabilly.
 
-### Additional parameters
+### Parameters
 
 | Parameter | Range | Default | What it does |
 |-----------|-------|---------|--------------|
@@ -166,11 +166,12 @@ The Advanced reverb gives you complete control over the reverb character, includ
 
 | Parameter | Range | Default | What it does |
 |-----------|-------|---------|--------------|
+| **Size** | 0–100% | 55% | The scale of the reverb space. Larger Size increases decay length and the sense of distance |
 | **Diffusion** | 0–100% | 60% | Smoothness of the early reflections. High = smooth; low = more distinct early reflections |
-| **Low Cut** | Adjustable Hz | ~80 Hz | Removes low-frequency content from the reverb tail — prevents the reverb from becoming boomy |
-| **High Cut** | Adjustable Hz | ~8 kHz | Removes high-frequency content from the reverb — warms up a harsh tail |
-| **Mod Rate** | 0–100% | 30% | Speed of internal LFO modulation. Modulation prevents the unnatural metallic "ringing" of static reverb |
-| **Mod Depth** | 0–100% | 20% | How much pitch variation the modulation introduces. Subtle values (10–20%) add life; high values create obvious pitch wobble |
+| **Low Cut** | 20–1200 Hz | ~80 Hz | Removes low-frequency content from the reverb tail — prevents the reverb from becoming boomy |
+| **High Cut** | 1000–20000 Hz | ~8 kHz | Removes high-frequency content from the reverb — warms up a harsh tail |
+| **Mod Rate** | 0.02–8 Hz | ~0.5 Hz | Speed of internal LFO modulation. Modulation prevents the unnatural metallic "ringing" of static reverb. Low values (0.1–1 Hz) are subtle and natural |
+| **Mod Depth** | 0–1 | ~0.2 | How much pitch variation the modulation introduces. Subtle values (0.1–0.3) add life; high values create obvious pitch wobble |
 | **Ducking** | 0–100% | 0% | Reduces reverb level when you are actively playing, and lets it bloom when you stop. Helps keep the dry signal clear in the mix |
 | **Drive** | 0–100% | 0% | Adds saturation inside the reverb tail — a subtle warmth at low values, a more coloured character at high values |
 | **Shimmer** | 0–100% | 0% | Adds a pitched octave layer to the reverb (similar to the Shimmer reverb type) |

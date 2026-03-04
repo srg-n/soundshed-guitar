@@ -11,8 +11,8 @@ A noise gate works like an automatic mute. When your signal is loud (you are pla
 | Parameter | Range | Default | What it does |
 |-----------|-------|---------|--------------|
 | **Threshold** | −80 to 0 dB | (low) | The volume level at which the gate opens. Signals above this level pass through; signals below are muted. Raise it to cut more noise; lower it to avoid cutting off quiet notes |
-| **Attack** | 0.1–50 ms | ~5 ms | How quickly the gate opens once the signal exceeds the threshold. Faster attack (low value) = abrupt open; slower attack = smoother, more gradual opening |
-| **Release** | 1–500 ms | ~100 ms | How quickly the gate closes after the signal drops below the threshold. Shorter release cuts off ringing strings faster; longer release lets notes decay more naturally |
+| **Attack** | 0.1–50 ms | 1 ms | How quickly the gate opens once the signal exceeds the threshold. Faster attack (low value) = abrupt open; slower attack = smoother, more gradual opening |
+| **Release** | 1–500 ms | 50 ms | How quickly the gate closes after the signal drops below the threshold. Shorter release cuts off ringing strings faster; longer release lets notes decay more naturally |
 
 ## Tips
 

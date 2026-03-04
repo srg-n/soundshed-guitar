@@ -21,6 +21,7 @@ Amp effects model the core amplifier character of your tone — the most importa
 |--------|-------------|
 | [Neural Amp Model (NAM)](amp-nam.md) | Loads a neural capture of a real guitar amplifier |
 | [NAM Blend](amp-nam-blend.md) | Mixes two or more NAM models together |
+| [Built-in Amp](amp-builtin.md) | Classic "Heavy American" preamp with full tone stack and power stage controls |
 
 ### Cabinets
 Cabinet effects simulate the speaker cabinet and microphone, completing the amp tone.
@@ -81,6 +82,7 @@ Modulation effects add movement and animation to the tone through periodic chang
 | [Phaser](phaser.md) | Swirling, phase-cancellation effect — smooth and cyclical |
 | [Tremolo](tremolo.md) | Rhythmic volume pulsing |
 | [Auto-Wah](auto-wah.md) | Envelope-controlled filter that opens and closes with your picking attack |
+| [Auto Arpeggiator](auto-arp.md) | BPM-synced arpeggiator that steps through chord intervals in time with the tempo |
 
 ### Pitch
 Pitch effects shift or harmonise the pitch of your signal.
@@ -95,5 +97,12 @@ Pitch effects shift or harmonise the pitch of your signal.
 Utility nodes control signal level and routing.
 
 | Effect | Description |
-|--------|-------------|
+|--------|---------|
 | [Gain Stage](gain.md) | Simple gain adjustment at any point in the chain |
+
+### Synth
+Synth effects convert your guitar signal into a synthesiser-style sound.
+
+| Effect | Description |
+|--------|---------|
+| [Synth Saw](synth-saw.md) | Guitar-to-synth voice using a sawtooth oscillator driven by your picking |

@@ -13,6 +13,19 @@ The Digital Delay creates one or more copies of your signal, delayed by a set am
 | **Time** | 1–2000 ms | ~300 ms | How long after the original note each echo occurs. 50–100 ms = slapback; 200–500 ms = rhythmic echo; 500–2000 ms = long, ambient trail |
 | **Feedback** | 0–95% | ~30% | How much of the delayed signal is fed back into the delay line to create additional repeats. Low Feedback = 1–2 echoes that die quickly; high Feedback = many cascading repeats; 95% = very long trail that dies gradually |
 | **Mix** | 0–100% | ~40% | Blends the delayed (wet) signal with the dry signal. At 100% you only hear the echoes, not the dry note |
+| **High Cut** | 200–20000 Hz | 8000 Hz | Rolls off high frequencies in the delay repeats. Lowering this warms up the echoes — useful for tape-echo style tones |
+| **Low Cut** | 20–5000 Hz | 20 Hz | Removes low-frequency buildup in the repeats. Raising this thins out the echoes so they do not clash with the dry guitar in the low end |
+| **Drive** | 0–100% | 0% | Adds saturation to the delay repeats for a warm, tape-like character. Subtle values add harmonic warmth; higher values dirty up the echoes |
+| **Stereo Mode** | Normal, Ping-Pong | Normal | In Ping-Pong mode, echoes alternate between the left and right channels — creating a bouncing stereo effect |
+
+### Advanced parameters
+
+| Parameter | Range | Default | What it does |
+|-----------|-------|---------|--------------|
+| **Spread** | 0–50 ms | 0 ms | Offsets the timing of left and right delay channels to widen the stereo image of the echoes |
+| **Mod Rate** | 0–10 Hz | 0 Hz | Modulates the delay time with a slow oscillator. Small amounts add a chorus-like shimmer to the echoes; higher values produce audible pitch wobble |
+| **Mod Depth** | 0–20 ms | 0 ms | The depth of the delay time modulation. Combine with Mod Rate for subtle tape-style instability |
+| **Ducking** | 0–100% | 0% | Reduces the delay level while you are playing and lets it bloom during pauses. Keeps the dry signal clear while still producing rich echo trails |
 
 ## Rhythmic delay timing
 
