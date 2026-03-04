@@ -2,8 +2,9 @@
 #include "dsp/EffectGuids.h"
 #include "resources/ResourceLibrary.h"
 
-#include <cmath>
 #include <array>
+#include <cmath>
+#include <thread>
 
 namespace guitarfx
 {
@@ -96,6 +97,19 @@ namespace guitarfx
       }
 
       return stats;
+    }
+
+    static inline void CpuRelax() noexcept
+    {
+#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+      _mm_pause();
+#elif defined(__GNUC__) || defined(__clang__)
+  #if defined(__x86_64__) || defined(__i386__)
+      __asm volatile("pause" ::: "memory");
+  #elif defined(__aarch64__) || defined(__arm__)
+      __asm volatile("yield" ::: "memory");
+  #endif
+#endif
     }
   } // namespace
   bool MultiPresetMixer::AddActivePreset(const Preset &preset, const std::string &presetId, const std::string &name)
@@ -710,6 +724,75 @@ namespace guitarfx
     return false;
   }
 
+  // ---------------------------------------------------------------------------
+  // Destructor / parallel worker lifecycle
+  // ---------------------------------------------------------------------------
+
+  MultiPresetMixer::~MultiPresetMixer()
+  {
+    StopWorkers();
+  }
+
+  void MultiPresetMixer::StartWorkers(int count)
+  {
+    StopWorkers();
+
+    mParallelQuit.store(false, std::memory_order_relaxed);
+    mParallelGeneration.store(0, std::memory_order_relaxed);
+
+    const int numWorkers = std::min(count, kMaxParallelWorkers);
+    mWorkerThreads.reserve(static_cast<size_t>(numWorkers));
+    for (int i = 0; i < numWorkers; ++i)
+      mWorkerThreads.emplace_back([this] { WorkerLoop(); });
+  }
+
+  void MultiPresetMixer::StopWorkers()
+  {
+    if (mWorkerThreads.empty())
+      return;
+
+    mParallelQuit.store(true, std::memory_order_release);
+    // Bump generation to wake any spinning workers so they can see the quit flag.
+    mParallelGeneration.fetch_add(1, std::memory_order_release);
+    for (auto &t : mWorkerThreads)
+    {
+      if (t.joinable())
+        t.join();
+    }
+    mWorkerThreads.clear();
+  }
+
+  void MultiPresetMixer::WorkerLoop()
+  {
+    uint32_t lastGen = 0;
+    while (!mParallelQuit.load(std::memory_order_acquire))
+    {
+      const uint32_t gen = mParallelGeneration.load(std::memory_order_acquire);
+      if (gen == lastGen)
+      {
+        CpuRelax();
+        continue;
+      }
+      lastGen = gen;
+
+      if (mParallelQuit.load(std::memory_order_acquire))
+        break;
+
+      const int total = mParallelTaskCount.load(std::memory_order_acquire);
+      while (true)
+      {
+        const int idx = mParallelTaskHead.fetch_add(1, std::memory_order_acq_rel);
+        if (idx >= total)
+          break;
+        const auto &wi = mWorkItems[static_cast<size_t>(idx)];
+        float *ins[2]  = {wi.preChainOutL, wi.preChainOutR};
+        float *outs[2] = {wi.inst->outL.data(), wi.inst->outR.data()};
+        wi.inst->executor.Process(ins, outs, wi.numSamples);
+        mParallelDoneCount.fetch_add(1, std::memory_order_release);
+      }
+    }
+  }
+
   void MultiPresetMixer::Prepare(double sampleRate, int maxBlockSize)
   {
     mSampleRate = sampleRate;
@@ -735,6 +818,13 @@ namespace guitarfx
       inst.executor.Prepare(sampleRate, maxBlockSize);
       AllocateInstanceBuffers(inst, maxBlockSize);
     }
+
+    // Start worker threads for parallel preset processing.
+    // Reserve hw_concurrency-1 threads so the audio thread's core is not contested.
+    const unsigned int hw = std::thread::hardware_concurrency();
+    const int workerCount = static_cast<int>(hw > 1 ? hw - 1 : 0);
+    if (workerCount > 0)
+      StartWorkers(workerCount);
   }
 
   void MultiPresetMixer::Reset()
@@ -874,7 +964,7 @@ namespace guitarfx
     // ==========================================================================
     // PRESET PROCESSING: Process each active preset and mix
     // ==========================================================================
-    
+
     // Detect solo mode
     bool anySolo = false;
     for (const auto &inst : mInstances)
@@ -892,28 +982,105 @@ namespace guitarfx
     if (outputs[1])
       std::fill(outputs[1], outputs[1] + numSamples, 0.0f);
 
-    // Process each preset and mix (fed from pre-chain output)
-    for (auto &inst : mInstances)
+    // Count active instances to decide whether to use parallel dispatch.
+    int activeCount = 0;
+    for (const auto &inst : mInstances)
+      if (!inst.cfg.mute && (!anySolo || inst.cfg.solo))
+        ++activeCount;
+
+    const bool useParallel = (activeCount >= 2) && !mWorkerThreads.empty();
+
+    if (useParallel)
     {
-      const bool include = (!inst.cfg.mute) && (!anySolo || inst.cfg.solo);
-      if (!include)
-        continue;
-
-      // Process through preset's signal chain
-      float *presetOutPtrs[2] = {inst.outL.data(), inst.outR.data()};
-      inst.executor.Process(preChainOutputs, presetOutPtrs, numSamples);
-
-      // Apply per-preset pan (equal-power) and mix gain
-      float gL = 1.0f, gR = 1.0f;
-      ComputePanGains(inst.cfg.pan, gL, gR);
-      const float mixGain = static_cast<float>(inst.cfg.mix);
-
-      for (int i = 0; i < numSamples; ++i)
+      // Pack work items (up to kMaxWorkItems); any extras fall through to serial below.
+      int wi = 0;
+      for (auto &inst : mInstances)
       {
-        if (outputs[0])
-          outputs[0][i] += inst.outL[static_cast<size_t>(i)] * mixGain * gL;
-        if (outputs[1])
-          outputs[1][i] += inst.outR[static_cast<size_t>(i)] * mixGain * gR;
+        if (inst.cfg.mute || (anySolo && !inst.cfg.solo))
+          continue;
+
+        if (wi < kMaxWorkItems)
+        {
+          mWorkItems[static_cast<size_t>(wi)] = {&inst, mPreChainOutL.data(), mPreChainOutR.data(), numSamples};
+          ++wi;
+        }
+        else
+        {
+          // Overflow beyond kMaxWorkItems: process serially and mix immediately.
+          float *presetOutPtrs[2] = {inst.outL.data(), inst.outR.data()};
+          inst.executor.Process(preChainOutputs, presetOutPtrs, numSamples);
+          float gL = 1.0f, gR = 1.0f;
+          ComputePanGains(inst.cfg.pan, gL, gR);
+          const float mixGain = static_cast<float>(inst.cfg.mix);
+          for (int i = 0; i < numSamples; ++i)
+          {
+            if (outputs[0]) outputs[0][i] += inst.outL[static_cast<size_t>(i)] * mixGain * gL;
+            if (outputs[1]) outputs[1][i] += inst.outR[static_cast<size_t>(i)] * mixGain * gR;
+          }
+        }
+      }
+
+      // Publish tasks and wake workers.
+      mParallelTaskHead.store(0, std::memory_order_relaxed);
+      mParallelDoneCount.store(0, std::memory_order_relaxed);
+      mParallelTaskCount.store(wi, std::memory_order_relaxed);
+      std::atomic_thread_fence(std::memory_order_release);
+      mParallelGeneration.fetch_add(1, std::memory_order_acq_rel);
+
+      // Audio thread steals tasks alongside workers.
+      while (true)
+      {
+        const int idx = mParallelTaskHead.fetch_add(1, std::memory_order_acq_rel);
+        if (idx >= wi)
+          break;
+        const auto &item = mWorkItems[static_cast<size_t>(idx)];
+        float *ins[2]  = {item.preChainOutL, item.preChainOutR};
+        float *outs[2] = {item.inst->outL.data(), item.inst->outR.data()};
+        item.inst->executor.Process(ins, outs, item.numSamples);
+        mParallelDoneCount.fetch_add(1, std::memory_order_release);
+      }
+
+      // Spin-wait for all tasks to complete.
+      while (mParallelDoneCount.load(std::memory_order_acquire) < wi)
+        CpuRelax();
+
+      // Mix all parallel outputs into the accumulator.
+      for (int i = 0; i < wi; ++i)
+      {
+        const auto &item = mWorkItems[static_cast<size_t>(i)];
+        float gL = 1.0f, gR = 1.0f;
+        ComputePanGains(item.inst->cfg.pan, gL, gR);
+        const float mixGain = static_cast<float>(item.inst->cfg.mix);
+        for (int s = 0; s < numSamples; ++s)
+        {
+          if (outputs[0]) outputs[0][s] += item.inst->outL[static_cast<size_t>(s)] * mixGain * gL;
+          if (outputs[1]) outputs[1][s] += item.inst->outR[static_cast<size_t>(s)] * mixGain * gR;
+        }
+      }
+    }
+    else
+    {
+      // Serial path: single active preset or no worker threads available.
+      for (auto &inst : mInstances)
+      {
+        const bool include = (!inst.cfg.mute) && (!anySolo || inst.cfg.solo);
+        if (!include)
+          continue;
+
+        float *presetOutPtrs[2] = {inst.outL.data(), inst.outR.data()};
+        inst.executor.Process(preChainOutputs, presetOutPtrs, numSamples);
+
+        float gL = 1.0f, gR = 1.0f;
+        ComputePanGains(inst.cfg.pan, gL, gR);
+        const float mixGain = static_cast<float>(inst.cfg.mix);
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+          if (outputs[0])
+            outputs[0][i] += inst.outL[static_cast<size_t>(i)] * mixGain * gL;
+          if (outputs[1])
+            outputs[1][i] += inst.outR[static_cast<size_t>(i)] * mixGain * gR;
+        }
       }
     }
 

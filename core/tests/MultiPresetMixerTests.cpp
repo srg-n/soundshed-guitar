@@ -1,4 +1,5 @@
 #include "dsp/MultiPresetMixer.h"
+#include "dsp/EffectGuids.h"
 #include "presets/PresetTypes.h"
 #include "resources/ResourceLibrary.h"
 #include <algorithm>
@@ -207,8 +208,8 @@ int main()
     mixer.SetTranspose(3);
 
     const auto normalized = mixer.GetGlobalChainConfig();
-    if (!GraphHasNodeType(normalized.preChainGraph, "dynamics_gate")
-        || !GraphHasNodeType(normalized.preChainGraph, "transpose"))
+    if (!GraphHasNodeType(normalized.preChainGraph, EffectGuids::kDynamicsGate)
+        || !GraphHasNodeType(normalized.preChainGraph, EffectGuids::kTranspose))
     {
       std::cerr << "Global pre-chain lost required gate/transpose nodes" << std::endl;
       allPassed = false;

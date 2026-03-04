@@ -27,7 +27,19 @@ if(GUITARFX_TEST_WITH_IPLUG2)
     )
 endif()
 
-set(GUITARFX_TEST_RESOURCES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../ui")
+set(GUITARFX_TEST_RESOURCES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/testdata")
+
+# Copy the shared library data files (JSON catalogue) into testdata at configure time.
+# The NAM and IR asset files are copied manually into testdata/assets/ and are not
+# part of the UI deployment – they live here for test purposes only.
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/testdata/data")
+foreach(_data_file audiofx-models.json ir-library.json default-presets.json)
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/../ui/data/${_data_file}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/testdata/data/${_data_file}"
+        COPYONLY
+    )
+endforeach()
 
 foreach(test_source IN LISTS TEST_SOURCES)
     get_filename_component(test_name "${test_source}" NAME_WE)

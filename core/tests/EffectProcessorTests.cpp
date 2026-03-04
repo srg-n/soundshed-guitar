@@ -16,6 +16,7 @@
 
 #include "dsp/EffectRegistry.h"
 #include "dsp/EffectProcessor.h"
+#include "dsp/EffectGuids.h"
 #include "dsp/effects/BuiltinEffects.h"
 
 namespace
@@ -111,27 +112,33 @@ bool TestEffectProcessor(const std::string& effectType)
   effect->Reset();
 
   // Create test buffers
-  std::vector<float> inputL(kTestBlockSize);
-  std::vector<float> inputR(kTestBlockSize);
   std::vector<float> outputL(kTestBlockSize, 0.0f);
   std::vector<float> outputR(kTestBlockSize, 0.0f);
 
-  // Generate 440Hz test tone
+  const int blocksToProcess = (effectType == guitarfx::EffectGuids::kSynthSaw) ? 8 : 1;
+
+  // Generate a phase-continuous 440 Hz sine across all blocks so that
+  // pitch-tracking effects (YIN) do not see a phase discontinuity at each
+  // block boundary which would corrupt the autocorrelation.
+  const int totalSamples = kTestBlockSize * blocksToProcess;
+  std::vector<float> inputL(static_cast<size_t>(totalSamples));
+  std::vector<float> inputR(static_cast<size_t>(totalSamples));
   GenerateSineWave(inputL, 440.0, 0.5);
   GenerateSineWave(inputR, 440.0, 0.5);
 
-  // Process audio (allow pitch-tracking effects to settle)
-  float* inputs[2] = {inputL.data(), inputR.data()};
   float* outputs[2] = {outputL.data(), outputR.data()};
 
-  const int blocksToProcess = (effectType == "synth_saw") ? 8 : 1;
   try
   {
     for (int block = 0; block < blocksToProcess; ++block)
     {
       std::fill(outputL.begin(), outputL.end(), 0.0f);
       std::fill(outputR.begin(), outputR.end(), 0.0f);
-      effect->Process(inputs, outputs, kTestBlockSize);
+      float* blkInputs[2] = {
+        inputL.data() + block * kTestBlockSize,
+        inputR.data() + block * kTestBlockSize
+      };
+      effect->Process(blkInputs, outputs, kTestBlockSize);
     }
   }
   catch (const std::exception& ex)

@@ -75,19 +75,20 @@ namespace
 
 void EnsurePresetBoundaryGainNodes(SignalGraph& graph)
 {
-  auto* inputNode = EnsureBoundaryNode(graph, "__input__", kNodeTypeInput);
-  auto* outputNode = EnsureBoundaryNode(graph, "__output__", kNodeTypeOutput);
+  // Call both EnsureBoundaryNode before using any resulting pointer:
+  // each call may push_back to graph.nodes, which would reallocate the
+  // vector and invalidate a pointer returned by the first call.
+  EnsureBoundaryNode(graph, "__input__",  kNodeTypeInput);
+  EnsureBoundaryNode(graph, "__output__", kNodeTypeOutput);
 
-  inputNode->enabled = true;
-  outputNode->enabled = true;
-
-  if (inputNode->params.find("gainDb") == inputNode->params.end())
+  for (const char* id : {"__input__", "__output__"})
   {
-    inputNode->params["gainDb"] = 0.0;
-  }
-  if (outputNode->params.find("gainDb") == outputNode->params.end())
-  {
-    outputNode->params["gainDb"] = 0.0;
+    if (auto* node = graph.FindNode(id))
+    {
+      node->enabled = true;
+      if (node->params.find("gainDb") == node->params.end())
+        node->params["gainDb"] = 0.0;
+    }
   }
 }
 

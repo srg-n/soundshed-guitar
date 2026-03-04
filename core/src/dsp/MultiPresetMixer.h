@@ -6,11 +6,13 @@
 #include "dsp/effects/ParametricEQEffect.h"
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <functional>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
-#include <atomic>
 
 namespace guitarfx
 {
@@ -74,6 +76,7 @@ namespace guitarfx
     using TunerCallback = std::function<void(const TunerResult &)>;
 
     MultiPresetMixer() = default;
+    ~MultiPresetMixer();
     MultiPresetMixer(const MultiPresetMixer &) = delete;
     MultiPresetMixer &operator=(const MultiPresetMixer &) = delete;
     MultiPresetMixer(MultiPresetMixer &&other) noexcept;
@@ -275,6 +278,30 @@ namespace guitarfx
     AtomicLevelStats mRawInputLevels;
     AtomicLevelStats mInputLevels;
     AtomicLevelStats mOutputLevels;
+
+    // ---- Parallel preset processing -----------------------------------------------
+    static constexpr int kMaxParallelWorkers = 7;
+    static constexpr int kMaxWorkItems = 16;
+
+    struct ParallelWorkItem
+    {
+      PresetInstance *inst = nullptr;
+      float *preChainOutL  = nullptr;
+      float *preChainOutR  = nullptr;
+      int numSamples       = 0;
+    };
+
+    std::array<ParallelWorkItem, kMaxWorkItems> mWorkItems{};
+    std::atomic<int>      mParallelTaskHead{0};
+    std::atomic<int>      mParallelTaskCount{0};
+    std::atomic<int>      mParallelDoneCount{0};
+    std::atomic<uint32_t> mParallelGeneration{0};
+    std::atomic<bool>     mParallelQuit{false};
+    std::vector<std::thread> mWorkerThreads;
+
+    void StartWorkers(int count);
+    void StopWorkers();
+    void WorkerLoop();
   };
 
 } // namespace guitarfx
