@@ -92,8 +92,8 @@ export function renderCustomLayout(
       class="custom-layout-container" 
       style="
         position: relative;
-        width: ${layout.dimensions.width}px;
-        height: ${layout.dimensions.height}px;
+        width: ${Math.round(layout.dimensions.width)}px;
+        height: ${Math.round(layout.dimensions.height)}px;
         overflow: hidden;
         border-radius: 8px;
         background: var(--bg-dark-secondary);
@@ -144,10 +144,10 @@ function renderOverlays(node: GraphNode, overlays: LayoutRectangleOverlay[]): st
           class="custom-layout-overlay"
           style="
             position: absolute;
-            left: ${overlay.position.x}px;
-            top: ${overlay.position.y}px;
-            width: ${overlay.size.width}px;
-            height: ${overlay.size.height}px;
+            left: ${Math.round(overlay.position.x)}px;
+            top: ${Math.round(overlay.position.y)}px;
+            width: ${Math.round(overlay.size.width)}px;
+            height: ${Math.round(overlay.size.height)}px;
             background-color: ${isVisible ? fill : "transparent"};
             border: ${isVisible ? `${borderWidth}px solid ${borderColor}` : "0 solid transparent"};
             border-radius: ${borderRadius}px;
@@ -213,6 +213,61 @@ export function renderCustomLayoutPreviewLayers(
     </div>
     <div class="custom-layout-labels" style="position: absolute; inset: 0; z-index: 3; pointer-events: none; margin: 0; padding: 0;">
       ${labels}
+    </div>
+  `;
+}
+
+/**
+ * Render the visual backdrop (backgrounds + overlays + labels) for layouts where
+ * useDefaultControls is true. The default param controls are passed as `innerHtml`
+ * and are rendered on top of the custom visual layers at normal document flow.
+ * The container uses min-height so it expands to fit the default controls while
+ * still honouring the layout's minimum canvas height.
+ */
+export function renderCustomLayoutBackdrop(
+  node: GraphNode,
+  layout: EffectLayout,
+  innerHtml: string
+): string {
+  const backgrounds = renderBackgrounds(layout.backgrounds);
+  const overlays = renderOverlays(node, layout.overlays ?? []);
+  const labels = renderTextLabels(layout.textLabels);
+
+  const offsetX = layout.defaultControlsOffset?.x ?? 0;
+  const offsetY = layout.defaultControlsOffset?.y ?? 0;
+  const scaleX = layout.defaultControlsScale?.x ?? 1;
+  const scaleY = layout.defaultControlsScale?.y ?? 1;
+  const hasTransformOrOffset = offsetX !== 0 || offsetY !== 0 || scaleX !== 1 || scaleY !== 1;
+  // Always fix the wrapper width to the design canvas width so that flex-wrap break points
+  // inside the controls match the designer exactly, regardless of how wide the runtime panel is.
+  const wrapperWidth = `width: ${Math.round(layout.dimensions.width)}px;`;
+  const wrapperStyle = hasTransformOrOffset
+    ? `position: absolute; left: ${Math.round(offsetX)}px; top: ${Math.round(offsetY)}px; transform: scale(${scaleX}, ${scaleY}); transform-origin: top left; z-index: 2; ${wrapperWidth}`
+    : `position: relative; z-index: 2; ${wrapperWidth}`;
+
+  return `
+    <div
+      class="custom-layout-container custom-layout-backdrop"
+      style="
+        position: relative;
+        width: 100%;
+        height: ${Math.round(layout.dimensions.height)}px;
+        overflow: hidden;
+        border-radius: 8px;
+        background: var(--bg-dark-secondary);
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      "
+    >
+      ${backgrounds}
+      ${overlays}
+      <div class="custom-layout-labels" style="position: absolute; inset: 0; z-index: 3; pointer-events: none; margin: 0; padding: 0;">
+        ${labels}
+      </div>
+      <div class="custom-layout-default-controls" style="${wrapperStyle}">
+        ${innerHtml}
+      </div>
     </div>
   `;
 }
@@ -324,12 +379,12 @@ function renderControls(
 
       const controlStyle = `
         position: absolute;
-        left: ${control.position.x}px;
-        top: ${control.position.y}px;
+        left: ${Math.round(control.position.x)}px;
+        top: ${Math.round(control.position.y)}px;
         display: flex;
         flex-direction: column;
         align-items: center;
-        ${control.size ? `width: ${control.size.width}px;` : ""}
+        ${control.size ? `width: ${Math.round(control.size.width)}px;` : ""}
       `;
 
       let controlHtml = "";
@@ -456,8 +511,8 @@ function renderTextLabels(labels: LayoutTextLabel[]): string {
     .map((label) => {
       const style = `
         position: absolute;
-        left: ${label.position.x}px;
-        top: ${label.position.y}px;
+        left: ${Math.round(label.position.x)}px;
+        top: ${Math.round(label.position.y)}px;
         font-size: ${label.fontSize}px;
         font-weight: ${label.fontWeight || "normal"};
         ${label.fontFamily ? `font-family: ${label.fontFamily};` : ""}
@@ -472,9 +527,11 @@ function renderTextLabels(labels: LayoutTextLabel[]): string {
 }
 
 /**
- * Format a parameter value for display
+ * Format a parameter value for display.
+ * Returns just the number for generic "amount" units to keep labels compact.
+ * Exported so the signal-path renderer and designer preview share identical formatting.
  */
-function formatParamValue(value: number, unit?: string, labels?: string[]): string {
+export function formatParamValue(value: number, unit?: string, labels?: string[]): string {
   if (unit === "toggle") {
     return value >= 0.5 ? "On" : "Off";
   }

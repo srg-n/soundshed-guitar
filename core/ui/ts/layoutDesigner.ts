@@ -11,6 +11,7 @@ import { EffectTypeRegistry, type ParameterDef } from "./presetV2.js";
 import { showNotification } from "./notifications.js";
 import { arrayBufferToBase64 } from "./utils.js";
 import { renderCustomLayoutPreviewLayers, type LayoutResourceControlDef } from "./layoutRenderer.js";
+import { buildDefaultParamControlsHtml } from "./signalPath.js";
 import type { GraphNode } from "./types.js";
 import {
   type EffectLayout,
@@ -26,6 +27,7 @@ import {
   DEFAULT_LAYOUT_DIMENSIONS,
   LAYOUT_DIMENSION_LIMITS,
   snapToGrid,
+  sanitizeLayout,
   generateLayoutId,
   generateLabelId,
   generateOverlayId,
@@ -127,6 +129,7 @@ export class LayoutDesignerModal {
   private addRectBtn: HTMLButtonElement | null = null;
   private addBgBtn: HTMLButtonElement | null = null;
   private addColorBgBtn: HTMLButtonElement | null = null;
+  private useDefaultControlsCheckbox: HTMLInputElement | null = null;
   private resetLayoutBtn: HTMLButtonElement | null = null;
   private undoBtn: HTMLButtonElement | null = null;
   private redoBtn: HTMLButtonElement | null = null;
@@ -176,6 +179,7 @@ export class LayoutDesignerModal {
     this.addRectBtn = document.getElementById("layout-designer-add-rect") as HTMLButtonElement;
     this.addBgBtn = document.getElementById("layout-designer-add-bg") as HTMLButtonElement;
     this.addColorBgBtn = document.getElementById("layout-designer-add-color-bg") as HTMLButtonElement;
+    this.useDefaultControlsCheckbox = document.getElementById("layout-designer-use-default-controls") as HTMLInputElement;
     this.resetLayoutBtn = document.getElementById("layout-designer-reset") as HTMLButtonElement;
     this.undoBtn = document.getElementById("layout-designer-undo") as HTMLButtonElement;
     this.redoBtn = document.getElementById("layout-designer-redo") as HTMLButtonElement;
@@ -217,6 +221,7 @@ export class LayoutDesignerModal {
     this.addRectBtn?.addEventListener("click", () => this.addRectangleOverlay());
     this.addBgBtn?.addEventListener("click", () => this.showAddBackgroundMenu());
     this.addColorBgBtn?.addEventListener("click", () => this.addColorBackground());
+    this.useDefaultControlsCheckbox?.addEventListener("change", () => this.toggleUseDefaultControls());
     this.resetLayoutBtn?.addEventListener("click", () => this.resetLayout());
     this.undoBtn?.addEventListener("click", () => this.undo());
     this.redoBtn?.addEventListener("click", () => this.redo());
@@ -303,6 +308,19 @@ export class LayoutDesignerModal {
     this.zoom = 1;
     this.undoStack = [];
     this.redoStack = [];
+
+    // Sync toolbar checkbox
+    if (this.useDefaultControlsCheckbox) {
+      this.useDefaultControlsCheckbox.checked = this.layout?.useDefaultControls === true;
+    }
+    // Sync Add Control button dim state
+    if (this.addControlBtn) {
+      const isDefaultControls = this.layout?.useDefaultControls === true;
+      this.addControlBtn.style.opacity = isDefaultControls ? "0.4" : "";
+      this.addControlBtn.title = isDefaultControls
+        ? "Add Control (disabled \u2014 Default Controls mode)"
+        : "Add Parameter Control";
+    }
 
     // Update UI
     this.updateDimensionInputs();
@@ -573,7 +591,7 @@ export class LayoutDesignerModal {
 
       // Load the imported layout into the designer
       this.pushUndoState();
-      this.layout = archive.layout;
+      this.layout = sanitizeLayout(archive.layout);
       // Update effect type if it matches or override with current
       if (this.effectType && archive.layout.effectType !== this.effectType) {
         this.layout.effectType = this.effectType;
@@ -734,14 +752,14 @@ export class LayoutDesignerModal {
     if (!this.layout || !this.widthInput || !this.heightInput) return;
 
     this.pushUndoState();
-    const width = Math.max(
+    const width = snapToGrid(Math.max(
       LAYOUT_DIMENSION_LIMITS.minWidth,
       Math.min(LAYOUT_DIMENSION_LIMITS.maxWidth, parseInt(this.widthInput.value) || DEFAULT_LAYOUT_DIMENSIONS.width)
-    );
-    const height = Math.max(
+    ));
+    const height = snapToGrid(Math.max(
       LAYOUT_DIMENSION_LIMITS.minHeight,
       Math.min(LAYOUT_DIMENSION_LIMITS.maxHeight, parseInt(this.heightInput.value) || DEFAULT_LAYOUT_DIMENSIONS.height)
-    );
+    ));
 
     this.layout.dimensions = { width, height };
     this.updateDimensionInputs();
@@ -763,8 +781,8 @@ export class LayoutDesignerModal {
     this.canvas.style.transformOrigin = "top left";
     // Wrapper takes the zoomed dimensions so parent container scrolls correctly
     if (this.canvasWrapper) {
-      this.canvasWrapper.style.width = `${this.layout.dimensions.width * this.zoom}px`;
-      this.canvasWrapper.style.height = `${this.layout.dimensions.height * this.zoom}px`;
+      this.canvasWrapper.style.width = `${Math.round(this.layout.dimensions.width * this.zoom)}px`;
+      this.canvasWrapper.style.height = `${Math.round(this.layout.dimensions.height * this.zoom)}px`;
     }
   }
 
@@ -787,6 +805,11 @@ export class LayoutDesignerModal {
   private renderRuntimePreview(): void {
     if (!this.controlsLayer || !this.layout) return;
 
+    if (this.layout.useDefaultControls) {
+      this.renderDefaultControlsPreview();
+      return;
+    }
+
     const previewNode = {
       id: "layout-designer-preview",
       type: this.effectType,
@@ -808,6 +831,64 @@ export class LayoutDesignerModal {
     this.controlsLayer.innerHTML = `
       <div class="layout-runtime-preview" style="position: absolute; inset: 0; pointer-events: none;">
         ${renderCustomLayoutPreviewLayers(previewNode, this.layout, this.paramDefs, resourceControls)}
+      </div>
+    `;
+  }
+
+  /**
+   * Render the real default controls preview inside the designer canvas for useDefaultControls layouts.
+   * Applies the configured offset and scale so the user can visually dial them in.
+   * Mirrors the Main / Advanced tab split used by the runtime signal-path panel.
+   */
+  private renderDefaultControlsPreview(): void {
+    if (!this.controlsLayer || !this.layout) return;
+
+    // Mirror the main/advanced split from renderNodeParamsPanel
+    let advancedDefs = this.paramDefs.filter((p) => Boolean(p.advanced));
+    let mainDefs = this.paramDefs.filter((p) => !p.advanced);
+    if (mainDefs.length === 0) {
+      mainDefs = this.paramDefs;
+      advancedDefs = [];
+    }
+    const hasAdvancedTab = advancedDefs.length > 0;
+
+    const innerHtml = hasAdvancedTab ? `
+      <div class="node-param-tabs" role="tablist" aria-label="Parameter Groups">
+        <button class="node-param-tab is-active" data-tab="main" type="button" role="tab" aria-selected="true">Main</button>
+        <button class="node-param-tab" data-tab="advanced" type="button" role="tab" aria-selected="false">Advanced</button>
+      </div>
+      <div class="node-param-tab-panels">
+        <div class="node-param-tab-panel is-active" data-tab="main" role="tabpanel">
+          <div class="params-controls">
+            ${buildDefaultParamControlsHtml(mainDefs, "layout-designer-preview")}
+          </div>
+        </div>
+        <div class="node-param-tab-panel" data-tab="advanced" role="tabpanel">
+          <div class="params-controls">
+            ${buildDefaultParamControlsHtml(advancedDefs, "layout-designer-preview")}
+          </div>
+        </div>
+      </div>
+    ` : `
+      <div class="params-controls">
+        ${buildDefaultParamControlsHtml(mainDefs, "layout-designer-preview")}
+      </div>
+    `;
+
+    const offsetX = this.layout.defaultControlsOffset?.x ?? 0;
+    const offsetY = this.layout.defaultControlsOffset?.y ?? 0;
+    const scaleX = this.layout.defaultControlsScale?.x ?? 1;
+    const scaleY = this.layout.defaultControlsScale?.y ?? 1;
+    const hasTransformOrOffset = offsetX !== 0 || offsetY !== 0 || scaleX !== 1 || scaleY !== 1;
+    // Pin wrapper to canvas width so flex-wrap break points are identical in the runtime panel.
+    const wrapperWidth = `width: ${this.layout.dimensions.width}px;`;
+    const wrapperStyle = hasTransformOrOffset
+      ? `position: absolute; left: ${offsetX}px; top: ${offsetY}px; transform: scale(${scaleX}, ${scaleY}); transform-origin: top left; ${wrapperWidth}`
+      : `position: relative; ${wrapperWidth}`;
+
+    this.controlsLayer.innerHTML = `
+      <div class="layout-default-controls-preview" style="${wrapperStyle} pointer-events: none;">
+        ${innerHtml}
       </div>
     `;
   }
@@ -992,13 +1073,35 @@ export class LayoutDesignerModal {
     if (!this.controlsLayer || !this.layout) return;
 
     // Clear existing controls
-    this.controlsLayer.querySelectorAll(".layout-control-placeholder, .layout-runtime-preview").forEach((el) => el.remove());
+    this.controlsLayer.querySelectorAll(".layout-control-placeholder, .layout-runtime-preview, .layout-default-controls-placeholder, .layout-default-controls-preview").forEach((el) => el.remove());
+
+    // When useDefaultControls is on, render a live preview of the real controls at the configured position/scale
+    if (this.layout.useDefaultControls) {
+      this.renderDefaultControlsPreview();
+      return;
+    }
 
     // Render each control
     this.layout.controls.forEach((control) => {
       const el = this.createControlElement(control);
       this.controlsLayer!.appendChild(el);
     });
+  }
+
+  private toggleUseDefaultControls(): void {
+    if (!this.layout || !this.useDefaultControlsCheckbox) return;
+    this.pushUndoState();
+    this.layout.useDefaultControls = this.useDefaultControlsCheckbox.checked;
+    // Dim the "Add Control" button to signal it has no effect in this mode
+    if (this.addControlBtn) {
+      this.addControlBtn.style.opacity = this.layout.useDefaultControls ? "0.4" : "";
+      this.addControlBtn.title = this.layout.useDefaultControls
+        ? "Add Control (disabled — Default Controls mode)"
+        : "Add Parameter Control";
+    }
+    this.selectedElement = null;
+    this.renderCanvas();
+    this.renderSidebar();
   }
 
   private createControlElement(control: LayoutControl): HTMLElement {
@@ -1157,11 +1260,15 @@ export class LayoutDesignerModal {
     this.sidebarUndoPushed = false;
 
     if (!this.selectedElement) {
-      this.sidebarContent.innerHTML = `
-        <div class="layout-designer-sidebar-empty">
-          Select a control, label, background, or rectangle to edit its properties
-        </div>
-      `;
+      if (this.layout?.useDefaultControls) {
+        this.renderDefaultControlsProperties();
+      } else {
+        this.sidebarContent.innerHTML = `
+          <div class="layout-designer-sidebar-empty">
+            Select a control, label, background, or rectangle to edit its properties
+          </div>
+        `;
+      }
       return;
     }
 
@@ -1174,6 +1281,91 @@ export class LayoutDesignerModal {
     } else if (this.selectedElement.type === "background") {
       this.renderBackgroundProperties(this.selectedElement.layerIndex);
     }
+  }
+
+  private renderDefaultControlsProperties(): void {
+    if (!this.sidebarContent || !this.layout) return;
+
+    const offsetX = this.layout.defaultControlsOffset?.x ?? 0;
+    const offsetY = this.layout.defaultControlsOffset?.y ?? 0;
+    const scaleX = this.layout.defaultControlsScale?.x ?? 1;
+    const scaleY = this.layout.defaultControlsScale?.y ?? 1;
+
+    this.sidebarContent.innerHTML = `
+      <div class="layout-property-group">
+        <div class="layout-property-group-title">Default Controls — Position</div>
+        <div class="layout-property-row">
+          <span class="layout-property-label">Left (px)</span>
+          <div class="layout-property-input">
+            <input type="number" id="prop-dc-offset-x" value="${offsetX}" step="1">
+          </div>
+        </div>
+        <div class="layout-property-row">
+          <span class="layout-property-label">Top (px)</span>
+          <div class="layout-property-input">
+            <input type="number" id="prop-dc-offset-y" value="${offsetY}" step="1">
+          </div>
+        </div>
+      </div>
+      <div class="layout-property-group">
+        <div class="layout-property-group-title">Default Controls — Scale</div>
+        <div class="layout-property-row">
+          <span class="layout-property-label">Scale X</span>
+          <div class="layout-property-input">
+            <input type="number" id="prop-dc-scale-x" value="${scaleX}" min="0.1" max="3" step="0.05">
+          </div>
+        </div>
+        <div class="layout-property-row">
+          <span class="layout-property-label">Scale Y</span>
+          <div class="layout-property-input">
+            <input type="number" id="prop-dc-scale-y" value="${scaleY}" min="0.1" max="3" step="0.05">
+          </div>
+        </div>
+        <div class="layout-property-row">
+          <button id="prop-dc-scale-reset" style="font-size: 11px;">Reset to 1:1</button>
+        </div>
+      </div>
+    `;
+
+    const bindNum = (id: string, apply: (v: number) => void) => {
+      const el = document.getElementById(id) as HTMLInputElement | null;
+      el?.addEventListener("change", () => {
+        const v = parseFloat(el.value);
+        if (!isNaN(v)) {
+          if (!this.sidebarUndoPushed) {
+            this.sidebarUndoPushed = true;
+            this.pushUndoState();
+          }
+          apply(v);
+          this.renderCanvas();
+        }
+      });
+    };
+
+    bindNum("prop-dc-offset-x", (v) => {
+      if (!this.layout) return;
+      this.layout.defaultControlsOffset = { x: Math.round(v), y: this.layout.defaultControlsOffset?.y ?? 0 };
+    });
+    bindNum("prop-dc-offset-y", (v) => {
+      if (!this.layout) return;
+      this.layout.defaultControlsOffset = { x: this.layout.defaultControlsOffset?.x ?? 0, y: Math.round(v) };
+    });
+    bindNum("prop-dc-scale-x", (v) => {
+      if (!this.layout) return;
+      this.layout.defaultControlsScale = { x: Math.max(0.1, v), y: this.layout.defaultControlsScale?.y ?? 1 };
+    });
+    bindNum("prop-dc-scale-y", (v) => {
+      if (!this.layout) return;
+      this.layout.defaultControlsScale = { x: this.layout.defaultControlsScale?.x ?? 1, y: Math.max(0.1, v) };
+    });
+
+    document.getElementById("prop-dc-scale-reset")?.addEventListener("click", () => {
+      if (!this.layout) return;
+      this.pushUndoState();
+      this.layout.defaultControlsScale = { x: 1, y: 1 };
+      this.renderCanvas();
+      this.renderSidebar();
+    });
   }
 
   private renderBackgroundProperties(layerIndex: number): void {

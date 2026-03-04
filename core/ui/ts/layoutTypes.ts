@@ -161,6 +161,22 @@ export interface EffectLayout {
   textLabels: LayoutTextLabel[];
   /** Image assets referenced by this layout (for export) */
   imageAssets?: LayoutImageRef[];
+  /**
+   * When true, the layout provides only the visual backdrop (backgrounds, overlays, labels)
+   * and the standard auto-generated parameter controls are rendered on top in their default
+   * flow layout. Use this to apply a custom background/theme to an otherwise standard effect.
+   */
+  useDefaultControls?: boolean;
+  /**
+   * When useDefaultControls is true: pixel offset applied to the default controls wrapper
+   * (left / top inside the backdrop container).
+   */
+  defaultControlsOffset?: { x: number; y: number };
+  /**
+   * When useDefaultControls is true: CSS transform scale applied to the default controls
+   * wrapper (transform-origin: top left). Values < 1 shrink, > 1 enlarge.
+   */
+  defaultControlsScale?: { x: number; y: number };
   /** Creation timestamp */
   createdAt?: string;
   /** Last modified timestamp */
@@ -221,6 +237,69 @@ export function layoutLookupKey(effectType: string, blendId?: string): string {
 /** Snap a value to the grid */
 export function snapToGrid(value: number, gridSize: number = LAYOUT_GRID_SIZE): number {
   return Math.round(value / gridSize) * gridSize;
+}
+
+/**
+ * Sanitize all pixel coordinates in a layout to be integer-aligned.
+ * Controls and overlays are snapped to the 8px grid; text labels and
+ * defaultControlsOffset are rounded to the nearest integer.
+ * Scale/opacity values are intentionally left untouched.
+ * Call this after importing an external layout to prevent sub-pixel drift.
+ */
+export function sanitizeLayout(layout: EffectLayout): EffectLayout {
+  // Dimensions — snap to grid, clamped within limits
+  layout.dimensions = {
+    width: snapToGrid(
+      Math.max(LAYOUT_DIMENSION_LIMITS.minWidth, Math.min(LAYOUT_DIMENSION_LIMITS.maxWidth, layout.dimensions.width))
+    ),
+    height: snapToGrid(
+      Math.max(LAYOUT_DIMENSION_LIMITS.minHeight, Math.min(LAYOUT_DIMENSION_LIMITS.maxHeight, layout.dimensions.height))
+    ),
+  };
+
+  // Controls
+  for (const control of layout.controls ?? []) {
+    control.position = {
+      x: snapToGrid(control.position.x),
+      y: snapToGrid(control.position.y),
+    };
+    if (control.size) {
+      control.size = {
+        width: snapToGrid(control.size.width),
+        height: snapToGrid(control.size.height),
+      };
+    }
+  }
+
+  // Overlays
+  for (const overlay of layout.overlays ?? []) {
+    overlay.position = {
+      x: snapToGrid(overlay.position.x),
+      y: snapToGrid(overlay.position.y),
+    };
+    overlay.size = {
+      width: snapToGrid(overlay.size.width),
+      height: snapToGrid(overlay.size.height),
+    };
+  }
+
+  // Text labels — round to integer (no grid constraint needed)
+  for (const label of layout.textLabels ?? []) {
+    label.position = {
+      x: Math.round(label.position.x),
+      y: Math.round(label.position.y),
+    };
+  }
+
+  // defaultControlsOffset — round to integer so left/top px values are whole numbers
+  if (layout.defaultControlsOffset) {
+    layout.defaultControlsOffset = {
+      x: Math.round(layout.defaultControlsOffset.x),
+      y: Math.round(layout.defaultControlsOffset.y),
+    };
+  }
+
+  return layout;
 }
 
 /** Generate a unique ID for layout elements */

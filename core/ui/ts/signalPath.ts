@@ -23,7 +23,7 @@ import {
 } from "./eqCurve.js";
 import { resourceBrowserModal } from "./resourceBrowser.js";
 import { findMatchingResourcePickerLabel } from "./resourcePickerLabel.js";
-import { hasCustomLayout, getCustomLayout, renderCustomLayout, type LayoutResourceControlDef } from "./layoutRenderer.js";
+import { hasCustomLayout, getCustomLayout, renderCustomLayout, renderCustomLayoutBackdrop, formatParamValue, type LayoutResourceControlDef } from "./layoutRenderer.js";
 import { layoutDesigner } from "./layoutDesigner.js";
 import {
   type BlendParamSpec,
@@ -1301,7 +1301,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
           ${isBlendParam ? `<div class="knob-mapped-points"></div>` : ""}
           <div class="knob-indicator"></div>
         </div>
-        <span class="node-param-value">${isEnum ? enumValueLabel : `${displayValue.toFixed(2)}${unit}`}</span>
+        <span class="node-param-value">${formatParamValue(displayValue, unit, enumLabels)}</span>
        
       </div>
     `;
@@ -1677,11 +1677,16 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
   const customLayout = nodeBlendId
     ? (getCustomLayout(node.type, nodeBlendId) ?? getCustomLayout(node.type))
     : getCustomLayout(node.type);
-  const customLayoutHtml = customLayout
+
+  // When useDefaultControls is true the layout provides only the visual backdrop; the
+  // standard auto-generated controls are rendered on top rather than positioned controls.
+  const useDefaultControls = customLayout?.useDefaultControls === true;
+
+  const customLayoutHtml = customLayout && !useDefaultControls
     ? renderCustomLayout(node, customLayout, paramDefs, customLayoutResourceControls)
     : null;
   const layoutIncludesResourceControls = Boolean(
-    customLayout && customLayout.controls.some((control) => control.bindingType === "resource" || control.paramKey.startsWith("__resource__:")),
+    customLayout && !useDefaultControls && customLayout.controls.some((control) => control.bindingType === "resource" || control.paramKey.startsWith("__resource__:")),
   );
 
   // Customize layout button (include blend ID for per-blend layout selection)
@@ -1698,8 +1703,9 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
       ${layoutIncludesResourceControls ? "" : resourceSelector}
       ${eqVisualizer}
       ${mixerInputControls}
-      ${customLayoutHtml ? customLayoutHtml : `
-        ${hasAdvancedTab ? `
+      ${customLayoutHtml ? customLayoutHtml : (() => {
+        // Build the standard default controls HTML
+        const defaultControlsHtml = hasAdvancedTab ? `
           <div class="node-param-tabs" role="tablist" aria-label="Parameter Groups">
             <button class="node-param-tab is-active" data-tab="main" type="button" role="tab" aria-selected="true">Main</button>
             <button class="node-param-tab" data-tab="advanced" type="button" role="tab" aria-selected="false">Advanced</button>
@@ -1720,8 +1726,12 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
           <div class="params-controls">
             ${buildParamControls(paramDefs)}
           </div>
-        `}
-      `}
+        `;
+        // If a backdrop layout exists, wrap the default controls inside it
+        return useDefaultControls && customLayout
+          ? renderCustomLayoutBackdrop(node, customLayout, defaultControlsHtml)
+          : defaultControlsHtml;
+      })()}
       <div class="node-actions">
         ${bypassButton}
         ${recalibrateButton}
@@ -1812,6 +1822,86 @@ function formatParamLabel(key: string): string {
 
 function isToggleParam(paramDef: { key: string; min?: number; max?: number; unit?: string }): boolean {
   return paramDef.unit==="toggle";
+}
+
+/**
+ * Build the default parameter controls HTML using only default values.
+ * Produces the same DOM structure as the live renderParamControl path so the
+ * layout designer can render a faithful preview without a live node.
+ * nodeId is used for data attributes so knob CSS still applies correctly.
+ */
+export function buildDefaultParamControlsHtml(
+  paramDefs: import("./presetV2.js").ParameterDef[],
+  nodeId = "preview"
+): string {
+  const renderOne = (p: import("./presetV2.js").ParameterDef): string => {
+    const label = p.name || formatParamLabel(p.key);
+    const value = p.default ?? 0;
+    const min = p.min ?? 0;
+    const max = p.max ?? 1;
+    const unit = p.unit || "amount";
+    const isToggle = isToggleParam(p);
+    const isEnum = unit === "enum" && Array.isArray(p.labels) && p.labels.length > 0;
+    const enumLabels = Array.isArray(p.labels) ? p.labels : [];
+    const labelIndex = Math.round(Math.max(min, Math.min(max, value)));
+    const enumValueLabel = isEnum ? (enumLabels[labelIndex] ?? `${labelIndex}`) : "";
+
+    if (isToggle) {
+      const checked = value >= 0.5;
+      return `
+        <div class="node-param-group">
+          <span class="node-param-label">${label}</span>
+          <label class="toggle-switch">
+            <input class="node-param-toggle" type="checkbox" data-node-id="${nodeId}" data-param-key="${p.key}" ${checked ? "checked" : ""} disabled>
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="node-param-value">${checked ? "On" : "Off"}</span>
+        </div>`;
+    }
+
+    return `
+      <div class="node-param-group">
+        <span class="node-param-label">${label}</span>
+        <div class="knob node-param-knob"
+          data-node-id="${nodeId}"
+          data-param-key="${p.key}"
+          data-value="${value}"
+          data-default="${value}"
+          data-min="${min}"
+          data-max="${max}"
+          data-unit="${unit}"
+          ${p.step !== undefined ? `data-step="${p.step}"` : ""}
+          ${isEnum ? `data-labels="${enumLabels.join("|")}"` : ""}
+        >
+          <div class="knob-indicator"></div>
+        </div>
+        <span class="node-param-value">${formatParamValue(value, unit, enumLabels)}</span>
+      </div>`;
+  };
+
+  const hasGroups = paramDefs.some((p) => typeof p.group === "string" && p.group.trim().length > 0);
+  if (!hasGroups) {
+    return paramDefs.map(renderOne).join("");
+  }
+
+  const groupOrder: string[] = [];
+  const groupMap = new Map<string, string[]>();
+  paramDefs.forEach((p) => {
+    const group = p.group?.trim() || "Other";
+    if (!groupMap.has(group)) {
+      groupMap.set(group, []);
+      groupOrder.push(group);
+    }
+    groupMap.get(group)!.push(renderOne(p));
+  });
+
+  return groupOrder.map((group) => `
+    <div class="node-param-group-block">
+      <div class="node-param-group-title">${group}</div>
+      <div class="node-param-group-items">
+        ${groupMap.get(group)!.join("")}
+      </div>
+    </div>`).join("");
 }
 
 function bindNodeParamControls(node: GraphNode, preset: Preset): void {
