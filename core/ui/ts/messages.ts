@@ -13,7 +13,7 @@ import { refreshSelectedNodeParams, renderSignalPathBar } from "./signalPath.js"
 import { refreshFxSelector } from "./fxSelector.js";
 import { applyEnvironmentState, applyMetronomeState } from "./metronome.js";
 import { applyToneSharingAppSettings, registerInstalledToneSharingPackFromImport } from "./toneSharingPanel.js";
-import type { GlobalSignalChainConfig, Preset, PresetFolder, ResourceRef, Setlist, UiSettings } from "./types.js";
+import type { GlobalSignalChainConfig, Preset, PresetFolder, ResourceRef, Setlist, UiSettings, CompositePreset } from "./types.js";
 import { EffectGuids } from "./effectGuids.js";
 import { migratePresetNodeTypes } from "./presetV2.js";
 import { handleResourceDataMessage } from "./archiveUtils.js";
@@ -25,6 +25,7 @@ import type { CompositeEffectDefinition } from "./compositeTypes.js";
 import { renderCompositeList, handleCompositeEditModeExited, handleCompositeEditStateUpdate } from "./compositeEditor.js";
 import { renderLayoutList } from "./layoutManager.js";
 import { renderBlendList } from "./blendManager.js";
+import { handleCompositePresetList, handleCompositePresetSaved, handleCompositePresetLoaded } from "./multiPresetMixer.js";
 import { enterCompositeEditState, updateCompositeEditState, exitCompositeEditState } from "./state.js";
 import { EffectTypeRegistry } from "./presetV2.js";
 import { themeSwitcher } from "./theme-switcher.js";
@@ -251,9 +252,10 @@ export function handleIncomingMessage(message: string): void {
         const resolvedPresets: Record<string, import("./types.js").MixerPresetState> = {};
 
         const ensurePreset = (id: string) => {
-          const entry = presets[id];
+          const entry = presets[id] as (import("./types.js").MixerPresetState & { name?: string }) | undefined;
           resolvedPresets[id] = {
             id,
+            name: typeof entry?.name === "string" ? entry.name : undefined,
             mix: typeof entry?.mix === "number" ? entry.mix : 1.0,
             pan: typeof entry?.pan === "number" ? entry.pan : 0.0,
             mute: Boolean(entry?.mute),
@@ -1105,6 +1107,23 @@ export function handleIncomingMessage(message: string): void {
       exitCompositeEditState();
       handleCompositeEditModeExited();
       renderSignalPathBar();
+      break;
+    }
+    case "compositePresetList": {
+      const list = (payload as { compositePresets?: CompositePreset[] }).compositePresets;
+      if (Array.isArray(list)) {
+        handleCompositePresetList(list);
+      }
+      break;
+    }
+    case "compositePresetSaved": {
+      const saved = payload as { id?: string; name?: string };
+      handleCompositePresetSaved(saved.id ?? "", saved.name ?? "");
+      break;
+    }
+    case "compositePresetLoaded": {
+      const loaded = payload as { id?: string; name?: string };
+      handleCompositePresetLoaded(loaded.id ?? "", loaded.name ?? "");
       break;
     }
     default:

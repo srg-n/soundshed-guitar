@@ -42,6 +42,162 @@
   font-size: 0.7rem;
 }
 
+/* ── Mixer preset tab bar ──────────────────────────────────────────── */
+.mixer-preset-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 4px 12px 0;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-medium);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+.mixer-preset-tabs::-webkit-scrollbar { display: none; }
+
+.mixer-preset-tab {
+  flex-shrink: 0;
+  padding: 5px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 4px 4px 0 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.mixer-preset-tab:hover {
+  color: var(--text-primary);
+  background: var(--overlay-light);
+}
+.mixer-preset-tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
+}
+.mixer-tab-mix {
+  margin-left: auto;
+  font-style: normal;
+}
+
+.tab-indicator {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 3px;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+.tab-indicator.muted  { background: #c44; color: #fff; }
+.tab-indicator.soloed { background: #c94; color: #fff; }
+
+/* ── Inline mixer panel (shown when Mix tab active) ────────────────── */
+.inline-mixer-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.iml-strips {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.iml-strip {
+  flex: 1;
+  min-width: 170px;
+  max-width: 260px;
+  border-left: 4px solid var(--accent, #666);
+  padding: 6px 10px 6px 8px;
+  background: var(--bg-secondary);
+}
+.iml-strip + .iml-strip {
+  border-right: 1px solid var(--border-medium);
+}
+
+.iml-strip-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 5px;
+}
+
+.iml-strip-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.iml-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+.iml-label input[type="range"] {
+  flex: 1;
+  height: 4px;
+  min-width: 60px;
+}
+
+.iml-toggles {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.iml-mute-btn,
+.iml-solo-btn {
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--border-medium);
+  background: var(--overlay-medium);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.iml-mute-btn.active  { background: #c44; border-color: #c44; color: #fff; }
+.iml-solo-btn.active  { background: #c94; border-color: #c94; color: #fff; }
+
+.iml-master {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 12px;
+  border-top: 1px solid var(--border-medium);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.iml-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* ── end inline mixer ───────────────────────────────────────────────── */
+
 .signal-path-scroll {
   flex: 1;
   overflow-x: auto;

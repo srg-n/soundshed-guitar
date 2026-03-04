@@ -1,4 +1,4 @@
-import { uiState, getActivePresetForRender, setPresetDirty, isCompositeEditMode, isAdvancedOptionsEnabled, isExperimentalFeaturesEnabled } from "./state.js";
+import { uiState, getActivePresetForRender, getSignalPathPreset, setFocusedMixerPresetId, setPresetDirty, isCompositeEditMode, isAdvancedOptionsEnabled, isExperimentalFeaturesEnabled } from "./state.js";
 import { buildBlendModelMappingsFromIds } from "./blendUtils.js";
 import type {
   Preset,
@@ -9,7 +9,8 @@ import type {
   BlendModelMapping,
   BlendMode,
 } from "./types.js";
-import { postMessage } from "./bridge.js";
+import { postMessage, setPresetMix, setPresetPan, setPresetMute, setPresetSolo, setMasterGain, setLimiterEnabled, removeActivePreset } from "./bridge.js";
+import { idAccentColor } from "./utils.js";
 import { showNotification } from "./notifications.js";
 import { EffectTypeRegistry, type EffectTypeInfo } from "./presetV2.js";
 import { EffectGuids } from "./effectGuids.js";
@@ -46,6 +47,9 @@ export { initializeBlendEditorModal, openBlendEditorWithDefinition } from "./sig
 
 const signalPathNodesElement = document.getElementById("signal-path-nodes");
 const nodeParamsPanelElement = document.getElementById("node-params-panel");
+
+/** Whether the Mix tab is currently active in the multi-preset tab bar. */
+let mixTabActive = false;
 let signalPathEqInteraction: EqCurveInteraction | null = null;
 /** Knob instances for the current node params panel, keyed by param key. */
 const nodeParamKnobs = new Map<string, GenericKnob>();
@@ -399,8 +403,21 @@ export function renderSignalPathBar(): void {
   // Show/hide composite edit mode banner
   updateCompositeEditBanner();
 
+  // Render preset selection tabs when multiple presets are active in the mixer
+  renderMixerPresetTabs();
+
+  // Show inline mixer panel instead of signal chain when Mix tab is active
+  const scroll = document.querySelector<HTMLElement>(".signal-path-scroll");
+  if (mixTabActive) {
+    if (scroll) scroll.hidden = true;
+    renderInlineMixer();
+    return;
+  }
+  if (scroll) scroll.hidden = false;
+  removeInlineMixer();
+
   const activePresetId = uiState.activePresetId;
-  const activePreset = getActivePresetForRender() ?? undefined;
+  const activePreset = getSignalPathPreset() ?? undefined;
   const presetChanged = activePresetId !== lastRenderedPresetId;
   lastRenderedPresetId = activePresetId ?? null;
   
@@ -2590,6 +2607,161 @@ function updateCompositeEditBanner(): void {
   } else {
     banner.style.display = "none";
   }
+}
+
+/**
+ * Renders the preset tab row above the signal path nodes when multiple presets
+ * are active in the mixer. In single-preset mode the tab row is hidden.
+ */
+function renderMixerPresetTabs(): void {
+  let tabBar = document.getElementById("mixer-preset-tabs");
+  const signalPathBar = document.getElementById("signal-path-bar");
+  const mixer = uiState.mixer;
+
+  const multiActive = !isCompositeEditMode() && mixer && mixer.activePresetIds.length > 1;
+
+  if (!multiActive) {
+    if (tabBar) tabBar.remove();
+    mixTabActive = false;
+    return;
+  }
+
+  if (!tabBar) {
+    tabBar = document.createElement("div");
+    tabBar.id = "mixer-preset-tabs";
+    tabBar.className = "mixer-preset-tabs";
+    const scroll = signalPathBar?.querySelector(".signal-path-scroll");
+    if (scroll) {
+      signalPathBar!.insertBefore(tabBar, scroll);
+    } else if (signalPathBar) {
+      signalPathBar.prepend(tabBar);
+    }
+  }
+
+  const focusedId = uiState.focusedMixerPresetId ?? mixer.activePresetIds[0];
+
+  const presetTabsHtml = mixer.activePresetIds.map((id) => {
+    const name = uiState.presetCache.get(id)?.name ?? mixer.presets[id]?.name ?? id;
+    const ps = mixer.presets[id];
+    const muted = ps?.mute ?? false;
+    const soloed = ps?.solo ?? false;
+    const active = !mixTabActive && id === focusedId;
+    const indicators = [
+      muted ? `<span class="tab-indicator muted" title="Muted">M</span>` : "",
+      soloed ? `<span class="tab-indicator soloed" title="Solo">S</span>` : "",
+    ].join("");
+    return `<button class="mixer-preset-tab${active ? " active" : ""}" data-preset-id="${escapeHtml(id)}" type="button">${escapeHtml(name)}${indicators}</button>`;
+  }).join("");
+
+  const mixTabHtml = `<button class="mixer-preset-tab mixer-tab-mix${mixTabActive ? " active" : ""}" data-mix-tab="1" type="button">⚖ Mix</button>`;
+
+  tabBar.innerHTML = presetTabsHtml + mixTabHtml;
+
+  tabBar.querySelectorAll<HTMLButtonElement>(".mixer-preset-tab:not([data-mix-tab])").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const pid = btn.dataset.presetId ?? "";
+      if (pid) {
+        mixTabActive = false;
+        setFocusedMixerPresetId(pid);
+        renderSignalPathBar();
+      }
+    });
+  });
+
+  tabBar.querySelector<HTMLButtonElement>("[data-mix-tab]")?.addEventListener("click", () => {
+    mixTabActive = !mixTabActive;
+    renderSignalPathBar();
+  });
+}
+
+function buildInlineMixerHtml(): string {
+  const mixer = uiState.mixer;
+  if (!mixer || !mixer.activePresetIds.length) return "";
+
+  const strips = mixer.activePresetIds.map((id) => {
+    const name = uiState.presetCache.get(id)?.name ?? mixer.presets[id]?.name ?? id;
+    const ps = mixer.presets[id] ?? { id, mix: 1.0, pan: 0.0, mute: false, solo: false };
+    return `
+      <div class="iml-strip" data-preset-id="${escapeHtml(id)}" style="--accent:${idAccentColor(id)}">
+        <div class="iml-strip-name">${escapeHtml(name)}</div>
+        <div class="iml-strip-controls">
+          <label class="iml-label">Mix<input type="range" class="iml-mix" min="0" max="1" step="0.01" value="${ps.mix}"/></label>
+          <label class="iml-label">Pan<input type="range" class="iml-pan" min="-1" max="1" step="0.01" value="${ps.pan}"/></label>
+          <div class="iml-toggles">
+            <button type="button" class="iml-mute-btn${ps.mute ? " active" : ""}" title="Mute">M</button>
+            <button type="button" class="iml-solo-btn${ps.solo ? " active" : ""}" title="Solo">S</button>
+          </div>
+        </div>
+      </div>`;
+  }).join("");
+
+  return `
+    <div class="iml-strips">${strips}</div>
+    <div class="iml-master">
+      <label class="iml-label">Master Gain<input type="range" id="iml-master-gain" min="0" max="2" step="0.01" value="${mixer.masterGain}"/></label>
+      <label class="iml-toggle"><input type="checkbox" id="iml-limiter" ${mixer.limiterEnabled ? "checked" : ""}/> Limiter</label>
+    </div>`;
+}
+
+function renderInlineMixer(): void {
+  const signalPathBar = document.getElementById("signal-path-bar");
+  let panel = document.getElementById("inline-mixer-panel");
+  if (!panel) {
+    panel = document.createElement("div");
+    panel.id = "inline-mixer-panel";
+    panel.className = "inline-mixer-panel";
+    signalPathBar?.appendChild(panel);
+  }
+  panel.innerHTML = buildInlineMixerHtml();
+  bindInlineMixerControls(panel);
+}
+
+function removeInlineMixer(): void {
+  document.getElementById("inline-mixer-panel")?.remove();
+}
+
+function bindInlineMixerControls(panel: HTMLElement): void {
+  panel.querySelectorAll<HTMLElement>(".iml-strip").forEach((strip) => {
+    const pid = strip.dataset.presetId ?? "";
+    if (!pid) return;
+
+    strip.querySelector<HTMLInputElement>(".iml-mix")?.addEventListener("input", (e) => {
+      const v = parseFloat((e.target as HTMLInputElement).value);
+      setPresetMix(pid, isFinite(v) ? v : 1.0);
+    });
+
+    strip.querySelector<HTMLInputElement>(".iml-pan")?.addEventListener("input", (e) => {
+      const v = parseFloat((e.target as HTMLInputElement).value);
+      setPresetPan(pid, isFinite(v) ? v : 0.0);
+    });
+
+    const muteBtn = strip.querySelector<HTMLButtonElement>(".iml-mute-btn");
+    muteBtn?.addEventListener("click", () => {
+      const nowMuted = !muteBtn.classList.contains("active");
+      setPresetMute(pid, nowMuted);
+      muteBtn.classList.toggle("active", nowMuted);
+      if (uiState.mixer?.presets[pid]) uiState.mixer.presets[pid].mute = nowMuted;
+      renderMixerPresetTabs(); // refresh M/S indicators in tabs
+    });
+
+    const soloBtn = strip.querySelector<HTMLButtonElement>(".iml-solo-btn");
+    soloBtn?.addEventListener("click", () => {
+      const nowSolo = !soloBtn.classList.contains("active");
+      setPresetSolo(pid, nowSolo);
+      soloBtn.classList.toggle("active", nowSolo);
+      if (uiState.mixer?.presets[pid]) uiState.mixer.presets[pid].solo = nowSolo;
+      renderMixerPresetTabs();
+    });
+  });
+
+  panel.querySelector<HTMLInputElement>("#iml-master-gain")?.addEventListener("input", (e) => {
+    const v = parseFloat((e.target as HTMLInputElement).value);
+    setMasterGain(isFinite(v) ? v : 1.0);
+  });
+
+  panel.querySelector<HTMLInputElement>("#iml-limiter")?.addEventListener("change", (e) => {
+    setLimiterEnabled((e.target as HTMLInputElement).checked);
+  });
 }
 
 /**

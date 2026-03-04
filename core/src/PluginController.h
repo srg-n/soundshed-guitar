@@ -255,6 +255,12 @@ private:
     void HandlePreviewRiffTakeRequest(const nlohmann::json& payload);
     void HandlePreviewCapturedRiffRequest(const nlohmann::json& payload);
 
+    // Composite presets (Multi-Rig)
+    void HandleSaveCompositePresetRequest(const nlohmann::json& payload);
+    void HandleLoadCompositePresetRequest(const nlohmann::json& payload);
+    void HandleGetCompositePresetListRequest();
+    void HandleRemoveCompositePresetRequest(const nlohmann::json& payload);
+
     // Signal diagnostics / performance
     void HandleGetSignalDiagnosticsRequest();
     void HandleGetPerformanceStatsRequest();
@@ -295,6 +301,7 @@ private:
     void SendCompositeLibraryToUI();
     void SendEffectCatalogToUI();
     void SendPresetListToUI();
+    void SendCompositePresetListToUI();
     void SendSignalDiagnosticsToUI();
     void SendPerformanceStatsToUI();
     void SendMetronomeStateToUI();

@@ -64,7 +64,10 @@
 }
 
 .preset-library-popover.open {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 130px);
+  overflow-y: auto;
 }
 
 .preset-library-header {
@@ -147,7 +150,6 @@
   display: grid;
   grid-template-columns: 220px 1fr;
   gap: 12px;
-  min-height: 280px;
 }
 
 .setlist-header {
@@ -180,7 +182,8 @@
   display: grid;
   grid-template-columns: 220px 1fr;
   gap: 12px;
-  min-height: 260px;
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 .setlist-list,
@@ -329,10 +332,45 @@
   background: var(--overlay-light);
 }
 
+.preset-list .preset-item header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
 .preset-list .preset-item h3 {
-  margin: 0 0 4px 0;
+  margin: 0;
   font-size: 13px;
   color: var(--text-primary);
+  flex: 1;
+}
+
+.preset-add-to-mixer-btn {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid var(--border-medium, #555);
+  background: var(--overlay-medium, rgba(255,255,255,0.08));
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.6;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.preset-add-to-mixer-btn:hover {
+  background: var(--overlay-light, rgba(255,255,255,0.14));
+  border-color: var(--color-primary, #f60);
+  color: var(--text-primary);
+}
+
+.preset-add-to-mixer-btn.in-mixer {
+  background: var(--color-primary-dim, rgba(255,100,0,0.18));
+  border-color: var(--color-primary, #f60);
+  color: var(--color-primary, #f60);
 }
 
 .preset-item-meta {

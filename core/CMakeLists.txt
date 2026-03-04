@@ -228,6 +228,9 @@ set(GUITARFX_CORE_SOURCES
     src/presets/PresetTypesJson.h
     src/presets/PresetStorage.h
     src/presets/PresetStorage.cpp
+    src/presets/CompositePresetTypes.h
+    src/presets/CompositePresetStorage.h
+    src/presets/CompositePresetStorage.cpp
 
     # Resources
     src/resources/ResourceLibrary.h

@@ -148,6 +148,27 @@ bool MessageDispatcher::DispatchLibraryAndComposite(PluginController& c,
         c.HandleMarkRiffUsedRequest(msg);
         return true;
     }
+    // ── Composite presets (Multi-Rig) ──────────────────────────────────────
+    if (type == "saveCompositePreset")
+    {
+        c.HandleSaveCompositePresetRequest(msg);
+        return true;
+    }
+    if (type == "loadCompositePreset")
+    {
+        c.HandleLoadCompositePresetRequest(msg);
+        return true;
+    }
+    if (type == "getCompositePresetList")
+    {
+        c.HandleGetCompositePresetListRequest();
+        return true;
+    }
+    if (type == "removeCompositePreset")
+    {
+        c.HandleRemoveCompositePresetRequest(msg);
+        return true;
+    }
     return false;
 }
 

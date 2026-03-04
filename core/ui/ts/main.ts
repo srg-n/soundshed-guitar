@@ -25,6 +25,7 @@ import { initializeDialogModals } from "./dialogs.js";
 import { activateTab, initializeIconBarTabs, initializeTabButtons, switchMainPanel } from "./navigation.js";
 import { initializeToneSharingPanel } from "./toneSharingPanel.js";
 import { initializeRiffLibraryPanel } from "./riffLibrary.js";
+import { initMultiRigTab } from "./multiPresetMixer.js";
 const eqModal = document.getElementById("eq-modal");
 const eqModalCloseBtn = document.getElementById("eq-modal-close");
 
@@ -69,6 +70,7 @@ async function bootstrap(): Promise<void> {
   initializeMetronome();
   initializeRiffLibraryPanel();
   initializeToneSharingPanel();
+  initMultiRigTab();
   if (eqModalCloseBtn) {
     eqModalCloseBtn.addEventListener("click", closeEqModal);
   }

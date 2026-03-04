@@ -236,6 +236,10 @@
         <div class="preset-library-popover" id="preset-library-popover" aria-hidden="true">
           <section class="preset-library" id="preset-library">
             <div class="preset-library-header">
+              <div class="preset-library-tabs" role="tablist">
+                <button id="preset-lib-tab-presets" type="button" class="preset-lib-tab active" role="tab" aria-selected="true" aria-controls="preset-library-presets-panel">Presets</button>
+                <button id="preset-lib-tab-multi-rig" type="button" class="preset-lib-tab" role="tab" aria-selected="false" aria-controls="preset-library-multi-rig-panel">Multi-Rig</button>
+              </div>
               <input type="text" id="preset-search" placeholder="Search presets..." />
               <div class="preset-library-actions">
                 <input type="text" id="preset-folder-name" placeholder="New folder name" />
@@ -258,9 +262,13 @@
               <button type="button" class="preset-tag-filter-chip" data-tag="ambient">ambient</button>
               <button type="button" class="preset-tag-filter-chip" data-tag="atmospheric">atmospheric</button>
             </div>
-            <div class="preset-library-body">
+            <div class="preset-library-body" id="preset-library-presets-panel" role="tabpanel" aria-labelledby="preset-lib-tab-presets">
               <div class="preset-folder-tree" id="preset-folder-tree"></div>
               <div class="preset-list" id="preset-list"></div>
+            </div>
+
+            <div class="preset-library-body preset-library-multi-rig-panel" id="preset-library-multi-rig-panel" role="tabpanel" aria-labelledby="preset-lib-tab-multi-rig" hidden>
+              <div class="composite-preset-list" id="composite-preset-list"></div>
             </div>
 
             <div class="setlist-collapsible" id="setlist-collapsible">

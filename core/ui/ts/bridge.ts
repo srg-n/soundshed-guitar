@@ -196,3 +196,24 @@ export function trimCapturedRiff(startRatio: number, endRatio: number): void {
 export function requestAppInfo(): void {
   postMessage({ type: "getAppInfo" });
 }
+
+// ── Composite Presets (Multi-Rig) ─────────────────────────────────────────────
+
+export function saveCompositePreset(name: string, description?: string): void {
+  postMessage({ type: "saveCompositePreset", name, description: description ?? "" });
+  appendLog(`saveCompositePreset → ${name}`);
+}
+
+export function loadCompositePreset(id: string): void {
+  postMessage({ type: "loadCompositePreset", id });
+  appendLog(`loadCompositePreset → ${id}`);
+}
+
+export function getCompositePresetList(): void {
+  postMessage({ type: "getCompositePresetList" });
+}
+
+export function removeCompositePreset(id: string): void {
+  postMessage({ type: "removeCompositePreset", id });
+  appendLog(`removeCompositePreset → ${id}`);
+}

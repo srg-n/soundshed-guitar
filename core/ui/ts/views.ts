@@ -1,8 +1,8 @@
 import { renderDemoAudioControls, bindDemoAudioControls } from "./demoAudio.js";
-import { uiState } from "./state.js";
-import { addActivePreset, setPresetMix, setPresetPan, setPresetMute, setPresetSolo, setMasterGain, setLimiterEnabled } from "./bridge.js";
+import { uiState, setFocusedMixerPresetId } from "./state.js";
+import { addActivePreset, removeActivePreset, setPresetMix, setPresetPan, setPresetMute, setPresetSolo, setMasterGain, setLimiterEnabled } from "./bridge.js";
 import { escapeHtml, idAccentColor } from "./utils.js";
-import { updateSignalPathClipIndicators } from "./signalPath.js";
+import { updateSignalPathClipIndicators, renderSignalPathBar } from "./signalPath.js";
 import { renderIcon } from "./iconAssets.js";
 import type { Preset, PresetFolder } from "./types.js";
 
@@ -108,20 +108,26 @@ function buildMixerMarkup(): string {
     return `
       <div class="mixer-panel-empty">
         <p>No active presets in the mixer.</p>
-        <p>Add a preset from the Preset details view.</p>
+        <p>Open the <strong>Preset Library</strong> and click <strong>+ Mixer</strong> on any preset to add it here.</p>
       </div>
     `;
   }
 
+  const focusedId = uiState.focusedMixerPresetId ?? mixer.activePresetIds[0];
+
   const rows = mixer.activePresetIds.map((id) => {
     const presetName = uiState.presetCache.get(id)?.name ?? id;
     const ps = mixer.presets[id] ?? { id, mix: 1.0, pan: 0.0, mute: false, solo: false };
+    const isFocused = id === focusedId;
     return `
-      <div class="mixer-row" data-preset-id="${escapeHtml(id)}">
+      <div class="mixer-row${isFocused ? " mixer-row-focused" : ""}" data-preset-id="${escapeHtml(id)}">
         <div class="mixer-row-header">
+          <span class="mixer-row-accent" style="background:${idAccentColor(id)}"></span>
           <span class="mixer-row-name">${escapeHtml(presetName)}</span>
           <label class="toggle mini-toggle"><input type="checkbox" class="mixer-solo" ${ps.solo ? "checked" : ""}/> Solo</label>
           <label class="toggle mini-toggle"><input type="checkbox" class="mixer-mute" ${ps.mute ? "checked" : ""}/> Mute</label>
+          <button class="mixer-view-chain-btn icon-btn" title="View signal chain" type="button">▶</button>
+          <button class="mixer-remove-btn icon-btn" title="Remove from mixer" type="button">×</button>
         </div>
         <div class="mixer-controls">
           <label class="mixer-control">
@@ -147,6 +153,7 @@ function buildMixerMarkup(): string {
         <label class="toggle mini-toggle">
           <input type="checkbox" id="mixer-limiter" ${mixer.limiterEnabled ? "checked" : ""}/> Limiter
         </label>
+        <button class="mixer-save-multi-rig-btn secondary-btn" id="mixer-save-multi-rig" type="button" title="Save current mixer as a Multi-Rig preset">Save Multi-Rig…</button>
       </div>
       <div class="mixer-rows">
         ${rows}
@@ -171,12 +178,47 @@ function bindMixerControls(container: HTMLElement): void {
     });
   }
 
+  // Save Multi-Rig button — only shows when 2+ presets active; handled by multiPresetMixer.ts
+  const saveMultiRigBtn = container.querySelector<HTMLButtonElement>("#mixer-save-multi-rig");
+  if (saveMultiRigBtn) {
+    saveMultiRigBtn.addEventListener("click", () => {
+      const event = new CustomEvent("mixerSaveMultiRig", { bubbles: true });
+      container.dispatchEvent(event);
+    });
+  }
+
   container.querySelectorAll<HTMLElement>(".mixer-row").forEach((row) => {
     const pid = row.dataset.presetId || "";
     const mixEl = row.querySelector<HTMLInputElement>(".mixer-mix");
     const panEl = row.querySelector<HTMLInputElement>(".mixer-pan");
     const muteEl = row.querySelector<HTMLInputElement>(".mixer-mute");
     const soloEl = row.querySelector<HTMLInputElement>(".mixer-solo");
+    const viewBtn = row.querySelector<HTMLButtonElement>(".mixer-view-chain-btn");
+    const removeBtn = row.querySelector<HTMLButtonElement>(".mixer-remove-btn");
+
+    if (viewBtn) {
+      viewBtn.addEventListener("click", () => {
+        setFocusedMixerPresetId(pid);
+        renderSignalPathBar();
+        renderMixerPanel();
+      });
+    }
+
+    if (removeBtn) {
+      removeBtn.addEventListener("click", () => {
+        removeActivePreset(pid);
+        if (uiState.mixer) {
+          uiState.mixer.activePresetIds = uiState.mixer.activePresetIds.filter((id) => id !== pid);
+          delete uiState.mixer.presets[pid];
+        }
+        if (uiState.focusedMixerPresetId === pid) {
+          uiState.focusedMixerPresetId = uiState.mixer?.activePresetIds[0] ?? null;
+        }
+        renderMixerPanel();
+        renderSignalPathBar();
+      });
+    }
+
     if (mixEl) {
       mixEl.addEventListener("input", () => {
         const v = parseFloat(mixEl.value);
@@ -196,6 +238,7 @@ function bindMixerControls(container: HTMLElement): void {
         const v = Boolean(muteEl.checked);
         setPresetMute(pid, v);
         if (uiState.mixer?.presets[pid]) uiState.mixer.presets[pid].mute = v;
+        renderSignalPathBar(); // refresh tab indicators
       });
     }
     if (soloEl) {
@@ -203,6 +246,7 @@ function bindMixerControls(container: HTMLElement): void {
         const v = Boolean(soloEl.checked);
         setPresetSolo(pid, v);
         if (uiState.mixer?.presets[pid]) uiState.mixer.presets[pid].solo = v;
+        renderSignalPathBar(); // refresh tab indicators
       });
     }
   });
@@ -354,11 +398,14 @@ export function renderPresetList(
         const tagChips = (preset.tags ?? []).length > 0
           ? `<div class="preset-item-tags">${(preset.tags ?? []).map((t) => `<span class="preset-item-tag">${escapeHtml(t)}</span>`).join("")}</div>`
           : "";
+        const inMixer = uiState.mixer?.activePresetIds.includes(preset.id) ?? false;
+        const addToMixerBtn = `<button class="preset-add-to-mixer-btn${inMixer ? " in-mixer" : ""}" data-preset-id="${preset.id}" title="${inMixer ? "Already in mixer" : "Add to mixer"}" type="button">${inMixer ? "✓ In Mixer" : "+ Mixer"}</button>`;
 
         return `
         <article class="preset-item ${preset.id === activePresetId ? "active" : ""}" data-id="${preset.id}" draggable="true" style="border-left: 3px solid ${idAccentColor(preset.id)}">
           <header>
             <h3>${escapeHtml(preset.name)}</h3>
+            ${addToMixerBtn}
           </header>
           ${metaParts ? `<div class="preset-item-meta">${metaParts}</div>` : ""}
           ${tagChips}
@@ -382,6 +429,38 @@ export function renderPresetList(
         await onSelect(presetId);
       }
     });
+
+    // Add-to-mixer button — toggles inclusion in mixer
+    const addBtn = element.querySelector<HTMLButtonElement>(".preset-add-to-mixer-btn");
+    if (addBtn) {
+      addBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const pid = addBtn.dataset.presetId ?? "";
+        if (!pid) return;
+        const alreadyIn = uiState.mixer?.activePresetIds.includes(pid) ?? false;
+        if (alreadyIn) {
+          removeActivePreset(pid);
+          if (uiState.mixer) {
+            uiState.mixer.activePresetIds = uiState.mixer.activePresetIds.filter((id) => id !== pid);
+            delete uiState.mixer.presets[pid];
+          }
+          addBtn.textContent = "+ Mixer";
+          addBtn.classList.remove("in-mixer");
+          addBtn.title = "Add to mixer";
+          renderSignalPathBar();
+          renderMixerPanel();
+        } else {
+          addActivePreset(pid);
+          if (uiState.mixer) {
+            uiState.mixer.activePresetIds.push(pid);
+          }
+          addBtn.textContent = "✓ In Mixer";
+          addBtn.classList.add("in-mixer");
+          addBtn.title = "Remove from mixer";
+          renderSignalPathBar();
+        }
+      });
+    }
 
     element.addEventListener("dragstart", (event) => {
       const presetId = element.getAttribute("data-id") ?? "";

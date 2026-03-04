@@ -17,6 +17,8 @@
 #include "dsp/EffectGuids.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/effects/BuiltinEffects.h"
+#include "presets/CompositePresetStorage.h"
+#include "presets/CompositePresetTypes.h"
 #include "util/Base64.h"
 #include "util/FileIO.h"
 #include "util/PathSanitizer.h"
@@ -3397,6 +3399,139 @@ void PluginController::HandleDeleteBlendDefinitionRequest(const nlohmann::json& 
     mBlendLibrary = std::move(updated);
     SaveBlendLibrary();
     BroadcastState();
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Composite (Multi-Rig) Preset handlers
+// ════════════════════════════════════════════════════════════════════
+
+void PluginController::SendCompositePresetListToUI()
+{
+    const auto dir = mResourceRoot / CompositePresetStorage::kSubdir;
+    const auto presets = CompositePresetStorage::ListAll(dir);
+    nlohmann::json msg;
+    msg["type"] = "compositePresetList";
+    nlohmann::json arr = nlohmann::json::array();
+    for (const auto& cp : presets)
+        arr.push_back(nlohmann::json(cp));
+    msg["compositePresets"] = std::move(arr);
+    SendMessageToUI(msg.dump());
+}
+
+void PluginController::HandleSaveCompositePresetRequest(const nlohmann::json& payload)
+{
+    const std::string name = payload.value("name", "");
+    if (name.empty()) { ReportErrorToUI("Save Multi-Rig failed", "A name is required"); return; }
+
+    const std::string description = payload.value("description", "");
+
+    // Build CompositePreset from current mixer state
+    CompositePreset cp;
+    cp.name = name;
+    cp.description = description;
+    cp.masterGain = mPresetMixer.GetMasterGain();
+    cp.limiterEnabled = mPresetMixer.IsLimiterEnabled();
+
+    for (const auto& pid : mPresetMixer.GetActivePresetIds())
+    {
+        const auto cfgOpt = mPresetMixer.GetPresetConfig(pid);
+        if (!cfgOpt) continue;
+        CompositePresetSlot slot;
+        slot.slotId = cfgOpt->id;
+        slot.presetId = pid;
+        slot.mix = cfgOpt->mix;
+        slot.pan = cfgOpt->pan;
+        slot.mute = cfgOpt->mute;
+        slot.solo = cfgOpt->solo;
+        cp.slots.push_back(std::move(slot));
+    }
+
+    if (cp.slots.empty()) { ReportErrorToUI("Save Multi-Rig failed", "No active presets in mixer"); return; }
+
+    // Assign id and timestamps
+    const std::string existingId = payload.value("id", "");
+    if (!existingId.empty())
+    {
+        cp.id = existingId;
+    }
+    else
+    {
+        // Generate a simple id from name + timestamp
+        const auto now = std::chrono::system_clock::now();
+        const auto ts = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+        cp.id = guitarfx::util::SanitizeFilename(name) + "_" + std::to_string(ts);
+    }
+
+    const auto now = std::chrono::system_clock::now();
+    const auto tt = std::chrono::system_clock::to_time_t(now);
+    std::ostringstream oss;
+    oss << std::put_time(std::gmtime(&tt), "%Y-%m-%dT%H:%M:%SZ");
+    const std::string ts = oss.str();
+
+    if (cp.createdAt.empty()) cp.createdAt = ts;
+    cp.modifiedAt = ts;
+
+    const auto dir = mResourceRoot / CompositePresetStorage::kSubdir;
+    if (!CompositePresetStorage::SaveToFile(cp, dir))
+    {
+        ReportErrorToUI("Save Multi-Rig failed", "Could not write file");
+        return;
+    }
+
+    // Confirm save to UI and send updated list
+    SendMessageToUI(nlohmann::json{{"type", "compositePresetSaved"}, {"id", cp.id}, {"name", cp.name}}.dump());
+    SendCompositePresetListToUI();
+}
+
+void PluginController::HandleLoadCompositePresetRequest(const nlohmann::json& payload)
+{
+    const std::string id = payload.value("id", "");
+    if (id.empty()) { ReportErrorToUI("Load Multi-Rig failed", "Missing preset id"); return; }
+
+    const auto dir = mResourceRoot / CompositePresetStorage::kSubdir;
+    const auto cpOpt = CompositePresetStorage::LoadById(id, dir);
+    if (!cpOpt) { ReportErrorToUI("Load Multi-Rig failed", "Preset not found: " + id); return; }
+
+    const auto& cp = *cpOpt;
+
+    // Clear existing mixer slots
+    for (const auto& pid : mPresetMixer.GetActivePresetIds())
+        RemoveActivePreset(pid);
+
+    // Load each slot
+    for (const auto& slot : cp.slots)
+    {
+        if (!AddActivePresetById(slot.presetId)) continue;
+        SetActivePresetMix(slot.presetId, slot.mix);
+        SetActivePresetPan(slot.presetId, slot.pan);
+        SetActivePresetMute(slot.presetId, slot.mute);
+        SetActivePresetSolo(slot.presetId, slot.solo);
+    }
+
+    // Restore master settings
+    SetMasterGain(cp.masterGain);
+    SetLimiterEnabled(cp.limiterEnabled);
+
+    // Notify UI
+    SendMessageToUI(nlohmann::json{{"type", "compositePresetLoaded"}, {"id", cp.id}, {"name", cp.name}}.dump());
+    BroadcastState();
+}
+
+void PluginController::HandleGetCompositePresetListRequest()
+{
+    SendCompositePresetListToUI();
+}
+
+void PluginController::HandleRemoveCompositePresetRequest(const nlohmann::json& payload)
+{
+    const std::string id = payload.value("id", "");
+    if (id.empty()) { ReportErrorToUI("Remove Multi-Rig failed", "Missing preset id"); return; }
+
+    const auto dir = mResourceRoot / CompositePresetStorage::kSubdir;
+    const bool removed = CompositePresetStorage::DeleteById(id, dir);
+    if (!removed) { ReportErrorToUI("Remove Multi-Rig failed", "Preset not found: " + id); return; }
+
+    SendCompositePresetListToUI();
 }
 
 void PluginController::HandleRequestResourceDataRequest(const nlohmann::json& payload)

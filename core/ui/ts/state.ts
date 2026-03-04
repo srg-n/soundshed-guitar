@@ -258,6 +258,8 @@ export const uiState: UiState = {
   compositeEditMode: false,
   compositeEditDefinition: null,
   compositeEditPreset: null,
+  focusedMixerPresetId: null,
+  compositePresets: [],
 };
 
 export function clonePreset<T extends Preset | null>(preset: T): T {
@@ -277,6 +279,45 @@ export function getActivePresetForRender(): Preset | null {
     return null;
   }
   return uiState.presetCache.get(activePresetId) ?? uiState.presets.find((preset) => preset.id === activePresetId) ?? null;
+}
+
+/**
+ * Returns the preset to display in the signal path bar.
+ * When multiple presets are active in the mixer, returns the focusedMixerPresetId slot if set;
+ * otherwise falls back to getActivePresetForRender().
+ */
+export function getSignalPathPreset(): Preset | null {
+  // Composite edit mode overrides everything
+  if (uiState.compositeEditMode && uiState.compositeEditPreset) {
+    return uiState.compositeEditPreset;
+  }
+  const mixer = uiState.mixer;
+  const multiActive = mixer && mixer.activePresetIds.length > 1;
+  if (multiActive) {
+    const focusedId = uiState.focusedMixerPresetId;
+    if (focusedId && mixer.activePresetIds.includes(focusedId)) {
+      // Only use the draft if it actually belongs to the focused preset
+      if (uiState.activePresetDraft && uiState.activePresetDraft.id === focusedId) {
+        return uiState.activePresetDraft;
+      }
+      return uiState.presetCache.get(focusedId) ?? null;
+    }
+    // Fall back to the first active mixer preset
+    const firstId = mixer.activePresetIds[0];
+    return uiState.presetCache.get(firstId) ?? null;
+  }
+  return getActivePresetForRender();
+}
+
+/**
+ * Sets the focused mixer preset and ensures it stays in sync with activePresetId.
+ * Call renderSignalPathBar() after this.
+ */
+export function setFocusedMixerPresetId(presetId: string | null): void {
+  uiState.focusedMixerPresetId = presetId;
+  if (presetId) {
+    uiState.activePresetId = presetId;
+  }
 }
 
 export function setActivePresetSnapshot(preset: Preset | null): void {

@@ -232,10 +232,32 @@ export type BlendLibrary = BlendDefinition[];
 
 export interface MixerPresetState {
   id: string;
+  name?: string;  // display name from mixer slot config
   mix: number; // 0..1
   pan: number; // -1..1 (L..R)
   mute: boolean;
   solo: boolean;
+}
+
+export interface CompositePresetSlot {
+  slotId: string;    // stable DSP instance ID, e.g. "p1"
+  presetId: string;  // references a regular Preset by ID
+  mix: number;       // 0..1 linear gain
+  pan: number;       // -1..1 (L..R)
+  mute: boolean;
+  solo: boolean;
+}
+
+export interface CompositePreset {
+  id: string;
+  name: string;
+  description?: string;
+  tags?: string[];
+  createdAt?: string;
+  modifiedAt?: string;
+  slots: CompositePresetSlot[];
+  masterGain: number;
+  limiterEnabled: boolean;
 }
 
 export interface GlobalSignalChainConfig {
@@ -431,6 +453,10 @@ export interface UiState {
   compositeEditDefinition?: CompositeEffectDefinition | null;
   /** Synthetic preset wrapping the composite's inner graph for signal path rendering. */
   compositeEditPreset?: Preset | null;
+  /** Which mixer slot's signal chain is shown in the signal path bar (UI-only, no DSP effect). */
+  focusedMixerPresetId?: string | null;
+  /** Saved composite (multi-rig) presets. */
+  compositePresets?: CompositePreset[];
   /** Available software update, populated when update check finds a newer version. */
   availableUpdate?: { version: string; downloadUrl: string; releaseNotes: string } | null;
 }
