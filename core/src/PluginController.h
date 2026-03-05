@@ -30,6 +30,7 @@
 #include <deque>
 #include <filesystem>
 #include <future>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -387,6 +388,10 @@ private:
     std::optional<Preset> mActivePreset;
     std::string mActivePresetJson;
     std::string mActivePresetId;
+
+    // Per-slot preset JSON cache, kept in sync with MultiPresetMixer instances.
+    // Used by BroadcastState to send full graph data to the UI for each mixer slot.
+    std::map<std::string, std::string> mMixerPresetJsonCache;
 
     // Composite edit mode
     std::optional<CompositeEffectDefinition> mEditingComposite;

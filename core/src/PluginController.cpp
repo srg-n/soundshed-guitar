@@ -1729,7 +1729,13 @@ double PluginController::GetParamValue(int paramIdx) const
 bool PluginController::AddActivePreset(const Preset& preset, const std::string& presetId, const std::string& name)
 {
     std::lock_guard<std::mutex> lock(mDSPMutex);
-    return mPresetMixer.AddActivePreset(preset, presetId, name);
+    const bool added = mPresetMixer.AddActivePreset(preset, presetId, name);
+    if (added)
+    {
+        try { mMixerPresetJsonCache[presetId] = PresetStorage::SerializeToJson(preset); }
+        catch (...) {}
+    }
+    return added;
 }
 
 bool PluginController::AddActivePresetById(const std::string& presetId)
@@ -1767,6 +1773,7 @@ void PluginController::RemoveActivePreset(const std::string& presetId)
 {
     std::lock_guard<std::mutex> lock(mDSPMutex);
     mPresetMixer.RemoveActivePreset(presetId);
+    mMixerPresetJsonCache.erase(presetId);
 }
 
 void PluginController::SetActivePresetMix(const std::string& presetId, double value)
@@ -2451,7 +2458,11 @@ void PluginController::HandleUpdateSignalPathNodeParamRequest(const nlohmann::js
     std::string nodeId = payload.value("nodeId", "");
     std::string paramKey = payload.value("paramKey", "");
     double value = payload.value("value", 0.0);
-    std::string presetId = payload.value("presetId", "p1");
+    // Prefer an explicit presetId from the payload; fall back to the active preset ID so
+    // that effects whose instance is keyed by a real UUID (not "p1") still receive the update.
+    std::string presetId = payload.value("presetId", std::string{});
+    if (presetId.empty())
+        presetId = mActivePresetId.empty() ? "p1" : mActivePresetId;
 
     auto* graph = ResolveEditTarget();
     if (!graph) return;
@@ -5227,6 +5238,19 @@ void PluginController::BroadcastState()
         }
     }
     mixer["presets"] = std::move(presetConfigs);
+
+    // Full preset graphs so the UI can display the signal chain for every mixer slot.
+    nlohmann::json presetGraphs = nlohmann::json::object();
+    for (const auto& id : mPresetMixer.GetActivePresetIds())
+    {
+        auto it = mMixerPresetJsonCache.find(id);
+        if (it != mMixerPresetJsonCache.end())
+        {
+            try { presetGraphs[id] = nlohmann::json::parse(it->second); }
+            catch (...) {}
+        }
+    }
+    mixer["presetGraphs"] = std::move(presetGraphs);
     state["mixer"] = std::move(mixer);
 
     // Metronome
@@ -5293,8 +5317,13 @@ void PluginController::ApplyPreset(const Preset& preset)
     // Remove existing preset instances and add the new one
     for (const auto& id : mPresetMixer.GetActivePresetIds())
         mPresetMixer.RemoveActivePreset(id);
+    mMixerPresetJsonCache.clear();
 
-    mPresetMixer.AddActivePreset(normalizedPreset, "p1", normalizedPreset.name);
+    // Use the real preset ID so the UI can map the mixer tab to the presetCache entry.
+    // Fall back to "p1" only for presets without an id (should not happen in practice).
+    const std::string initialSlotId = normalizedPreset.id.empty() ? "p1" : normalizedPreset.id;
+    mPresetMixer.AddActivePreset(normalizedPreset, initialSlotId, normalizedPreset.name);
+    mMixerPresetJsonCache[initialSlotId] = mActivePresetJson;
 
     // Register tuner callback
     mPresetMixer.SetTunerCallback(

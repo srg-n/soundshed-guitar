@@ -2618,9 +2618,11 @@ function renderMixerPresetTabs(): void {
   const signalPathBar = document.getElementById("signal-path-bar");
   const mixer = uiState.mixer;
 
-  const multiActive = !isCompositeEditMode() && mixer && mixer.activePresetIds.length > 1;
+  // Show tab bar whenever there is at least one active preset so the user can
+  // always close/clear even the single active slot.
+  const anyActive = !isCompositeEditMode() && mixer && mixer.activePresetIds.length >= 1;
 
-  if (!multiActive) {
+  if (!anyActive) {
     if (tabBar) tabBar.remove();
     mixTabActive = false;
     return;
@@ -2650,7 +2652,8 @@ function renderMixerPresetTabs(): void {
       muted ? `<span class="tab-indicator muted" title="Muted">M</span>` : "",
       soloed ? `<span class="tab-indicator soloed" title="Solo">S</span>` : "",
     ].join("");
-    return `<button class="mixer-preset-tab${active ? " active" : ""}" data-preset-id="${escapeHtml(id)}" type="button">${escapeHtml(name)}${indicators}</button>`;
+    const closeBtn = `<span class="mixer-tab-close" data-close-preset-id="${escapeHtml(id)}" title="Remove from mixer" role="button" aria-label="Remove ${escapeHtml(name)}">×</span>`;
+    return `<button class="mixer-preset-tab${active ? " active" : ""}" data-preset-id="${escapeHtml(id)}" type="button">${escapeHtml(name)}${indicators}${closeBtn}</button>`;
   }).join("");
 
   const mixTabHtml = `<button class="mixer-preset-tab mixer-tab-mix${mixTabActive ? " active" : ""}" data-mix-tab="1" type="button">⚖ Mix</button>`;
@@ -2658,13 +2661,39 @@ function renderMixerPresetTabs(): void {
   tabBar.innerHTML = presetTabsHtml + mixTabHtml;
 
   tabBar.querySelectorAll<HTMLButtonElement>(".mixer-preset-tab:not([data-mix-tab])").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", (e) => {
+      // Don't switch tab when close button was clicked
+      if ((e.target as HTMLElement).closest(".mixer-tab-close")) return;
       const pid = btn.dataset.presetId ?? "";
       if (pid) {
         mixTabActive = false;
         setFocusedMixerPresetId(pid);
         renderSignalPathBar();
       }
+    });
+  });
+
+  // Close (×) buttons — remove preset from mixer
+  tabBar.querySelectorAll<HTMLElement>(".mixer-tab-close").forEach((closeEl) => {
+    closeEl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const pid = closeEl.dataset.closePresetId ?? "";
+      if (!pid) return;
+      removeActivePreset(pid);
+      if (uiState.mixer) {
+        uiState.mixer.activePresetIds = uiState.mixer.activePresetIds.filter((id) => id !== pid);
+        delete uiState.mixer.presets[pid];
+      }
+      if (uiState.focusedMixerPresetId === pid) {
+        uiState.focusedMixerPresetId = uiState.mixer?.activePresetIds[0] ?? null;
+      }
+      // Update any "✓ In Mixer" button in the preset list for this preset
+      document.querySelectorAll<HTMLButtonElement>(`.preset-add-to-mixer-btn[data-preset-id="${CSS.escape(pid)}"]`).forEach((btn) => {
+        btn.textContent = "+ Mixer";
+        btn.classList.remove("in-mixer");
+        btn.title = "Add to mixer";
+      });
+      renderSignalPathBar();
     });
   });
 

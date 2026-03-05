@@ -274,6 +274,25 @@ export function handleIncomingMessage(message: string): void {
           masterGain: typeof mixer.masterGain === "number" ? mixer.masterGain : uiState.mixer?.masterGain ?? 1.0,
           limiterEnabled: Boolean(mixer.limiterEnabled),
         };
+
+        // Populate presetCache with full graph data for each mixer slot.
+        // The C++ includes these so the UI can display signal chains even for
+        // slots that the user has never explicitly loaded as the active preset.
+        const presetGraphs = (mixer as { presetGraphs?: Record<string, unknown> }).presetGraphs;
+        if (presetGraphs && typeof presetGraphs === "object") {
+          for (const [slotId, presetData] of Object.entries(presetGraphs)) {
+            if (presetData && typeof presetData === "object") {
+              const existing = uiState.presetCache.get(slotId);
+              // Only overwrite stubs (entries without graph nodes)
+              if (!existing?.graph?.nodes?.length) {
+                const p = presetData as Preset;
+                migratePresetNodeTypes(p);
+                normalizePresetResources(p);
+                uiState.presetCache.set(slotId, p);
+              }
+            }
+          }
+        }
       }
       uiState.signalTest = null;
       const preset = (payload as { preset?: Preset }).preset;

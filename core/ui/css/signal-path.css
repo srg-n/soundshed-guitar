@@ -96,6 +96,26 @@
 .tab-indicator.muted  { background: #c44; color: #fff; }
 .tab-indicator.soloed { background: #c94; color: #fff; }
 
+.mixer-tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 5px;
+  width: 14px;
+  height: 14px;
+  font-size: 13px;
+  line-height: 1;
+  border-radius: 50%;
+  color: var(--text-muted);
+  cursor: pointer;
+  vertical-align: middle;
+  transition: background 0.1s, color 0.1s;
+}
+.mixer-tab-close:hover {
+  background: rgba(220, 60, 60, 0.25);
+  color: #e05050;
+}
+
 /* ── Inline mixer panel (shown when Mix tab active) ────────────────── */
 .inline-mixer-panel {
   flex: 1;

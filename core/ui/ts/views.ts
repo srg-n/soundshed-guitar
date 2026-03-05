@@ -450,9 +450,21 @@ export function renderPresetList(
           renderSignalPathBar();
           renderMixerPanel();
         } else {
+          // Cache the preset's full data immediately so the signal chain tab is
+          // populated before the C++ round-trip completes.
+          const cachedPreset = uiState.presetCache.get(pid);
+          if (!cachedPreset?.graph?.nodes?.length) {
+            const fromList = uiState.presets.find((p) => p.id === pid);
+            if (fromList?.graph?.nodes?.length) {
+              uiState.presetCache.set(pid, fromList);
+            }
+          }
           addActivePreset(pid);
           if (uiState.mixer) {
             uiState.mixer.activePresetIds.push(pid);
+            if (!uiState.mixer.presets[pid]) {
+              uiState.mixer.presets[pid] = { id: pid, mix: 1.0, pan: 0.0, mute: false, solo: false };
+            }
           }
           addBtn.textContent = "✓ In Mixer";
           addBtn.classList.add("in-mixer");
