@@ -6,6 +6,7 @@
 #include "signalsmith-stretch.h"
 #include <algorithm>
 #include <cmath>
+#include <random>
 #include <vector>
 
 namespace guitarfx
@@ -47,6 +48,7 @@ namespace guitarfx
 
       mStretch.presetCheaper(2, static_cast<float>(sampleRate), false);
       mConfigured = true;
+      mRng.seed(std::random_device{}());
 
       mPitchBuf.assign(static_cast<size_t>(kPitchBufSize), 0.0f);
       mPitchFillPos = 0;
@@ -214,8 +216,18 @@ namespace guitarfx
           const int count = static_cast<int>(mStepSemitones.size());
           if (count > 0)
           {
-            mCurrentStep = (mCurrentStep + 1) % count;
-            mCurrentSemitones = mStepSemitones[static_cast<size_t>(mCurrentStep)];
+            if (mRandomDirection)
+              mCurrentStep = static_cast<int>(mRng() % static_cast<unsigned>(count));
+            else
+              mCurrentStep = (mCurrentStep + 1) % count;
+            if (mRandomPattern)
+            {
+              // Fresh random semitone for this step so every note is unpredictable.
+              mCurrentSemitones = static_cast<int>(mRng() % 25u) - 12;
+              mStepSemitones[static_cast<size_t>(mCurrentStep)] = mCurrentSemitones;
+            }
+            else
+              mCurrentSemitones = mStepSemitones[static_cast<size_t>(mCurrentStep)];
             // Update stretch with new pitch for the next block.
             ApplyStretchSemitones(mCurrentSemitones);
           }
@@ -232,7 +244,7 @@ namespace guitarfx
       }
       else if (key == "stepRate")
       {
-        mStepRate = static_cast<int>(std::clamp(std::round(value), 0.0, 4.0));
+        mStepRate = static_cast<int>(std::clamp(std::round(value), 0.0, 6.0));
         UpdatePhaseIncrement();
       }
       else if (key == "numSteps")
@@ -242,7 +254,7 @@ namespace guitarfx
       }
       else if (key == "pattern")
       {
-        mPattern = static_cast<int>(std::clamp(std::round(value), 0.0, 4.0));
+        mPattern = static_cast<int>(std::clamp(std::round(value), 0.0, 5.0));
         RebuildStepList();
       }
       else if (key == "direction")
@@ -324,6 +336,7 @@ namespace guitarfx
     // ── Pattern table ─────────────────────────────────────────────────────
     static constexpr int kMaxCustomSteps = 8;
     static constexpr int kPatternCustom  = 4;
+    static constexpr int kPatternRandom  = 5;
     static constexpr int    kPitchBufSize      = 2048; // ~46ms analysis window at 44.1kHz
     static constexpr int    kActivateFrames    = 2;    // consecutive on-windows needed to activate
     static constexpr int    kDeactivateFrames  = 5;    // consecutive off-windows needed to deactivate
@@ -338,14 +351,16 @@ namespace guitarfx
       { -1, -1, -1, -1, -1, -1, -1, -1, -1 },  // 4: Custom (use mCustomSteps / mNumSteps)
     };
 
-    // Beats per step for each stepRate enum value (0-4).
+    // Beats per step for each stepRate enum value (0-6).
     // Based on a common 4/4 meter reference beat (quarter note = 1 beat).
-    static constexpr double kBeatFractions[5] = {
+    static constexpr double kBeatFractions[7] = {
       1.0,          // 0: 1/4  note  = 1 beat
       0.5,          // 1: 1/8  note  = 0.5 beats
       0.25,         // 2: 1/16 note  = 0.25 beats
-      1.0 / 3.0,    // 3: 1/8  triplet = 1/3 beat
-      1.0 / 6.0,    // 4: 1/16 triplet = 1/6 beat
+      0.125,        // 3: 1/32 note  = 0.125 beats
+      1.0 / 3.0,    // 4: 1/8  triplet = 1/3 beat
+      1.0 / 6.0,    // 5: 1/16 triplet = 1/6 beat
+      1.0 / 12.0,   // 6: 1/32 triplet = 1/12 beat
     };
 
     // ── Helpers ───────────────────────────────────────────────────────────
@@ -365,7 +380,17 @@ namespace guitarfx
     {
       std::vector<int> base;
 
-      if (mPattern == kPatternCustom)
+      mRandomPattern   = (mPattern == kPatternRandom);
+      mRandomDirection = mRandomPattern; // Random pattern always picks steps randomly
+
+      if (mPattern == kPatternRandom)
+      {
+        // Populate the pool with mNumSteps random semitones in [0, 12].
+        // Steps are re-randomized individually on each advance in Process().
+        for (int i = 0; i < mNumSteps; ++i)
+          base.push_back(static_cast<int>(mRng() % 25u) - 12);
+      }
+      else if (mPattern == kPatternCustom)
       {
         for (int i = 0; i < mNumSteps && i < kMaxCustomSteps; ++i)
           base.push_back(mCustomSteps[static_cast<size_t>(i)]);
@@ -385,28 +410,35 @@ namespace guitarfx
         return;
       }
 
-      // Apply direction
-      switch (mDirection)
+      // Apply direction (ignored for Random pattern — steps are always picked randomly)
+      if (!mRandomPattern)
       {
-        case 0: // Up — use base as-is
-          mStepSemitones = base;
-          break;
-        case 1: // Down — reverse
-          mStepSemitones = std::vector<int>(base.rbegin(), base.rend());
-          break;
-        case 2: // Up-Down — base + reverse without duplicating endpoints
+        switch (mDirection)
         {
-          mStepSemitones = base;
-          if (base.size() > 1)
+          case 0: // Up — use base as-is
+            mStepSemitones = base;
+            break;
+          case 1: // Down — reverse
+            mStepSemitones = std::vector<int>(base.rbegin(), base.rend());
+            break;
+          case 2: // Up-Down — base + reverse without duplicating endpoints
           {
-            for (int i = static_cast<int>(base.size()) - 2; i >= 1; --i)
-              mStepSemitones.push_back(base[static_cast<size_t>(i)]);
+            mStepSemitones = base;
+            if (base.size() > 1)
+            {
+              for (int i = static_cast<int>(base.size()) - 2; i >= 1; --i)
+                mStepSemitones.push_back(base[static_cast<size_t>(i)]);
+            }
+            break;
           }
-          break;
+          default:
+            mStepSemitones = base;
+            break;
         }
-        default:
-          mStepSemitones = base;
-          break;
+      }
+      else
+      {
+        mStepSemitones = base;
       }
 
       // Clamp current step index to new list size
@@ -489,7 +521,7 @@ namespace guitarfx
 
     // ── Parameters ────────────────────────────────────────────────────────
     double mBpm           = 120.0;
-    int    mStepRate      = 1;     // 0=1/4, 1=1/8, 2=1/16, 3=1/8T, 4=1/16T
+    int    mStepRate      = 1;     // 0=1/4, 1=1/8, 2=1/16, 3=1/8T, 4=1/16T, 5=1/32, 6=1/32T
     int    mNumSteps      = 4;     // active steps in Custom mode
     int    mPattern       = 0;     // 0=Major, 1=Minor, 2=Power, 3=Octaves, 4=Custom
     int    mDirection     = 0;     // 0=Up, 1=Down, 2=UpDown
@@ -509,6 +541,9 @@ namespace guitarfx
     double mPhaseIncrement = 0.0;
     int    mCurrentStep    = 0;
     int    mCurrentSemitones = 0;
+    bool   mRandomPattern   = false;
+    bool   mRandomDirection  = false;
+    std::mt19937 mRng;
     std::vector<int>   mStepSemitones;
     signalsmith::stretch::SignalsmithStretch<float> mStretch;
     std::vector<float> mWetL;
@@ -536,11 +571,11 @@ namespace guitarfx
     info.requiresTempo = true;
     info.parameters    = {
       // Step timing
-      {"stepRate",   "Step Rate",    1.0, 0.0,  4.0,  "enum", "timing",  false, 1.0,
-       {"1/4 Note", "1/8 Note", "1/16 Note", "1/8 Triplet", "1/16 Triplet"}},
+      {"stepRate",   "Step Rate",    1.0, 0.0,  6.0,  "enum", "timing",  false, 1.0,
+       {"1/4 Note", "1/8 Note", "1/16 Note", "1/32 Note", "1/8 Triplet", "1/16 Triplet", "1/32 Triplet"}},
       // Pattern
-      {"pattern",    "Pattern",      0.0, 0.0,  4.0,  "enum", "pattern", false, 1.0,
-       {"Major Triad", "Minor Triad", "Power Chord", "Octaves", "Custom"}},
+      {"pattern",    "Pattern",      0.0, 0.0,  5.0,  "enum", "pattern", false, 1.0,
+       {"Major Triad", "Minor Triad", "Power Chord", "Octaves", "Custom", "Random"}},
       {"direction",  "Direction",    0.0, 0.0,  2.0,  "enum", "pattern", false, 1.0,
        {"Up", "Down", "Up-Down"}},
       {"numSteps",   "Steps",        4.0, 2.0,  8.0,  "enum", "pattern", false, 1.0,
