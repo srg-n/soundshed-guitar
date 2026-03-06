@@ -500,3 +500,15 @@
   gap: 4px;
   flex-shrink: 0;
 }
+
+.layout-list-thumb {
+  width: 80px;
+  height: auto;
+  max-height: 50px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+  align-self: center;
+  border: 1px solid var(--border-browser);
+  background: var(--bg-deep);
+}

@@ -189,6 +189,8 @@ export interface EffectLayout {
   createdAt?: string;
   /** Last modified timestamp */
   modifiedAt?: string;
+  /** Base64 JPEG data URL of the layout thumbnail, captured when saving in the designer */
+  thumbnailDataUrl?: string;
 }
 
 /** Layout library entry with metadata */

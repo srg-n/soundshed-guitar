@@ -99,6 +99,7 @@ export function renderLayoutList(): void {
 
       return `
       <div class="layout-list-item" data-layout-key="${escAttr(key)}" data-layout-id="${escAttr(entry.layoutId)}">
+        ${layout.thumbnailDataUrl ? `<img class="layout-list-thumb" src="${escAttr(layout.thumbnailDataUrl)}" alt="Layout preview" />` : ""}
         <div class="layout-list-info">
           <span class="layout-list-name">${escHtml(layoutName)}</span>
           <span class="layout-list-meta">

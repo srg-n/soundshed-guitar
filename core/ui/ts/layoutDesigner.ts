@@ -203,7 +203,7 @@ export class LayoutDesignerModal {
     // Close buttons
     this.closeBtn?.addEventListener("click", () => this.close());
     this.cancelBtn?.addEventListener("click", () => this.close());
-    this.saveBtn?.addEventListener("click", () => this.save());
+    this.saveBtn?.addEventListener("click", () => { void this.save(); });
     this.exportBtn?.addEventListener("click", () => this.exportLayout());
     this.importBtn?.addEventListener("click", () => this.importFileInput?.click());
     this.importFileInput?.addEventListener("change", () => this.handleImportFileSelected());
@@ -448,7 +448,7 @@ export class LayoutDesignerModal {
     return Array.from(ids);
   }
 
-  private save(): void {
+  private async save(): Promise<void> {
     if (!this.layout) return;
 
     this.layout.modifiedAt = new Date().toISOString();
@@ -457,6 +457,12 @@ export class LayoutDesignerModal {
     if (this.blendId) {
       this.layout.blendId = this.blendId;
     }
+
+    // Capture a thumbnail of the current design state before persisting
+    try {
+      const thumbnail = await this.captureLayoutThumbnail();
+      if (thumbnail) this.layout.thumbnailDataUrl = thumbnail;
+    } catch { /* thumbnail failure must not block save */ }
 
     const isNewLayout = this.isNewLayout;
     const referencedImageIds = isNewLayout ? this.collectReferencedImageIds() : [];
@@ -484,6 +490,103 @@ export class LayoutDesignerModal {
 
     showNotification("Layout saved", "success");
     this.close(true);
+  }
+
+  /** Render a compact thumbnail of the current layout onto an offscreen canvas and return a JPEG data URL. */
+  private async captureLayoutThumbnail(): Promise<string | null> {
+    const layout = this.layout;
+    if (!layout) return null;
+
+    const THUMB_W = 280;
+    const layoutW = layout.dimensions.width;
+    const layoutH = layout.dimensions.height;
+    const scale = Math.min(THUMB_W / layoutW, 1);
+    const scaledW = Math.ceil(layoutW * scale);
+    const scaledH = Math.ceil(layoutH * scale);
+
+    const canvasEl = document.createElement("canvas");
+    canvasEl.width = scaledW;
+    canvasEl.height = scaledH;
+    const ctx = canvasEl.getContext("2d");
+    if (!ctx) return null;
+
+    // Base fill for transparent/unset areas
+    ctx.fillStyle = "#1c1c1c";
+    ctx.fillRect(0, 0, scaledW, scaledH);
+
+    // Backgrounds
+    const sortedBgs = [...layout.backgrounds].sort((a, b) => a.layerIndex - b.layerIndex);
+    for (const bg of sortedBgs) {
+      ctx.globalAlpha = bg.opacity ?? 1;
+      if (bg.type === "color") {
+        ctx.fillStyle = bg.value;
+        ctx.fillRect(0, 0, scaledW, scaledH);
+      } else if (bg.type === "image") {
+        const imageRef = uiState.layoutLibrary?.images.find((img) => img.imageId === bg.value);
+        if (imageRef?.dataUrl) {
+          try {
+            const imgEl = await LayoutDesignerModal.loadThumbnailImage(imageRef.dataUrl);
+            ctx.drawImage(imgEl, 0, 0, scaledW, scaledH);
+          } catch { /* ignore failed image */ }
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // Rectangle overlays
+    for (const overlay of layout.overlays ?? []) {
+      const ox = overlay.position.x * scale;
+      const oy = overlay.position.y * scale;
+      const ow = overlay.size.width * scale;
+      const oh = overlay.size.height * scale;
+      const style = overlay.style ?? {};
+      if (style.backgroundColor) {
+        ctx.globalAlpha = style.backgroundOpacity ?? 1;
+        ctx.fillStyle = style.backgroundColor;
+        ctx.fillRect(ox, oy, ow, oh);
+        ctx.globalAlpha = 1;
+      }
+      if (style.borderColor && (style.borderWidth ?? 0) > 0) {
+        ctx.strokeStyle = style.borderColor;
+        ctx.lineWidth = Math.max(0.5, (style.borderWidth ?? 1) * scale);
+        ctx.strokeRect(ox, oy, ow, oh);
+      }
+    }
+
+    // Control indicator dots
+    if (!layout.useDefaultControls) {
+      ctx.fillStyle = "rgba(90, 159, 212, 0.55)";
+      const r = Math.max(4, 7 * scale);
+      for (const control of layout.controls) {
+        const cx = control.position.x * scale + r;
+        const cy = control.position.y * scale + r;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Text labels
+    for (const label of layout.textLabels) {
+      const fontSize = Math.max(5, Math.round((label.fontSize || 11) * scale));
+      ctx.font = `${label.fontWeight ?? "normal"} ${fontSize}px ${label.fontFamily ?? "sans-serif"}`;
+      ctx.fillStyle = label.color ?? "#dddddd";
+      ctx.globalAlpha = 0.9;
+      ctx.textAlign = (label.textAlign as CanvasTextAlign) ?? "left";
+      ctx.fillText(label.text, label.position.x * scale, label.position.y * scale + fontSize);
+      ctx.globalAlpha = 1;
+    }
+
+    return canvasEl.toDataURL("image/jpeg", 0.82);
+  }
+
+  private static loadThumbnailImage(src: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
   }
 
   private async exportLayout(): Promise<void> {

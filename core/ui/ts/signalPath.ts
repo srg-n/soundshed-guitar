@@ -845,8 +845,20 @@ function renderNodeElement(node: GraphNode): string {
     resourceLabel = `<div class="node-resource">${resourceSummary}</div>`;
   }
 
+  // Use the layout thumbnail as a background image on the node card if available.
+  const blendId = (() => {
+    const params = node.params as Record<string, unknown> | undefined;
+    return typeof params?.blend === "string" ? params.blend : "";
+  })();
+  const nodeLayout = blendId
+    ? (getCustomLayout(node.type, blendId) ?? getCustomLayout(node.type))
+    : getCustomLayout(node.type);
+  const thumbUrl = nodeLayout?.thumbnailDataUrl ?? null;
+  const thumbStyle = thumbUrl ? ` style="background-image: url('${thumbUrl.replace(/'/g, "\\'")}')"`  : "";
+  const thumbClass = thumbUrl ? " has-thumb" : "";
+
   return `
-    <div class="signal-node ${categoryClass} ${bypassedClass} ${selectedClass} ${missingClass}" 
+    <div class="signal-node ${categoryClass} ${bypassedClass} ${selectedClass} ${missingClass}${thumbClass}"${thumbStyle} 
          data-node-id="${node.id}" 
          draggable="true" 
          tabindex="0">
