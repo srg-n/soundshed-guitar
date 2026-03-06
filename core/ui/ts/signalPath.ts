@@ -846,7 +846,7 @@ function renderNodeElement(node: GraphNode): string {
     resourceLabel = `<div class="node-resource">${resourceSummary}</div>`;
   }
 
-  // Use the layout thumbnail as a background image on the node card if available.
+  // Use the layout thumbnail as a small avatar at the top-left of the node if available.
   const blendId = (() => {
     const params = node.params as Record<string, unknown> | undefined;
     return typeof params?.blend === "string" ? params.blend : "";
@@ -855,16 +855,19 @@ function renderNodeElement(node: GraphNode): string {
     ? (getCustomLayout(node.type, blendId) ?? getCustomLayout(node.type))
     : getCustomLayout(node.type);
   const thumbUrl = nodeLayout?.thumbnailDataUrl ?? null;
-  const thumbStyle = thumbUrl ? ` style="background-image: url('${thumbUrl.replace(/'/g, "\\'")}')"`  : "";
+  const thumbAvatar = thumbUrl
+    ? `<img class="node-layout-thumb" src="${thumbUrl.replace(/"/g, "&quot;")}" alt="" aria-hidden="true" />` 
+    : "";
   const thumbClass = thumbUrl ? " has-thumb" : "";
 
   return `
-    <div class="signal-node ${categoryClass} ${bypassedClass} ${selectedClass} ${missingClass}${thumbClass}"${thumbStyle} 
+    <div class="signal-node ${categoryClass} ${bypassedClass} ${selectedClass} ${missingClass}${thumbClass}" 
          data-node-id="${node.id}" 
          draggable="true" 
          tabindex="0">
+      ${thumbAvatar}
       ${allowDelete ? '<button class="signal-node-delete" type="button" title="Remove" aria-label="Remove">×</button>' : ""}
-      <div class="node-icon">${icon}</div>
+      ${thumbUrl ? `<div class="node-icon"></div>` : `<div class="node-icon">${icon}</div>`}
       <div class="node-info">
         <div class="node-name">${displayName}</div>
         ${effectTypeName ? `<div class="node-type">${effectTypeName}</div>` : ""}
@@ -2868,18 +2871,18 @@ function showEffectSelectionDropdown(buttonElement: HTMLElement, edge: EdgeRef |
           <div class="effect-dropdown-category-name">
             ${getFxCategoryIcon(categoryId)} ${categoryInfo?.name || categoryId}
           </div>
-          ${effects.map(effect => `
+          ${effects.map(effect => { const thumb = getCustomLayout(effect.type)?.thumbnailDataUrl; const icon = thumb ? `<img src="${thumb.replace(/"/g, '&quot;')}" alt="" aria-hidden="true" class="effect-dropdown-thumb" />` : `<span class="effect-dropdown-icon">${getNodeIcon(effect.type)}</span>`; return `
             <div class="effect-dropdown-item" data-effect-type="${effect.type}">
-              <span class="effect-dropdown-icon">${getNodeIcon(effect.type)}</span>
+              ${icon}
               <span class="effect-dropdown-name">${effect.displayName}</span>
             </div>
-          `).join('')}
-          ${blendEntries.map((blend) => `
+          `; }).join('')}
+          ${blendEntries.map((blend) => { const layout = getCustomLayout(EffectGuids.kAmpNamBlend, blend.id) ?? getCustomLayout(EffectGuids.kAmpNamBlend); const thumb = layout?.thumbnailDataUrl; const icon = thumb ? `<img src="${thumb.replace(/"/g, '&quot;')}" alt="" aria-hidden="true" class="effect-dropdown-thumb" />` : `<span class="effect-dropdown-icon">${getBadgeIcon("blend", "Custom blend")}</span>`; return `
             <div class="effect-dropdown-item" data-effect-type="${EffectGuids.kAmpNamBlend}" data-blend-id="${blend.id}" data-blend-name="${escapeHtml(blend.name)}" data-blend-category="${blend.originalCategory}">
-              <span class="effect-dropdown-icon">${getBadgeIcon("blend", "Custom blend")}</span>
+              ${icon}
               <span class="effect-dropdown-name">${escapeHtml(blend.name)}</span>
             </div>
-          `).join('')}
+          `; }).join('')}
         </div>
       `;
     }

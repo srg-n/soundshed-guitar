@@ -11,6 +11,7 @@ import { uiState, setPresetDirty } from "./state.js";
 import { postMessage } from "./bridge.js";
 import { getBadgeIcon, getFxCategoryIcon, getFxEffectIcon } from "./iconAssets.js";
 import { getCompositeEffectEntries } from "./compositeEffects.js";
+import { getCustomLayout } from "./layoutRenderer.js";
 
 // DOM Elements
 const fxSelectorPanel = document.getElementById("fx-selector-panel");
@@ -254,7 +255,7 @@ function renderFxItem(effect: EffectTypeInfo, categoryColor: string, blendId?: s
           data-effect-category="${effect.category}"
          draggable="true"
          style="--category-color: ${categoryColor}">
-      <div class="fx-item-icon">${getFxEffectIcon(effect.type)}</div>
+      <div class="fx-item-icon">${(() => { const thumb = blendId ? (getCustomLayout(effect.type, blendId) ?? getCustomLayout(effect.type)) : getCustomLayout(effect.type); const url = thumb?.thumbnailDataUrl; return url ? `<img src="${url.replace(/"/g, '&quot;')}" alt="" aria-hidden="true" class="fx-item-thumb" />` : getFxEffectIcon(effect.type); })()}</div>
       <div class="fx-item-info">
         <div class="fx-item-name">${effect.displayName}</div>
         <div class="fx-item-type">${compositeId ? "composite" : effect.category}</div>

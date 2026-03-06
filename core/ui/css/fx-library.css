@@ -295,6 +295,15 @@
   display: block;
 }
 
+.fx-item-thumb {
+  width: 36px;
+  height: 26px;
+  object-fit: cover;
+  border-radius: 3px;
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
 .fx-item-info {
   flex: 1;
   min-width: 0;

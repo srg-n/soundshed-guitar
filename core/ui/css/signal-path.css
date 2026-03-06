@@ -323,33 +323,22 @@
   border-bottom: 6px solid transparent;
 }
 
-.signal-node.has-thumb {
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-}
-
-/* Scrim so text/icons remain legible over a thumbnail */
-.signal-node.has-thumb::after {
-  content: "";
+/* Layout thumbnail avatar — small card at top-left of node */
+.node-layout-thumb {
   position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: rgba(0, 0, 0, 0.52);
+  top: -8px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 3px;
+  opacity: 0.85;
   pointer-events: none;
-  z-index: 0;
-}
-
-/* Lift children above the scrim */
-.signal-node.has-thumb > * {
-  position: relative;
   z-index: 1;
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.signal-node.has-thumb .node-name,
-.signal-node.has-thumb .node-type,
-.signal-node.has-thumb .node-resource {
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+.signal-node.has-thumb {
+  /* extra padding on the left to make room for the avatar */
+  padding-left: 38px;
 }
 
 .signal-node.bypassed {
@@ -2076,6 +2065,16 @@
   width: 18px;
   height: 18px;
   display: block;
+}
+
+.effect-dropdown-thumb {
+  width: 36px;
+  height: 26px;
+  object-fit: cover;
+  border-radius: 3px;
+  display: block;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .effect-dropdown-name {
