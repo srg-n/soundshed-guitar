@@ -71,6 +71,8 @@ export class LayoutDesignerModal {
   private effectType = "";
   private blendId = "";
   private layout: EffectLayout | null = null;
+  private isFactoryLayout = false;
+  private isNewLayout = false;  // true for layouts never persisted to disk yet
   private paramDefs: ParameterDef[] = [];
   private resourceCandidates: LayoutResourceCandidate[] = [];
 
@@ -292,6 +294,50 @@ export class LayoutDesignerModal {
       this.layout = this.createDefaultLayout(effectType);
     }
 
+    // Ensure layoutId is always set at open time so images can reference it before save.
+    if (this.layout && !this.layout.layoutId) {
+      this.layout.layoutId = generateLayoutId();
+    }
+
+    // Determine whether this is a factory layout (read-only origin).
+    // If so, fork a new layoutId so it saves as a brand-new user layout.
+    const blendKey = (options?.blendId || "") ? layoutLookupKey(effectType, options?.blendId) : effectType;
+
+    // Look up the library entry by layoutId. Also fall back to the base effectType key:
+    // getCustomLayout() may return a non-blend layout as fallback for a blend context,
+    // which would cause a key mismatch and incorrectly set isNewLayout = true.
+    let libraryEntry = uiState.layoutLibrary?.byEffectType[blendKey]?.find(
+      (e) => e.layoutId === this.layout?.layoutId
+    );
+    if (!libraryEntry && blendKey !== effectType) {
+      libraryEntry = uiState.layoutLibrary?.byEffectType[effectType]?.find(
+        (e) => e.layoutId === this.layout?.layoutId
+      );
+    }
+
+    this.isFactoryLayout = libraryEntry?.isFactory === true;
+    this.isNewLayout = !libraryEntry || this.isFactoryLayout;
+
+    if (this.isFactoryLayout && this.layout) {
+      // Before forking, check if a non-factory user layout already exists for this key.
+      // If one does, redirect to editing it instead of creating yet another copy.
+      const existingUserEntry =
+        uiState.layoutLibrary?.byEffectType[blendKey]?.find(
+          (e) => !e.isFactory && e.isDefault
+        ) ??
+        uiState.layoutLibrary?.byEffectType[blendKey]?.find((e) => !e.isFactory);
+
+      if (existingUserEntry) {
+        // Redirect: open the existing user copy instead of forking again
+        this.layout = JSON.parse(JSON.stringify(existingUserEntry.layout));
+        this.isFactoryLayout = false;
+        this.isNewLayout = false;
+      } else {
+        // No user copy yet: fork a new one from this factory layout
+        this.layout.layoutId = generateLayoutId();
+      }
+    }
+
     if (this.layout && !Array.isArray(this.layout.overlays)) {
       this.layout.overlays = [];
     }
@@ -389,6 +435,19 @@ export class LayoutDesignerModal {
     }));
   }
 
+  /** Collect all image IDs referenced by the current layout. */
+  private collectReferencedImageIds(): string[] {
+    if (!this.layout) return [];
+    const ids = new Set<string>();
+    for (const bg of this.layout.backgrounds) {
+      if (bg.type === "image" && bg.value) ids.add(bg.value);
+    }
+    for (const control of this.layout.controls) {
+      if (control.style?.knobImageId) ids.add(control.style.knobImageId);
+    }
+    return Array.from(ids);
+  }
+
   private save(): void {
     if (!this.layout) return;
 
@@ -399,13 +458,23 @@ export class LayoutDesignerModal {
       this.layout.blendId = this.blendId;
     }
 
+    const isNewLayout = this.isNewLayout;
+    const referencedImageIds = isNewLayout ? this.collectReferencedImageIds() : [];
+
     // Send to plugin for persistence (include blendId for per-blend file naming)
     postMessage({
       type: "saveEffectLayout",
       effectType: this.effectType,
       blendId: this.blendId || undefined,
+      layoutId: this.layout.layoutId,
       layout: this.layout,
+      isNewLayout,
+      referencedImageIds,
     });
+
+    // After first save the layout is no longer new/factory
+    this.isNewLayout = false;
+    this.isFactoryLayout = false;
 
     this.persistLayoutLocally(this.layout);
 
@@ -468,11 +537,17 @@ export class LayoutDesignerModal {
       }
     }
 
-    // Build layout JSON for export (includes image manifest for reimport)
+    // Build layout JSON for export (includes image manifest for reimport).
+    // When useDefaultControls is true the controls array is redundant — strip it
+    // to keep the exported file clean.
+    const exportLayout = this.layout.useDefaultControls
+      ? { ...this.layout, controls: [] }
+      : this.layout;
+
     const exportData = {
       formatVersion: 1,
       createdAt: new Date().toISOString(),
-      layout: this.layout,
+      layout: exportLayout,
       images: imageManifest,
     };
 
@@ -585,6 +660,7 @@ export class LayoutDesignerModal {
             imageId: img.imageId,
             fileName: img.fileName,
             data: img.rawBase64,
+            layoutId: archive.layout.layoutId ?? "",
           });
         }
       }
@@ -2341,6 +2417,7 @@ export class LayoutDesignerModal {
       type: "browseLayoutImage",
       purpose: "background",
       layerIndex: layerIndex ?? (this.layout?.backgrounds.length || 0),
+      layoutId: this.layout?.layoutId ?? "",
     });
   }
 
@@ -2569,6 +2646,7 @@ export class LayoutDesignerModal {
       type: "browseLayoutImage",
       purpose: "knob",
       paramKey: control.paramKey,
+      layoutId: this.layout?.layoutId ?? "",
     });
   }
 

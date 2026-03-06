@@ -17,6 +17,7 @@ import {
   removeCompositePreset,
 } from "./bridge.js";
 import { showNotification } from "./notifications.js";
+import { showConfirm } from "./dialogs.js";
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
@@ -42,9 +43,10 @@ export function renderCompositePresetList(): void {
       loadCompositePreset(id);
     });
 
-    chip.querySelector(".composite-preset-remove-btn")?.addEventListener("click", (e) => {
+    chip.querySelector(".composite-preset-remove-btn")?.addEventListener("click", async (e) => {
       e.stopPropagation();
-      if (!confirm(`Remove Multi-Rig "${chip.dataset.name}"?`)) return;
+      const confirmed = await showConfirm(`Remove Multi-Rig "${chip.dataset.name}"?`, "Remove Multi-Rig");
+      if (!confirmed) return;
       removeCompositePreset(id);
     });
   });

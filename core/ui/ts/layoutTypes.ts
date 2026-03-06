@@ -201,6 +201,8 @@ export interface LayoutLibraryEntry {
   layoutId: string;
   /** File path where this layout is stored */
   filePath?: string;
+  /** True for layouts shipped with the application (read-only, cannot be deleted) */
+  isFactory?: boolean;
 }
 
 /** Complete layout library state */

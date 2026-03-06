@@ -485,6 +485,16 @@
   color: var(--text-secondary);
 }
 
+.layout-factory-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-primary, #5a9fd4);
+  opacity: 0.75;
+}
+
 .layout-list-actions {
   display: flex;
   gap: 4px;

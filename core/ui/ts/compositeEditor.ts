@@ -24,6 +24,7 @@ import { EffectTypeRegistry } from "./presetV2.js";
 import { postMessage } from "./bridge.js";
 import { showNotification } from "./notifications.js";
 import { appendLog } from "./logging.js";
+import { showConfirm } from "./dialogs.js";
 import {
   isCompositeEditMode,
   getCompositeEditDefinition,
@@ -163,7 +164,7 @@ export function renderCompositeList(): void {
   compositeList.querySelectorAll(".composite-delete-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       const id = (btn as HTMLElement).dataset.compositeId;
-      if (id) confirmDeleteComposite(id);
+      if (id) void confirmDeleteComposite(id);
     });
   });
 }
@@ -309,13 +310,13 @@ function saveCurrentComposite(saveAsNew: boolean): void {
   closeEditorUI();
 }
 
-function confirmDeleteComposite(id: string): void {
+async function confirmDeleteComposite(id: string): Promise<void> {
   const def = getCompositeDefinition(id);
   if (!def) return;
-  if (confirm(`Delete composite "${def.name}"? This cannot be undone.`)) {
-    deleteCompositeDefinition(id);
-    renderCompositeList();
-  }
+  const confirmed = await showConfirm(`Delete composite "${def.name}"? This cannot be undone.`, "Delete Composite");
+  if (!confirmed) return;
+  deleteCompositeDefinition(id);
+  renderCompositeList();
 }
 
 // ─────────────────────────────────────────────────────────────

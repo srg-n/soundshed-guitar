@@ -12,6 +12,7 @@ import { layoutDesigner } from "./layoutDesigner.js";
 import { postMessage } from "./bridge.js";
 import { showNotification } from "./notifications.js";
 import { appendLog } from "./logging.js";
+import { showConfirm } from "./dialogs.js";
 import type { LayoutLibraryEntry, EffectLayout } from "./layoutTypes.js";
 
 // ─────────────────────────────────────────────────────────────
@@ -91,6 +92,7 @@ export function renderLayoutList(): void {
       const effectName = typeInfo?.displayName || layout.effectType;
       const layoutName = layout.name || "(Unnamed)";
       const isDefault = entry.isDefault;
+      const isFactory = entry.isFactory === true;
       const blendLabel = layout.blendId ? ` — blend: ${layout.blendId}` : "";
       const controlCount = layout.controls.length;
       const dims = layout.dimensions;
@@ -102,12 +104,15 @@ export function renderLayoutList(): void {
           <span class="layout-list-meta">
             ${escHtml(effectName)}${escHtml(blendLabel)} · ${controlCount} controls · ${dims.width}×${dims.height}
             ${isDefault ? ' · <strong>Default</strong>' : ""}
+            ${isFactory ? ' · <span class="layout-factory-badge">Factory</span>' : ""}
           </span>
           ${layout.author ? `<span class="layout-list-author">by ${escHtml(layout.author)}</span>` : ""}
         </div>
         <div class="layout-list-actions">
           <button class="layout-edit-btn advanced-action-btn" data-layout-key="${escAttr(key)}" data-layout-id="${escAttr(entry.layoutId)}" data-effect-type="${escAttr(layout.effectType)}" data-blend-id="${escAttr(layout.blendId ?? "")}" title="Edit in designer">Edit</button>
-          <button class="layout-delete-btn advanced-action-btn danger" data-layout-key="${escAttr(key)}" data-layout-id="${escAttr(entry.layoutId)}" title="Delete layout">Delete</button>
+          ${isFactory
+            ? ""
+            : `<button class="layout-delete-btn advanced-action-btn danger" data-layout-key="${escAttr(key)}" data-layout-id="${escAttr(entry.layoutId)}" title="Delete layout">Delete</button>`}
         </div>
       </div>`;
     })
@@ -127,10 +132,11 @@ export function renderLayoutList(): void {
 
   layoutList.querySelectorAll(".layout-delete-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const el = btn as HTMLElement;
+      const el = btn as HTMLButtonElement;
+      if (el.disabled) return;
       const key = el.dataset.layoutKey ?? "";
       const layoutId = el.dataset.layoutId ?? "";
-      confirmDeleteLayout(key, layoutId);
+      void confirmDeleteLayout(key, layoutId);
     });
   });
 }
@@ -161,16 +167,18 @@ function openLayoutInDesigner(
   });
 }
 
-function confirmDeleteLayout(key: string, layoutId: string): void {
+async function confirmDeleteLayout(key: string, layoutId: string): Promise<void> {
   const library = uiState.layoutLibrary;
   if (!library) return;
 
   const entries = library.byEffectType[key] ?? [];
   const entry = entries.find((e) => e.layoutId === layoutId);
   if (!entry) return;
+  if (entry.isFactory) return; // factory layouts are read-only
 
   const name = entry.layout.name || entry.layout.effectType;
-  if (!confirm(`Delete layout "${name}"?`)) return;
+  const confirmed = await showConfirm(`Delete layout "${name}"?`, "Delete Layout");
+  if (!confirmed) return;
 
   // Send delete request to engine
   postMessage({
@@ -183,7 +191,10 @@ function confirmDeleteLayout(key: string, layoutId: string): void {
   // Optimistically remove from local state
   library.byEffectType[key] = entries.filter((e) => e.layoutId !== layoutId);
   if (library.defaults[key] === layoutId) {
-    const nextDefault = library.byEffectType[key]?.[0]?.layoutId;
+    // Prefer a non-factory entry as the new default
+    const nextDefault =
+      library.byEffectType[key]?.find((e) => !e.isFactory)?.layoutId ??
+      library.byEffectType[key]?.[0]?.layoutId;
     if (nextDefault) {
       library.defaults[key] = nextDefault;
       library.byEffectType[key].forEach((e) => {
