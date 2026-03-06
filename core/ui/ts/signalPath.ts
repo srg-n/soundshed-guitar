@@ -82,6 +82,7 @@ const EFFECT_VISUAL_BACKGROUNDS: Record<string, string> = {
 
 layoutDesigner.onClose(() => {
   refreshSelectedNodeParams();
+  renderSignalPathBar();
 });
 
 function updateEffectVisualization(node?: GraphNode): void {

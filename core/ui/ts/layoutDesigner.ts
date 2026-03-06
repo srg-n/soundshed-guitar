@@ -988,6 +988,7 @@ export class LayoutDesignerModal {
     this.renderTextLabels();
   }
 
+
   private renderRuntimePreview(): void {
     if (!this.controlsLayer || !this.layout) return;
 
@@ -1661,8 +1662,8 @@ export class LayoutDesignerModal {
           <span class="layout-property-label">Size Mode</span>
           <div class="layout-property-input">
             <select id="prop-bg-size">
-              <option value="cover" ${bg.size === "cover" || !bg.size ? "selected" : ""}>Cover</option>
-              <option value="contain" ${bg.size === "contain" ? "selected" : ""}>Contain</option>
+              <option value="cover" ${bg.size === "cover" ? "selected" : ""}>Cover</option>
+              <option value="contain" ${bg.size === "contain" || !bg.size ? "selected" : ""}>Contain</option>
               <option value="stretch" ${bg.size === "stretch" ? "selected" : ""}>Stretch</option>
               <option value="tile" ${bg.size === "tile" ? "selected" : ""}>Tile</option>
               <option value="custom" ${bg.size === "custom" ? "selected" : ""}>Custom Scale</option>
@@ -2500,7 +2501,7 @@ export class LayoutDesignerModal {
       type: "image",
       value: imageId,
       opacity: 1,
-      size: "cover",
+      size: "contain",
     };
 
     if (existingIndex >= 0) {
