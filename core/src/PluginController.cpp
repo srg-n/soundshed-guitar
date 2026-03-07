@@ -2485,7 +2485,8 @@ void PluginController::HandleUpdateSignalPathNodeBypassRequest(const nlohmann::j
     bool enabled = payload.value("enabled", true);
     if (payload.contains("bypassed"))
         enabled = !payload.value("bypassed", false);
-    std::string presetId = payload.value("presetId", "p1");
+    const std::string fallbackId = mActivePresetId.empty() ? "p1" : mActivePresetId;
+    std::string presetId = payload.value("presetId", fallbackId);
 
     auto* graph = ResolveEditTarget();
     if (!graph) return;
@@ -5175,7 +5176,8 @@ void PluginController::HandleSetGlobalChainRequest(const nlohmann::json& payload
 
 void PluginController::HandleSetNodeEnabledRequest(const nlohmann::json& payload)
 {
-    std::string presetId = payload.value("presetId", "p1");
+    const std::string fallbackId = mActivePresetId.empty() ? "p1" : mActivePresetId;
+    std::string presetId = payload.value("presetId", fallbackId);
     std::string nodeId = payload.value("nodeId", "");
     bool enabled = payload.value("enabled", true);
     mPresetMixer.SetNodeEnabled(presetId, nodeId, enabled);
