@@ -514,7 +514,10 @@ namespace guitarfx
               // Check if this input is muted
               if (mixerEffect->IsInputMuted(inputPort))
               {
-                // Skip muted inputs
+                // Mark mixer as connected (outputs silence) so downstream
+                // nodes receive the zeroed buffer rather than leaving the
+                // host output buffer unwritten (which causes a repeating tone).
+                state->hasInput = true;
                 continue;
               }
 

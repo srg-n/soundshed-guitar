@@ -45,7 +45,7 @@ namespace guitarfx
     if (irSamples.size() <= kDirectConvolutionThreshold)
     {
       mDirectIR = irSamples;
-      mDirectHistory.assign(irSamples.size(), 0.0);
+      mDirectHistory.assign(irSamples.size(), 0.0f);
       mDirectHistoryPos = 0;
       mUseDirectConvolution = true;
       mInitialized = true;
@@ -83,7 +83,7 @@ namespace guitarfx
     for (size_t p = 0; p < mNumPartitions; ++p)
     {
       // Clear input buffer
-      std::fill(mFFTInputBuffer.begin(), mFFTInputBuffer.end(), std::complex<double>(0.0, 0.0));
+      std::fill(mFFTInputBuffer.begin(), mFFTInputBuffer.end(), std::complex<float>(0.0f, 0.0f));
 
       // Copy IR partition into FIRST half
       const size_t irStart = p * mPartitionSize;
@@ -91,7 +91,7 @@ namespace guitarfx
 
       for (size_t i = irStart; i < irEnd; ++i)
       {
-        mFFTInputBuffer[i - irStart] = std::complex<double>(irSamples[i], 0.0);
+        mFFTInputBuffer[i - irStart] = std::complex<float>(irSamples[i], 0.0f);
       }
 
       // Compute and store FFT
@@ -103,24 +103,24 @@ namespace guitarfx
     mInputFFTDelayLine.resize(mNumPartitions);
     for (auto &fft : mInputFFTDelayLine)
     {
-      fft.assign(mFFTSize, std::complex<double>(0.0, 0.0));
+      fft.assign(mFFTSize, std::complex<float>(0.0f, 0.0f));
     }
     mDelayLineIndex = 0;
 
     // Allocate I/O buffers
-    mInputBuffer.assign(mPartitionSize, 0.0);
-    mOutputBuffer.assign(mPartitionSize, 0.0);
+    mInputBuffer.assign(mPartitionSize, 0.0f);
+    mOutputBuffer.assign(mPartitionSize, 0.0f);
     mInputBufferPos = 0;
     mOutputBufferReadPos = mPartitionSize; // Start empty
 
     // Previous input block for overlap-save (needed for proper convolution)
-    mPreviousInputBlock.assign(mPartitionSize, 0.0);
+    mPreviousInputBlock.assign(mPartitionSize, 0.0f);
 
     mInitialized = true;
     return true;
   }
 
-  void RealtimeConvolver::ProcessDirect(const double *input, double *output, int numSamples)
+  void RealtimeConvolver::ProcessDirect(const float *input, float *output, int numSamples)
   {
     const size_t irLen = mDirectIR.size();
 
@@ -130,12 +130,12 @@ namespace guitarfx
       mDirectHistory[mDirectHistoryPos] = input[i];
 
       // Direct FIR convolution: output[n] = sum(input[n-k] * ir[k])
-      double sum = 0.0;
+      float sum = 0.0f;
       for (size_t k = 0; k < irLen; ++k)
       {
         // Calculate index into circular history buffer
         size_t histIdx = (mDirectHistoryPos + irLen - k) % irLen;
-        sum += mDirectHistory[histIdx] * static_cast<double>(mDirectIR[k]);
+        sum += mDirectHistory[histIdx] * mDirectIR[k];
       }
       output[i] = sum;
 
@@ -150,8 +150,8 @@ namespace guitarfx
     // This is the correct overlap-save arrangement for linear convolution
     for (size_t i = 0; i < mPartitionSize; ++i)
     {
-      mFFTInputBuffer[i] = std::complex<double>(mPreviousInputBlock[i], 0.0);
-      mFFTInputBuffer[mPartitionSize + i] = std::complex<double>(mInputBuffer[i], 0.0);
+      mFFTInputBuffer[i]              = std::complex<float>(static_cast<float>(mPreviousInputBlock[i]), 0.0f);
+      mFFTInputBuffer[mPartitionSize + i] = std::complex<float>(static_cast<float>(mInputBuffer[i]),  0.0f);
     }
 
     // Save current input for next block
@@ -187,23 +187,21 @@ namespace guitarfx
     // Overlap-Save output extraction:
     // The first N samples contain circular convolution artifacts - DISCARD them
     // The last N samples are the valid linear convolution result - KEEP them
-    const double scale = 1.0 / static_cast<double>(mFFTSize);
+    const float scale = 1.0f / static_cast<float>(mFFTSize);
 
     for (size_t i = 0; i < mPartitionSize; ++i)
     {
       // Keep only the SECOND half of the IFFT output (valid linear convolution)
-      double sample = mFFTInputBuffer[mPartitionSize + i].real() * scale;
+      float sample = mFFTInputBuffer[mPartitionSize + i].real() * scale;
 
       // Safety: clamp to reasonable audio range to prevent numeric instability
-      // This protects against FFT/accumulator overflow in edge cases
       if (std::isnan(sample) || std::isinf(sample))
       {
-        sample = 0.0;
+        sample = 0.0f;
       }
       else
       {
-        // Clamp to ±100.0 (extremely loud but still within double precision range)
-        sample = std::clamp(sample, -100.0, 100.0);
+        sample = std::clamp(sample, -100.0f, 100.0f);
       }
 
       mOutputBuffer[i] = sample;
@@ -212,7 +210,7 @@ namespace guitarfx
     mOutputBufferReadPos = 0;
   }
 
-  void RealtimeConvolver::Process(const double *input, double *output, int numSamples)
+  void RealtimeConvolver::Process(const float *input, float *output, int numSamples)
   {
     if (!mInitialized || !input || !output || numSamples <= 0)
     {
@@ -263,7 +261,7 @@ namespace guitarfx
     // Reset direct convolution state
     if (mUseDirectConvolution)
     {
-      std::fill(mDirectHistory.begin(), mDirectHistory.end(), 0.0);
+      std::fill(mDirectHistory.begin(), mDirectHistory.end(), 0.0f);
       mDirectHistoryPos = 0;
       return;
     }
@@ -276,9 +274,9 @@ namespace guitarfx
     mDelayLineIndex = 0;
 
     // Clear buffers
-    std::fill(mInputBuffer.begin(), mInputBuffer.end(), 0.0);
-    std::fill(mOutputBuffer.begin(), mOutputBuffer.end(), 0.0);
-    std::fill(mPreviousInputBlock.begin(), mPreviousInputBlock.end(), 0.0);
+    std::fill(mInputBuffer.begin(), mInputBuffer.end(), 0.0f);
+    std::fill(mOutputBuffer.begin(), mOutputBuffer.end(), 0.0f);
+    std::fill(mPreviousInputBlock.begin(), mPreviousInputBlock.end(), 0.0f);
     mInputBufferPos = 0;
     mOutputBufferReadPos = mPartitionSize;
   }

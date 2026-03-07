@@ -121,7 +121,7 @@ namespace guitarfx
      * @param output Complex output (size mSize)
      * @param input Complex input (size mSize)
      */
-    void Forward(std::complex<double> *output, const std::complex<double> *input) const
+    void Forward(std::complex<float> *output, const std::complex<float> *input) const
     {
       // Convert to interleaved format and apply bit reversal
       for (size_t i = 0; i < mSize; ++i)
@@ -137,7 +137,7 @@ namespace guitarfx
       // Convert back to std::complex format
       for (size_t i = 0; i < mSize; ++i)
       {
-        output[i] = std::complex<double>(mWorkBuffer[i * 2], mWorkBuffer[i * 2 + 1]);
+        output[i] = std::complex<float>(mWorkBuffer[i * 2], mWorkBuffer[i * 2 + 1]);
       }
     }
 
@@ -145,7 +145,7 @@ namespace guitarfx
      * Inverse FFT: frequency domain -> time domain
      * Note: Output is NOT scaled - caller must scale by 1/N
      */
-    void Inverse(std::complex<double> *output, const std::complex<double> *input) const
+    void Inverse(std::complex<float> *output, const std::complex<float> *input) const
     {
       // Convert to interleaved format and apply bit reversal
       for (size_t i = 0; i < mSize; ++i)
@@ -161,7 +161,7 @@ namespace guitarfx
       // Convert back to std::complex format
       for (size_t i = 0; i < mSize; ++i)
       {
-        output[i] = std::complex<double>(mWorkBuffer[i * 2], mWorkBuffer[i * 2 + 1]);
+        output[i] = std::complex<float>(mWorkBuffer[i * 2], mWorkBuffer[i * 2 + 1]);
       }
     }
 
@@ -171,64 +171,58 @@ namespace guitarfx
      * This is the hottest path in partitioned convolution.
      */
     static void ComplexMultiplyAccumulate(
-        std::complex<double> *acc,
-        const std::complex<double> *a,
-        const std::complex<double> *b,
+        std::complex<float> *acc,
+        const std::complex<float> *a,
+        const std::complex<float> *b,
         size_t count)
     {
   #if defined(GUITARFX_ARCH_X86)
-      // Process 2 complex numbers at a time using SSE2
-      // Each complex = 2 doubles, so we process 4 doubles = 2 __m128d
+      // SSE3 path: process 4 complex<float> per iteration (2x __m128).
+      // Layout: [re0, im0, re1, im1] per register.
+      // Complex multiply: (ar+ai*j)(br+bi*j) = (ar*br-ai*bi) + (ar*bi+ai*br)*j
+      // Using MOVELDUP/MOVEHDUP (SSE3) + ADDSUB (SSE3).
 
-      const double *pa = reinterpret_cast<const double *>(a);
-      const double *pb = reinterpret_cast<const double *>(b);
-      double *pacc = reinterpret_cast<double *>(acc);
+      const float *pa = reinterpret_cast<const float *>(a);
+      const float *pb = reinterpret_cast<const float *>(b);
+      float *pacc = reinterpret_cast<float *>(acc);
 
       size_t i = 0;
 
-      // SSE2 path - process 2 complex numbers at a time
-      for (; i + 1 < count; i += 2)
+      // Process 4 complex floats at a time (2x __m128)
+      for (; i + 3 < count; i += 4)
       {
-        // Load a[i] and a[i+1]: [a0r, a0i, a1r, a1i]
-        __m128d a0 = _mm_loadu_pd(pa + i * 2);     // [a0r, a0i]
-        __m128d a1 = _mm_loadu_pd(pa + i * 2 + 2); // [a1r, a1i]
+        __m128 a0 = _mm_loadu_ps(pa + i * 2);       // [a0r,a0i,a1r,a1i]
+        __m128 a1 = _mm_loadu_ps(pa + i * 2 + 4);   // [a2r,a2i,a3r,a3i]
+        __m128 b0 = _mm_loadu_ps(pb + i * 2);
+        __m128 b1 = _mm_loadu_ps(pb + i * 2 + 4);
 
-        // Load b[i] and b[i+1]
-        __m128d b0 = _mm_loadu_pd(pb + i * 2);     // [b0r, b0i]
-        __m128d b1 = _mm_loadu_pd(pb + i * 2 + 2); // [b1r, b1i]
+        __m128 ar0 = _mm_moveldup_ps(a0);                               // [a0r,a0r,a1r,a1r]
+        __m128 ai0 = _mm_movehdup_ps(a0);                               // [a0i,a0i,a1i,a1i]
+        __m128 bs0 = _mm_shuffle_ps(b0, b0, _MM_SHUFFLE(2,3,0,1));     // [b0i,b0r,b1i,b1r]
+        __m128 r0  = _mm_addsub_ps(_mm_mul_ps(ar0, b0), _mm_mul_ps(ai0, bs0));
 
-        // Complex multiply: (ar + ai*j)(br + bi*j) = (ar*br - ai*bi) + (ar*bi + ai*br)*j
+        __m128 ar1 = _mm_moveldup_ps(a1);
+        __m128 ai1 = _mm_movehdup_ps(a1);
+        __m128 bs1 = _mm_shuffle_ps(b1, b1, _MM_SHUFFLE(2,3,0,1));
+        __m128 r1  = _mm_addsub_ps(_mm_mul_ps(ar1, b1), _mm_mul_ps(ai1, bs1));
 
-        // For a0*b0:
-        __m128d a0r = _mm_unpacklo_pd(a0, a0);       // [a0r, a0r]
-        __m128d a0i = _mm_unpackhi_pd(a0, a0);       // [a0i, a0i]
-        __m128d b0_swap = _mm_shuffle_pd(b0, b0, 1); // [b0i, b0r]
-
-        __m128d prod0_r = _mm_mul_pd(a0r, b0);             // [a0r*b0r, a0r*b0i]
-        __m128d prod0_i = _mm_mul_pd(a0i, b0_swap);        // [a0i*b0i, a0i*b0r]
-        __m128d result0 = _mm_addsub_pd(prod0_r, prod0_i); // [a0r*b0r - a0i*b0i, a0r*b0i + a0i*b0r]
-
-        // For a1*b1:
-        __m128d a1r = _mm_unpacklo_pd(a1, a1);
-        __m128d a1i = _mm_unpackhi_pd(a1, a1);
-        __m128d b1_swap = _mm_shuffle_pd(b1, b1, 1);
-
-        __m128d prod1_r = _mm_mul_pd(a1r, b1);
-        __m128d prod1_i = _mm_mul_pd(a1i, b1_swap);
-        __m128d result1 = _mm_addsub_pd(prod1_r, prod1_i);
-
-        // Accumulate
-        __m128d acc0 = _mm_loadu_pd(pacc + i * 2);
-        __m128d acc1 = _mm_loadu_pd(pacc + i * 2 + 2);
-
-        acc0 = _mm_add_pd(acc0, result0);
-        acc1 = _mm_add_pd(acc1, result1);
-
-        _mm_storeu_pd(pacc + i * 2, acc0);
-        _mm_storeu_pd(pacc + i * 2 + 2, acc1);
+        _mm_storeu_ps(pacc + i * 2,     _mm_add_ps(_mm_loadu_ps(pacc + i * 2),     r0));
+        _mm_storeu_ps(pacc + i * 2 + 4, _mm_add_ps(_mm_loadu_ps(pacc + i * 2 + 4), r1));
       }
 
-      // Handle remaining element
+      // Handle remaining pairs (2 complex floats)
+      for (; i + 1 < count; i += 2)
+      {
+        __m128 av = _mm_loadu_ps(pa + i * 2);                           // [a0r,a0i,a1r,a1i]
+        __m128 bv = _mm_loadu_ps(pb + i * 2);
+        __m128 ar = _mm_moveldup_ps(av);
+        __m128 ai = _mm_movehdup_ps(av);
+        __m128 bs = _mm_shuffle_ps(bv, bv, _MM_SHUFFLE(2,3,0,1));
+        __m128 r  = _mm_addsub_ps(_mm_mul_ps(ar, bv), _mm_mul_ps(ai, bs));
+        _mm_storeu_ps(pacc + i * 2, _mm_add_ps(_mm_loadu_ps(pacc + i * 2), r));
+      }
+
+      // Scalar remainder
       for (; i < count; ++i)
       {
         acc[i] += a[i] * b[i];
@@ -244,30 +238,30 @@ namespace guitarfx
     /**
      * SIMD-optimized buffer clear
      */
-    static void ClearBuffer(std::complex<double> *buffer, size_t count)
+    static void ClearBuffer(std::complex<float> *buffer, size_t count)
     {
-      double *p = reinterpret_cast<double *>(buffer);
-      const size_t doubleCount = count * 2;
+      float *p = reinterpret_cast<float *>(buffer);
+      const size_t floatCount = count * 2;
 
 #if defined(GUITARFX_ARCH_X86)
-      __m128d zero = _mm_setzero_pd();
+      const __m128 zero = _mm_setzero_ps();
 
       size_t i = 0;
-      for (; i + 8 <= doubleCount; i += 8)
+      for (; i + 16 <= floatCount; i += 16)
       {
-        _mm_storeu_pd(p + i, zero);
-        _mm_storeu_pd(p + i + 2, zero);
-        _mm_storeu_pd(p + i + 4, zero);
-        _mm_storeu_pd(p + i + 6, zero);
+        _mm_storeu_ps(p + i,      zero);
+        _mm_storeu_ps(p + i + 4,  zero);
+        _mm_storeu_ps(p + i + 8,  zero);
+        _mm_storeu_ps(p + i + 12, zero);
       }
-      for (; i < doubleCount; ++i)
+      for (; i < floatCount; ++i)
       {
-        p[i] = 0.0;
+        p[i] = 0.0f;
       }
 #else
-      for (size_t i = 0; i < doubleCount; ++i)
+      for (size_t i = 0; i < floatCount; ++i)
       {
-        p[i] = 0.0;
+        p[i] = 0.0f;
       }
 #endif
     }
@@ -275,19 +269,19 @@ namespace guitarfx
     [[nodiscard]] size_t GetSize() const noexcept { return mSize; }
 
   private:
-    static double *AllocateAligned(size_t count)
+    static float *AllocateAligned(size_t count)
     {
 #ifdef _MSC_VER
-      return static_cast<double *>(_aligned_malloc(count * sizeof(double), SIMD_ALIGN));
+      return static_cast<float *>(_aligned_malloc(count * sizeof(float), SIMD_ALIGN));
 #else
       void *ptr = nullptr;
-      if (posix_memalign(&ptr, SIMD_ALIGN, count * sizeof(double)) != 0)
+      if (posix_memalign(&ptr, SIMD_ALIGN, count * sizeof(float)) != 0)
         return nullptr;
-      return static_cast<double *>(ptr);
+      return static_cast<float *>(ptr);
 #endif
     }
 
-    static void FreeAligned(double *ptr)
+    static void FreeAligned(float *ptr)
     {
       if (ptr)
       {
@@ -313,12 +307,12 @@ namespace guitarfx
         mTwiddleSizes[stage - 1] = halfM;
         mTwiddleBuffers[stage - 1] = AllocateAligned(halfM * 2);
 
-        const double angleStep = -2.0 * M_PI / static_cast<double>(m);
+        const float angleStep = static_cast<float>(-2.0 * M_PI / static_cast<double>(m));
 
         for (size_t j = 0; j < halfM; ++j)
         {
-          const double angle = angleStep * static_cast<double>(j);
-          mTwiddleBuffers[stage - 1][j * 2] = std::cos(angle);
+          const float angle = angleStep * static_cast<float>(j);
+          mTwiddleBuffers[stage - 1][j * 2]     = std::cos(angle);
           mTwiddleBuffers[stage - 1][j * 2 + 1] = std::sin(angle);
         }
       }
@@ -340,15 +334,15 @@ namespace guitarfx
       }
     }
 
-    void FFTCore(double *data, bool inverse) const
+    void FFTCore(float *data, bool inverse) const
     {
-      // Cooley-Tukey iterative FFT with SIMD butterflies
+      // Cooley-Tukey iterative FFT with SIMD butterflies (float/SSE3)
       for (size_t stage = 1; stage <= mLog2Size; ++stage)
       {
         const size_t m = size_t{1} << stage;
         const size_t halfM = m >> 1;
-        const double *twiddles = mTwiddleBuffers[stage - 1];
-        const double invSign = inverse ? -1.0 : 1.0;
+        const float *twiddles = mTwiddleBuffers[stage - 1];
+        const float invSign = inverse ? -1.0f : 1.0f;
 
         for (size_t k = 0; k < mSize; k += m)
         {
@@ -356,88 +350,60 @@ namespace guitarfx
           size_t j = 0;
 
 #if defined(GUITARFX_ARCH_X86)
-          // Process pairs of butterflies using SSE2
+          // SSE3: process 2 butterflies per iteration using one __m128 per pair.
+          // idx0 and idx1=idx0+2 are adjacent; idx0h and idx1h=idx0h+2 are adjacent,
+          // so we can load/store 2 complex floats in a single 128-bit op.
           for (; j + 1 < halfM; j += 2)
           {
-            const size_t idx0 = (k + j) * 2;
-            const size_t idx1 = (k + j + 1) * 2;
+            const size_t idx0  = (k + j) * 2;
             const size_t idx0h = (k + j + halfM) * 2;
-            const size_t idx1h = (k + j + 1 + halfM) * 2;
 
-            // Load twiddle factors
-            __m128d tw0 = _mm_loadu_pd(twiddles + j * 2);     // [wr0, wi0]
-            __m128d tw1 = _mm_loadu_pd(twiddles + j * 2 + 2); // [wr1, wi1]
+            // Load twiddles for butterfly j and j+1: [wr0,wi0,wr1,wi1]
+            __m128 tw = _mm_loadu_ps(twiddles + j * 2);
 
-            // Apply inverse sign to imaginary part if needed
+            // Negate imaginary parts of twiddle for inverse FFT: [wr0,-wi0,wr1,-wi1]
             if (inverse)
             {
-              __m128d signMask = _mm_set_pd(-1.0, 1.0);
-              tw0 = _mm_mul_pd(tw0, signMask);
-              tw1 = _mm_mul_pd(tw1, signMask);
+              const __m128 signMask = _mm_set_ps(-1.0f, 1.0f, -1.0f, 1.0f);
+              tw = _mm_mul_ps(tw, signMask);
             }
 
-            // Load u and t values
-            __m128d u0 = _mm_loadu_pd(data + idx0);  // [ur0, ui0]
-            __m128d t0 = _mm_loadu_pd(data + idx0h); // [tr0, ti0]
-            __m128d u1 = _mm_loadu_pd(data + idx1);
-            __m128d t1 = _mm_loadu_pd(data + idx1h);
+            // Load t = [tr0,ti0,tr1,ti1] and u = [ur0,ui0,ur1,ui1]
+            __m128 t = _mm_loadu_ps(data + idx0h);
+            __m128 u = _mm_loadu_ps(data + idx0);
 
-            // Complex multiply t * twiddle
-            // (tr + ti*j)(wr + wi*j) = (tr*wr - ti*wi) + (tr*wi + ti*wr)*j
+            // Complex multiply t * tw for both pairs using MOVELDUP/MOVEHDUP (SSE3)
+            __m128 tr = _mm_moveldup_ps(t);                           // [tr0,tr0,tr1,tr1]
+            __m128 ti = _mm_movehdup_ps(t);                           // [ti0,ti0,ti1,ti1]
+            __m128 tw_swap = _mm_shuffle_ps(tw, tw, _MM_SHUFFLE(2,3,0,1)); // [wi0,wr0,wi1,wr1]
+            __m128 twt = _mm_addsub_ps(_mm_mul_ps(tr, tw), _mm_mul_ps(ti, tw_swap));
 
-            // For t0 * tw0:
-            __m128d tr0 = _mm_unpacklo_pd(t0, t0);          // [tr0, tr0]
-            __m128d ti0 = _mm_unpackhi_pd(t0, t0);          // [ti0, ti0]
-            __m128d tw0_swap = _mm_shuffle_pd(tw0, tw0, 1); // [wi0, wr0]
-
-            __m128d prod0_r = _mm_mul_pd(tr0, tw0);         // [tr0*wr0, tr0*wi0]
-            __m128d prod0_i = _mm_mul_pd(ti0, tw0_swap);    // [ti0*wi0, ti0*wr0]
-            __m128d twt0 = _mm_addsub_pd(prod0_r, prod0_i); // [tr*wr - ti*wi, tr*wi + ti*wr]
-
-            // For t1 * tw1:
-            __m128d tr1 = _mm_unpacklo_pd(t1, t1);
-            __m128d ti1 = _mm_unpackhi_pd(t1, t1);
-            __m128d tw1_swap = _mm_shuffle_pd(tw1, tw1, 1);
-
-            __m128d prod1_r = _mm_mul_pd(tr1, tw1);
-            __m128d prod1_i = _mm_mul_pd(ti1, tw1_swap);
-            __m128d twt1 = _mm_addsub_pd(prod1_r, prod1_i);
-
-            // Butterfly: y[k+j] = u + twt, y[k+j+halfM] = u - twt
-            __m128d y0_lo = _mm_add_pd(u0, twt0);
-            __m128d y0_hi = _mm_sub_pd(u0, twt0);
-            __m128d y1_lo = _mm_add_pd(u1, twt1);
-            __m128d y1_hi = _mm_sub_pd(u1, twt1);
-
-            _mm_storeu_pd(data + idx0, y0_lo);
-            _mm_storeu_pd(data + idx0h, y0_hi);
-            _mm_storeu_pd(data + idx1, y1_lo);
-            _mm_storeu_pd(data + idx1h, y1_hi);
+            // Butterfly: lo = u+twt, hi = u-twt
+            _mm_storeu_ps(data + idx0,  _mm_add_ps(u, twt));
+            _mm_storeu_ps(data + idx0h, _mm_sub_ps(u, twt));
           }
 #endif
 
           // Handle remaining butterfly (if halfM is odd)
           for (; j < halfM; ++j)
           {
-            const size_t idx = (k + j) * 2;
+            const size_t idx  = (k + j) * 2;
             const size_t idxh = (k + j + halfM) * 2;
 
-            const double wr = twiddles[j * 2];
-            const double wi = twiddles[j * 2 + 1] * invSign;
+            const float wr = twiddles[j * 2];
+            const float wi = twiddles[j * 2 + 1] * invSign;
 
-            const double ur = data[idx];
-            const double ui = data[idx + 1];
-            const double tr = data[idxh];
-            const double ti = data[idxh + 1];
+            const float ur = data[idx];
+            const float ui = data[idx + 1];
+            const float tr = data[idxh];
+            const float ti = data[idxh + 1];
 
-            // t * twiddle
-            const double twr = tr * wr - ti * wi;
-            const double twi = tr * wi + ti * wr;
+            const float twr = tr * wr - ti * wi;
+            const float twi = tr * wi + ti * wr;
 
-            // Butterfly
-            data[idx] = ur + twr;
+            data[idx]     = ur + twr;
             data[idx + 1] = ui + twi;
-            data[idxh] = ur - twr;
+            data[idxh]    = ur - twr;
             data[idxh + 1] = ui - twi;
           }
         }
@@ -446,9 +412,9 @@ namespace guitarfx
 
     size_t mSize;
     size_t mLog2Size;
-    mutable double *mWorkBuffer;
+    mutable float *mWorkBuffer;
     std::vector<size_t> mTwiddleSizes;
-    std::vector<double *> mTwiddleBuffers;
+    std::vector<float *> mTwiddleBuffers;
     std::vector<size_t> mBitReversed;
   };
 

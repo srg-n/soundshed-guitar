@@ -83,8 +83,8 @@ namespace guitarfx
 
       for (int i = 0; i < numSamples; ++i)
       {
-        mInputBufferL[i] = inputs[0] ? inputs[0][i] : 0.0;
-        mInputBufferR[i] = inputs[1] ? inputs[1][i] : (inputs[0] ? inputs[0][i] : 0.0);
+        mInputBufferL[i] = inputs[0] ? inputs[0][i] : 0.0f;
+        mInputBufferR[i] = inputs[1] ? inputs[1][i] : (inputs[0] ? inputs[0][i] : 0.0f);
       }
 
       mConvolverLL.Process(mInputBufferL.data(), mOutputBufferLL.data(), numSamples);
@@ -106,8 +106,8 @@ namespace guitarfx
         const float dryL = inputs[0] ? inputs[0][i] : 0.0f;
         const float dryR = inputs[1] ? inputs[1][i] : dryL;
 
-        float wetL = static_cast<float>(mOutputBufferLL[i] + (mHasTrueStereo ? mOutputBufferLR[i] : 0.0));
-        float wetR = static_cast<float>(mOutputBufferRR[i] + (mHasTrueStereo ? mOutputBufferRL[i] : 0.0));
+        float wetL = static_cast<float>(mOutputBufferLL[i] + (mHasTrueStereo ? mOutputBufferLR[i] : 0.0f));
+        float wetR = static_cast<float>(mOutputBufferRR[i] + (mHasTrueStereo ? mOutputBufferRL[i] : 0.0f));
 
         if (toneCoef < 1.0f)
         {
@@ -466,16 +466,16 @@ namespace guitarfx
     std::uint16_t mIRChannels = 0;
     bool mHasTrueStereo = false;
 
-    std::vector<double> mInputBufferL;
-    std::vector<double> mInputBufferR;
-    std::vector<double> mOutputBufferLL;
-    std::vector<double> mOutputBufferRR;
-    std::vector<double> mOutputBufferLR;
-    std::vector<double> mOutputBufferRL;
+    std::vector<float> mInputBufferL;
+    std::vector<float> mInputBufferR;
+    std::vector<float> mOutputBufferLL;
+    std::vector<float> mOutputBufferRR;
+    std::vector<float> mOutputBufferLR;
+    std::vector<float> mOutputBufferRL;
 
     std::atomic<double> mMix{0.3};
     std::atomic<double> mOutputGain{1.0};
-    IRQuality mQuality = IRQuality::Full;
+    IRQuality mQuality = IRQuality::Standard;
     std::atomic<int> mPendingQuality{-1};
     std::atomic<float> mTone{1.0f};
     std::atomic<float> mToneCoef{1.0f};

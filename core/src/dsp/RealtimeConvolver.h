@@ -45,7 +45,7 @@ namespace guitarfx
      * Process audio samples through the convolver.
      * ZERO heap allocations in this path - all buffers pre-allocated.
      */
-    void Process(const double *input, double *output, int numSamples);
+    void Process(const float *input, float *output, int numSamples);
 
     /**
      * Reset internal state (clears all buffers).
@@ -58,14 +58,14 @@ namespace guitarfx
 
   private:
     void ProcessBlock();
-    void ProcessDirect(const double *input, double *output, int numSamples);
+    void ProcessDirect(const float *input, float *output, int numSamples);
 
     bool mInitialized = false;
     bool mUseDirectConvolution = false; // For short IRs, use direct FIR convolution (no latency)
 
     // Direct convolution (for short IRs)
     std::vector<float> mDirectIR;
-    std::vector<double> mDirectHistory; // Ring buffer for FIR filter state
+    std::vector<float> mDirectHistory; // Ring buffer for FIR filter state
     size_t mDirectHistoryPos = 0;
     static constexpr size_t kDirectConvolutionThreshold = 64; // Use direct convolution for IRs <= this length
 
@@ -75,23 +75,23 @@ namespace guitarfx
     size_t mNumPartitions = 0;
 
     // IR in frequency domain (pre-computed at SetImpulse time)
-    std::vector<std::vector<std::complex<double>>> mIRPartitionsFFT;
+    std::vector<std::vector<std::complex<float>>> mIRPartitionsFFT;
 
     // Input delay line (frequency domain) - circular buffer
-    std::vector<std::vector<std::complex<double>>> mInputFFTDelayLine;
+    std::vector<std::vector<std::complex<float>>> mInputFFTDelayLine;
     size_t mDelayLineIndex = 0;
 
     // Input/output sample buffering
-    std::vector<double> mInputBuffer;
-    std::vector<double> mOutputBuffer;
-    std::vector<double> mPreviousInputBlock; // Previous block for overlap-save
+    std::vector<float> mInputBuffer;
+    std::vector<float> mOutputBuffer;
+    std::vector<float> mPreviousInputBlock; // Previous block for overlap-save
     size_t mInputBufferPos = 0;
     size_t mOutputBufferReadPos = 0;
 
     // Pre-allocated working buffers (NO allocations in ProcessBlock)
-    std::vector<std::complex<double>> mFFTInputBuffer;  // Input to FFT
-    std::vector<std::complex<double>> mFFTOutputBuffer; // Output from FFT
-    std::vector<std::complex<double>> mAccumulator;     // Freq domain accumulator
+    std::vector<std::complex<float>> mFFTInputBuffer;  // Input to FFT
+    std::vector<std::complex<float>> mFFTOutputBuffer; // Output from FFT
+    std::vector<std::complex<float>> mAccumulator;     // Freq domain accumulator
 
     // FFT plan
     std::unique_ptr<SimdFFT> mFFT;

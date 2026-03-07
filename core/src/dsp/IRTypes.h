@@ -113,11 +113,11 @@ namespace guitarfx
     switch (quality)
     {
     case IRQuality::Economy:
-      return static_cast<size_t>(sampleRate * 3.0);   // ~3s — slight truncation of very long tails
+      return static_cast<size_t>(sampleRate * 1.5);   // ~1.5s — ultra-low CPU, live performance
     case IRQuality::Standard:
-      return static_cast<size_t>(sampleRate * 6.0);   // ~6s — covers most concert hall IRs
+      return static_cast<size_t>(sampleRate * 3.0);   // ~3s — covers most room and plate reverbs
     case IRQuality::High:
-      return static_cast<size_t>(sampleRate * 12.0);  // ~12s — covers the longest IRs
+      return static_cast<size_t>(sampleRate * 6.0);   // ~6s — covers concert hall IRs
     case IRQuality::Full:
     default:
       return 0; // Unlimited

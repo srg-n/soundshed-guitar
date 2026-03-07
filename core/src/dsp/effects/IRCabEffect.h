@@ -121,11 +121,11 @@ namespace guitarfx
         return;
       }
 
-      // Copy to double buffers
+      // Copy to float buffers
       for (int i = 0; i < numSamples; ++i)
       {
-        mInputBufferL[i] = inputs[0] ? inputs[0][i] : 0.0;
-        mInputBufferR[i] = inputs[1] ? inputs[1][i] : (inputs[0] ? inputs[0][i] : 0.0);
+        mInputBufferL[i] = inputs[0] ? inputs[0][i] : 0.0f;
+        mInputBufferR[i] = inputs[1] ? inputs[1][i] : (inputs[0] ? inputs[0][i] : 0.0f);
       }
 
       // Process through convolvers
@@ -1128,16 +1128,16 @@ namespace guitarfx
     bool mIsStereo = false;
     bool mIsStereoB = false;
 
-    std::vector<double> mInputBufferL;
-    std::vector<double> mInputBufferR;
-    std::vector<double> mOutputBufferL;
-    std::vector<double> mOutputBufferR;
-    std::vector<double> mOutputBufferBL;
-    std::vector<double> mOutputBufferBR;
-    std::vector<double> mPrevOutputBufferL;
-    std::vector<double> mPrevOutputBufferR;
-    std::vector<double> mPrevOutputBufferBL;
-    std::vector<double> mPrevOutputBufferBR;
+    std::vector<float> mInputBufferL;
+    std::vector<float> mInputBufferR;
+    std::vector<float> mOutputBufferL;
+    std::vector<float> mOutputBufferR;
+    std::vector<float> mOutputBufferBL;
+    std::vector<float> mOutputBufferBR;
+    std::vector<float> mPrevOutputBufferL;
+    std::vector<float> mPrevOutputBufferR;
+    std::vector<float> mPrevOutputBufferBL;
+    std::vector<float> mPrevOutputBufferBR;
 
     double mMix = 1.0;
     double mIRBlend = 0.0;
