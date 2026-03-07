@@ -15,7 +15,15 @@ import { showNotification } from "./notifications.js";
 import { EffectTypeRegistry, type EffectTypeInfo } from "./presetV2.js";
 import { EffectGuids } from "./effectGuids.js";
 import { getBadgeIcon, getFxCategoryIcon, getFxEffectIcon, renderIcon } from "./iconAssets.js";
-import { sendAddSignalPathNode, sendAddSignalPathNodeOnEdge, type SignalPathEdgeRef } from "./fxSelector.js";
+import {
+  CATEGORY_METADATA,
+  getFxLibraryItems,
+  getOrderedFxCategories,
+  sendAddSignalPathNode,
+  sendAddSignalPathNodeOnEdge,
+  type FxLibraryItem,
+  type SignalPathEdgeRef,
+} from "./fxSelector.js";
 import { GenericKnob } from "./controls.js";
 import {
   EqCurveInteraction,
@@ -2843,46 +2851,48 @@ function showEffectSelectionDropdown(buttonElement: HTMLElement, edge: EdgeRef |
 
   const dropdown = document.createElement("div");
   dropdown.className = "effect-selection-dropdown";
-  
-  const allEffects = EffectTypeRegistry.getAll().filter((effect) => {
-    if (effect.catalogHidden) return false;
-    else return true;
-  });
-  const effectsByCategory = new Map<string, EffectTypeInfo[]>();
-  
-  allEffects.forEach((effect) => {
+
+  const dropdownItems = getFxLibraryItems({ excludeTypes: [EffectGuids.kMixer] });
+  const effectsByCategory = new Map<string, FxLibraryItem[]>();
+
+  dropdownItems.forEach((effect) => {
     if (!effectsByCategory.has(effect.category)) {
       effectsByCategory.set(effect.category, []);
     }
     effectsByCategory.get(effect.category)!.push(effect);
   });
 
-  const categoryOrder = ["dynamics", "amp", "fx", "cab", "eq", "modulation", "pitch", "delay", "reverb", "synth", "utility"];
+  const categoryOrder = getOrderedFxCategories(dropdownItems);
   
   let dropdownHtml = '<div class="effect-dropdown-header">Add Effect</div>';
   
   categoryOrder.forEach((categoryId) => {
     const effects = effectsByCategory.get(categoryId) ?? [];
-    const blendEntries = getBlendEntriesForCategory(categoryId);
-    if (effects.length > 0 || blendEntries.length > 0) {
-      const categoryInfo = FX_CATEGORIES.find(c => c.id === categoryId);
+    if (effects.length > 0) {
+      const categoryInfo = CATEGORY_METADATA[categoryId];
       dropdownHtml += `
         <div class="effect-dropdown-category">
           <div class="effect-dropdown-category-name">
             ${categoryInfo?.name || categoryId}
           </div>
-          ${effects.map(effect => { const thumb = getCustomLayout(effect.type)?.thumbnailDataUrl; const icon = thumb ? `<img src="${thumb.replace(/"/g, '&quot;')}" alt="" aria-hidden="true" class="effect-dropdown-thumb" />` : `<span class="effect-dropdown-icon">${getNodeIcon(effect.type)}</span>`; return `
-            <div class="effect-dropdown-item" data-effect-type="${effect.type}">
+          ${effects.map((effect) => {
+            const thumb = effect.blendId
+              ? (getCustomLayout(effect.type, effect.blendId) ?? getCustomLayout(effect.type))?.thumbnailDataUrl
+              : getCustomLayout(effect.type)?.thumbnailDataUrl;
+            const icon = thumb
+              ? `<img src="${thumb.replace(/"/g, '&quot;')}" alt="" aria-hidden="true" class="effect-dropdown-thumb" />`
+              : `<span class="effect-dropdown-icon">${effect.blendId ? getBadgeIcon("blend", "Custom blend") : getNodeIcon(effect.type)}</span>`;
+              return `
+              <div class="effect-dropdown-item"
+                data-effect-type="${effect.type}"
+                data-blend-id="${escapeHtml(effect.blendId ?? "")}"
+                data-blend-name="${escapeHtml(effect.blendId ? effect.displayName : "")}"
+                data-blend-category="${escapeHtml(effect.blendCategory ?? "")}">
               ${icon}
-              <span class="effect-dropdown-name">${effect.displayName}</span>
+              <span class="effect-dropdown-name">${escapeHtml(effect.displayName)}</span>
             </div>
-          `; }).join('')}
-          ${blendEntries.map((blend) => { const layout = getCustomLayout(EffectGuids.kAmpNamBlend, blend.id) ?? getCustomLayout(EffectGuids.kAmpNamBlend); const thumb = layout?.thumbnailDataUrl; const icon = thumb ? `<img src="${thumb.replace(/"/g, '&quot;')}" alt="" aria-hidden="true" class="effect-dropdown-thumb" />` : `<span class="effect-dropdown-icon">${getBadgeIcon("blend", "Custom blend")}</span>`; return `
-            <div class="effect-dropdown-item" data-effect-type="${EffectGuids.kAmpNamBlend}" data-blend-id="${blend.id}" data-blend-name="${escapeHtml(blend.name)}" data-blend-category="${blend.originalCategory}">
-              ${icon}
-              <span class="effect-dropdown-name">${escapeHtml(blend.name)}</span>
-            </div>
-          `; }).join('')}
+          `;
+          }).join('')}
         </div>
       `;
     }
@@ -2926,19 +2936,6 @@ function showEffectSelectionDropdown(buttonElement: HTMLElement, edge: EdgeRef |
     document.addEventListener("click", closeHandler);
   }, 0);
 }
-
-const FX_CATEGORIES = [
-  { id: "dynamics", name: "Dynamics", color: "#e04848" },
-  { id: "amp", name: "Amplifiers", color: "#e07848" },
-  { id: "fx", name: "Neural FX", color: "#c0784a" },
-  { id: "cab", name: "Cabinets", color: "#a86830" },
-  { id: "eq", name: "Equalizers", color: "#48a8e0" },
-  { id: "modulation", name: "Modulation", color: "#9048e0" },
-  { id: "delay", name: "Delay", color: "#48e0a8" },
-  { id: "reverb", name: "Reverb", color: "#4878e0" },
-  { id: "synth", name: "Synth", color: "#7a8a02" },
-  { id: "utility", name: "Utility", color: "#808080" },
-];
 
 type ResourceGroupPayload = {
   groupId: string;

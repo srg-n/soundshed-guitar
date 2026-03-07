@@ -3,6 +3,7 @@
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/EffectGuids.h"
+#include "dsp/effects/TempoSync.h"
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -118,10 +119,28 @@ namespace guitarfx
 
     void SetParam(const std::string &key, double value) override
     {
-      if (key == "time" || key == "timeMs")
+      if (key == "bpm")
+      {
+        mBpm = tempo_sync::ClampBpm(value);
+        if (mSyncMode == tempo_sync::kSyncModeTempo)
+          UpdateDelaySamples();
+      }
+      else if (key == "syncMode")
+      {
+        mSyncMode = tempo_sync::ClampSyncMode(value);
+        UpdateDelaySamples();
+      }
+      else if (key == "syncDivision")
+      {
+        mSyncDivision = tempo_sync::ClampDivision(value);
+        if (mSyncMode == tempo_sync::kSyncModeTempo)
+          UpdateDelaySamples();
+      }
+      else if (key == "time" || key == "timeMs")
       {
         mDelayMs = std::clamp(value, 1.0, 2000.0);
-        UpdateDelaySamples();
+        if (mSyncMode != tempo_sync::kSyncModeTempo)
+          UpdateDelaySamples();
       }
       else if (key == "feedback")
         mFeedback = std::clamp(value, 0.0, 0.95);
@@ -158,6 +177,10 @@ namespace guitarfx
 
     [[nodiscard]] double GetParam(const std::string &key) const override
     {
+      if (key == "bpm") return mBpm;
+      if (key == "syncMode") return mSyncMode;
+      if (key == "syncDivision") return mSyncDivision;
+      if (key == "effectiveTimeMs") return GetEffectiveDelayMs();
       if (key == "time" || key == "timeMs") return mDelayMs;
       if (key == "feedback")   return mFeedback;
       if (key == "mix")        return mMix;
@@ -176,6 +199,14 @@ namespace guitarfx
     [[nodiscard]] std::string GetCategory() const override { return "delay"; }
 
   private:
+    [[nodiscard]] double GetEffectiveDelayMs() const
+    {
+      if (mSyncMode != tempo_sync::kSyncModeTempo)
+        return mDelayMs;
+
+      return std::clamp(tempo_sync::DivisionDelayMs(mBpm, mSyncDivision), 1.0, 2000.0);
+    }
+
     // Read from circular buffer with linear interpolation.
     [[nodiscard]] float ReadInterp(const std::vector<float> &buf, size_t bufSize, double delay) const
     {
@@ -203,7 +234,8 @@ namespace guitarfx
 
     void UpdateDelaySamples()
     {
-      mDelaySamples  = mSampleRate * mDelayMs  * 0.001;
+      const double delayMs = GetEffectiveDelayMs();
+      mDelaySamples  = mSampleRate * delayMs  * 0.001;
       mSpreadSamples = mSampleRate * mSpreadMs * 0.001;
       if (!mBufferL.empty())
       {
@@ -236,7 +268,10 @@ namespace guitarfx
     double mMix        = 0.3;
     double mHighCutHz  = 8000.0;
     double mLowCutHz   = 20.0;
+    double mBpm        = tempo_sync::kDefaultBpm;
     int    mStereoMode = 0;
+    int    mSyncMode   = tempo_sync::kSyncModeOff;
+    int    mSyncDivision = 4;
     double mSpreadMs   = 0.0;
     double mModRate    = 0.0;
     double mModDepth   = 0.0;
@@ -264,8 +299,11 @@ namespace guitarfx
     info.category     = "delay";
     info.description  = "Stereo digital delay with tone shaping, modulation, drive, and ducking";
     info.requiresResource = false;
+    info.requiresTempo = true;
     info.parameters = {
         {"time",       "Time",        300.0,  1.0,    2000.0,  "ms"},
+      {"syncMode",   "Sync",        0.0,    0.0,    1.0,     "enum",  "timing", false, 1.0, tempo_sync::SyncModeLabels()},
+      {"syncDivision","Division",   4.0,    0.0,    14.0,    "enum",  "timing", false, 1.0, tempo_sync::DivisionLabels()},
         {"feedback",   "Feedback",    0.4,    0.0,    0.95,    "amount"},
         {"mix",        "Mix",         0.3,    0.0,    1.0,     "amount"},
         {"highCut",    "High Cut",    8000.0, 200.0,  20000.0, "Hz"},

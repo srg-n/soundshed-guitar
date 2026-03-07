@@ -3,6 +3,7 @@
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/EffectGuids.h"
+#include "dsp/effects/TempoSync.h"
 #include <atomic>
 #include <algorithm>
 #include <cmath>
@@ -31,7 +32,7 @@ namespace guitarfx
 
     void Process(float **inputs, float **outputs, int numSamples) override
     {
-      const float rateHz = mRateHz.load(std::memory_order_relaxed);
+      const float rateHz = GetEffectiveRateHz();
       const float depth = mDepth.load(std::memory_order_relaxed);
       const float shape = mShape.load(std::memory_order_relaxed);
       const float mix = mMix.load(std::memory_order_relaxed);
@@ -68,7 +69,19 @@ namespace guitarfx
 
     void SetParam(const std::string &key, double value) override
     {
-      if (key == "rate")
+      if (key == "bpm")
+      {
+        mBpm.store(tempo_sync::ClampBpm(value), std::memory_order_relaxed);
+      }
+      else if (key == "syncMode")
+      {
+        mSyncMode.store(tempo_sync::ClampSyncMode(value), std::memory_order_relaxed);
+      }
+      else if (key == "syncDivision")
+      {
+        mSyncDivision.store(tempo_sync::ClampDivision(value), std::memory_order_relaxed);
+      }
+      else if (key == "rate")
       {
         mRateHz.store(static_cast<float>(std::clamp(value, 0.1, 12.0)), std::memory_order_relaxed);
       }
@@ -90,6 +103,14 @@ namespace guitarfx
 
     [[nodiscard]] double GetParam(const std::string &key) const override
     {
+      if (key == "bpm")
+        return mBpm.load(std::memory_order_relaxed);
+      if (key == "syncMode")
+        return mSyncMode.load(std::memory_order_relaxed);
+      if (key == "syncDivision")
+        return mSyncDivision.load(std::memory_order_relaxed);
+      if (key == "effectiveRate")
+        return GetEffectiveRateHz();
       if (key == "rate")
         return mRateHz.load(std::memory_order_relaxed);
       if (key == "depth")
@@ -107,6 +128,16 @@ namespace guitarfx
   private:
     static constexpr double kPi = 3.14159265358979323846;
 
+    [[nodiscard]] float GetEffectiveRateHz() const
+    {
+      if (mSyncMode.load(std::memory_order_relaxed) != tempo_sync::kSyncModeTempo)
+        return mRateHz.load(std::memory_order_relaxed);
+
+      const double bpm = mBpm.load(std::memory_order_relaxed);
+      const int division = mSyncDivision.load(std::memory_order_relaxed);
+      return static_cast<float>(std::clamp(tempo_sync::DivisionRateHz(bpm, division), 0.1, 12.0));
+    }
+
     static float ShapeLfo(float lfo, float shape)
     {
       const float amount = 1.0f + shape * 8.0f;
@@ -117,6 +148,9 @@ namespace guitarfx
     std::atomic<float> mDepth{0.7f};
     std::atomic<float> mShape{0.0f};
     std::atomic<float> mMix{1.0f};
+    std::atomic<double> mBpm{tempo_sync::kDefaultBpm};
+    std::atomic<int> mSyncMode{tempo_sync::kSyncModeOff};
+    std::atomic<int> mSyncDivision{4};
 
     double mPhase = 0.0;
   };
@@ -130,8 +164,11 @@ namespace guitarfx
     info.category = "modulation";
     info.description = "Amplitude modulation tremolo";
     info.requiresResource = false;
+    info.requiresTempo = true;
     info.parameters = {
       {"rate", "Rate", 4.0, 0.1, 12.0, "Hz"},
+      {"syncMode", "Sync", 0.0, 0.0, 1.0, "enum", "timing", false, 1.0, tempo_sync::SyncModeLabels()},
+      {"syncDivision", "Division", 4.0, 0.0, 14.0, "enum", "timing", false, 1.0, tempo_sync::DivisionLabels()},
       {"depth", "Depth", 0.7, 0.0, 1.0, "amount"},
       {"shape", "Shape", 0.0, 0.0, 1.0, "amount"},
       {"mix", "Mix", 1.0, 0.0, 1.0, "amount"}

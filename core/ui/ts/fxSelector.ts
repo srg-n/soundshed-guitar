@@ -28,7 +28,7 @@ let searchFilter = "";
 // Category display metadata — id → { name, color }.
 // This is the only UI-side definition needed; the actual category list
 // is derived at render time from what the effect registry contains.
-const CATEGORY_METADATA: Record<string, { name: string; color: string }> = {
+export const CATEGORY_METADATA: Record<string, { name: string; color: string }> = {
   amp:        { name: "Amplifiers",  color: "#e07848" },
   cab:        { name: "Cabinets",    color: "#a86830" },
   drive:      { name: "Drive",       color: "#e04848" },
@@ -42,11 +42,37 @@ const CATEGORY_METADATA: Record<string, { name: string; color: string }> = {
   utility:    { name: "Utility",     color: "#808080" },
 };
 
-function getCatalogEffects(): EffectTypeInfo[] {
+export type FxLibraryItem = EffectTypeInfo & {
+  blendId?: string;
+  blendCategory?: string;
+  compositeId?: string;
+  description?: string;
+};
+
+export function getCatalogEffects(options?: { excludeTypes?: string[] }): EffectTypeInfo[] {
+  const excludedTypes = new Set([EffectGuids.kMixer, ...(options?.excludeTypes ?? [])]);
   return EffectTypeRegistry.getAll().filter((effect) => {
     if (effect.catalogHidden) return false;
-    return effect.type !== EffectGuids.kAmpNam && effect.type !== EffectGuids.kAmpNamBlend;
+    if (effect.type === EffectGuids.kAmpNam || effect.type === EffectGuids.kAmpNamBlend) return false;
+    return !excludedTypes.has(effect.type);
   });
+}
+
+export function getOrderedFxCategories(items: Array<{ category: string }>): string[] {
+  const categoriesWithContent = new Set(items.map((item) => item.category).filter(Boolean));
+  const metadataOrder = Object.keys(CATEGORY_METADATA);
+  return [
+    ...metadataOrder.filter((id) => categoriesWithContent.has(id)),
+    ...[...categoriesWithContent].filter((id) => !CATEGORY_METADATA[id]).sort(),
+  ];
+}
+
+export function getFxLibraryItems(options?: { excludeTypes?: string[] }): FxLibraryItem[] {
+  return [
+    ...getCatalogEffects(options),
+    ...getBlendFxItems(),
+    ...getCompositeFxItems(),
+  ].filter((item) => !(options?.excludeTypes ?? []).includes(item.type));
 }
 
 /**
@@ -113,20 +139,11 @@ function renderCategories(): void {
   const allEffects = getCatalogEffects();
   const blendItems = getBlendFxItems();
   const compositeItems = getCompositeFxItems();
-
-  // Collect all categories that have content, in metadata order first,
-  // then any unknown categories from the registry appended alphabetically.
-  const categoriesWithContent = new Set([
-    ...allEffects.map((e) => e.category),
-    ...blendItems.map((b) => b.category),
-    ...compositeItems.map((c) => c.category),
+  const orderedCategories = getOrderedFxCategories([
+    ...allEffects,
+    ...blendItems,
+    ...compositeItems,
   ]);
-
-  const metadataOrder = Object.keys(CATEGORY_METADATA);
-  const orderedCategories = [
-    ...metadataOrder.filter((id) => categoriesWithContent.has(id)),
-    ...[...categoriesWithContent].filter((id) => !CATEGORY_METADATA[id]).sort(),
-  ];
 
   const categoriesHtml = orderedCategories.map((categoryId) => {
     const meta = CATEGORY_METADATA[categoryId] ?? { name: categoryId, color: "#606060" };

@@ -3,6 +3,7 @@
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/EffectGuids.h"
+#include "dsp/effects/TempoSync.h"
 #include <atomic>
 #include <algorithm>
 #include <array>
@@ -38,7 +39,7 @@ namespace guitarfx
 
     void Process(float **inputs, float **outputs, int numSamples) override
     {
-      const float rateHz = mRateHz.load(std::memory_order_relaxed);
+      const float rateHz = GetEffectiveRateHz();
       const float depth = mDepth.load(std::memory_order_relaxed);
       const float feedback = mFeedback.load(std::memory_order_relaxed);
       const float mix = mMix.load(std::memory_order_relaxed);
@@ -94,7 +95,19 @@ namespace guitarfx
 
     void SetParam(const std::string &key, double value) override
     {
-      if (key == "rate")
+      if (key == "bpm")
+      {
+        mBpm.store(tempo_sync::ClampBpm(value), std::memory_order_relaxed);
+      }
+      else if (key == "syncMode")
+      {
+        mSyncMode.store(tempo_sync::ClampSyncMode(value), std::memory_order_relaxed);
+      }
+      else if (key == "syncDivision")
+      {
+        mSyncDivision.store(tempo_sync::ClampDivision(value), std::memory_order_relaxed);
+      }
+      else if (key == "rate")
       {
         mRateHz.store(static_cast<float>(std::clamp(value, 0.05, 8.0)), std::memory_order_relaxed);
       }
@@ -116,6 +129,14 @@ namespace guitarfx
 
     [[nodiscard]] double GetParam(const std::string &key) const override
     {
+      if (key == "bpm")
+        return mBpm.load(std::memory_order_relaxed);
+      if (key == "syncMode")
+        return mSyncMode.load(std::memory_order_relaxed);
+      if (key == "syncDivision")
+        return mSyncDivision.load(std::memory_order_relaxed);
+      if (key == "effectiveRate")
+        return GetEffectiveRateHz();
       if (key == "rate")
         return mRateHz.load(std::memory_order_relaxed);
       if (key == "depth")
@@ -132,6 +153,16 @@ namespace guitarfx
 
   private:
     static constexpr double kPi = 3.14159265358979323846;
+
+    [[nodiscard]] float GetEffectiveRateHz() const
+    {
+      if (mSyncMode.load(std::memory_order_relaxed) != tempo_sync::kSyncModeTempo)
+        return mRateHz.load(std::memory_order_relaxed);
+
+      const double bpm = mBpm.load(std::memory_order_relaxed);
+      const int division = mSyncDivision.load(std::memory_order_relaxed);
+      return static_cast<float>(std::clamp(tempo_sync::DivisionRateHz(bpm, division), 0.05, 8.0));
+    }
 
     static float ProcessAllpass(float x, float &state, float a)
     {
@@ -157,6 +188,9 @@ namespace guitarfx
     std::atomic<float> mDepth{0.8f};
     std::atomic<float> mFeedback{0.3f};
     std::atomic<float> mMix{0.5f};
+    std::atomic<double> mBpm{tempo_sync::kDefaultBpm};
+    std::atomic<int> mSyncMode{tempo_sync::kSyncModeOff};
+    std::atomic<int> mSyncDivision{4};
 
     double mPhase = 0.0;
   };
@@ -170,8 +204,11 @@ namespace guitarfx
     info.category = "modulation";
     info.description = "Cascaded all-pass phaser";
     info.requiresResource = false;
+    info.requiresTempo = true;
     info.parameters = {
       {"rate", "Rate", 0.4, 0.05, 8.0, "Hz"},
+      {"syncMode", "Sync", 0.0, 0.0, 1.0, "enum", "timing", false, 1.0, tempo_sync::SyncModeLabels()},
+      {"syncDivision", "Division", 4.0, 0.0, 14.0, "enum", "timing", false, 1.0, tempo_sync::DivisionLabels()},
       {"depth", "Depth", 0.8, 0.0, 1.0, "amount"},
       {"feedback", "Feedback", 0.3, 0.0, 0.95, "amount"},
       {"mix", "Mix", 0.5, 0.0, 1.0, "amount"}

@@ -89,7 +89,7 @@ All effects register via `EffectRegistry` (singleton factory). Effect type IDs, 
 |---------|------|----------------|
 | `pitch_shift` | Pitch Shift | `semitones` (-1..+1 normalized), `minSemitones`/`maxSemitones` (-12..+12), `mix`, `stepMode` (0/1) — uses Signalsmith Stretch |
 | `transpose` | Transpose | `semitones` (-36..+12 st), `mix` — optimized for integer steps, uses Signalsmith Stretch |
-| `octave` | Octave Effect | — |
+| `octave` | Octave Effect | `octaveUp`, `octaveDown`, `tone`, `mix` — uses Signalsmith Stretch for fixed +/-12 semitone voices |
 
 ### 2.7 Delay
 

@@ -3,6 +3,7 @@
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/EffectGuids.h"
+#include "dsp/effects/TempoSync.h"
 #include <atomic>
 #include <algorithm>
 #include <cmath>
@@ -26,7 +27,8 @@ namespace guitarfx
       mBufferSize = static_cast<int>(std::ceil(maxDelayMs * sampleRate / 1000.0)) + 2;
       mDelayBufferL.assign(mBufferSize, 0.0f);
       mDelayBufferR.assign(mBufferSize, 0.0f);
-      mWriteIndex = 0;
+      UpdateFeedbackDamping();
+      Reset();
     }
 
     void Reset() override
@@ -35,6 +37,8 @@ namespace guitarfx
       std::fill(mDelayBufferR.begin(), mDelayBufferR.end(), 0.0f);
       mWriteIndex = 0;
       mPhase = 0.0;
+      mFeedbackStateL = 0.0f;
+      mFeedbackStateR = 0.0f;
     }
 
     void Process(float **inputs, float **outputs, int numSamples) override
@@ -50,6 +54,8 @@ namespace guitarfx
           {
             if (inputs[ch])
               std::copy_n(inputs[ch], numSamples, outputs[ch]);
+            else if (ch == 1 && inputs[0])
+              std::copy_n(inputs[0], numSamples, outputs[ch]);
             else
               std::fill_n(outputs[ch], numSamples, 0.0f);
           }
@@ -57,7 +63,7 @@ namespace guitarfx
         return;
       }
 
-      const float rateHz = mRateHz.load(std::memory_order_relaxed);
+      const float rateHz = GetEffectiveRateHz();
       const float depthMs = mDepthMs.load(std::memory_order_relaxed);
       const float delayMs = mDelayMs.load(std::memory_order_relaxed);
       const float feedback = mFeedback.load(std::memory_order_relaxed);
@@ -82,13 +88,20 @@ namespace guitarfx
         const float delayedL = ReadDelaySafe(mDelayBufferL, delayMsL);
         const float delayedR = ReadDelaySafe(mDelayBufferR, delayMsR);
 
-        // Clamp feedback buffer to prevent resonance runaway. The comb filter
-        // gain at resonance is 1/(1-feedback); without clamping, strongly-driven
-        // resonance accumulates over LFO cycles and produces large transients
-        // that cause a wideband noise burst in downstream effects (e.g. reverb).
-        static constexpr float kFeedbackClamp = 4.0f;
-        mDelayBufferL[mWriteIndex] = std::clamp(inL + delayedL * feedback, -kFeedbackClamp, kFeedbackClamp);
-        mDelayBufferR[mWriteIndex] = std::clamp(inR + delayedR * feedback, -kFeedbackClamp, kFeedbackClamp);
+        // Condition the feedback path before writing back into the modulated
+        // comb filter. Hard clipping here creates sharp discontinuities that
+        // a downstream convolver turns into broadband noise.
+        float feedbackL = ApplyFeedbackDamping(mFeedbackStateL, delayedL) * feedback;
+        float feedbackR = ApplyFeedbackDamping(mFeedbackStateR, delayedR) * feedback;
+        feedbackL = SoftLimit(feedbackL);
+        feedbackR = SoftLimit(feedbackR);
+
+        float writeL = inL + feedbackL;
+        float writeR = inR + feedbackR;
+        if (!std::isfinite(writeL)) writeL = 0.0f;
+        if (!std::isfinite(writeR)) writeR = 0.0f;
+        mDelayBufferL[mWriteIndex] = writeL;
+        mDelayBufferR[mWriteIndex] = writeR;
 
         float outL = inL * (1.0f - mix) + delayedL * mix;
         float outR = inR * (1.0f - mix) + delayedR * mix;
@@ -112,7 +125,19 @@ namespace guitarfx
 
     void SetParam(const std::string &key, double value) override
     {
-      if (key == "rate")
+      if (key == "bpm")
+      {
+        mBpm.store(tempo_sync::ClampBpm(value), std::memory_order_relaxed);
+      }
+      else if (key == "syncMode")
+      {
+        mSyncMode.store(tempo_sync::ClampSyncMode(value), std::memory_order_relaxed);
+      }
+      else if (key == "syncDivision")
+      {
+        mSyncDivision.store(tempo_sync::ClampDivision(value), std::memory_order_relaxed);
+      }
+      else if (key == "rate")
       {
         mRateHz.store(static_cast<float>(std::clamp(value, 0.05, 5.0)), std::memory_order_relaxed);
       }
@@ -126,7 +151,7 @@ namespace guitarfx
       }
       else if (key == "feedback")
       {
-        mFeedback.store(static_cast<float>(std::clamp(value, 0.0, 0.95)), std::memory_order_relaxed);
+        mFeedback.store(static_cast<float>(std::clamp(value, 0.0, 0.85)), std::memory_order_relaxed);
       }
       else if (key == "mix")
       {
@@ -138,6 +163,14 @@ namespace guitarfx
 
     [[nodiscard]] double GetParam(const std::string &key) const override
     {
+      if (key == "bpm")
+        return mBpm.load(std::memory_order_relaxed);
+      if (key == "syncMode")
+        return mSyncMode.load(std::memory_order_relaxed);
+      if (key == "syncDivision")
+        return mSyncDivision.load(std::memory_order_relaxed);
+      if (key == "effectiveRate")
+        return GetEffectiveRateHz();
       if (key == "rate")
         return mRateHz.load(std::memory_order_relaxed);
       if (key == "depth")
@@ -158,12 +191,41 @@ namespace guitarfx
     static constexpr double kPi = 3.14159265358979323846;
     static constexpr double kHalfPi = 1.57079632679489661923;
 
+    [[nodiscard]] float GetEffectiveRateHz() const
+    {
+      if (mSyncMode.load(std::memory_order_relaxed) != tempo_sync::kSyncModeTempo)
+        return mRateHz.load(std::memory_order_relaxed);
+
+      const double bpm = mBpm.load(std::memory_order_relaxed);
+      const int division = mSyncDivision.load(std::memory_order_relaxed);
+      return static_cast<float>(std::clamp(tempo_sync::DivisionRateHz(bpm, division), 0.05, 5.0));
+    }
+
+    void UpdateFeedbackDamping()
+    {
+      constexpr float kFeedbackCutoffHz = 6000.0f;
+      const float x = static_cast<float>(2.0 * kPi * kFeedbackCutoffHz / std::max(1.0, mSampleRate));
+      mFeedbackDampingCoef = 1.0f - std::exp(-x);
+    }
+
+    float ApplyFeedbackDamping(float &state, float sample)
+    {
+      state += mFeedbackDampingCoef * (sample - state);
+      return state;
+    }
+
+    static float SoftLimit(float sample)
+    {
+      constexpr float kDrive = 2.0f;
+      return std::tanh(sample * kDrive) / kDrive;
+    }
+
     float ReadDelaySafe(const std::vector<float> &buffer, float delayMs)
     {
       const float delaySamples = delayMs * static_cast<float>(mSampleRate) / 1000.0f;
       float readIndex = static_cast<float>(mWriteIndex) - delaySamples;
-      if (readIndex < 0.0f)
-        readIndex += static_cast<float>(mBufferSize);
+      const float bufSize = static_cast<float>(mBufferSize);
+      readIndex = std::fmod(readIndex + bufSize, bufSize);
 
       const int index0 = static_cast<int>(readIndex);
       const int index1 = (index0 + 1) % mBufferSize;
@@ -190,8 +252,14 @@ namespace guitarfx
     std::atomic<float> mDelayMs{1.0f};
     std::atomic<float> mFeedback{0.2f};
     std::atomic<float> mMix{0.5f};
+    std::atomic<double> mBpm{tempo_sync::kDefaultBpm};
+    std::atomic<int> mSyncMode{tempo_sync::kSyncModeOff};
+    std::atomic<int> mSyncDivision{4};
 
     double mPhase = 0.0;
+    float mFeedbackStateL = 0.0f;
+    float mFeedbackStateR = 0.0f;
+    float mFeedbackDampingCoef = 1.0f;
   };
 
   inline void RegisterFlangerEffect()
@@ -203,11 +271,14 @@ namespace guitarfx
     info.category = "modulation";
     info.description = "Short modulated delay flanger";
     info.requiresResource = false;
+    info.requiresTempo = true;
     info.parameters = {
       {"rate", "Rate", 0.25, 0.05, 5.0, "Hz"},
+      {"syncMode", "Sync", 0.0, 0.0, 1.0, "enum", "timing", false, 1.0, tempo_sync::SyncModeLabels()},
+      {"syncDivision", "Division", 4.0, 0.0, 14.0, "enum", "timing", false, 1.0, tempo_sync::DivisionLabels()},
       {"depth", "Depth", 2.0, 0.0, 5.0, "ms"},
       {"delay", "Delay", 1.0, 0.1, 5.0, "ms"},
-      {"feedback", "Feedback", 0.2, 0.0, 0.95, "amount"},
+      {"feedback", "Feedback", 0.2, 0.0, 0.85, "amount"},
       {"mix", "Mix", 0.5, 0.0, 1.0, "amount"}
     };
 

@@ -1,10 +1,10 @@
 # Octave
 
-> Blends octave-up and octave-down voices with your dry signal — instant "octave pedal" sound.
+> Blends octave-up and octave-down voices with your dry signal using high-quality pitch shifting.
 
 ## What it does
 
-The Octave effect generates a pitch-shifted copy of your signal one octave above and/or one octave below, and blends each with the original. The result ranges from the classic octave-up fuzz tone (popularised by Jimi Hendrix's "Purple Haze" intro) to the bass-heavy octave-down growl heard in heavy rock. You can blend both octaves simultaneously — or use Octave Up and Octave Down simultaneously for a bigger, more three-dimensional combined tone.
+The Octave effect generates a pitch-shifted copy of your signal one octave above and/or one octave below, and blends each with the original. The octave voices use the same Signalsmith-based pitch-shifting approach as Transpose, so the result is cleaner and more stable than the legacy octave generator while still covering the classic octave-up fuzz tone and octave-down growl.
 
 The Tone control is a low-pass filter applied to the entire output, keeping the extended harmonics from becoming harsh.
 
@@ -19,9 +19,9 @@ The Tone control is a low-pass filter applied to the entire output, keeping the 
 
 ## Tips
 
-- **Octave Up + dry signal (~50% Octave Up, Mix 100%)** is the classic "fuzzy octave up" tone for single-note lines. Use it on the bridge pickup, near the upper frets for cleanest tracking.
+- **Octave Up + dry signal (~50% Octave Up, Mix 100%)** is the classic "fuzzy octave up" tone for single-note lines. Use it on the bridge pickup, near the upper frets for the brightest attack.
 - **Octave Down + dry at moderate levels** adds a bass guitar-like sub voice beneath your guitar — useful for bass-less arrangements or a thicker, heavier tone.
 - **Both Octave Up and Down at moderate levels** creates a wide, organ-like chord tone.
-- Octave effects **track best on single notes**. On complex chords, the pitch detection becomes confused and the octaves become less accurate.
+- The new octave voices handle chords and sustained harmonies much more gracefully than the legacy tracking-based version, but single-note lines still give the most pedal-like result.
 - **Play closer to the neck pickup** if using the octave-up voice — the more fundamental tone helps the tracking.
 - Lower the Tone control if the result sounds harsh or unnatural. The octave harmonics can be very bright; rolling off the top end with Tone at 30–45% keeps the combined sound musical.
