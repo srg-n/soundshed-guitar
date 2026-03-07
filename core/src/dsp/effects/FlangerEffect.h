@@ -42,6 +42,21 @@ namespace guitarfx
       if (mBufferSize == 0)
         return;
 
+      if (!mEnabled)
+      {
+        for (int ch = 0; ch < 2; ++ch)
+        {
+          if (outputs[ch])
+          {
+            if (inputs[ch])
+              std::copy_n(inputs[ch], numSamples, outputs[ch]);
+            else
+              std::fill_n(outputs[ch], numSamples, 0.0f);
+          }
+        }
+        return;
+      }
+
       const float rateHz = mRateHz.load(std::memory_order_relaxed);
       const float depthMs = mDepthMs.load(std::memory_order_relaxed);
       const float delayMs = mDelayMs.load(std::memory_order_relaxed);
@@ -64,14 +79,23 @@ namespace guitarfx
         const float delayMsL = delayMs + depthMs * modL;
         const float delayMsR = delayMs + depthMs * modR;
 
-        const float delayedL = ReadDelay(mDelayBufferL, delayMsL);
-        const float delayedR = ReadDelay(mDelayBufferR, delayMsR);
+        const float delayedL = ReadDelaySafe(mDelayBufferL, delayMsL);
+        const float delayedR = ReadDelaySafe(mDelayBufferR, delayMsR);
 
-        mDelayBufferL[mWriteIndex] = inL + delayedL * feedback;
-        mDelayBufferR[mWriteIndex] = inR + delayedR * feedback;
+        // Clamp feedback buffer to prevent resonance runaway. The comb filter
+        // gain at resonance is 1/(1-feedback); without clamping, strongly-driven
+        // resonance accumulates over LFO cycles and produces large transients
+        // that cause a wideband noise burst in downstream effects (e.g. reverb).
+        static constexpr float kFeedbackClamp = 4.0f;
+        mDelayBufferL[mWriteIndex] = std::clamp(inL + delayedL * feedback, -kFeedbackClamp, kFeedbackClamp);
+        mDelayBufferR[mWriteIndex] = std::clamp(inR + delayedR * feedback, -kFeedbackClamp, kFeedbackClamp);
 
-        const float outL = inL * (1.0f - mix) + delayedL * mix;
-        const float outR = inR * (1.0f - mix) + delayedR * mix;
+        float outL = inL * (1.0f - mix) + delayedL * mix;
+        float outR = inR * (1.0f - mix) + delayedR * mix;
+
+        // Safety: guard downstream effects against NaN/Inf
+        if (!std::isfinite(outL)) outL = 0.0f;
+        if (!std::isfinite(outR)) outR = 0.0f;
 
         if (outputs[0])
           outputs[0][i] = outL;
@@ -134,7 +158,7 @@ namespace guitarfx
     static constexpr double kPi = 3.14159265358979323846;
     static constexpr double kHalfPi = 1.57079632679489661923;
 
-    float ReadDelay(const std::vector<float> &buffer, float delayMs)
+    float ReadDelaySafe(const std::vector<float> &buffer, float delayMs)
     {
       const float delaySamples = delayMs * static_cast<float>(mSampleRate) / 1000.0f;
       float readIndex = static_cast<float>(mWriteIndex) - delaySamples;
@@ -145,7 +169,10 @@ namespace guitarfx
       const int index1 = (index0 + 1) % mBufferSize;
       const float frac = readIndex - static_cast<float>(index0);
 
-      return buffer[index0] * (1.0f - frac) + buffer[index1] * frac;
+      const float result = buffer[index0] * (1.0f - frac) + buffer[index1] * frac;
+      // A NaN in the history (from a prior corrupted buffer) must not re-enter
+      // the feedback loop, as it would corrupt every subsequent output sample.
+      return std::isfinite(result) ? result : 0.0f;
     }
 
     void AdvanceWriteIndex()
