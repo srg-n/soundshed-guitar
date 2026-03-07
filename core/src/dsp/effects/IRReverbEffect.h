@@ -36,6 +36,7 @@ namespace guitarfx
       mOutputBufferRL.resize(static_cast<std::size_t>(maxBlockSize));
 
       ApplyPendingQuality();
+      UpdateToneFilter();
 
       if (!mImpulseLL.empty())
       {
@@ -49,6 +50,8 @@ namespace guitarfx
       mConvolverRR.Reset();
       mConvolverLR.Reset();
       mConvolverRL.Reset();
+      mToneStateL = 0.0f;
+      mToneStateR = 0.0f;
     }
 
     void Process(float **inputs, float **outputs, int numSamples) override
@@ -93,32 +96,47 @@ namespace guitarfx
         mConvolverRL.Process(mInputBufferL.data(), mOutputBufferRL.data(), numSamples);
       }
 
-      const float wetGain = static_cast<float>(mMix * mOutputGain);
-      const float dryGain = static_cast<float>((1.0 - mMix));
+      const double mix = mMix.load(std::memory_order_relaxed);
+      const float wetGain = static_cast<float>(mix * mOutputGain.load(std::memory_order_relaxed));
+      const float dryGain = static_cast<float>(1.0 - mix);
+      const float toneCoef = mToneCoef.load(std::memory_order_relaxed);
 
       for (int i = 0; i < numSamples; ++i)
       {
         const float dryL = inputs[0] ? inputs[0][i] : 0.0f;
         const float dryR = inputs[1] ? inputs[1][i] : dryL;
 
-        const double wetL = mOutputBufferLL[i] + (mHasTrueStereo ? mOutputBufferLR[i] : 0.0);
-        const double wetR = mOutputBufferRR[i] + (mHasTrueStereo ? mOutputBufferRL[i] : 0.0);
+        float wetL = static_cast<float>(mOutputBufferLL[i] + (mHasTrueStereo ? mOutputBufferLR[i] : 0.0));
+        float wetR = static_cast<float>(mOutputBufferRR[i] + (mHasTrueStereo ? mOutputBufferRL[i] : 0.0));
+
+        if (toneCoef < 1.0f)
+        {
+          mToneStateL += toneCoef * (wetL - mToneStateL);
+          mToneStateR += toneCoef * (wetR - mToneStateR);
+          wetL = mToneStateL;
+          wetR = mToneStateR;
+        }
 
         if (outputs[0])
-          outputs[0][i] = static_cast<float>(wetL) * wetGain + dryL * dryGain;
+          outputs[0][i] = wetL * wetGain + dryL * dryGain;
         if (outputs[1])
-          outputs[1][i] = static_cast<float>(wetR) * wetGain + dryR * dryGain;
+          outputs[1][i] = wetR * wetGain + dryR * dryGain;
       }
     }
 
     void SetParam(const std::string &key, double value) override
     {
       if (key == "mix")
-        mMix = std::clamp(value, 0.0, 1.0);
+        mMix.store(std::clamp(value, 0.0, 1.0), std::memory_order_relaxed);
       else if (key == "outputGain")
-        mOutputGain = std::pow(10.0, std::clamp(value, -24.0, 24.0) / 20.0);
+        mOutputGain.store(std::pow(10.0, std::clamp(value, -24.0, 24.0) / 20.0), std::memory_order_relaxed);
       else if (key == "enabled")
         mEnabled = value > 0.5;
+      else if (key == "tone")
+      {
+        mTone.store(static_cast<float>(std::clamp(value, 0.0, 1.0)), std::memory_order_relaxed);
+        UpdateToneFilter();
+      }
       else if (key == "quality")
       {
         const int q = static_cast<int>(std::clamp(value, 0.0, 3.0));
@@ -131,9 +149,11 @@ namespace guitarfx
     [[nodiscard]] double GetParam(const std::string &key) const override
     {
       if (key == "mix")
-        return mMix;
+        return mMix.load(std::memory_order_relaxed);
+      if (key == "tone")
+        return mTone.load(std::memory_order_relaxed);
       if (key == "outputGain")
-        return 20.0 * std::log10(mOutputGain);
+        return 20.0 * std::log10(mOutputGain.load(std::memory_order_relaxed));
       if (key == "enabled")
         return mEnabled ? 1.0 : 0.0;
       if (key == "quality")
@@ -266,7 +286,7 @@ namespace guitarfx
       if (mQuality == IRQuality::Full)
         return minLength;
 
-      const size_t maxSamples = GetMaxIRSamples(mQuality, mSampleRate);
+      const size_t maxSamples = GetMaxReverbIRSamples(mQuality, mSampleRate);
       if (maxSamples == 0 || minLength <= maxSamples)
         return minLength;
 
@@ -285,10 +305,9 @@ namespace guitarfx
         return false;
       }
 
-      if (data.channels < 2)
+      if (data.channels < 1)
       {
-        std::cerr << "[IRReverbEffect] ERROR: IR file has insufficient channels (need >=2, got " 
-                  << data.channels << "): " << path << "\n";
+        std::cerr << "[IRReverbEffect] ERROR: IR file has no audio channels: " << path << "\n";
         return false;
       }
 
@@ -378,6 +397,21 @@ namespace guitarfx
       }
     }
 
+    void UpdateToneFilter()
+    {
+      const float t = mTone.load(std::memory_order_relaxed);
+      if (t >= 1.0f)
+      {
+        mToneCoef.store(1.0f, std::memory_order_relaxed);
+        return;
+      }
+      const float minHz = 1500.0f;
+      const float maxHz = 20000.0f;
+      const float cutoff = minHz + (maxHz - minHz) * t;
+      const float x = static_cast<float>(2.0 * 3.14159265358979323846 * cutoff / std::max(1.0, mSampleRate));
+      mToneCoef.store(1.0f - std::exp(-x), std::memory_order_relaxed);
+    }
+
     RealtimeConvolver mConvolverLL;
     RealtimeConvolver mConvolverRR;
     RealtimeConvolver mConvolverLR;
@@ -400,10 +434,14 @@ namespace guitarfx
     std::vector<double> mOutputBufferLR;
     std::vector<double> mOutputBufferRL;
 
-    double mMix = 1.0;
-    double mOutputGain = 1.0;
-    IRQuality mQuality = IRQuality::Standard;
+    std::atomic<double> mMix{0.3};
+    std::atomic<double> mOutputGain{1.0};
+    IRQuality mQuality = IRQuality::Full;
     std::atomic<int> mPendingQuality{-1};
+    std::atomic<float> mTone{1.0f};
+    std::atomic<float> mToneCoef{1.0f};
+    float mToneStateL = 0.0f;
+    float mToneStateR = 0.0f;
   };
 
   inline void RegisterIRReverbEffect()
@@ -417,9 +455,10 @@ namespace guitarfx
     info.requiresResource = true;
     info.resourceType = "ir";
     info.parameters = {
-        {"mix", "Mix", 1.0, 0.0, 1.0, "amount"},
+        {"mix", "Mix", 0.3, 0.0, 1.0, "amount"},
         {"outputGain", "Output", 0.0, -24.0, 24.0, "dB"},
-        {"quality", "Quality", 1.0, 0.0, 3.0, ""}};
+        {"tone", "Tone", 1.0, 0.0, 1.0, "amount"},
+        {"quality", "Quality", 3.0, 0.0, 3.0, "enum", "", false, 1.0, {"Economy", "Standard", "High", "Full"}}};
 
     EffectRegistry::Instance().Register(info.type, info, []()
                                         { return std::make_unique<IRReverbEffect>(); });

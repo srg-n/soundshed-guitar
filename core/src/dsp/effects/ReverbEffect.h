@@ -83,6 +83,8 @@ namespace guitarfx
       mLowpassAlpha = mLowpassAlphaTarget;
       mHighpassAlpha = mHighpassAlphaTarget;
       mSizeScaleCurrent = mSizeScaleTarget; // snap size scale so no ramp on load
+      mMixSmoothed = static_cast<float>(mMix);
+      mWidthSmoothed = static_cast<float>(mWidth);
       // Clear mode-specific state so no stale values from a previous Prepare.
       mSpringBpS1 = {};
       mSpringBpS2 = {};
@@ -168,9 +170,6 @@ namespace guitarfx
         return;
       }
 
-      const float wet = static_cast<float>(mMix);
-      const float dry = 1.0f - wet;
-      const float width = static_cast<float>(mWidth);
       const float drive = static_cast<float>(mDrive);
       const float duckAmount = static_cast<float>(mDucking);
 
@@ -187,6 +186,12 @@ namespace guitarfx
         mHighpassAlpha += (mHighpassAlphaTarget - mHighpassAlpha) * mSmoothCoeff;
         // Size scale smoothed at ~200ms to eliminate zipper noise from delay-length changes.
         mSizeScaleCurrent += (mSizeScaleTarget - mSizeScaleCurrent) * mSizeSmoothCoeff;
+        // Mix and width smoothed to prevent clicks on parameter changes.
+        mMixSmoothed += (static_cast<float>(mMix) - mMixSmoothed) * mSmoothCoeff;
+        mWidthSmoothed += (static_cast<float>(mWidth) - mWidthSmoothed) * mSmoothCoeff;
+        const float wet = mMixSmoothed;
+        const float dry = 1.0f - wet;
+        const float width = mWidthSmoothed;
 
         const float inputLevel = 0.5f * (std::fabs(inL) + std::fabs(inR));
         const float duckCoeff = (inputLevel > mDuckEnv) ? mDuckAttackCoeff : mDuckReleaseCoeff;
@@ -1088,6 +1093,10 @@ namespace guitarfx
     float mSizeScaleTarget = 1.0f;
     float mSizeScaleCurrent = 1.0f;
     float mSizeSmoothCoeff = 0.0001f;
+
+    // Mix and width smoothed values — lerped per-sample to prevent click on parameter changes.
+    float mMixSmoothed = 0.24f;
+    float mWidthSmoothed = 1.0f;
 
     // Audio-rate modulation depth (scaled from mModDepth user value in UpdateParameters).
     // Kept separate so GetParam("modDepth") always returns the user-facing 0–1 value.

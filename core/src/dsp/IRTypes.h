@@ -102,4 +102,26 @@ namespace guitarfx
     }
   }
 
+  /**
+   * Get the maximum reverb IR length in samples for a given quality mode.
+   * These limits are calibrated for full reverb tails (3–12s) rather than
+   * short cabinet IRs. Use GetMaxIRSamples() for cab simulation.
+   * Returns 0 for Full quality (unlimited).
+   */
+  constexpr size_t GetMaxReverbIRSamples(IRQuality quality, double sampleRate = 48000.0)
+  {
+    switch (quality)
+    {
+    case IRQuality::Economy:
+      return static_cast<size_t>(sampleRate * 3.0);   // ~3s — slight truncation of very long tails
+    case IRQuality::Standard:
+      return static_cast<size_t>(sampleRate * 6.0);   // ~6s — covers most concert hall IRs
+    case IRQuality::High:
+      return static_cast<size_t>(sampleRate * 12.0);  // ~12s — covers the longest IRs
+    case IRQuality::Full:
+    default:
+      return 0; // Unlimited
+    }
+  }
+
 } // namespace guitarfx

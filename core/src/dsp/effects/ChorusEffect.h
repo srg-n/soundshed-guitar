@@ -26,7 +26,7 @@ namespace guitarfx
       mBufferSize = static_cast<int>(std::ceil(maxDelayMs * sampleRate / 1000.0)) + 2;
       mDelayBufferL.assign(mBufferSize, 0.0f);
       mDelayBufferR.assign(mBufferSize, 0.0f);
-      mWriteIndex = 0;
+      Reset();
     }
 
     void Reset() override
@@ -34,7 +34,7 @@ namespace guitarfx
       std::fill(mDelayBufferL.begin(), mDelayBufferL.end(), 0.0f);
       std::fill(mDelayBufferR.begin(), mDelayBufferR.end(), 0.0f);
       mWriteIndex = 0;
-      mPhase = 0.0;
+      mPhase.store(0.0, std::memory_order_relaxed);
     }
 
     void Process(float **inputs, float **outputs, int numSamples) override
@@ -49,20 +49,19 @@ namespace guitarfx
       const float mix = mMix.load(std::memory_order_relaxed);
 
       const double phaseInc = 2.0 * kPi * rateHz / std::max(1.0, mSampleRate);
+      double phase = mPhase.load(std::memory_order_relaxed);
 
       for (int i = 0; i < numSamples; ++i)
       {
         const float inL = inputs[0] ? inputs[0][i] : 0.0f;
         const float inR = inputs[1] ? inputs[1][i] : 0.0f;
 
-        const float lfoL = static_cast<float>(std::sin(mPhase));
-        const float lfoR = static_cast<float>(std::sin(mPhase + kHalfPi));
+        const float lfoL = static_cast<float>(std::sin(phase));
+        const float lfoR = static_cast<float>(std::sin(phase + kHalfPi));
 
-        const float modL = 0.5f * (1.0f + lfoL);
-        const float modR = 0.5f * (1.0f + lfoR);
-
-        const float delayMsL = delayMs + depthMs * modL;
-        const float delayMsR = delayMs + depthMs * modR;
+        // Bipolar modulation centred on delayMs; clamp to avoid zero/negative delay
+        const float delayMsL = std::max(0.1f, delayMs + depthMs * lfoL);
+        const float delayMsR = std::max(0.1f, delayMs + depthMs * lfoR);
 
         const float delayedL = ReadDelay(mDelayBufferL, delayMsL);
         const float delayedR = ReadDelay(mDelayBufferR, delayMsR);
@@ -79,11 +78,11 @@ namespace guitarfx
           outputs[1][i] = outR;
 
         AdvanceWriteIndex();
-        mPhase += phaseInc;
-        // Wrap phase to prevent floating-point precision drift over long runtimes
-        if (mPhase >= 2.0 * kPi)
-          mPhase = std::fmod(mPhase, 2.0 * kPi);
+        phase += phaseInc;
+        if (phase >= 2.0 * kPi)
+          phase = std::fmod(phase, 2.0 * kPi);
       }
+      mPhase.store(phase, std::memory_order_relaxed);
     }
 
     void SetParam(const std::string &key, double value) override
@@ -138,8 +137,8 @@ namespace guitarfx
     {
       const float delaySamples = delayMs * static_cast<float>(mSampleRate) / 1000.0f;
       float readIndex = static_cast<float>(mWriteIndex) - delaySamples;
-      if (readIndex < 0.0f)
-        readIndex += static_cast<float>(mBufferSize);
+      const float bufSize = static_cast<float>(mBufferSize);
+      readIndex = std::fmod(readIndex + bufSize, bufSize);
 
       const int index0 = static_cast<int>(readIndex);
       const int index1 = (index0 + 1) % mBufferSize;
@@ -158,13 +157,13 @@ namespace guitarfx
     int mBufferSize = 0;
     int mWriteIndex = 0;
 
-    std::atomic<float> mRateHz{1.2f};
-    std::atomic<float> mDepthMs{12.0f};
-    std::atomic<float> mDelayMs{18.0f};
+    std::atomic<float> mRateHz{0.5f};
+    std::atomic<float> mDepthMs{2.0f};
+    std::atomic<float> mDelayMs{15.0f};
     std::atomic<float> mFeedback{0.1f};
-    std::atomic<float> mMix{0.4f};
+    std::atomic<float> mMix{0.3f};
 
-    double mPhase = 0.0;
+    std::atomic<double> mPhase{0.0};
   };
 
   inline void RegisterChorusEffect()
@@ -177,11 +176,11 @@ namespace guitarfx
     info.description = "Modulated delay chorus";
     info.requiresResource = false;
     info.parameters = {
-      {"rate", "Rate", 1.2, 0.1, 10.0, "Hz"},
-      {"depth", "Depth", 12.0, 0.0, 20.0, "ms"},
-      {"delay", "Delay", 18.0, 1.0, 30.0, "ms"},
+      {"rate", "Rate", 0.5, 0.1, 10.0, "Hz"},
+      {"depth", "Depth", 2.0, 0.0, 20.0, "ms"},
+      {"delay", "Delay", 15.0, 1.0, 30.0, "ms"},
       {"feedback", "Feedback", 0.1, 0.0, 0.95, "amount"},
-      {"mix", "Mix", 0.4, 0.0, 1.0, "amount"}
+      {"mix", "Mix", 0.3, 0.0, 1.0, "amount"}
     };
 
     EffectRegistry::Instance().Register(info.type, info, []()
