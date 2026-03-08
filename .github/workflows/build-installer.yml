@@ -276,10 +276,10 @@ jobs:
           fi
 
       - name: Configure JUCE CMake
-        run: cmake -S juce -B juce/Builds -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="${{ matrix.cmake_architectures }}"
+        run: cmake -S juce -B juce/builds -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="${{ matrix.cmake_architectures }}"
 
       - name: Build JUCE Standalone Release
-        run: cmake --build juce/Builds --config Release --target SoundshedGuitar_Standalone --parallel
+        run: cmake --build juce/builds --config Release --target SoundshedGuitar_Standalone --parallel
 
       - name: Export JUCE build env
         run: |
@@ -292,7 +292,7 @@ jobs:
       - name: Create DMG
         if: ${{ matrix.package_dmg }}
         run: |
-          APP_PATH="juce/Builds/${PROJECT_NAME}_artefacts/Release/Standalone/${PRODUCT_NAME}.app"
+          APP_PATH="juce/builds/${PROJECT_NAME}_artefacts/Release/Standalone/${PRODUCT_NAME}.app"
           if [ ! -d "$APP_PATH" ]; then
             echo "Standalone app not found at $APP_PATH"
             exit 1

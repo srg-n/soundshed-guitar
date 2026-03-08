@@ -20,6 +20,55 @@ endif()
 option(GUITARFX_CORE_FETCH_DEPS "Fetch third-party dependencies automatically" OFF)
 option(GUITARFX_CORE_BUILD_TESTS "Build core unit tests" OFF)
 
+function(guitarfx_apply_release_optimizations target_name)
+    if(MSVC)
+        target_compile_options(${target_name} PRIVATE
+            $<$<CONFIG:Release>:/Ox>
+            $<$<CONFIG:RelWithDebInfo>:/Ox>
+            $<$<CONFIG:Release>:/fp:fast>
+            $<$<CONFIG:RelWithDebInfo>:/fp:fast>)
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|x86_64)$")
+            target_compile_options(${target_name} PRIVATE
+                $<$<CONFIG:Release>:/arch:AVX2>
+                $<$<CONFIG:RelWithDebInfo>:/arch:AVX2>)
+        endif()
+    elseif(APPLE)
+        target_compile_options(${target_name} PRIVATE
+            $<$<CONFIG:Release>:-O3>
+            $<$<CONFIG:RelWithDebInfo>:-O3>
+            $<$<CONFIG:Release>:-ffast-math>
+            $<$<CONFIG:RelWithDebInfo>:-ffast-math>)
+
+        set(_guitarfx_osx_arches "${CMAKE_OSX_ARCHITECTURES}")
+        if(NOT _guitarfx_osx_arches)
+            set(_guitarfx_osx_arches "${CMAKE_SYSTEM_PROCESSOR}")
+        endif()
+
+        if(_guitarfx_osx_arches MATCHES "x86_64")
+            if(_guitarfx_osx_arches MATCHES "arm64")
+                target_compile_options(${target_name} PRIVATE
+                    $<$<CONFIG:Release>:SHELL:-Xarch_x86_64 -mavx2>
+                    $<$<CONFIG:RelWithDebInfo>:SHELL:-Xarch_x86_64 -mavx2>)
+            else()
+                target_compile_options(${target_name} PRIVATE
+                    $<$<CONFIG:Release>:-mavx2>
+                    $<$<CONFIG:RelWithDebInfo>:-mavx2>)
+            endif()
+        endif()
+    else()
+        target_compile_options(${target_name} PRIVATE
+            $<$<CONFIG:Release>:-O3>
+            $<$<CONFIG:RelWithDebInfo>:-O3>
+            $<$<CONFIG:Release>:-ffast-math>
+            $<$<CONFIG:RelWithDebInfo>:-ffast-math>)
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|x86_64)$")
+            target_compile_options(${target_name} PRIVATE
+                $<$<CONFIG:Release>:-mavx2>
+                $<$<CONFIG:RelWithDebInfo>:-mavx2>)
+        endif()
+    endif()
+endfunction()
+
 # ---------------------------------------------------------------------------
 # Dependencies
 # ---------------------------------------------------------------------------
@@ -108,27 +157,7 @@ if(GUITARFX_CORE_FETCH_DEPS AND NOT TARGET NeuralAmpModelerCore AND NOT TARGET n
         file(GLOB NAM_SOURCES CONFIGURE_DEPENDS "${NeuralAmpModelerCore_SOURCE_DIR}/NAM/*.cpp")
         add_library(NeuralAmpModelerCore STATIC ${NAM_SOURCES})
         target_compile_features(NeuralAmpModelerCore PUBLIC cxx_std_17)
-        # Release optimization flags for NAM inference
-        if(MSVC)
-            target_compile_options(NeuralAmpModelerCore PRIVATE
-                $<$<CONFIG:Release>:/Ox>
-                $<$<CONFIG:Release>:/fp:fast>
-                $<$<CONFIG:Release>:/arch:AVX2>)
-        elseif(APPLE)
-            target_compile_options(NeuralAmpModelerCore PRIVATE
-                $<$<CONFIG:Release>:-Ofast>
-                $<$<CONFIG:RelWithDebInfo>:-Ofast>)
-            if(CMAKE_OSX_ARCHITECTURES MATCHES "x86_64" OR
-               (NOT CMAKE_OSX_ARCHITECTURES AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64"))
-                target_compile_options(NeuralAmpModelerCore PRIVATE
-                    $<$<CONFIG:Release>:-mavx2>)
-            endif()
-        else()
-            target_compile_options(NeuralAmpModelerCore PRIVATE
-                $<$<CONFIG:Release>:-Ofast>
-                $<$<CONFIG:RelWithDebInfo>:-Ofast>
-                $<$<CONFIG:Release>:-mavx2>)
-        endif()
+        guitarfx_apply_release_optimizations(NeuralAmpModelerCore)
         target_include_directories(NeuralAmpModelerCore PUBLIC
             "${CMAKE_CURRENT_SOURCE_DIR}/src/compat"
             "${NeuralAmpModelerCore_SOURCE_DIR}"
@@ -345,27 +374,8 @@ if(WIN32)
     target_compile_options(SoundshedGuitarCore PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/bigobj>)
 endif()
 
-# Release optimization flags — fast-math, full opt, and AVX2 SIMD
-if(MSVC)
-    target_compile_options(SoundshedGuitarCore PRIVATE
-        $<$<CONFIG:Release>:/Ox>
-        $<$<CONFIG:Release>:/fp:fast>
-        $<$<CONFIG:Release>:/arch:AVX2>)
-elseif(APPLE)
-    target_compile_options(SoundshedGuitarCore PRIVATE
-        $<$<CONFIG:Release>:-Ofast>
-        $<$<CONFIG:RelWithDebInfo>:-Ofast>)
-    if(CMAKE_OSX_ARCHITECTURES MATCHES "x86_64" OR
-       (NOT CMAKE_OSX_ARCHITECTURES AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64"))
-        target_compile_options(SoundshedGuitarCore PRIVATE
-            $<$<CONFIG:Release>:-mavx2>)
-    endif()
-else()
-    target_compile_options(SoundshedGuitarCore PRIVATE
-        $<$<CONFIG:Release>:-Ofast>
-        $<$<CONFIG:RelWithDebInfo>:-Ofast>
-        $<$<CONFIG:Release>:-mavx2>)
-endif()
+# Release optimization flags — architecture-aware and safe for universal macOS builds
+guitarfx_apply_release_optimizations(SoundshedGuitarCore)
 
 set_target_properties(SoundshedGuitarCore PROPERTIES
     CXX_STANDARD 20

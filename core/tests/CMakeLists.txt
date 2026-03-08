@@ -73,6 +73,10 @@ foreach(test_source IN LISTS TEST_SOURCES)
         target_compile_options(${test_name} PRIVATE /bigobj)
     endif()
 
+    target_compile_options(${test_name} PRIVATE
+        $<TARGET_PROPERTY:SoundshedGuitarCore,COMPILE_OPTIONS>
+    )
+
     set_target_properties(${test_name} PROPERTIES
         CXX_STANDARD 20
         CXX_STANDARD_REQUIRED ON
