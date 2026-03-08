@@ -103,6 +103,16 @@ function getDockHostRect(): DOMRect | null {
   return rect;
 }
 
+function setDockHostActive(active: boolean): void {
+  const dockHost = document.getElementById("jam-player-dock");
+  if (!(dockHost instanceof HTMLElement)) {
+    return;
+  }
+
+  dockHost.classList.toggle("is-active", active);
+  dockHost.setAttribute("aria-hidden", active ? "false" : "true");
+}
+
 function persistFavorites(): void {
   const jam = ensureJamState();
   const payload = jam.favorites.map((favorite) => ({
@@ -399,12 +409,15 @@ export function renderFloatingPlayer(): void {
   }
 
   if (!jam.player.open || !jam.player.currentVideo) {
+    setDockHostActive(false);
     root.innerHTML = "";
     return;
   }
 
   clampPlayerPosition(jam.player);
 
+  const dockActive = jam.player.minimized;
+  setDockHostActive(dockActive);
   const dockRect = jam.player.minimized ? getDockHostRect() : null;
   const width = jam.player.minimized ? Math.round(dockRect?.width ?? PLAYER_MINIMIZED_WIDTH) : jam.player.width;
   const video = jam.player.currentVideo;

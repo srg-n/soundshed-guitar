@@ -1,7 +1,12 @@
 .jam-player-dock {
+  display: none;
   flex: 0 0 clamp(240px, 20vw, 320px);
   min-height: 78px;
   pointer-events: none;
+}
+
+.jam-player-dock.is-active {
+  display: block;
 }
 
 .jam-panel {

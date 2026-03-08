@@ -1738,12 +1738,26 @@ export function initializePresetControls(): void {
 }
 
 // Save preset modal helpers
+function configureSavePresetModalLabels(isOverwrite: boolean): void {
+  const title = document.getElementById("save-preset-modal-title");
+  const confirmBtn = document.getElementById("save-preset-confirm");
+
+  if (title) {
+    title.textContent = isOverwrite ? "Overwrite Preset" : "Save Preset As";
+  }
+
+  if (confirmBtn) {
+    confirmBtn.textContent = isOverwrite ? "Overwrite Preset" : "Save New Preset";
+  }
+}
+
 export function openSavePresetModal(): void {
   const modal = document.getElementById("save-preset-modal");
   if (!modal) return;
 
   // Save As must always create a new preset, never reuse edit state.
   delete modal.dataset.editingPresetId;
+  configureSavePresetModalLabels(false);
 
   const folderSelect = document.getElementById("preset-folder-select") as HTMLSelectElement | null;
   const nameInput = document.getElementById("preset-name-input") as HTMLInputElement | null;
@@ -3208,6 +3222,7 @@ export function openEditPresetModal(): void {
 
   const modal = document.getElementById("save-preset-modal");
   if (!modal) return;
+  configureSavePresetModalLabels(true);
 
   const folderSelect = document.getElementById("preset-folder-select") as HTMLSelectElement | null;
   const presetFolder = findFolderForPreset(uiState.presetFolders ?? [], activePresetId);
