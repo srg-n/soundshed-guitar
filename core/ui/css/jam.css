@@ -1,3 +1,9 @@
+.jam-player-dock {
+  flex: 0 0 clamp(240px, 20vw, 320px);
+  min-height: 78px;
+  pointer-events: none;
+}
+
 .jam-panel {
   display: flex;
   flex-direction: column;
@@ -198,6 +204,11 @@
   border-color: rgba(44, 84, 160, 0.16);
 }
 
+.jam-floating-player.is-docked {
+  border-radius: 18px;
+  box-shadow: none;
+}
+
 .jam-floating-player-header {
   display: flex;
   align-items: center;
@@ -210,6 +221,11 @@
 
 .theme-light .jam-floating-player-header {
   background: linear-gradient(180deg, rgba(247, 250, 255, 0.98), rgba(235, 242, 251, 0.98));
+}
+
+.jam-floating-player.is-docked .jam-floating-player-header {
+  cursor: default;
+  min-height: 78px;
 }
 
 .jam-floating-player-meta {
@@ -273,6 +289,10 @@
 }
 
 @media (max-width: 760px) {
+  .jam-player-dock {
+    display: none;
+  }
+
   .jam-search-row {
     grid-template-columns: 1fr;
   }

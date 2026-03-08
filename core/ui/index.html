@@ -43,14 +43,14 @@
           <path d="M6 10h2M6 13h2M16 9h2M16 12h2M16 15h2" stroke="currentColor" stroke-width="1.5" fill="none" />
         </svg>
       </button>
-      <button class="icon-btn" data-panel="jam" title="Jam">
-        <svg viewBox="0 0 24 24">
-          <path d="M12 3v11.5a3.5 3.5 0 1 1-2-3.16V7.5l8-2V14.5a3.5 3.5 0 1 1-2-3.16V3.96L12 5z" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
       <button class="icon-btn" data-panel="sharing" title="Tone Sharing">
         <svg viewBox="0 0 24 24">
           <path d="M7 18a4 4 0 0 1 0-8 5.5 5.5 0 0 1 10.6-1.6A3.5 3.5 0 1 1 18.5 18H7z" stroke="currentColor" stroke-width="1.5" fill="none" />
+        </svg>
+      </button>
+      <button class="icon-btn" data-panel="jam" title="Jam">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 5.5v13l10-6.5z" fill="currentColor" />
         </svg>
       </button>
       <button class="icon-btn" data-panel="settings" title="Settings">
@@ -67,6 +67,7 @@
 
     <!-- Top Control Bar -->
     <section class="control-bar">
+      <div class="jam-player-dock" id="jam-player-dock" aria-hidden="true"></div>
       <div class="control-bar-group">
         <!-- Digital VU meter for raw input peak -->
         <div class="input-vu-meter" id="input-vu-meter" title="Raw input peak level">

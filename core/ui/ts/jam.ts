@@ -12,16 +12,18 @@ const PLAYER_WIDTH = 420;
 const PLAYER_MINIMIZED_WIDTH = 280;
 const PLAYER_PADDING = 24;
 const DEFAULT_PLAYER_Y = 96;
+const DEFAULT_JAM_QUERY = "backing track";
 const SEARCH_MAX_RESULTS = 12;
 
 let initialized = false;
+let initialSearchTriggered = false;
 let searchRequestId = 0;
 
 function ensureJamState(): JamState {
   if (!uiState.jam) {
     uiState.jam = {
       activeTab: "search",
-      query: "",
+      query: DEFAULT_JAM_QUERY,
       results: [],
       favorites: [],
       loading: false,
@@ -85,6 +87,20 @@ function clampPlayerPosition(state: JamPlayerState): void {
   }
   state.x = Math.min(Math.max(PLAYER_PADDING, state.x), maxX);
   state.y = Math.min(Math.max(PLAYER_PADDING, state.y), maxY);
+}
+
+function getDockHostRect(): DOMRect | null {
+  const dockHost = document.getElementById("jam-player-dock");
+  if (!(dockHost instanceof HTMLElement)) {
+    return null;
+  }
+
+  const rect = dockHost.getBoundingClientRect();
+  if (rect.width < 1 || rect.height < 1) {
+    return null;
+  }
+
+  return rect;
 }
 
 function persistFavorites(): void {
@@ -344,6 +360,9 @@ function bindFloatingPlayerDrag(panel: HTMLElement, handle: HTMLElement): void {
   handle.dataset.dragBound = "true";
   const jam = ensureJamState();
   handle.addEventListener("mousedown", (event) => {
+    if (jam.player.minimized) {
+      return;
+    }
     if ((event.target as HTMLElement).closest("button")) {
       return;
     }
@@ -386,7 +405,8 @@ export function renderFloatingPlayer(): void {
 
   clampPlayerPosition(jam.player);
 
-  const width = jam.player.minimized ? PLAYER_MINIMIZED_WIDTH : jam.player.width;
+  const dockRect = jam.player.minimized ? getDockHostRect() : null;
+  const width = jam.player.minimized ? Math.round(dockRect?.width ?? PLAYER_MINIMIZED_WIDTH) : jam.player.width;
   const video = jam.player.currentVideo;
   const src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(video.videoId)}?autoplay=1&rel=0&playsinline=1`;
 
@@ -430,8 +450,14 @@ export function renderFloatingPlayer(): void {
   if (panel) {
     panel.dataset.videoId = video.videoId;
     panel.classList.toggle("is-minimized", jam.player.minimized);
-    panel.style.left = `${jam.player.x}px`;
-    panel.style.top = `${jam.player.y}px`;
+    panel.classList.toggle("is-docked", Boolean(dockRect));
+    if (dockRect) {
+      panel.style.left = `${Math.round(dockRect.left)}px`;
+      panel.style.top = `${Math.round(dockRect.top)}px`;
+    } else {
+      panel.style.left = `${jam.player.x}px`;
+      panel.style.top = `${jam.player.y}px`;
+    }
     panel.style.width = `${width}px`;
   }
   if (title) {
@@ -511,6 +537,9 @@ function bindPanelActions(): void {
 
 export function applyJamAppSettings(): void {
   const jam = ensureJamState();
+  if (!jam.query.trim()) {
+    jam.query = DEFAULT_JAM_QUERY;
+  }
   jam.apiKeyAvailable = getApiKey().length > 0;
   jam.favorites = normalizeFavorites(uiState.appSettings?.[FAVORITES_SETTING]);
   jam.player = normalizePlayerState(uiState.appSettings?.[PLAYER_UI_SETTING], jam.player);
@@ -518,6 +547,11 @@ export function applyJamAppSettings(): void {
   clampPlayerPosition(jam.player);
   renderJamPanel();
   renderFloatingPlayer();
+
+  if (!initialSearchTriggered && jam.apiKeyAvailable && jam.results.length === 0 && !jam.loading) {
+    initialSearchTriggered = true;
+    void runSearch();
+  }
 }
 
 export function initializeJamPanel(): void {
@@ -526,5 +560,6 @@ export function initializeJamPanel(): void {
   }
   initialized = true;
   bindPanelActions();
+  window.addEventListener("resize", () => renderFloatingPlayer());
   applyJamAppSettings();
 }
