@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dsp/effects/DriveOutputLimiter.h"
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/EffectGuids.h"
@@ -49,6 +50,7 @@ namespace guitarfx
         return;
       mSampleRate = sampleRate;
       mMaxBlockSize = maxBlockSize;
+      UpdateInputFilterCoefficient();
       UpdateToneCoefficient();
       Reset();
     }
@@ -57,35 +59,43 @@ namespace guitarfx
     {
       mToneStateL = 0.0f;
       mToneStateR = 0.0f;
+      mInputLowStateL = 0.0f;
+      mInputLowStateR = 0.0f;
     }
 
     void Process(float **inputs, float **outputs, int numSamples) override
     {
       // Snapshot parameters once per block to avoid repeated atomic loads in the hot loop
       const float drive = mDrive.load(std::memory_order_relaxed);
+      const float tone = mTone.load(std::memory_order_relaxed);
       const float levelDb = mLevelDb.load(std::memory_order_relaxed);
       const float mix = mMix.load(std::memory_order_relaxed);
       const float toneCoef = mToneCoef.load(std::memory_order_relaxed);
 
-      const float driveGain = 1.0f + 29.0f * drive;
+      const float driveGain = 1.0f + 23.0f * drive;
       const float levelGain = static_cast<float>(std::pow(10.0, levelDb * 0.05));
+      const float clipLevel = 0.85f - 0.25f * drive;
+      const float lowTighten = 0.95f + 0.10f * drive;
 
       for (int i = 0; i < numSamples; ++i)
       {
         const float inL = inputs[0] ? inputs[0][i] : 0.0f;
         const float inR = inputs[1] ? inputs[1][i] : 0.0f;
 
-        float wetL = std::clamp(inL * driveGain, -1.0f, 1.0f);
-        float wetR = std::clamp(inR * driveGain, -1.0f, 1.0f);
+        const float lowL = ApplyOnePole(inL, mInputLowStateL, mInputLowCoef);
+        const float lowR = ApplyOnePole(inR, mInputLowStateR, mInputLowCoef);
 
-        wetL = ApplyTone(wetL, mToneStateL, toneCoef);
-        wetR = ApplyTone(wetR, mToneStateR, toneCoef);
+        float wetL = ShapeDistortion((inL - lowL * lowTighten) * driveGain, clipLevel, drive);
+        float wetR = ShapeDistortion((inR - lowR * lowTighten) * driveGain, clipLevel, drive);
+
+        wetL = ApplyTone(wetL, mToneStateL, toneCoef, tone);
+        wetR = ApplyTone(wetR, mToneStateR, toneCoef, tone);
 
         wetL *= levelGain;
         wetR *= levelGain;
 
-        const float outL = inL * (1.0f - mix) + wetL * mix;
-        const float outR = inR * (1.0f - mix) + wetR * mix;
+        const float outL = drive_output_limiter::SoftClipNearCeiling(inL * (1.0f - mix) + wetL * mix);
+        const float outR = drive_output_limiter::SoftClipNearCeiling(inR * (1.0f - mix) + wetR * mix);
 
         if (outputs[0])
           outputs[0][i] = outL;
@@ -139,23 +149,45 @@ namespace guitarfx
     void UpdateToneCoefficient()
     {
       const float t = mTone.load(std::memory_order_relaxed);
-      if (t >= 1.0f)
-      {
-        mToneCoef.store(1.0f, std::memory_order_relaxed); // sentinel: bypass
-        return;
-      }
-      const float minHz = 800.0f;
-      const float maxHz = 8000.0f;
+      const float minHz = 900.0f;
+      const float maxHz = 5200.0f;
       const float cutoff = minHz + (maxHz - minHz) * t;
       const float x = static_cast<float>(2.0 * kPi * cutoff / std::max(1.0, mSampleRate));
       mToneCoef.store(1.0f - std::exp(-x), std::memory_order_relaxed);
     }
 
-    static float ApplyTone(float input, float &state, float toneCoef)
+    void UpdateInputFilterCoefficient()
     {
-      if (toneCoef >= 1.0f) return input; // tone at max: pass through unfiltered
-      state += toneCoef * (input - state);
+      const float cutoff = 140.0f;
+      const float x = static_cast<float>(2.0 * kPi * cutoff / std::max(1.0, mSampleRate));
+      mInputLowCoef = 1.0f - std::exp(-x);
+    }
+
+    static float ApplyOnePole(float input, float &state, float coefficient)
+    {
+      state += coefficient * (input - state);
       return state;
+    }
+
+    static float ApplyTone(float input, float &state, float toneCoef, float tone)
+    {
+      const float dark = ApplyOnePole(input, state, toneCoef);
+      if (tone <= 0.5f)
+      {
+        const float blend = tone * 2.0f;
+        return dark + (input - dark) * blend;
+      }
+
+      const float presence = input + (input - dark) * 0.25f;
+      const float blend = (tone - 0.5f) * 2.0f;
+      return input + (presence - input) * blend;
+    }
+
+    static float ShapeDistortion(float input, float clipLevel, float drive)
+    {
+      const float preShaped = std::tanh(input * 0.75f) * (1.25f + 0.45f * drive);
+      const float clipped = std::clamp(preShaped, -clipLevel, clipLevel) / std::max(clipLevel, 1.0e-4f);
+      return clipped * (0.9f + 0.08f * drive);
     }
 
     std::atomic<float> mDrive{0.6f};
@@ -166,6 +198,9 @@ namespace guitarfx
     std::atomic<float> mToneCoef{0.0f};
     float mToneStateL = 0.0f;
     float mToneStateR = 0.0f;
+    float mInputLowStateL = 0.0f;
+    float mInputLowStateR = 0.0f;
+    float mInputLowCoef = 0.0f;
   };
 
   inline void RegisterDistortionEffect()

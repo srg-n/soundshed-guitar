@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dsp/effects/DriveOutputLimiter.h"
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/EffectGuids.h"
@@ -21,6 +22,7 @@ namespace guitarfx
         return;
       mSampleRate = sampleRate;
       mMaxBlockSize = maxBlockSize;
+      UpdateBodyFilterCoefficient();
       UpdateToneCoefficient();
       Reset();
     }
@@ -29,34 +31,44 @@ namespace guitarfx
     {
       mToneStateL = 0.0f;
       mToneStateR = 0.0f;
+      mBodyStateL = 0.0f;
+      mBodyStateR = 0.0f;
     }
 
     void Process(float **inputs, float **outputs, int numSamples) override
     {
       const float drive = mDrive.load(std::memory_order_relaxed);
+      const float tone = mTone.load(std::memory_order_relaxed);
       const float levelDb = mLevelDb.load(std::memory_order_relaxed);
       const float mix = mMix.load(std::memory_order_relaxed);
       const float toneCoef = mToneCoef.load(std::memory_order_relaxed);
 
-      const float driveGain = 1.0f + 29.0f * drive;
+      const float stageOneGain = 1.0f + 10.0f * drive;
+      const float stageTwoGain = 1.0f + 18.0f * drive;
       const float levelGain = static_cast<float>(std::pow(10.0, levelDb * 0.05));
+      const float bias = 0.05f + 0.18f * drive;
+      const float bodyBlend = 0.18f + 0.22f * drive;
+      const float gate = 0.01f + 0.04f * drive * drive;
 
       for (int i = 0; i < numSamples; ++i)
       {
         const float inL = inputs[0] ? inputs[0][i] : 0.0f;
         const float inR = inputs[1] ? inputs[1][i] : 0.0f;
 
-        float wetL = ShapeFuzz(inL * driveGain);
-        float wetR = ShapeFuzz(inR * driveGain);
+        const float bodyL = ApplyOnePole(inL, mBodyStateL, mBodyCoef);
+        const float bodyR = ApplyOnePole(inR, mBodyStateR, mBodyCoef);
 
-        wetL = ApplyTone(wetL, mToneStateL, toneCoef);
-        wetR = ApplyTone(wetR, mToneStateR, toneCoef);
+        float wetL = ShapeFuzz(inL, bodyL, stageOneGain, stageTwoGain, bias, gate) + bodyL * bodyBlend;
+        float wetR = ShapeFuzz(inR, bodyR, stageOneGain, stageTwoGain, bias, gate) + bodyR * bodyBlend;
+
+        wetL = ApplyTone(wetL, mToneStateL, toneCoef, tone);
+        wetR = ApplyTone(wetR, mToneStateR, toneCoef, tone);
 
         wetL *= levelGain;
         wetR *= levelGain;
 
-        const float outL = inL * (1.0f - mix) + wetL * mix;
-        const float outR = inR * (1.0f - mix) + wetR * mix;
+        const float outL = drive_output_limiter::SoftClipNearCeiling(inL * (1.0f - mix) + wetL * mix);
+        const float outR = drive_output_limiter::SoftClipNearCeiling(inR * (1.0f - mix) + wetR * mix);
 
         if (outputs[0])
           outputs[0][i] = outL;
@@ -110,30 +122,63 @@ namespace guitarfx
     void UpdateToneCoefficient()
     {
       const float t = mTone.load(std::memory_order_relaxed);
-      if (t >= 1.0f)
-      {
-        mToneCoef.store(1.0f, std::memory_order_relaxed); // sentinel: bypass
-        return;
-      }
       const float minHz = 500.0f;
-      const float maxHz = 5000.0f;
+      const float maxHz = 4200.0f;
       const float cutoff = minHz + (maxHz - minHz) * t;
       const float x = static_cast<float>(2.0 * kPi * cutoff / std::max(1.0, mSampleRate));
       mToneCoef.store(1.0f - std::exp(-x), std::memory_order_relaxed);
     }
 
-    static float ApplyTone(float input, float &state, float toneCoef)
+    void UpdateBodyFilterCoefficient()
     {
-      if (toneCoef >= 1.0f) return input; // tone at max: pass through unfiltered
-      state += toneCoef * (input - state);
+      const float cutoff = 220.0f;
+      const float x = static_cast<float>(2.0 * kPi * cutoff / std::max(1.0, mSampleRate));
+      mBodyCoef = 1.0f - std::exp(-x);
+    }
+
+    static float ApplyOnePole(float input, float &state, float coefficient)
+    {
+      state += coefficient * (input - state);
       return state;
     }
 
-    static float ShapeFuzz(float x)
+    static float ApplyTone(float input, float &state, float toneCoef, float tone)
     {
-      const float absX = std::abs(x);
-      const float shaped = 1.0f - std::exp(-absX);
-      return std::copysign(shaped, x);
+      const float dark = ApplyOnePole(input, state, toneCoef);
+      if (tone <= 0.5f)
+      {
+        const float blend = tone * 2.0f;
+        return dark + (input - dark) * blend;
+      }
+
+      const float presence = input + (input - dark) * 0.20f;
+      const float blend = (tone - 0.5f) * 2.0f;
+      return input + (presence - input) * blend;
+    }
+
+    static float ApplyGate(float input, float threshold)
+    {
+      const float magnitude = std::max(0.0f, std::abs(input) - threshold);
+      return std::copysign(magnitude / std::max(1.0f - threshold, 1.0e-4f), input);
+    }
+
+    static float ShapeFuzz(float input,
+                           float body,
+                           float stageOneGain,
+                           float stageTwoGain,
+                           float bias,
+                           float gate)
+    {
+      const float woollyInput = input + body * 0.45f;
+      const float biased = std::tanh((woollyInput + bias) * stageOneGain);
+      const float center = std::tanh(bias * stageOneGain);
+      const float stageOne = biased - center;
+
+      const float stageTwoInput = stageOne * stageTwoGain - bias * 0.35f;
+      const float stageTwo = std::copysign(1.0f - std::exp(-std::abs(stageTwoInput)), stageTwoInput);
+      const float cleanup = std::clamp(std::abs(input) * (2.5f + 0.35f * stageOneGain), 0.0f, 1.0f);
+      const float blended = stageOne * (1.0f - cleanup) * 0.85f + stageTwo * cleanup;
+      return ApplyGate(blended, gate);
     }
 
     std::atomic<float> mDrive{0.7f};
@@ -144,6 +189,9 @@ namespace guitarfx
     std::atomic<float> mToneCoef{0.0f};
     float mToneStateL = 0.0f;
     float mToneStateR = 0.0f;
+    float mBodyStateL = 0.0f;
+    float mBodyStateR = 0.0f;
+    float mBodyCoef = 0.0f;
   };
 
   inline void RegisterFuzzEffect()

@@ -3,6 +3,7 @@
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/EffectGuids.h"
+#include "dsp/effects/DriveOutputLimiter.h"
 #include <algorithm>
 #include <cmath>
 
@@ -29,6 +30,9 @@ namespace guitarfx
     void Process(float **inputs, float **outputs, int numSamples) override
     {
       const float ceiling = static_cast<float>(std::pow(10.0, mCeilingDb * 0.05));
+      const float softClip = mSoftClip;
+      const float safeCeiling = std::max(ceiling, 1.0e-6f);
+      const float clipKnee = 0.995f - 0.075f * std::clamp(softClip, 0.0f, 1.0f);
 
       for (int i = 0; i < numSamples; ++i)
       {
@@ -54,8 +58,16 @@ namespace guitarfx
         float outL = inL * mGain;
         float outR = inR * mGain;
 
-        outL = std::clamp(outL, -ceiling, ceiling);
-        outR = std::clamp(outR, -ceiling, ceiling);
+        if (softClip > 0.0f)
+        {
+          outL = drive_output_limiter::SoftClipNearCeiling(outL / safeCeiling, clipKnee, 1.0f) * safeCeiling;
+          outR = drive_output_limiter::SoftClipNearCeiling(outR / safeCeiling, clipKnee, 1.0f) * safeCeiling;
+        }
+        else
+        {
+          outL = std::clamp(outL, -ceiling, ceiling);
+          outR = std::clamp(outR, -ceiling, ceiling);
+        }
 
         if (outputs[0])
           outputs[0][i] = outL;
@@ -75,6 +87,10 @@ namespace guitarfx
         mReleaseMs = static_cast<float>(std::clamp(value, 1.0, 500.0));
         UpdateReleaseCoefficient();
       }
+      else if (key == "softClip")
+      {
+        mSoftClip = static_cast<float>(std::clamp(value, 0.0, 1.0));
+      }
     }
 
     void SetConfig(const std::string &, const std::string &) override {}
@@ -85,6 +101,8 @@ namespace guitarfx
         return mCeilingDb;
       if (key == "release")
         return mReleaseMs;
+      if (key == "softClip")
+        return mSoftClip;
       return 0.0;
     }
 
@@ -107,6 +125,7 @@ namespace guitarfx
     double mSampleRate = 44100.0;
     float mCeilingDb = -0.1f;
     float mReleaseMs = 50.0f;
+    float mSoftClip = 0.0f;
     float mReleaseCoef = 0.0f;
     float mGain = 1.0f;
   };
@@ -122,7 +141,8 @@ namespace guitarfx
     info.requiresResource = false;
     info.parameters = {
       {"ceiling", "Ceiling", -0.1, -24.0, 0.0, "dB"},
-      {"release", "Release", 50.0, 1.0, 500.0, "ms"}
+      {"release", "Release", 50.0, 1.0, 500.0, "ms"},
+      {"softClip", "Soft Clip", 0.0, 0.0, 1.0, "amount", "Output", true}
     };
 
     EffectRegistry::Instance().Register(info.type, info, []()

@@ -3,6 +3,7 @@
 #include "dsp/EffectProcessor.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/EffectGuids.h"
+#include "dsp/effects/DriveOutputLimiter.h"
 #include <atomic>
 #include <cmath>
 #include <algorithm>
@@ -36,8 +37,10 @@ namespace guitarfx
       const float knee = mKnee.load(std::memory_order_relaxed);
       const float makeupDb = mMakeupDb.load(std::memory_order_relaxed);
       const float mix = mMix.load(std::memory_order_relaxed);
+      const float softClip = mSoftClip.load(std::memory_order_relaxed);
       const float attackCoef = mAttackCoef.load(std::memory_order_relaxed);
       const float releaseCoef = mReleaseCoef.load(std::memory_order_relaxed);
+      const float clipKnee = 0.995f - 0.075f * std::clamp(softClip, 0.0f, 1.0f);
 
       for (int i = 0; i < numSamples; ++i)
       {
@@ -91,6 +94,12 @@ namespace guitarfx
         float mixedL = inL * (1.0f - mix) + outL * mix;
         float mixedR = inR * (1.0f - mix) + outR * mix;
 
+        if (softClip > 0.0f)
+        {
+          mixedL = drive_output_limiter::SoftClipNearCeiling(mixedL, clipKnee, 1.0f);
+          mixedR = drive_output_limiter::SoftClipNearCeiling(mixedR, clipKnee, 1.0f);
+        }
+
         if (outputs[0])
           outputs[0][i] = mixedL;
         if (outputs[1])
@@ -132,6 +141,10 @@ namespace guitarfx
       {
         mMix.store(static_cast<float>(std::clamp(value, 0.0, 1.0)), std::memory_order_relaxed);
       }
+      else if (key == "softClip")
+      {
+        mSoftClip.store(static_cast<float>(std::clamp(value, 0.0, 1.0)), std::memory_order_relaxed);
+      }
     }
 
     void SetConfig(const std::string &, const std::string &) override {}
@@ -152,6 +165,8 @@ namespace guitarfx
         return mMakeupDb.load(std::memory_order_relaxed);
       if (key == "mix")
         return mMix.load(std::memory_order_relaxed);
+      if (key == "softClip")
+        return mSoftClip.load(std::memory_order_relaxed);
       return 0.0;
     }
 
@@ -177,6 +192,7 @@ namespace guitarfx
     std::atomic<float> mKnee{6.0f};
     std::atomic<float> mMakeupDb{0.0f};
     std::atomic<float> mMix{1.0f};
+    std::atomic<float> mSoftClip{0.0f};
 
     // Coefficients (derived from params + sample rate, updated atomically)
     std::atomic<float> mAttackCoef{0.0f};
@@ -213,9 +229,11 @@ namespace guitarfx
       const float ratio = mRatio.load(std::memory_order_relaxed);
       const float makeupDb = mMakeupDb.load(std::memory_order_relaxed);
       const float mix = mMix.load(std::memory_order_relaxed);
+      const float softClip = mSoftClip.load(std::memory_order_relaxed);
       const float attackCoef = mAttackCoef.load(std::memory_order_relaxed);
       const float releaseCoef = mReleaseCoef.load(std::memory_order_relaxed);
       const float detectCoef = mDetectCoef.load(std::memory_order_relaxed);
+      const float clipKnee = 0.995f - 0.075f * std::clamp(softClip, 0.0f, 1.0f);
 
       for (int i = 0; i < numSamples; ++i)
       {
@@ -253,6 +271,12 @@ namespace guitarfx
         float outL = inL * gain * mix + inL * (1.0f - mix);
         float outR = inR * gain * mix + inR * (1.0f - mix);
 
+        if (softClip > 0.0f)
+        {
+          outL = drive_output_limiter::SoftClipNearCeiling(outL, clipKnee, 1.0f);
+          outR = drive_output_limiter::SoftClipNearCeiling(outR, clipKnee, 1.0f);
+        }
+
         if (outputs[0])
           outputs[0][i] = outL;
         if (outputs[1])
@@ -280,6 +304,8 @@ namespace guitarfx
         mMakeupDb.store(static_cast<float>(std::clamp(value, 0.0, 24.0)), std::memory_order_relaxed);
       else if (key == "mix")
         mMix.store(static_cast<float>(std::clamp(value, 0.0, 1.0)), std::memory_order_relaxed);
+      else if (key == "softClip")
+        mSoftClip.store(static_cast<float>(std::clamp(value, 0.0, 1.0)), std::memory_order_relaxed);
     }
 
     void SetConfig(const std::string &, const std::string &) override {}
@@ -298,6 +324,8 @@ namespace guitarfx
         return mMakeupDb.load(std::memory_order_relaxed);
       if (key == "mix")
         return mMix.load(std::memory_order_relaxed);
+      if (key == "softClip")
+        return mSoftClip.load(std::memory_order_relaxed);
       return 0.0;
     }
 
@@ -321,6 +349,7 @@ namespace guitarfx
     std::atomic<float> mReleaseMs{300.0f};
     std::atomic<float> mMakeupDb{0.0f};
     std::atomic<float> mMix{1.0f};
+    std::atomic<float> mSoftClip{0.0f};
 
     std::atomic<float> mAttackCoef{0.0f};
     std::atomic<float> mReleaseCoef{0.0f};
@@ -348,7 +377,8 @@ namespace guitarfx
           {"release", "Release", 100.0, 10.0, 2000.0, "ms"},
           {"knee", "Knee", 6.0, 0.0, 24.0, "dB"},
           {"makeup", "Makeup", 0.0, 0.0, 24.0, "dB"},
-          {"mix", "Mix", 1.0, 0.0, 1.0, "amount"}};
+          {"mix", "Mix", 1.0, 0.0, 1.0, "amount"},
+          {"softClip", "Soft Clip", 0.0, 0.0, 1.0, "amount", "Output", true}};
 
       EffectRegistry::Instance().Register(info.type, info, []()
                                           { return std::make_unique<CompressorEffect>(); });
@@ -369,7 +399,8 @@ namespace guitarfx
           {"attack", "Attack", 20.0, 5.0, 200.0, "ms"},
           {"release", "Release", 300.0, 50.0, 3000.0, "ms"},
           {"makeup", "Makeup", 0.0, 0.0, 24.0, "dB"},
-          {"mix", "Mix", 1.0, 0.0, 1.0, "amount"}};
+          {"mix", "Mix", 1.0, 0.0, 1.0, "amount"},
+          {"softClip", "Soft Clip", 0.0, 0.0, 1.0, "amount", "Output", true}};
 
       EffectRegistry::Instance().Register(info.type, info, []()
                                           { return std::make_unique<OptoCompressorEffect>(); });
