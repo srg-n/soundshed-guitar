@@ -77,6 +77,14 @@ if(GUITARFX_FETCH_DEPENDENCIES)
     FetchContent_MakeAvailable(nlohmann_json)
   endif()
 
+  if(WIN32 AND NOT DEFINED intelipp_static_win_x64_SOURCE_DIR)
+    FetchContent_Declare(
+      intelipp_static_win_x64
+      URL https://www.nuget.org/api/v2/package/intelipp.static.win-x64/2022.3.1.8
+    )
+    FetchContent_MakeAvailable(intelipp_static_win_x64)
+  endif()
+
   # Signalsmith headers are provided transitively by SoundshedGuitarCore.
 
   if(NOT TARGET WebView2::Loader)

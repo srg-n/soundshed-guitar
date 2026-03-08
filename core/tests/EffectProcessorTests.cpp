@@ -897,6 +897,86 @@ bool TestOctaveSpecific()
   return octaveUpOk && octaveDownOk;
 }
 
+bool TestTransposeLatencySpecific()
+{
+  std::cout << "\n--- TransposeEffect Latency Tests ---\n";
+
+  auto& registry = guitarfx::EffectRegistry::Instance();
+  auto effect = registry.Create(guitarfx::EffectGuids::kTranspose);
+  if (!effect)
+  {
+    std::cout << "  FAIL: Could not create transpose effect\n";
+    return false;
+  }
+
+  effect->Prepare(kTestSampleRate, kTestBlockSize);
+  effect->SetParam("mix", 1.0);
+  effect->SetParam("quality", 0.0);
+  effect->SetParam("semitones", -1.0);
+  const int lowShiftLatency = effect->GetLatencySamples();
+
+  effect->SetParam("semitones", -2.0);
+  const int slightDownTuneLatency = effect->GetLatencySamples();
+
+  effect->SetParam("semitones", -12.0);
+  const int deepShiftLatency = effect->GetLatencySamples();
+
+  effect->SetParam("quality", 1.0);
+  effect->SetParam("semitones", -1.0);
+  const int qualityLatency = effect->GetLatencySamples();
+
+  const bool lowShiftResponsive = lowShiftLatency > 0 && lowShiftLatency <= kTestBlockSize;
+  const bool slightDownTuneStillResponsive = slightDownTuneLatency >= lowShiftLatency && slightDownTuneLatency <= kTestBlockSize * 2;
+  const bool deepShiftStillBounded = deepShiftLatency >= lowShiftLatency && deepShiftLatency <= kTestBlockSize * 3;
+  const bool qualityModeIsHigherLatency = qualityLatency > lowShiftLatency;
+
+  std::cout << "  " << std::left << std::setw(44) << "-1 semitone stays within one block:" << (lowShiftResponsive ? "PASS" : "FAIL")
+            << " (latency=" << lowShiftLatency << ")\n";
+  std::cout << "  " << std::left << std::setw(44) << "-2 semitones stays within two blocks:" << (slightDownTuneStillResponsive ? "PASS" : "FAIL")
+            << " (latency=" << slightDownTuneLatency << ")\n";
+  std::cout << "  " << std::left << std::setw(44) << "-12 semitones stays within three blocks:" << (deepShiftStillBounded ? "PASS" : "FAIL")
+            << " (latency=" << deepShiftLatency << ")\n";
+  std::cout << "  " << std::left << std::setw(44) << "Best quality increases transpose latency:" << (qualityModeIsHigherLatency ? "PASS" : "FAIL")
+            << " (latency=" << qualityLatency << ")\n";
+
+  return lowShiftResponsive && slightDownTuneStillResponsive && deepShiftStillBounded && qualityModeIsHigherLatency;
+}
+
+bool TestPitchShiftQualitySpecific()
+{
+  std::cout << "\n--- PitchShiftEffect Quality Tests ---\n";
+
+  auto& registry = guitarfx::EffectRegistry::Instance();
+  auto effect = registry.Create(guitarfx::EffectGuids::kPitchShift);
+  if (!effect)
+  {
+    std::cout << "  FAIL: Could not create pitch shift effect\n";
+    return false;
+  }
+
+  effect->Prepare(kTestSampleRate, kTestBlockSize);
+  effect->SetParam("mix", 1.0);
+  effect->SetParam("stepMode", 1.0);
+  effect->SetParam("minSemitones", -2.0);
+  effect->SetParam("maxSemitones", 2.0);
+  effect->SetParam("quality", 0.0);
+  effect->SetParam("semitones", 0.5);
+  const int latencyModeLatency = effect->GetLatencySamples();
+
+  effect->SetParam("quality", 1.0);
+  const int qualityModeLatency = effect->GetLatencySamples();
+
+  const bool latencyModeResponsive = latencyModeLatency > 0 && latencyModeLatency <= kTestBlockSize;
+  const bool qualityModeHigherLatency = qualityModeLatency > latencyModeLatency;
+
+  std::cout << "  " << std::left << std::setw(44) << "Best latency keeps pitch shift within one block:" << (latencyModeResponsive ? "PASS" : "FAIL")
+            << " (latency=" << latencyModeLatency << ")\n";
+  std::cout << "  " << std::left << std::setw(44) << "Best quality increases pitch shift latency:" << (qualityModeHigherLatency ? "PASS" : "FAIL")
+            << " (latency=" << qualityModeLatency << ")\n";
+
+  return latencyModeResponsive && qualityModeHigherLatency;
+}
+
 } // anonymous namespace
 
 int main()
@@ -959,6 +1039,12 @@ int main()
     return 1;
 
   if (!TestOctaveSpecific())
+    return 1;
+
+  if (!TestTransposeLatencySpecific())
+    return 1;
+
+  if (!TestPitchShiftQualitySpecific())
     return 1;
 
   if (!TestTempoSyncSpecific())

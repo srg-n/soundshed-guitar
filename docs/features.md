@@ -88,7 +88,7 @@ All effects register via `EffectRegistry` (singleton factory). Effect type IDs, 
 | Type ID | Name | Key Parameters |
 |---------|------|----------------|
 | `pitch_shift` | Pitch Shift | `semitones` (-1..+1 normalized), `minSemitones`/`maxSemitones` (-12..+12), `mix`, `stepMode` (0/1) — uses Signalsmith Stretch |
-| `transpose` | Transpose | `semitones` (-36..+12 st), `mix` — optimized for integer steps, uses Signalsmith Stretch |
+| `transpose` | Transpose | `semitones` (-24..+12 st), `mix` — optimized for integer steps, uses Signalsmith Stretch |
 | `octave` | Octave Effect | `octaveUp`, `octaveDown`, `tone`, `mix` — uses Signalsmith Stretch for fixed +/-12 semitone voices |
 
 ### 2.7 Delay
@@ -219,7 +219,7 @@ Blending maps multiple NAM models to a set of physical parameters, enabling smoo
 | `graph` | SignalGraph | Effect signal graph |
 | `embeddedResources` | EmbeddedResource[] | Portable base64-encoded resources |
 
-**GlobalSettings**: `inputTrim`, `outputTrim`, `outputVolume`, `autoLevelInput`, `autoLevelOutput`, `transpose` (semitones, -36..+12).
+**GlobalSettings**: `inputTrim`, `outputTrim`, `outputVolume`, `autoLevelInput`, `autoLevelOutput`, `transpose` (semitones, -24..+12).
 
 ### 8.2 CRUD Operations
 

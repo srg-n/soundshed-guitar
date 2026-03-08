@@ -22,11 +22,21 @@ option(GUITARFX_ENABLE_TESTS "Build the test suite (Debug only)" ON)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(FetchDependencies)
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../core/cmake/GuitarfxIPP.cmake")
+
+guitarfx_detect_ipp()
+if(GUITARFX_IPP_AVAILABLE)
+    set(SIGNALSMITH_USE_IPP ON CACHE BOOL "Use Intel IPP backend for Signalsmith Linear" FORCE)
+endif()
 
 # Shared core library (framework-agnostic DSP, presets, resources, controller)
 set(GUITARFX_CORE_FETCH_DEPS ON CACHE BOOL "" FORCE)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../core
                  ${CMAKE_BINARY_DIR}/core)
+
+if(GUITARFX_IPP_AVAILABLE)
+    guitarfx_enable_ipp_for_target(SoundshedGuitarCore)
+endif()
 
 add_subdirectory(src)
 

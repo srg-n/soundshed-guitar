@@ -1693,6 +1693,7 @@ void PluginController::OnParamChange(int paramIdx, double value)
         return;
 
     mParamValues[static_cast<size_t>(paramIdx)] = value;
+    const bool latencyMayHaveChanged = (paramIdx == kParamTranspose);
 
     // Route to mixer
     switch (paramIdx)
@@ -1720,6 +1721,9 @@ void PluginController::OnParamChange(int paramIdx, double value)
     case kParamEQHighFreq:   mPresetMixer.SetEQBandFrequency(3, value); break;
     default: break;
     }
+
+    if (latencyMayHaveChanged)
+        UpdateHostLatency();
 }
 
 double PluginController::GetParamValue(int paramIdx) const
@@ -1963,8 +1967,16 @@ void PluginController::HandleSetGlobalChainParamRequest(const nlohmann::json& pa
     else if (path == "gate.attack") mPresetMixer.SetGlobalGateAttack(value.get<double>());
     else if (path == "gate.hold") mPresetMixer.SetGlobalGateHold(value.get<double>());
     else if (path == "gate.release") mPresetMixer.SetGlobalGateRelease(value.get<double>());
-    else if (path == "transpose.enabled") mPresetMixer.SetGlobalTransposeEnabled(value.get<bool>());
-    else if (path == "transpose.semitones") mPresetMixer.SetGlobalTranspose(value.get<int>());
+    else if (path == "transpose.enabled")
+    {
+        mPresetMixer.SetGlobalTransposeEnabled(value.get<bool>());
+        UpdateHostLatency();
+    }
+    else if (path == "transpose.semitones")
+    {
+        mPresetMixer.SetGlobalTranspose(value.get<int>());
+        UpdateHostLatency();
+    }
     else if (path == "eq.enabled") mPresetMixer.SetGlobalEQEnabled(value.get<bool>());
     else if (path == "doubler.enabled") mPresetMixer.SetGlobalDoublerEnabled(value.get<bool>());
     else if (path == "doubler.delay") mPresetMixer.SetGlobalDoublerDelay(value.get<double>());

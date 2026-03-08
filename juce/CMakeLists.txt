@@ -48,6 +48,11 @@ if (WIN32)
     )
 endif()
 
+include(PamplejuceIPP)
+if(GUITARFX_IPP_AVAILABLE)
+    set(SIGNALSMITH_USE_IPP ON CACHE BOOL "Use Intel IPP backend for Signalsmith Linear" FORCE)
+endif()
+
 # Signalsmith headers are provided transitively by SoundshedGuitarCore.
 
 # Configures universal binaries and decides which version of macOS to support
@@ -329,13 +334,10 @@ endfunction()
 soundshed_copy_ui_resources(${PROJECT_NAME}_Standalone)
 soundshed_copy_ui_resources(${PROJECT_NAME}_VST3)
 
-# IPP support, comment out to disable
-include(PamplejuceIPP)
-
-# Propagate IPP availability to the core DSP library so it can use IPP code paths
-if(DEFINED IPP_ROOT AND IS_DIRECTORY "${IPP_ROOT}")
-    target_compile_definitions(SoundshedGuitarCore PUBLIC PAMPLEJUCE_IPP=1)
-    target_include_directories(SoundshedGuitarCore PUBLIC "${IPP_INC}")
+# Propagate IPP availability to the JUCE shared code and core DSP library.
+if(GUITARFX_IPP_AVAILABLE)
+    guitarfx_enable_ipp_for_target(SharedCode)
+    guitarfx_enable_ipp_for_target(SoundshedGuitarCore)
 endif()
 
 # Everything related to the tests target
