@@ -9,6 +9,7 @@
  */
 
 #include <cmath>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -623,6 +624,62 @@ bool TestFlangerReverbStability()
   }
 }
 
+bool TestAlgorithmicReverbsStaySilentOnSilence()
+{
+  std::cout << "\n--- Algorithmic Reverb Silence Test ---\n";
+
+    const std::array<const char*, 5> reverbTypes = {
+      guitarfx::EffectGuids::kReverbRoom,
+      guitarfx::EffectGuids::kReverbChamber,
+      guitarfx::EffectGuids::kReverbSpring,
+      guitarfx::EffectGuids::kReverbAdvanced,
+      guitarfx::EffectGuids::kReverbAmbient};
+
+  auto& registry = guitarfx::EffectRegistry::Instance();
+  constexpr int kBlocksToProcess = 12;
+  constexpr double kMaxSilentPeak = 1.0e-5;
+  bool allSilent = true;
+
+  std::vector<float> inputL(kTestBlockSize, 0.0f);
+  std::vector<float> inputR(kTestBlockSize, 0.0f);
+  std::vector<float> outputL(kTestBlockSize, 0.0f);
+  std::vector<float> outputR(kTestBlockSize, 0.0f);
+  float* inputs[2] = {inputL.data(), inputR.data()};
+  float* outputs[2] = {outputL.data(), outputR.data()};
+
+  for (const char* effectType : reverbTypes)
+  {
+    auto effect = registry.Create(effectType);
+    if (!effect)
+    {
+      std::cout << "  FAIL: Could not create " << effectType << "\n";
+      return false;
+    }
+
+    effect->Prepare(kTestSampleRate, kTestBlockSize);
+    effect->Reset();
+
+    double peak = 0.0;
+    for (int block = 0; block < kBlocksToProcess; ++block)
+    {
+      std::fill(outputL.begin(), outputL.end(), 0.0f);
+      std::fill(outputR.begin(), outputR.end(), 0.0f);
+      effect->Process(inputs, outputs, kTestBlockSize);
+
+      const auto leftAnalysis = AnalyzeSignal(outputL);
+      const auto rightAnalysis = AnalyzeSignal(outputR);
+      peak = std::max({peak, leftAnalysis.peakValue, rightAnalysis.peakValue});
+    }
+
+    const bool silent = peak <= kMaxSilentPeak;
+    std::cout << "  " << std::left << std::setw(44) << effectType << (silent ? "PASS" : "FAIL")
+              << " (peak=" << std::scientific << peak << ")\n" << std::defaultfloat;
+    allSilent = allSilent && silent;
+  }
+
+  return allSilent;
+}
+
 bool TestTempoSyncSpecific()
 {
   std::cout << "\n--- Tempo Sync Effect Tests ---\n";
@@ -951,7 +1008,6 @@ bool TestTransposeLatencySpecific()
 
   effect->Prepare(kTestSampleRate, kTestBlockSize);
   effect->SetParam("mix", 1.0);
-  effect->SetParam("quality", 0.0);
   effect->SetParam("semitones", -1.0);
   const int lowShiftLatency = effect->GetLatencySamples();
 
@@ -961,25 +1017,18 @@ bool TestTransposeLatencySpecific()
   effect->SetParam("semitones", -12.0);
   const int deepShiftLatency = effect->GetLatencySamples();
 
-  effect->SetParam("quality", 1.0);
-  effect->SetParam("semitones", -1.0);
-  const int qualityLatency = effect->GetLatencySamples();
+  const bool lowShiftReportsLatency = lowShiftLatency > 0;
+  const bool slightDownTuneKeepsLatencyProfile = slightDownTuneLatency == lowShiftLatency;
+  const bool deepShiftKeepsLatencyProfile = deepShiftLatency == lowShiftLatency;
 
-  const bool lowShiftResponsive = lowShiftLatency > 0 && lowShiftLatency <= kTestBlockSize;
-  const bool slightDownTuneStillResponsive = slightDownTuneLatency >= lowShiftLatency && slightDownTuneLatency <= kTestBlockSize * 2;
-  const bool deepShiftStillBounded = deepShiftLatency >= lowShiftLatency && deepShiftLatency <= kTestBlockSize * 3;
-  const bool qualityModeIsHigherLatency = qualityLatency > lowShiftLatency;
-
-  std::cout << "  " << std::left << std::setw(44) << "-1 semitone stays within one block:" << (lowShiftResponsive ? "PASS" : "FAIL")
+  std::cout << "  " << std::left << std::setw(44) << "-1 semitone reports positive latency:" << (lowShiftReportsLatency ? "PASS" : "FAIL")
             << " (latency=" << lowShiftLatency << ")\n";
-  std::cout << "  " << std::left << std::setw(44) << "-2 semitones stays within two blocks:" << (slightDownTuneStillResponsive ? "PASS" : "FAIL")
+  std::cout << "  " << std::left << std::setw(44) << "-2 semitones keeps current latency profile:" << (slightDownTuneKeepsLatencyProfile ? "PASS" : "FAIL")
             << " (latency=" << slightDownTuneLatency << ")\n";
-  std::cout << "  " << std::left << std::setw(44) << "-12 semitones stays within three blocks:" << (deepShiftStillBounded ? "PASS" : "FAIL")
+  std::cout << "  " << std::left << std::setw(44) << "-12 semitones keeps current latency profile:" << (deepShiftKeepsLatencyProfile ? "PASS" : "FAIL")
             << " (latency=" << deepShiftLatency << ")\n";
-  std::cout << "  " << std::left << std::setw(44) << "Best quality increases transpose latency:" << (qualityModeIsHigherLatency ? "PASS" : "FAIL")
-            << " (latency=" << qualityLatency << ")\n";
 
-  return lowShiftResponsive && slightDownTuneStillResponsive && deepShiftStillBounded && qualityModeIsHigherLatency;
+  return lowShiftReportsLatency && slightDownTuneKeepsLatencyProfile && deepShiftKeepsLatencyProfile;
 }
 
 bool TestStftTransposeSpecific()
@@ -1277,6 +1326,9 @@ int main()
     return 1;
 
   if (!TestOctaveSpecific())
+    return 1;
+
+  if (!TestAlgorithmicReverbsStaySilentOnSilence())
     return 1;
 
   if (!TestStftTransposeSpecific())

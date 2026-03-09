@@ -106,13 +106,9 @@ All types share `decay`, `mix`, and `preDelay`. Each has tuned internals for its
 | Type ID | Name | Notable Extra Parameters |
 |---------|------|--------------------------|
 | `reverb_room` | Room | `size`, `damping` |
-| `reverb_hall` | Hall | `size`, `damping`, `width` |
-| `reverb_plate` | Plate | `tone`, `damping` |
 | `reverb_chamber` | Chamber | `size`, `tone` |
 | `reverb_spring` | Spring | `tone`, `drive` |
-| `reverb_shimmer` | Shimmer | `size`, `shimmer` |
-| `reverb_ambient` | Ambient | `size`, `diffusion`, `width` |
-| `reverb_advanced` | Advanced | Full control: `diffusion`, `lowCut`, `highCut`, `modRate`, `modDepth`, `ducking`, `drive`, `shimmer`, `tone`, `width` |
+| `reverb_advanced` | Advanced | Full control: `diffusion`, `lowCut`, `highCut`, `modRate`, `modDepth`, `ducking`, `drive`, `tone`, `width` |
 
 ### 2.9 Synthesis
 

@@ -126,6 +126,23 @@ guitarfx::SignalGraph MakeSpringReverbPath()
   return g;
 }
 
+guitarfx::SignalGraph MakeAmbientReverbPath()
+{
+  using namespace guitarfx;
+  SignalGraph g;
+  g.nodes.push_back({"in", kNodeTypeInput, "", "Input", true});
+  g.nodes.push_back({"ambient", "reverb_ambient", "reverb", "Ambient", true});
+  g.nodes.back().params["mix"] = 0.32;
+  g.nodes.back().params["decay"] = 0.76;
+  g.nodes.back().params["space"] = 0.82;
+  g.nodes.back().params["modDepth"] = 0.42;
+  g.nodes.push_back({"out", kNodeTypeOutput, "", "Output", true});
+
+  g.edges.push_back({"in", "ambient", 0, 0, 1.0});
+  g.edges.push_back({"ambient", "out", 0, 0, 1.0});
+  return g;
+}
+
 guitarfx::SignalGraph MakeParallelPath()
 {
   using namespace guitarfx;
@@ -305,6 +322,17 @@ int main()
   // Case 4: Parallel path (two branches summed in mixer)
   {
     Analysis a{};
+    const bool ok = RunGraph(MakeAmbientReverbPath(), a);
+    const bool boundsOk = (a.peak > 1e-4) && (a.peak < 1.5) && (a.rms > 1e-4);
+    std::cout << "Ambient reverb path: peak=" << std::fixed << std::setprecision(3) << a.peak
+              << ", rms=" << std::setprecision(3) << a.rms
+              << ((ok && boundsOk) ? "  PASS" : "  FAIL") << "\n";
+    if (ok && boundsOk) ++passed; else ++failed;
+  }
+
+  // Case 5: Parallel path (two branches summed in mixer)
+  {
+    Analysis a{};
     const bool ok = RunGraph(MakeParallelPath(), a);
     // Expected sum of -6 dB and -12 dB branches for 0.5 input
     const double gA = std::pow(10.0, -6.0 / 20.0);
@@ -321,7 +349,7 @@ int main()
     if (ok && within) ++passed; else ++failed;
   }
 
-  // Case 5: Parallel path with hard-panned mixer inputs
+  // Case 6: Parallel path with hard-panned mixer inputs
   {
     std::vector<float> outL;
     std::vector<float> outR;

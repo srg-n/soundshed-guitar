@@ -126,14 +126,11 @@ const EFFECT_STUBS: EffectStub[] = [
   { type: EffectGuids.kDelayDoubler,     aliases: ["delay_doubler"] },
   // Reverb
   { type: EffectGuids.kReverbRoom,       aliases: ["reverb_room"] },
-  { type: EffectGuids.kReverbHall,       aliases: ["reverb_hall"] },
-  { type: EffectGuids.kReverbPlate,      aliases: ["reverb_plate"] },
   { type: EffectGuids.kReverbChamber,    aliases: ["reverb_chamber"] },
   { type: EffectGuids.kReverbSpring,     aliases: ["reverb_spring"] },
-  { type: EffectGuids.kReverbShimmer,    aliases: ["reverb_shimmer"] },
-  { type: EffectGuids.kReverbAmbient,    aliases: ["reverb_ambient"] },
   { type: EffectGuids.kReverbAdvanced,   aliases: ["reverb_advanced"] },
   { type: EffectGuids.kReverbIr,         aliases: ["reverb_ir"] },
+  { type: EffectGuids.kReverbAmbient,    aliases: ["reverb_ambient"] },
   // Modulation
   { type: EffectGuids.kChorus,           aliases: ["chorus"] },
   { type: EffectGuids.kFlanger,          aliases: ["flanger"] },

@@ -2,7 +2,7 @@
 
 > Simulates the acoustic character of a physical space — from a small practice room to a huge concert hall.
 
-Reverb adds the sense of space and dimension that makes a sound feel like it exists somewhere real rather than coming directly from a speaker. Soundshed Guitar includes nine reverb types: choose the one that suits the sound and size of space you want.
+Reverb adds the sense of space and dimension that makes a sound feel like it exists somewhere real rather than coming directly from a speaker. Soundshed Guitar currently includes five reverb types: choose the one that suits the sound and size of space you want.
 
 ---
 
@@ -22,7 +22,7 @@ All reverb types share these controls:
 
 > A small to medium natural-sounding room reverb.
 
-The Room reverb adds the tight, bouncy reflections of a real room. It sounds natural and unobtrusive — closer and denser than a hall, with a shorter decay.
+The Room reverb adds the tight, bouncy reflections of a real room. It sounds natural and unobtrusive, with a shorter decay and a more immediate sense of space.
 
 ### Additional parameters
 
@@ -37,58 +37,18 @@ The Room reverb adds the tight, bouncy reflections of a real room. It sounds nat
 
 ---
 
-## Hall
-
-> A large, open, concert-hall reverb with a long, wide stereo tail.
-
-Hall reverb simulates the big, diffuse sound of a concert hall or arena. The tail is long and spreads wide in the stereo field.
-
-### Additional parameters
-
-| Parameter | Range | Default | What it does |
-|-----------|-------|---------|--------------|
-| **Size** | 0–100% | 60% | The size of the hall. Large Size creates the iconic long, immersive tail |
-| **Damping** | 0–100% | 40% | High-frequency absorption over time. Lower Damping keeps the tail bright and glassy; higher Damping gives a warmer, softer decay |
-| **Width** | 0–100% | 70% | How wide the reverb spreads in the stereo image. Higher Width = more immersive sense of space |
-
-### Tips
-- Hall reverb is best for clean arpeggiated playing, ambient tones, or lush lead lines.
-- Keep Decay moderate (40–60%) unless you want a huge, ambient wash. Very long Decay can make fast playing indistinct.
-- A 15–25 ms Pre-Delay is almost always beneficial — it prevents the reverb from blurring the note attack.
-
----
-
-## Plate
-
-> A dense, smooth reverb with an even tail — inspired by the mechanical plate reverb units used in classic recordings.
-
-Plate reverb has a characteristic density and smoothness that flatters almost any instrument. It does not try to simulate a real room — the tail is uniform and musical, without strong early reflections.
-
-### Additional parameters
-
-| Parameter | Range | Default | What it does |
-|-----------|-------|---------|--------------|
-| **Tone** | 0–100% | 50% | Adjusts the brightness of the reverb tail. Lower Tone = warm, vintage character; higher Tone = bright and present |
-| **Damping** | 0–100% | 50% | How fast the high frequencies decay. More Damping = softer tail; less Damping = glassy, airy tail |
-
-### Tips
-- Plate is a versatile "workhorse" reverb that sounds great on clean, crunch, and even moderately gained tones.
-- Its smooth, even decay makes it particularly good for recording — it blends naturally without cluttering the mix.
-
----
-
 ## Chamber
 
 > A medium-sized, warm reverb that sounds like a dedicated echo chamber or live room.
 
-Chamber reverb sits between Room and Hall in size — intimate but not tight. The character is warm and organic, inspired by the physical echo chambers studios once used for natural reverb.
+Chamber reverb sits between a small room and a larger live room in size: intimate but not tight. The character is warm and organic, inspired by the physical echo chambers studios once used for natural reverb.
 
 ### Additional parameters
 
 | Parameter | Range | Default | What it does |
 |-----------|-------|---------|--------------|
-| **Size** | 0–100% | 50% | The perceived size of the chamber — from a small booth to a large live room |
-| **Tone** | 0–100% | 50% | Brightness of the reverb character. Lower values produce a warmer, darker chamber sound |
+| **Size** | 0–100% | 38% | The perceived size of the chamber — from a small booth to a large live room |
+| **Tone** | 0–100% | 42% | Brightness of the reverb character. Lower values produce a warmer, darker chamber sound |
 
 ### Tips
 - Chamber works well on blues, classic rock, and jazz tones — the warmth and mid focus complements these styles naturally.
@@ -105,8 +65,8 @@ Spring reverb has a very distinct, characterful sound. The mechanical nature of 
 
 | Parameter | Range | Default | What it does |
 |-----------|-------|---------|--------------|
-| **Tone** | 0–100% | 50% | Adjusts the overall brightness and harshness of the spring character. Lower for a warmer spring; higher for the classic bright, glassy drip |
-| **Drive** | 0–100% | 30% | Controls how hard the spring is "driven." Higher Drive increases the splashy, saturated character — higher values can produce the overloaded spring "crash" effect |
+| **Tone** | 0–100% | 52% | Adjusts the overall brightness and harshness of the spring character. Lower for a warmer spring; higher for the classic bright, glassy drip |
+| **Drive** | 0–100% | 10% | Controls how hard the spring is "driven." Higher Drive increases the splashy, saturated character — higher values can produce the overloaded spring "crash" effect |
 
 ### Tips
 - Spring is most effective at moderate-to-high Mix levels (30–50%) — the character becomes apparent and musical at these levels.
@@ -115,68 +75,26 @@ Spring reverb has a very distinct, characterful sound. The mechanical nature of 
 
 ---
 
-## Shimmer
-
-> A reverb that pitch-shifts the reverb tail upward — creating ethereal, choir-like swells.
-
-Shimmer adds a pitched layer (typically an octave up) to the reverb signal, which feeds back and creates heavenly, swelling harmonics on top of sustained notes. It is an ambient and highly atmospheric effect.
-
-### Additional parameters
-
-| Parameter | Range | Default | What it does |
-|-----------|-------|---------|--------------|
-| **Size** | 0–100% | 70% | The decay length of the reverb space. Larger Size gives the shimmer more time to build and swell |
-| **Shimmer** | 0–100% | 60% | How much of the pitch-shifted signal is blended into the reverb. Low Shimmer = a subtle hint of pitch; high Shimmer = a strong, choir-like pitch layer |
-
-### Tips
-- Shimmer is best on sustained notes and chords played on a clean tone. It is not suited to fast playing or high-gain sounds.
-- Set **Decay long and Shimmer moderate (40–60%)** for the classic shimmer reverb sound — the tail builds as the note is held.
-- Very high Shimmer levels can wash out the original pitch — keep it below 70–75% unless you specifically want a more abstract, ambient result.
-- Use Pre-Delay (20–40 ms) to keep the dry note clear before the shimmer bloom begins.
-
----
-
-## Ambient
-
-> A large, diffuse, atmospheric reverb designed for lush, enveloping spaces.
-
-Ambient reverb produces a very diffuse, smooth reverb character without strong early reflections — it sounds like a very large, soft space. It is used to create atmospheric, "floating" tones where the guitar seems to exist inside the reverb rather than on top of it.
-
-### Additional parameters
-
-| Parameter | Range | Default | What it does |
-|-----------|-------|---------|--------------|
-| **Size** | 0–100% | 80% | The scale of the ambient space. Large Size produces a seamless, endless reverb bloom |
-| **Diffusion** | 0–100% | 70% | How spread out and smooth the reverb is. High Diffusion = smooth, even tail with no distinct reflections; low Diffusion = slightly grainier, more textured tail |
-| **Width** | 0–100% | 80% | The stereo width of the reverb. High Width creates an immersive stereo field |
-
-### Tips
-- Ambient reverb is best used with **Decay set very long** and **Mix at 20–40%**. This creates the sense of floating in the space.
-- Pair with a long Pre-Delay (30–50 ms) to keep the dry attack clear against the ambient wash.
-
----
-
 ## Advanced
 
 > A fully featured reverb with controls for every aspect of the space, modulation, and tone shaping.
 
-The Advanced reverb gives you complete control over the reverb character, including internal modulation (to prevent metallic ringing), ducking (to reduce reverb when you are picking), filtering, and more.
+The Advanced reverb gives you complete control over the reverb character, including internal delay-line modulation (to prevent static metallic ringing), ducking (to reduce reverb when you are picking), filtering, and more.
 
 ### Additional parameters
 
 | Parameter | Range | Default | What it does |
 |-----------|-------|---------|--------------|
-| **Size** | 0–100% | 55% | The scale of the reverb space. Larger Size increases decay length and the sense of distance |
-| **Diffusion** | 0–100% | 60% | Smoothness of the early reflections. High = smooth; low = more distinct early reflections |
+| **Size** | 0–100% | 40% | The scale of the reverb space. Larger Size increases decay length and the sense of distance |
+| **Diffusion** | 0–100% | 74% | Smoothness of the early reflections. High = smooth; low = more distinct early reflections |
 | **Low Cut** | 20–1200 Hz | ~80 Hz | Removes low-frequency content from the reverb tail — prevents the reverb from becoming boomy |
 | **High Cut** | 1000–20000 Hz | ~8 kHz | Removes high-frequency content from the reverb — warms up a harsh tail |
 | **Mod Rate** | 0.02–8 Hz | ~0.5 Hz | Speed of internal LFO modulation. Modulation prevents the unnatural metallic "ringing" of static reverb. Low values (0.1–1 Hz) are subtle and natural |
 | **Mod Depth** | 0–1 | ~0.2 | How much pitch variation the modulation introduces. Subtle values (0.1–0.3) add life; high values create obvious pitch wobble |
 | **Ducking** | 0–100% | 0% | Reduces reverb level when you are actively playing, and lets it bloom when you stop. Helps keep the dry signal clear in the mix |
 | **Drive** | 0–100% | 0% | Adds saturation inside the reverb tail — a subtle warmth at low values, a more coloured character at high values |
-| **Shimmer** | 0–100% | 0% | Adds a pitched octave layer to the reverb (similar to the Shimmer reverb type) |
-| **Tone** | 0–100% | 50% | Overall brightness of the reverb tail |
-| **Width** | 0–100% | 70% | Stereo width of the reverb |
+| **Tone** | 0–100% | 42% | Overall brightness of the reverb tail |
+| **Width** | 0–100% | 73% | Stereo width of the reverb |
 
 ### Tips
 - The **Ducking** control is especially useful for rhythm playing — the reverb stays out of the way while you pick but blooms naturally during pauses.
@@ -200,5 +118,5 @@ The IR Convolution reverb works the same way as an [IR Cabinet](cab-ir.md) — i
 
 ### Tips
 - Many free and commercial reverb IR libraries are available online and can be imported into your resource folder.
-- Unlike algorithmic reverbs (Room, Hall, etc.), the IR Convolution reverb precisely captures a real space — but you cannot adjust its decay length or size without a third-party IR editor tool.
+- Unlike the built-in algorithmic reverbs, the IR Convolution reverb precisely captures a real space — but you cannot adjust its decay length or size without a third-party IR editor tool.
 - Use Pre-Delay (set in the global chain or via an upstream effect) to separate the dry signal from the reverb onset.

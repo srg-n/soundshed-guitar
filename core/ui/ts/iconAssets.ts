@@ -86,14 +86,11 @@ const effectIcons: Record<string, IconKey> = {
 
   // Reverb
   [EffectGuids.kReverbRoom]:       "hall",
-  [EffectGuids.kReverbHall]:       "hall",
-  [EffectGuids.kReverbPlate]:      "hall",
   [EffectGuids.kReverbChamber]:    "hall",
   [EffectGuids.kReverbSpring]:     "hall",
-  [EffectGuids.kReverbShimmer]:    "sparkle",
-  [EffectGuids.kReverbAmbient]:    "sparkle",
   [EffectGuids.kReverbAdvanced]:   "sparkle",
   [EffectGuids.kReverbIr]:         "hall",
+  [EffectGuids.kReverbAmbient]:    "sparkle",
 
   // Synth
   [EffectGuids.kSynthSaw]:         "note",

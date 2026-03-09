@@ -49,14 +49,11 @@ namespace guitarfx
 
     // ── Reverb ────────────────────────────────────────────────────────────
     constexpr const char* kReverbRoom      = "7467cbf1-6c7f-4f07-b5dd-a303d25b475c";
-    constexpr const char* kReverbHall      = "a07ab1a5-37e5-4279-bd08-5ad640886709";
-    constexpr const char* kReverbPlate     = "9e023b65-5431-48eb-95ff-4f13e7f864a2";
     constexpr const char* kReverbChamber   = "4ef25e86-9763-40bc-aca6-636b542df60b";
     constexpr const char* kReverbSpring    = "0df83b32-23d0-4530-a50e-e0824a5ccf01";
-    constexpr const char* kReverbShimmer   = "7dcbb06d-8925-4f84-b412-232b7c02de26";
-    constexpr const char* kReverbAmbient   = "d663f5d8-0f6e-4721-960d-81621fe41801";
     constexpr const char* kReverbAdvanced  = "92558944-f0da-4d97-ab75-bed8b63abc31";
     constexpr const char* kReverbIr        = "497d3c9d-ed6b-4c71-8e6d-0f9d61564dbc";
+    constexpr const char* kReverbAmbient   = "b3f5445e-0cb9-43a3-ac2f-9216fb8e42dc";
 
     // ── Modulation ────────────────────────────────────────────────────────
     constexpr const char* kChorus          = "decdd132-029a-46a5-a362-edcde007a450";

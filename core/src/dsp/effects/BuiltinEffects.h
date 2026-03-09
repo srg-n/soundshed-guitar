@@ -12,6 +12,7 @@
 #include "dsp/effects/StftTransposeEffect.h"
 #include "dsp/effects/TransposeEffect.h"
 #include "dsp/effects/ReverbEffect.h"
+#include "dsp/effects/AmbientReverbEffect.h"
 #include "dsp/effects/CompressorEffect.h"
 #include "dsp/effects/OverdriveEffect.h"
 #include "dsp/effects/DistortionEffect.h"
@@ -99,6 +100,7 @@ namespace guitarfx
     RegisterDoublerEffect();
     RegisterReverbEffect();
     RegisterIRReverbEffect();
+    RegisterAmbientReverbEffect();
 
     // Modulation effects
     RegisterPitchShiftEffect();

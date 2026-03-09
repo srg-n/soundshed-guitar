@@ -70,7 +70,7 @@ Reverb effects simulate acoustic spaces — from small rooms to large halls and 
 
 | Effect | Description |
 |--------|-------------|
-| [Reverb (all types)](reverb.md) | Room, Hall, Plate, Chamber, Spring, Shimmer, Ambient, Advanced, and IR Convolution reverbs |
+| [Reverb (all types)](reverb.md) | Room, Chamber, Spring, Advanced, and IR Convolution reverbs |
 
 ### Modulation
 Modulation effects add movement and animation to the tone through periodic changes in pitch, phase, or volume.

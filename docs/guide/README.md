@@ -64,7 +64,7 @@ Each effect is documented with a description, full parameter reference, and prac
 - [Stereo Doubler](effects/delay-doubler.md)
 
 ### Reverb
-- [Reverb (all types)](effects/reverb.md) — Room, Hall, Plate, Chamber, Spring, Shimmer, Ambient, Advanced, IR Convolution
+- [Reverb (all types)](effects/reverb.md) — Room, Chamber, Spring, Advanced, IR Convolution
 
 ### Modulation
 - [Chorus](effects/chorus.md)

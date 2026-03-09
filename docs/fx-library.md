@@ -69,14 +69,11 @@ All UUID constants are defined in `core/src/dsp/EffectGuids.h`. The table below 
 | `kDelayDigital` | `673d3e7a-e9ef-4c5d-a4c4-619dff3355ed` | `delay_digital` |
 | `kDelayDoubler` | `778aaef4-40e3-4efa-8782-6a8bfa1d1661` | `delay_doubler` |
 | `kReverbRoom` | `7467cbf1-6c7f-4f07-b5dd-a303d25b475c` | `reverb_room` |
-| `kReverbHall` | `a07ab1a5-37e5-4279-bd08-5ad640886709` | `reverb_hall` |
-| `kReverbPlate` | `9e023b65-5431-48eb-95ff-4f13e7f864a2` | `reverb_plate` |
 | `kReverbChamber` | `4ef25e86-9763-40bc-aca6-636b542df60b` | `reverb_chamber` |
 | `kReverbSpring` | `0df83b32-23d0-4530-a50e-e0824a5ccf01` | `reverb_spring` |
-| `kReverbShimmer` | `7dcbb06d-8925-4f84-b412-232b7c02de26` | `reverb_shimmer` |
-| `kReverbAmbient` | `d663f5d8-0f6e-4721-960d-81621fe41801` | `reverb_ambient` |
 | `kReverbAdvanced` | `92558944-f0da-4d97-ab75-bed8b63abc31` | `reverb_advanced` |
 | `kReverbIr` | `497d3c9d-ed6b-4c71-8e6d-0f9d61564dbc` | `reverb_ir` |
+| `kReverbAmbient` | `b3f5445e-0cb9-43a3-ac2f-9216fb8e42dc` | `reverb_ambient` |
 | `kChorus` | `decdd132-029a-46a5-a362-edcde007a450` | `chorus` |
 | `kFlanger` | `1a3f3793-7e80-4e3d-ab7b-3ce3ce032fe7` | `flanger` |
 | `kPhaser` | `3aa9dc81-31c2-40d5-9b1b-b0b9d1295e9b` | `phaser` |
@@ -138,7 +135,7 @@ EffectProcessor* processor = EffectRegistry::Create("amp_nam");
 | `modulation` | Modulation effects | Chorus, flanger, phaser, tremolo, auto-wah |
 | `pitch` | Pitch manipulation | Pitch shift, transpose, octave |
 | `delay` | Time-based delay | Digital delay, doubler |
-| `reverb` | Reverberation | Room, hall, plate, spring, IR |
+| `reverb` | Reverberation | Room, chamber, spring, advanced, IR, ambient |
 | `utility` | Utility processing | Gain, splitter, mixer |
 | `synth` | Synthesized tones | Synth saw |
 
@@ -220,13 +217,10 @@ Clean digital delay.
 The reverb family uses a shared multi-mode algorithmic engine with dedicated type IDs:
 
 - `reverb_room`
-- `reverb_hall`
-- `reverb_plate`
 - `reverb_chamber`
 - `reverb_spring`
-- `reverb_shimmer`
-- `reverb_ambient`
 - `reverb_advanced`
+- `reverb_ambient`
 
 Each mode has tuned internals, but only exposes the controls typically needed for that style.
 
@@ -240,65 +234,24 @@ Each mode has tuned internals, but only exposes the controls typically needed fo
 | `preDelay` | 0–220 | 8.0 | ms |
 | `mix` | 0.0–1.0 | 0.22 | — |
 
-#### Hall Reverb (`reverb_hall`)
-
-| Parameter | Range | Default | Unit |
-|-----------|-------|---------|------|
-| `decay` | 0.0–1.0 | 0.76 | — |
-| `size` | 0.0–1.0 | 0.70 | — |
-| `preDelay` | 0–220 | 24.0 | ms |
-| `damping` | 0.0–1.0 | 0.46 | — |
-| `width` | 0.0–1.2 | 1.05 | — |
-| `mix` | 0.0–1.0 | 0.27 | — |
-
-#### Plate Reverb (`reverb_plate`)
-
-| Parameter | Range | Default | Unit |
-|-----------|-------|---------|------|
-| `decay` | 0.0–1.0 | 0.58 | — |
-| `preDelay` | 0–220 | 12.0 | ms |
-| `tone` | 0.0–1.0 | 0.76 | — |
-| `damping` | 0.0–1.0 | 0.35 | — |
-| `mix` | 0.0–1.0 | 0.24 | — |
-
 #### Chamber Reverb (`reverb_chamber`)
 
 | Parameter | Range | Default | Unit |
 |-----------|-------|---------|------|
-| `decay` | 0.0–1.0 | 0.60 | — |
-| `size` | 0.0–1.0 | 0.56 | — |
-| `tone` | 0.0–1.0 | 0.52 | — |
-| `preDelay` | 0–220 | 15.0 | ms |
-| `mix` | 0.0–1.0 | 0.24 | — |
+| `decay` | 0.0–1.0 | 0.42 | — |
+| `size` | 0.0–1.0 | 0.38 | — |
+| `tone` | 0.0–1.0 | 0.42 | — |
+| `preDelay` | 0–220 | 12.0 | ms |
+| `mix` | 0.0–1.0 | 0.16 | — |
 
 #### Spring Reverb (`reverb_spring`)
 
 | Parameter | Range | Default | Unit |
 |-----------|-------|---------|------|
-| `decay` | 0.0–1.0 | 0.50 | — |
-| `tone` | 0.0–1.0 | 0.68 | — |
-| `drive` | 0.0–1.0 | 0.22 | — |
-| `mix` | 0.0–1.0 | 0.23 | — |
-
-#### Shimmer Reverb (`reverb_shimmer`)
-
-| Parameter | Range | Default | Unit |
-|-----------|-------|---------|------|
-| `decay` | 0.0–1.0 | 0.84 | — |
-| `size` | 0.0–1.0 | 0.80 | — |
-| `shimmer` | 0.0–1.0 | 0.45 | — |
-| `preDelay` | 0–220 | 28.0 | ms |
-| `mix` | 0.0–1.0 | 0.30 | — |
-
-#### Ambient Reverb (`reverb_ambient`)
-
-| Parameter | Range | Default | Unit |
-|-----------|-------|---------|------|
-| `decay` | 0.0–1.0 | 0.86 | — |
-| `size` | 0.0–1.0 | 0.90 | — |
-| `diffusion` | 0.0–1.0 | 0.90 | — |
-| `width` | 0.0–1.2 | 1.10 | — |
-| `mix` | 0.0–1.0 | 0.32 | — |
+| `decay` | 0.0–1.0 | 0.34 | — |
+| `tone` | 0.0–1.0 | 0.52 | — |
+| `drive` | 0.0–1.0 | 0.10 | — |
+| `mix` | 0.0–1.0 | 0.14 | — |
 
 #### Advanced Reverb (`reverb_advanced`)
 
@@ -306,26 +259,42 @@ Common controls:
 
 | Parameter | Range | Default | Unit |
 |-----------|-------|---------|------|
-| `decay` | 0.0–1.0 | 0.64 | — |
-| `size` | 0.0–1.0 | 0.55 | — |
-| `mix` | 0.0–1.0 | 0.24 | — |
-| `damping` | 0.0–1.0 | 0.46 | — |
-| `preDelay` | 0–220 | 16.0 | ms |
-| `tone` | 0.0–1.0 | 0.62 | — |
-| `width` | 0.0–1.2 | 1.00 | — |
+| `decay` | 0.0–1.0 | 0.40 | — |
+| `size` | 0.0–1.0 | 0.40 | — |
+| `mix` | 0.0–1.0 | 0.16 | — |
+| `damping` | 0.0–1.0 | 0.66 | — |
+| `preDelay` | 0–220 | 12.0 | ms |
+| `tone` | 0.0–1.0 | 0.42 | — |
+| `width` | 0.0–1.2 | 0.88 | — |
 
 Advanced controls:
 
 | Parameter | Range | Default | Unit |
 |-----------|-------|---------|------|
-| `diffusion` | 0.0–1.0 | 0.70 | — |
+| `diffusion` | 0.0–1.0 | 0.74 | — |
 | `lowCut` | 20–1200 | 140 | Hz |
-| `highCut` | 1000–20000 | 12000 | Hz |
-| `modRate` | 0.02–8.0 | 0.45 | Hz |
-| `modDepth` | 0.0–1.0 | 0.18 | — |
+| `highCut` | 1000–20000 | 7600 | Hz |
+| `modRate` | 0.02–8.0 | 0.28 | Hz |
+| `modDepth` | 0.0–1.0 | 0.26 | — |
 | `ducking` | 0.0–1.0 | 0.08 | — |
 | `drive` | 0.0–1.0 | 0.00 | — |
-| `shimmer` | 0.0–1.0 | 0.00 | — |
+
+#### Ambient Reverb (`reverb_ambient`)
+
+Long, diffuse late reverb with soft early reflections, slow modulation, and a wide stereo bloom.
+
+| Parameter | Range | Default | Unit |
+|-----------|-------|---------|------|
+| `decay` | 0.0–1.0 | 0.70 | — |
+| `space` | 0.0–1.0 | 0.72 | — |
+| `diffusion` | 0.0–1.0 | 0.84 | — |
+| `preDelay` | 0–200 | 26.0 | ms |
+| `tone` | 0.0–1.0 | 0.42 | — |
+| `width` | 0.0–1.25 | 1.08 | — |
+| `modRate` | 0.02–2.0 | 0.18 | Hz |
+| `modDepth` | 0.0–1.0 | 0.38 | — |
+| `mix` | 0.0–1.0 | 0.28 | — |
+| `outputGain` | -18..+12 | 0.0 | dB |
 
 ### Simple Cabinet (`cab_simple`)
 Filter-based cabinet simulation (no IR required).
