@@ -1106,6 +1106,80 @@ bool TestStftTransposeLiveChangesSpecific()
   return latencyTracksTarget && allBlocksHealthy;
 }
 
+bool TestStftTransposePolyphonicModeSpecific()
+{
+  std::cout << "\n--- StftTransposeEffect Polyphonic Tests ---\n";
+
+  auto& registry = guitarfx::EffectRegistry::Instance();
+  auto effect = registry.Create(guitarfx::EffectGuids::kTransposeStft);
+  if (!effect)
+  {
+    std::cout << "  FAIL: Could not create STFT transpose effect\n";
+    return false;
+  }
+
+  effect->Prepare(kTestSampleRate, kTestBlockSize);
+  effect->SetParam("mix", 1.0);
+  effect->SetParam("mode", 1.0);
+  effect->SetParam("normalize", 1.0);
+  effect->SetParam("quefrencyMs", 0.0);
+  effect->SetParam("timbre", 1.0);
+  effect->SetParam("semitones", -12.0);
+
+  const int latencySamples = effect->GetLatencySamples();
+  const int latencyBlocks = std::max(0, (latencySamples + kTestBlockSize - 1) / kTestBlockSize);
+  const int blocksToProcess = latencyBlocks + 8;
+  const int totalSamples = blocksToProcess * kTestBlockSize;
+
+  std::vector<float> inputL(static_cast<size_t>(totalSamples), 0.0f);
+  std::vector<float> inputR(static_cast<size_t>(totalSamples), 0.0f);
+  std::vector<float> outputL(static_cast<size_t>(totalSamples), 0.0f);
+  std::vector<float> outputR(static_cast<size_t>(totalSamples), 0.0f);
+  std::vector<float> blockOutL(kTestBlockSize, 0.0f);
+  std::vector<float> blockOutR(kTestBlockSize, 0.0f);
+
+  for (size_t i = 0; i < inputL.size(); ++i)
+  {
+    const double time = static_cast<double>(i) / kTestSampleRate;
+    const double sample = 0.25 * std::sin(2.0 * kPi * 440.0 * time)
+      + 0.20 * std::sin(2.0 * kPi * 554.3652619537 * time)
+      + 0.15 * std::sin(2.0 * kPi * 659.2551138257 * time);
+    inputL[i] = static_cast<float>(sample);
+    inputR[i] = static_cast<float>(sample);
+  }
+
+  float* outputs[2] = {blockOutL.data(), blockOutR.data()};
+  for (int block = 0; block < blocksToProcess; ++block)
+  {
+    std::fill(blockOutL.begin(), blockOutL.end(), 0.0f);
+    std::fill(blockOutR.begin(), blockOutR.end(), 0.0f);
+    float* inputs[2] = {
+      inputL.data() + block * kTestBlockSize,
+      inputR.data() + block * kTestBlockSize
+    };
+    effect->Process(inputs, outputs, kTestBlockSize);
+    std::copy(blockOutL.begin(), blockOutL.end(), outputL.begin() + static_cast<size_t>(block * kTestBlockSize));
+    std::copy(blockOutR.begin(), blockOutR.end(), outputR.begin() + static_cast<size_t>(block * kTestBlockSize));
+  }
+
+  const size_t warmupStart = static_cast<size_t>(std::min(totalSamples - 1,
+    latencySamples + kTestBlockSize * 2));
+  std::vector<float> steadyState(outputL.begin() + static_cast<std::ptrdiff_t>(warmupStart), outputL.end());
+  const auto analysis = AnalyzeSignal(steadyState);
+
+  const bool polyModeReportsHigherLatency = latencySamples >= 1536;
+  const bool polyphonicOutputHealthy = !analysis.hasNaN && !analysis.hasInf && !analysis.isAllZeros && analysis.peakValue > 0.05;
+
+  std::cout << "  " << std::left << std::setw(44) << "Polyphonic mode increases analysis window:"
+            << (polyModeReportsHigherLatency ? "PASS" : "FAIL")
+            << " (latency=" << latencySamples << ")\n";
+  std::cout << "  " << std::left << std::setw(44) << "Chord input remains finite and audible:"
+            << (polyphonicOutputHealthy ? "PASS" : "FAIL")
+            << " (peak=" << std::fixed << std::setprecision(3) << analysis.peakValue << ")\n";
+
+  return polyModeReportsHigherLatency && polyphonicOutputHealthy;
+}
+
 bool TestPitchShiftQualitySpecific()
 {
   std::cout << "\n--- PitchShiftEffect Quality Tests ---\n";
@@ -1209,6 +1283,9 @@ int main()
     return 1;
 
   if (!TestStftTransposeLiveChangesSpecific())
+    return 1;
+
+  if (!TestStftTransposePolyphonicModeSpecific())
     return 1;
 
   if (!TestTransposeLatencySpecific())

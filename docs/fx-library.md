@@ -396,6 +396,12 @@ STFT phase-vocoder transpose intended for direct comparison with the default Sig
 |-----------|-------|---------|------|
 | `semitones` | -12..+12 | 0.0 | st |
 | `mix` | 0.0–1.0 | 1.0 | — |
+| `mode` | 0/1 (`Low Latency`/`Polyphonic`) | 0.0 | enum |
+| `quefrencyMs` | 0.0–5.0 | 0.0 | ms |
+| `timbre` | 0.5–2.0 | 1.0 | ratio |
+| `normalize` | 0/1 (`Off`/`On`) | 1.0 | enum |
+
+`mode=Polyphonic` switches to a larger, higher-overlap STFT profile for better chord handling at the cost of higher latency. Keep `quefrencyMs=0` for most polyphonic material; the upstream library notes that cepstral formant preservation is less reliable with polyphonic input.
 
 ### Gain (`gain`)
 Simple gain stage.

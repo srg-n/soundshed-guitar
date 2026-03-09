@@ -19,6 +19,14 @@ namespace guitarfx
 {
   namespace detail
   {
+    struct StftTransposeOptions
+    {
+      int mode = 0;
+      double quefrencySeconds = 0.0;
+      double timbre = 1.0;
+      bool normalization = true;
+    };
+
     struct StftTransposeProfile
     {
       size_t analysisWindow = 1024;
@@ -34,21 +42,22 @@ namespace guitarfx
     class StftTransposeChannel
     {
     public:
-      [[nodiscard]] static int GetExpectedLatencySamples(int semitones)
+      [[nodiscard]] static int GetExpectedLatencySamples(int semitones, int mode)
       {
         const int clamped = std::clamp(semitones, -12, 12);
         if (clamped == 0)
           return 0;
 
-        const StftTransposeProfile profile = SelectProfile(clamped, 0);
+        const StftTransposeProfile profile = SelectProfile(clamped, mode, 0);
         return static_cast<int>(profile.analysisWindow - profile.synthesisWindow);
       }
 
-      void Prepare(double sampleRate, int maxBlockSize, int semitones)
+      void Prepare(double sampleRate, int maxBlockSize, int semitones, const StftTransposeOptions& options)
       {
         mSampleRate = sampleRate;
         mMaxBlockSize = std::max(1, maxBlockSize);
         mSemitones = semitones;
+        mOptions = SanitizeOptions(options);
         mFactor = std::pow(2.0, static_cast<double>(mSemitones) / 12.0);
         RebuildPipeline();
       }
@@ -64,22 +73,27 @@ namespace guitarfx
 
         if (mCore)
         {
-          // factors() resets the upstream vocoder state.
-          mCore->factors({mFactor});
+          ApplyCoreOptions();
         }
       }
 
-      void SetSemitones(int semitones)
+      void Configure(int semitones, const StftTransposeOptions& options)
       {
         const int clamped = std::clamp(semitones, -12, 12);
+        const StftTransposeOptions sanitizedOptions = SanitizeOptions(options);
         const double factor = std::pow(2.0, static_cast<double>(clamped) / 12.0);
-        if (clamped == mSemitones)
+        if (clamped == mSemitones
+            && sanitizedOptions.mode == mOptions.mode
+            && std::abs(sanitizedOptions.quefrencySeconds - mOptions.quefrencySeconds) < 1.0e-9
+            && std::abs(sanitizedOptions.timbre - mOptions.timbre) < 1.0e-9
+            && sanitizedOptions.normalization == mOptions.normalization)
           return;
 
         mSemitones = clamped;
         mFactor = factor;
+        mOptions = sanitizedOptions;
 
-        const StftTransposeProfile nextProfile = SelectProfile(mSemitones, mMaxBlockSize);
+        const StftTransposeProfile nextProfile = SelectProfile(mSemitones, mOptions.mode, mMaxBlockSize);
         const bool profileChanged = nextProfile.analysisWindow != mProfile.analysisWindow
           || nextProfile.synthesisWindow != mProfile.synthesisWindow
           || nextProfile.overlap != mProfile.overlap;
@@ -91,7 +105,7 @@ namespace guitarfx
         }
         else if (mCore)
         {
-          mCore->factors({mFactor});
+          ApplyCoreOptions();
           Reset();
         }
       }
@@ -132,9 +146,27 @@ namespace guitarfx
       }
 
     private:
-      static StftTransposeProfile SelectProfile(int semitones, int /*maxBlockSize*/)
+      [[nodiscard]] static StftTransposeOptions SanitizeOptions(const StftTransposeOptions& options)
+      {
+        StftTransposeOptions sanitized = options;
+        sanitized.mode = std::clamp(options.mode, 0, 1);
+        sanitized.quefrencySeconds = std::clamp(options.quefrencySeconds, 0.0, 0.005);
+        sanitized.timbre = std::clamp(options.timbre, 0.5, 2.0);
+        return sanitized;
+      }
+
+      static StftTransposeProfile SelectProfile(int semitones, int mode, int /*maxBlockSize*/)
       {
         const int amount = std::abs(semitones);
+        if (mode > 0)
+        {
+          if (amount <= 2)
+          {
+            return {1024, 256, 8};
+          }
+          return {2048, 512, 8};
+        }
+
         if (amount <= 2)
         {
           return {512, 128, 4};
@@ -142,9 +174,20 @@ namespace guitarfx
         return {1024, 256, 4};
       }
 
+      void ApplyCoreOptions()
+      {
+        if (!mCore)
+          return;
+
+        mCore->factors({mFactor});
+        mCore->quefrency(mOptions.quefrencySeconds);
+        mCore->distortion(mOptions.timbre);
+        mCore->normalization(mOptions.normalization);
+      }
+
       void RebuildPipeline()
       {
-        mProfile = SelectProfile(mSemitones, mMaxBlockSize);
+        mProfile = SelectProfile(mSemitones, mOptions.mode, mMaxBlockSize);
         mHopSize = std::max<size_t>(1, mProfile.synthesisWindow / mProfile.overlap);
         mLatencySamples = static_cast<int>(mProfile.analysisWindow - mProfile.synthesisWindow);
 
@@ -158,10 +201,7 @@ namespace guitarfx
 
         mStft = std::make_unique<stftpitchshift::STFT<double>>(mProfile.asTuple(), mHopSize, false);
         mCore = std::make_unique<stftpitchshift::StftPitchShiftCore<double>>(mProfile.asTuple(), mHopSize, mSampleRate);
-        mCore->factors({mFactor});
-        mCore->quefrency(0.0);
-        mCore->distortion(1.0);
-        mCore->normalization(true);
+        ApplyCoreOptions();
 
         Reset();
       }
@@ -223,6 +263,7 @@ namespace guitarfx
       size_t mHopSize = 64;
       size_t mOutputReadIndex = 0;
       StftTransposeProfile mProfile;
+      StftTransposeOptions mOptions;
 
       std::unique_ptr<stftpitchshift::STFT<double>> mStft;
       std::unique_ptr<stftpitchshift::StftPitchShiftCore<double>> mCore;
@@ -248,12 +289,19 @@ namespace guitarfx
       mZero.assign(static_cast<size_t>(maxBlockSize), 0.0f);
 
       mActiveSemitones = mRequestedSemitones.load(std::memory_order_relaxed);
+      mActiveMode = std::clamp(mRequestedMode.load(std::memory_order_relaxed), 0, 1);
       mActiveMix = std::clamp(mRequestedMix.load(std::memory_order_relaxed), 0.0, 1.0);
+      mActiveQuefrencyMs = std::clamp(mRequestedQuefrencyMs.load(std::memory_order_relaxed), 0.0, 5.0);
+      mActiveTimbre = std::clamp(mRequestedTimbre.load(std::memory_order_relaxed), 0.5, 2.0);
+      mActiveNormalization = mRequestedNormalization.load(std::memory_order_relaxed) > 0.5;
       mSemitoneChangePending.store(false, std::memory_order_relaxed);
+      mOptionChangePending.store(false, std::memory_order_relaxed);
 
-      mLeft.Prepare(sampleRate, maxBlockSize, mActiveSemitones);
-      mRight.Prepare(sampleRate, maxBlockSize, mActiveSemitones);
-      mReportedLatencySamples.store(detail::StftTransposeChannel::GetExpectedLatencySamples(mActiveSemitones),
+      const detail::StftTransposeOptions options = BuildActiveOptions();
+
+      mLeft.Prepare(sampleRate, maxBlockSize, mActiveSemitones, options);
+      mRight.Prepare(sampleRate, maxBlockSize, mActiveSemitones, options);
+      mReportedLatencySamples.store(detail::StftTransposeChannel::GetExpectedLatencySamples(mActiveSemitones, mActiveMode),
                                     std::memory_order_relaxed);
       mConfigured = true;
       Reset();
@@ -326,7 +374,9 @@ namespace guitarfx
         if (semitones != mRequestedSemitones.load(std::memory_order_relaxed))
         {
           mRequestedSemitones.store(semitones, std::memory_order_relaxed);
-          mReportedLatencySamples.store(detail::StftTransposeChannel::GetExpectedLatencySamples(semitones),
+          mReportedLatencySamples.store(detail::StftTransposeChannel::GetExpectedLatencySamples(
+                                          semitones,
+                                          mRequestedMode.load(std::memory_order_relaxed)),
                                         std::memory_order_relaxed);
           mSemitoneChangePending.store(true, std::memory_order_release);
         }
@@ -334,6 +384,33 @@ namespace guitarfx
       else if (key == "mix")
       {
         mRequestedMix.store(std::clamp(value, 0.0, 1.0), std::memory_order_relaxed);
+      }
+      else if (key == "mode")
+      {
+        const int mode = value >= 0.5 ? 1 : 0;
+        if (mode != mRequestedMode.load(std::memory_order_relaxed))
+        {
+          mRequestedMode.store(mode, std::memory_order_relaxed);
+          mReportedLatencySamples.store(detail::StftTransposeChannel::GetExpectedLatencySamples(
+                                          mRequestedSemitones.load(std::memory_order_relaxed), mode),
+                                        std::memory_order_relaxed);
+          mOptionChangePending.store(true, std::memory_order_release);
+        }
+      }
+      else if (key == "quefrencyMs")
+      {
+        mRequestedQuefrencyMs.store(std::clamp(value, 0.0, 5.0), std::memory_order_relaxed);
+        mOptionChangePending.store(true, std::memory_order_release);
+      }
+      else if (key == "timbre")
+      {
+        mRequestedTimbre.store(std::clamp(value, 0.5, 2.0), std::memory_order_relaxed);
+        mOptionChangePending.store(true, std::memory_order_release);
+      }
+      else if (key == "normalize")
+      {
+        mRequestedNormalization.store(value > 0.5 ? 1.0 : 0.0, std::memory_order_relaxed);
+        mOptionChangePending.store(true, std::memory_order_release);
       }
     }
 
@@ -345,6 +422,14 @@ namespace guitarfx
         return static_cast<double>(mRequestedSemitones.load(std::memory_order_relaxed));
       if (key == "mix")
         return mRequestedMix.load(std::memory_order_relaxed);
+      if (key == "mode")
+        return static_cast<double>(mRequestedMode.load(std::memory_order_relaxed));
+      if (key == "quefrencyMs")
+        return mRequestedQuefrencyMs.load(std::memory_order_relaxed);
+      if (key == "timbre")
+        return mRequestedTimbre.load(std::memory_order_relaxed);
+      if (key == "normalize")
+        return mRequestedNormalization.load(std::memory_order_relaxed);
       return 0.0;
     }
 
@@ -357,31 +442,70 @@ namespace guitarfx
     }
 
   private:
+    [[nodiscard]] detail::StftTransposeOptions BuildActiveOptions() const
+    {
+      detail::StftTransposeOptions options;
+      options.mode = mActiveMode;
+      options.quefrencySeconds = mActiveQuefrencyMs * 1.0e-3;
+      options.timbre = mActiveTimbre;
+      options.normalization = mActiveNormalization;
+      return options;
+    }
+
     void ApplyPendingRealtimeParams()
     {
       mActiveMix = std::clamp(mRequestedMix.load(std::memory_order_relaxed), 0.0, 1.0);
 
-      if (!mSemitoneChangePending.exchange(false, std::memory_order_acq_rel))
+      const bool semitoneChanged = mSemitoneChangePending.exchange(false, std::memory_order_acq_rel);
+      const bool optionChanged = mOptionChangePending.exchange(false, std::memory_order_acq_rel);
+
+      if (!semitoneChanged && !optionChanged)
         return;
 
       const int requestedSemitones = mRequestedSemitones.load(std::memory_order_acquire);
-      if (requestedSemitones == mActiveSemitones)
-        return;
+      const int requestedMode = std::clamp(mRequestedMode.load(std::memory_order_acquire), 0, 1);
+      const double requestedQuefrencyMs = std::clamp(mRequestedQuefrencyMs.load(std::memory_order_acquire), 0.0, 5.0);
+      const double requestedTimbre = std::clamp(mRequestedTimbre.load(std::memory_order_acquire), 0.5, 2.0);
+      const bool requestedNormalization = mRequestedNormalization.load(std::memory_order_acquire) > 0.5;
 
-      mLeft.SetSemitones(requestedSemitones);
-      mRight.SetSemitones(requestedSemitones);
+      if (requestedSemitones == mActiveSemitones
+          && requestedMode == mActiveMode
+          && std::abs(requestedQuefrencyMs - mActiveQuefrencyMs) < 1.0e-9
+          && std::abs(requestedTimbre - mActiveTimbre) < 1.0e-9
+          && requestedNormalization == mActiveNormalization)
+      {
+        return;
+      }
+
+      mActiveMode = requestedMode;
+      mActiveQuefrencyMs = requestedQuefrencyMs;
+      mActiveTimbre = requestedTimbre;
+      mActiveNormalization = requestedNormalization;
+
+      const detail::StftTransposeOptions options = BuildActiveOptions();
+      mLeft.Configure(requestedSemitones, options);
+      mRight.Configure(requestedSemitones, options);
       mActiveSemitones = requestedSemitones;
-      mReportedLatencySamples.store(detail::StftTransposeChannel::GetExpectedLatencySamples(mActiveSemitones),
+      mReportedLatencySamples.store(detail::StftTransposeChannel::GetExpectedLatencySamples(mActiveSemitones, mActiveMode),
                                     std::memory_order_relaxed);
     }
 
     std::atomic<int> mRequestedSemitones{0};
+    std::atomic<int> mRequestedMode{0};
     std::atomic<double> mRequestedMix{1.0};
+    std::atomic<double> mRequestedQuefrencyMs{0.0};
+    std::atomic<double> mRequestedTimbre{1.0};
+    std::atomic<double> mRequestedNormalization{1.0};
     std::atomic<bool> mSemitoneChangePending{false};
+    std::atomic<bool> mOptionChangePending{false};
     std::atomic<int> mReportedLatencySamples{0};
     bool mConfigured = false;
     int mActiveSemitones = 0;
+    int mActiveMode = 0;
     double mActiveMix = 1.0;
+    double mActiveQuefrencyMs = 0.0;
+    double mActiveTimbre = 1.0;
+    bool mActiveNormalization = true;
 
     detail::StftTransposeChannel mLeft;
     detail::StftTransposeChannel mRight;
@@ -401,7 +525,11 @@ namespace guitarfx
     info.requiresResource = false;
     info.parameters = {
       {"semitones", "Semitones", 0.0, -12.0, 12.0, "st", "", false, 1.0},
-      {"mix", "Mix", 1.0, 0.0, 1.0, "amount"}
+      {"mix", "Mix", 1.0, 0.0, 1.0, "amount"},
+      {"mode", "Mode", 0.0, 0.0, 1.0, "enum", "", false, 1.0, {"Low Latency", "Polyphonic"}},
+      {"quefrencyMs", "Quefrency", 0.0, 0.0, 5.0, "ms", "", false, 0.1},
+      {"timbre", "Timbre", 1.0, 0.5, 2.0, "ratio", "", false, 0.01},
+      {"normalize", "Normalize", 1.0, 0.0, 1.0, "enum", "", false, 1.0, {"Off", "On"}}
     };
     EffectRegistry::Instance().Register(info.type, info, []()
                                         { return std::make_unique<StftTransposeEffect>(); });
