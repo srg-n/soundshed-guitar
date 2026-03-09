@@ -841,6 +841,10 @@
                 <span class="metric-label">Peak Load:</span>
                 <span class="metric-value" id="dsp-peak-value">0.0%</span>
               </div>
+              <div class="performance-metric">
+                <span class="metric-label">I/O Latency:</span>
+                <span class="metric-value" id="dsp-latency-value">—</span>
+              </div>
             </div>
             <div class="performance-details">
               <h3>Signal Diagnostics <span class="metric-value" id="signal-diagnostics-status">Disabled</span></h3>
@@ -889,13 +893,7 @@
               <canvas id="performance-plot" width="400" height="200"></canvas>
             </div>
             <div class="performance-details">
-              <h3>Per-Effect Times (μs)</h3>
-              <div id="performance-details-list">
-                <!-- Per-effect timing details will be populated here -->
-              </div>
-            </div>
-            <div class="performance-details">
-              <h3>Per-Node Levels (dBFS)</h3>
+              <h3>Per-Node Diagnostics</h3>
               <div class="designed-peak-input-section" id="designed-peak-input-section">
                 <div class="performance-metric">
                   <span class="metric-label">Preset Designed Peak Input:</span>

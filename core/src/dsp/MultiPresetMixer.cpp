@@ -1346,39 +1346,69 @@ namespace guitarfx
   {
     SignalGraphExecutor::DSPPerformanceStats aggregatedStats;
 
-    if (mInstances.empty())
+    const auto mergeStats = [&aggregatedStats](const SignalGraphExecutor::DSPPerformanceStats& stats,
+                                               const std::string& scopedPrefix)
     {
-      return aggregatedStats;
-    }
+      aggregatedStats.totalProcessingTimeUs += stats.totalProcessingTimeUs;
+      aggregatedStats.realTimeUs = std::max(aggregatedStats.realTimeUs, stats.realTimeUs);
 
-    // Aggregate stats from all active preset instances
-    for (const auto& instance : mInstances)
-    {
-      auto instanceStats = instance.executor.GetPerformanceStats();
-
-      // Sum up total processing time
-      aggregatedStats.totalProcessingTimeUs += instanceStats.totalProcessingTimeUs;
-
-      // Use the maximum real time (since they process in parallel)
-      if (instanceStats.realTimeUs > aggregatedStats.realTimeUs)
-      {
-        aggregatedStats.realTimeUs = instanceStats.realTimeUs;
-      }
-
-      // Calculate average DSP load across instances
-      aggregatedStats.dspLoadPercent += instanceStats.dspLoadPercent;
-
-      // Merge node processing times
-      for (const auto& [nodeId, timeUs] : instanceStats.nodeProcessingTimesUs)
+      for (const auto& [nodeId, timeUs] : stats.nodeProcessingTimesUs)
       {
         aggregatedStats.nodeProcessingTimesUs[nodeId] += timeUs;
       }
+
+      if (stats.scopedNodeProcessingTimesUs.empty())
+      {
+        for (const auto& [nodeId, timeUs] : stats.nodeProcessingTimesUs)
+        {
+          aggregatedStats.scopedNodeProcessingTimesUs[scopedPrefix + nodeId] += timeUs;
+        }
+      }
+      else
+      {
+        for (const auto& [nodeId, timeUs] : stats.scopedNodeProcessingTimesUs)
+        {
+          aggregatedStats.scopedNodeProcessingTimesUs[scopedPrefix + nodeId] += timeUs;
+        }
+      }
+
+      for (const auto& [nodeId, latencySamples] : stats.nodeLatencySamples)
+      {
+        aggregatedStats.nodeLatencySamples[nodeId] = std::max(aggregatedStats.nodeLatencySamples[nodeId], latencySamples);
+      }
+
+      if (stats.scopedNodeLatencySamples.empty())
+      {
+        for (const auto& [nodeId, latencySamples] : stats.nodeLatencySamples)
+        {
+          aggregatedStats.scopedNodeLatencySamples[scopedPrefix + nodeId] = std::max(
+            aggregatedStats.scopedNodeLatencySamples[scopedPrefix + nodeId],
+            latencySamples);
+        }
+      }
+      else
+      {
+        for (const auto& [nodeId, latencySamples] : stats.scopedNodeLatencySamples)
+        {
+          aggregatedStats.scopedNodeLatencySamples[scopedPrefix + nodeId] = std::max(
+            aggregatedStats.scopedNodeLatencySamples[scopedPrefix + nodeId],
+            latencySamples);
+        }
+      }
+    };
+
+    mergeStats(mPreChainExecutor.GetPerformanceStats(), "pre::");
+
+    for (const auto& instance : mInstances)
+    {
+      mergeStats(instance.executor.GetPerformanceStats(), instance.cfg.id + "::");
     }
 
-    // Average the DSP load across all instances
-    if (!mInstances.empty())
+    mergeStats(mPostChainExecutor.GetPerformanceStats(), "post::");
+
+    if (aggregatedStats.realTimeUs > 0.0)
     {
-      aggregatedStats.dspLoadPercent /= static_cast<double>(mInstances.size());
+      aggregatedStats.dspLoadPercent = (aggregatedStats.totalProcessingTimeUs / aggregatedStats.realTimeUs) * 100.0;
     }
 
     return aggregatedStats;

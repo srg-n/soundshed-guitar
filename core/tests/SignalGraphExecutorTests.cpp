@@ -30,6 +30,7 @@ struct Analysis
   bool allZero = false;
 };
 
+
 void GenerateSine(std::vector<float>& l, std::vector<float>& r, double freq = 440.0, double amp = 0.5)
 {
   for (int i = 0; i < static_cast<int>(l.size()); ++i)
@@ -147,6 +148,68 @@ guitarfx::SignalGraph MakeParallelPath()
   return g;
 }
 
+guitarfx::SignalGraph MakeParallelPathWithHardPan()
+{
+  using namespace guitarfx;
+  SignalGraph g;
+  g.nodes.push_back({"in", kNodeTypeInput, "", "Input", true});
+
+  g.nodes.push_back({"a", "gain", "utility", "BranchA", true});
+  g.nodes.back().params["gainDb"] = -6.0;
+
+  g.nodes.push_back({"b", "gain", "utility", "BranchB", true});
+  g.nodes.back().params["gainDb"] = -12.0;
+
+  g.nodes.push_back({"mix", kNodeTypeMixer, "", "Mixer", true});
+  g.nodes.back().params["pan_0"] = -1.0;
+  g.nodes.back().params["pan_1"] = 1.0;
+
+  g.nodes.push_back({"out", kNodeTypeOutput, "", "Output", true});
+
+  g.edges.push_back({"in", "a", 0, 0, 1.0});
+  g.edges.push_back({"in", "b", 0, 0, 1.0});
+  g.edges.push_back({"a", "mix", 0, 0, 1.0});
+  g.edges.push_back({"b", "mix", 0, 1, 1.0});
+  g.edges.push_back({"mix", "out", 0, 0, 1.0});
+  return g;
+}
+
+guitarfx::SignalGraph MakeLatencySinglePath(double semitones, bool enabled = true)
+{
+  using namespace guitarfx;
+  SignalGraph g;
+  g.nodes.push_back({"in", kNodeTypeInput, "", "Input", true});
+  g.nodes.push_back({"shift", "transpose", "modulation", "Transpose", enabled});
+  g.nodes.back().params["semitones"] = semitones;
+  g.nodes.push_back({"out", kNodeTypeOutput, "", "Output", true});
+  g.edges.push_back({"in", "shift", 0, 0, 1.0});
+  g.edges.push_back({"shift", "out", 0, 0, 1.0});
+  return g;
+}
+
+guitarfx::SignalGraph MakeParallelLatencyPath(double semitonesA, double semitonesB)
+{
+  using namespace guitarfx;
+  SignalGraph g;
+  g.nodes.push_back({"in", kNodeTypeInput, "", "Input", true});
+
+  g.nodes.push_back({"a", "transpose", "modulation", "TransposeA", true});
+  g.nodes.back().params["semitones"] = semitonesA;
+
+  g.nodes.push_back({"b", "transpose", "modulation", "TransposeB", true});
+  g.nodes.back().params["semitones"] = semitonesB;
+
+  g.nodes.push_back({"mix", kNodeTypeMixer, "", "Mixer", true});
+  g.nodes.push_back({"out", kNodeTypeOutput, "", "Output", true});
+
+  g.edges.push_back({"in", "a", 0, 0, 1.0});
+  g.edges.push_back({"in", "b", 0, 0, 1.0});
+  g.edges.push_back({"a", "mix", 0, 0, 1.0});
+  g.edges.push_back({"b", "mix", 0, 1, 1.0});
+  g.edges.push_back({"mix", "out", 0, 0, 1.0});
+  return g;
+}
+
 bool RunGraph(const guitarfx::SignalGraph& g, Analysis& out)
 {
   using namespace guitarfx;
@@ -166,6 +229,29 @@ bool RunGraph(const guitarfx::SignalGraph& g, Analysis& out)
 
   out = Analyze(outL, outR);
   return !out.hasNaN && !out.hasInf && !out.allZero;
+}
+
+bool RunGraph(const guitarfx::SignalGraph& g, std::vector<float>& outL, std::vector<float>& outR)
+{
+  using namespace guitarfx;
+  RegisterAllEffects();
+
+  SignalGraphExecutor exec;
+  exec.SetGraph(g);
+  exec.Prepare(kSR, kBlock);
+
+  std::vector<float> inL(static_cast<size_t>(kBlock), 0.0f), inR(static_cast<size_t>(kBlock), 0.0f);
+  GenerateSine(inL, inR);
+
+  outL.assign(static_cast<size_t>(kBlock), 0.0f);
+  outR.assign(static_cast<size_t>(kBlock), 0.0f);
+
+  float* in[2] = { inL.data(), inR.data() };
+  float* outBuf[2] = { outL.data(), outR.data() };
+  exec.Process(in, outBuf, kBlock);
+
+  const Analysis analysis = Analyze(outL, outR);
+  return !analysis.hasNaN && !analysis.hasInf && !analysis.allZero;
 }
 
 } // namespace
@@ -235,7 +321,36 @@ int main()
     if (ok && within) ++passed; else ++failed;
   }
 
-  // Case 5: Resource-backed NAM-only path (resource resolution + processing)
+  // Case 5: Parallel path with hard-panned mixer inputs
+  {
+    std::vector<float> outL;
+    std::vector<float> outR;
+    const bool ok = RunGraph(MakeParallelPathWithHardPan(), outL, outR);
+    const double expectedL = 0.5 * std::pow(10.0, -6.0 / 20.0);
+    const double expectedR = 0.5 * std::pow(10.0, -12.0 / 20.0);
+    const double tol = 0.03;
+
+    double peakL = 0.0;
+    double peakR = 0.0;
+    for (int i = 0; i < kBlock; ++i)
+    {
+      peakL = std::max(peakL, std::abs(static_cast<double>(outL[static_cast<size_t>(i)])));
+      peakR = std::max(peakR, std::abs(static_cast<double>(outR[static_cast<size_t>(i)])));
+    }
+
+    const bool leftWithin = std::abs(peakL - expectedL) <= expectedL * tol;
+    const bool rightWithin = std::abs(peakR - expectedR) <= expectedR * tol;
+    const bool separated = peakL > (peakR * 1.5) && peakR < peakL;
+
+    std::cout << "Parallel hard-pan path: peakL=" << std::fixed << std::setprecision(3) << peakL
+              << ", peakR=" << std::setprecision(3) << peakR
+              << ((ok && leftWithin && rightWithin && separated) ? "  PASS" : "  FAIL")
+              << " (expected L≈" << std::setprecision(3) << expectedL
+              << ", R≈" << expectedR << ")\n";
+    if (ok && leftWithin && rightWithin && separated) ++passed; else ++failed;
+  }
+
+  // Case 6: Resource-backed NAM-only path (resource resolution + processing)
   {
     using namespace guitarfx;
     // Build library entries (use test resources dir)
@@ -286,7 +401,7 @@ int main()
     if (ok) ++passed; else ++failed;
   }
 
-  // Case 5: Resource-backed IR-only path
+  // Case 7: Resource-backed IR-only path
   {
     using namespace guitarfx;
     ResourceLibrary lib;
@@ -370,6 +485,56 @@ int main()
       // IR convolver needs investigation; mark diagnostic to keep suite green
       std::cout << "  SKIP (IR init/latency issue)\n";
     }
+  }
+
+  // Case 8: Single-path reported latency matches latent node
+  {
+    using namespace guitarfx;
+    RegisterAllEffects();
+    SignalGraphExecutor exec;
+    exec.SetGraph(MakeLatencySinglePath(1.0));
+    exec.Prepare(kSR, kBlock);
+    const int latencySamples = exec.GetTotalLatencySamples();
+    const bool ok = latencySamples > 0;
+    std::cout << "Single-path latency: reported=" << latencySamples
+              << (ok ? "  PASS" : "  FAIL")
+              << " (expected > 0)\n";
+    if (ok) ++passed; else ++failed;
+  }
+
+  // Case 9: Parallel-branch latency uses longest path, not branch sum
+  {
+    using namespace guitarfx;
+    RegisterAllEffects();
+    SignalGraphExecutor singleBranchExec;
+    singleBranchExec.SetGraph(MakeLatencySinglePath(1.0));
+    singleBranchExec.Prepare(kSR, kBlock);
+    const int singleBranchLatency = singleBranchExec.GetTotalLatencySamples();
+
+    SignalGraphExecutor exec;
+    exec.SetGraph(MakeParallelLatencyPath(1.0, 1.0));
+    exec.Prepare(kSR, kBlock);
+    const int latencySamples = exec.GetTotalLatencySamples();
+    const bool ok = latencySamples == singleBranchLatency;
+    std::cout << "Parallel-path latency: reported=" << latencySamples
+              << (ok ? "  PASS" : "  FAIL")
+              << " (expected longest-path " << singleBranchLatency << ")\n";
+    if (ok) ++passed; else ++failed;
+  }
+
+  // Case 10: Disabled latent node does not contribute to reported latency
+  {
+    using namespace guitarfx;
+    RegisterAllEffects();
+    SignalGraphExecutor exec;
+    exec.SetGraph(MakeLatencySinglePath(3.0, false));
+    exec.Prepare(kSR, kBlock);
+    const int latencySamples = exec.GetTotalLatencySamples();
+    const bool ok = latencySamples == 0;
+    std::cout << "Disabled-node latency: reported=" << latencySamples
+              << (ok ? "  PASS" : "  FAIL")
+              << " (expected 0)\n";
+    if (ok) ++passed; else ++failed;
   }
 
   std::cout << "\n========================================\n";

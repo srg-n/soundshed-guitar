@@ -1745,6 +1745,7 @@ bool PluginController::AddActivePreset(const Preset& preset, const std::string& 
     {
         try { mMixerPresetJsonCache[presetId] = PresetStorage::SerializeToJson(preset); }
         catch (...) {}
+        UpdateHostLatency();
     }
     return added;
 }
@@ -1785,6 +1786,7 @@ void PluginController::RemoveActivePreset(const std::string& presetId)
     std::lock_guard<std::mutex> lock(mDSPMutex);
     mPresetMixer.RemoveActivePreset(presetId);
     mMixerPresetJsonCache.erase(presetId);
+    UpdateHostLatency();
 }
 
 void PluginController::SetActivePresetMix(const std::string& presetId, double value)
@@ -5196,6 +5198,7 @@ void PluginController::HandleSetNodeEnabledRequest(const nlohmann::json& payload
     std::string nodeId = payload.value("nodeId", "");
     bool enabled = payload.value("enabled", true);
     mPresetMixer.SetNodeEnabled(presetId, nodeId, enabled);
+    UpdateHostLatency();
 }
 
 void PluginController::HandleSetNodeParamRequest(const nlohmann::json& payload)
@@ -5205,6 +5208,7 @@ void PluginController::HandleSetNodeParamRequest(const nlohmann::json& payload)
     std::string key = payload.value("key", "");
     double value = payload.value("value", 0.0);
     mPresetMixer.SetNodeParam(presetId, nodeId, key, value);
+    UpdateHostLatency();
 }
 
 void PluginController::HandleLoadNodeResourceRequest(const nlohmann::json& payload)
@@ -5216,6 +5220,7 @@ void PluginController::HandleLoadNodeResourceRequest(const nlohmann::json& paylo
     if (payload.contains("resourceId")) ref.resourceId = payload["resourceId"].get<std::string>();
     if (payload.contains("filePath")) ref.filePath = payload["filePath"].get<std::string>();
     mPresetMixer.LoadNodeResource(presetId, nodeId, ref);
+    UpdateHostLatency();
 }
 
 void PluginController::HandleSetTunerEnabledRequest(const nlohmann::json& payload)
@@ -6977,14 +6982,28 @@ void PluginController::SendSignalDiagnosticsToUI()
 void PluginController::SendPerformanceStatsToUI()
 {
     auto stats = mPresetMixer.GetPerformanceStats();
+    const int totalLatencySamples = mPresetMixer.GetTotalLatencySamples();
     nlohmann::json statsJson;
     statsJson["totalProcessingTimeUs"] = stats.totalProcessingTimeUs;
     statsJson["realTimeUs"] = stats.realTimeUs;
     statsJson["dspLoadPercent"] = stats.dspLoadPercent;
+    statsJson["totalLatencySamples"] = totalLatencySamples;
     nlohmann::json nodeTimes = nlohmann::json::object();
     for (const auto& [nodeId, timeUs] : stats.nodeProcessingTimesUs)
         nodeTimes[nodeId] = timeUs;
     statsJson["nodeProcessingTimesUs"] = nodeTimes;
+    nlohmann::json scopedNodeTimes = nlohmann::json::object();
+    for (const auto& [nodeId, timeUs] : stats.scopedNodeProcessingTimesUs)
+        scopedNodeTimes[nodeId] = timeUs;
+    statsJson["scopedNodeProcessingTimesUs"] = scopedNodeTimes;
+    nlohmann::json nodeLatencies = nlohmann::json::object();
+    for (const auto& [nodeId, latencySamples] : stats.nodeLatencySamples)
+        nodeLatencies[nodeId] = latencySamples;
+    statsJson["nodeLatencySamples"] = nodeLatencies;
+    nlohmann::json scopedNodeLatencies = nlohmann::json::object();
+    for (const auto& [nodeId, latencySamples] : stats.scopedNodeLatencySamples)
+        scopedNodeLatencies[nodeId] = latencySamples;
+    statsJson["scopedNodeLatencySamples"] = scopedNodeLatencies;
 
     nlohmann::json msg;
     msg["type"] = "dspPerformance";

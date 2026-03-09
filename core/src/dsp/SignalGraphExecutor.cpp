@@ -73,6 +73,7 @@ namespace guitarfx
 
       return stats;
     }
+
   }
 
   SignalGraphExecutor::SignalGraphExecutor() = default;
@@ -574,7 +575,12 @@ namespace guitarfx
           {
             float *inPtrs[2] = {state->bufferLeft.data(), state->bufferRight.data()};
             float *outPtrs[2] = {mTempLeftBuffer.data(), mTempRightBuffer.data()};
+            auto nodeStart = std::chrono::high_resolution_clock::now();
             state->processor->Process(inPtrs, outPtrs, numSamples);
+            auto nodeEnd = std::chrono::high_resolution_clock::now();
+            const std::chrono::duration<double, std::micro> nodeDuration(nodeEnd - nodeStart);
+            localStats.nodeProcessingTimesUs[nodeId] = nodeDuration.count();
+            localStats.scopedNodeProcessingTimesUs[nodeId] = nodeDuration.count();
             std::copy(mTempLeftBuffer.begin(), mTempLeftBuffer.begin() + numSamples, state->bufferLeft.begin());
             std::copy(mTempRightBuffer.begin(), mTempRightBuffer.begin() + numSamples, state->bufferRight.begin());
           }
@@ -590,6 +596,7 @@ namespace guitarfx
           auto nodeEnd = std::chrono::high_resolution_clock::now();
           const std::chrono::duration<double, std::micro> nodeDuration(nodeEnd - nodeStart);
           localStats.nodeProcessingTimesUs[nodeId] = nodeDuration.count();
+          localStats.scopedNodeProcessingTimesUs[nodeId] = nodeDuration.count();
 
           // Copy back
           std::copy(mTempLeftBuffer.begin(), mTempLeftBuffer.begin() + numSamples, state->bufferLeft.begin());
@@ -653,19 +660,52 @@ namespace guitarfx
   SignalGraphExecutor::DSPPerformanceStats SignalGraphExecutor::GetPerformanceStats() const
   {
     std::lock_guard<std::mutex> lock(mPerformanceStatsMutex);
-    return mLastPerformanceStats;
+    auto stats = mLastPerformanceStats;
+    for (const auto& [nodeId, state] : mNodeStates)
+    {
+      const int latencySamples = (state.processor && state.processor->IsEnabled())
+        ? state.processor->GetLatencySamples()
+        : 0;
+      stats.nodeLatencySamples[nodeId] = latencySamples;
+      stats.scopedNodeLatencySamples[nodeId] = latencySamples;
+    }
+    return stats;
   }
 
   int SignalGraphExecutor::GetTotalLatencySamples() const
   {
-    int total = 0;
+    std::map<std::string, int> cumulativeLatencyByNode;
     for (const auto& nodeId : mExecutionOrder)
     {
+      int maxIncomingLatency = 0;
+      if (auto incomingIt = mIncomingEdgesByNode.find(nodeId); incomingIt != mIncomingEdgesByNode.end())
+      {
+        for (const auto edgeIndex : incomingIt->second)
+        {
+          if (edgeIndex >= mGraph.edges.size())
+            continue;
+          const auto& edge = mGraph.edges[edgeIndex];
+          auto sourceLatencyIt = cumulativeLatencyByNode.find(edge.from);
+          if (sourceLatencyIt != cumulativeLatencyByNode.end())
+            maxIncomingLatency = std::max(maxIncomingLatency, sourceLatencyIt->second);
+        }
+      }
+
+      int ownLatency = 0;
       auto it = mNodeStates.find(nodeId);
-      if (it != mNodeStates.end() && it->second.processor)
-        total += it->second.processor->GetLatencySamples();
+      if (it != mNodeStates.end() && it->second.processor && it->second.processor->IsEnabled())
+        ownLatency = it->second.processor->GetLatencySamples();
+
+      cumulativeLatencyByNode[nodeId] = maxIncomingLatency + ownLatency;
     }
-    return total;
+
+    if (auto outputIt = cumulativeLatencyByNode.find("__output__"); outputIt != cumulativeLatencyByNode.end())
+      return outputIt->second;
+
+    int maxLatency = 0;
+    for (const auto& [_, latency] : cumulativeLatencyByNode)
+      maxLatency = std::max(maxLatency, latency);
+    return maxLatency;
   }
 
   std::vector<SignalGraphExecutor::NodeSignalLevel> SignalGraphExecutor::GetNodeSignalLevels() const

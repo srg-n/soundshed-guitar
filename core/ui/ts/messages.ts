@@ -881,10 +881,19 @@ export function handleIncomingMessage(message: string): void {
       break;
     }
     case "dspPerformance": {
-      const stats = payload as { stats?: import("./types.js").DSPPerformanceStats };
+      const stats = payload as {
+        stats?: import("./types.js").DSPPerformanceStats;
+        sampleRate?: number;
+        blockSize?: number;
+      };
       if (stats.stats) {
-        uiState.dspPerformance = stats.stats;
-        uiState.dspPerformanceHistory.push(stats.stats);
+        const mergedStats: import("./types.js").DSPPerformanceStats = {
+          ...stats.stats,
+          sampleRate: stats.sampleRate ?? stats.stats.sampleRate,
+          blockSize: stats.blockSize ?? stats.stats.blockSize,
+        };
+        uiState.dspPerformance = mergedStats;
+        uiState.dspPerformanceHistory.push(mergedStats);
         if (uiState.dspPerformanceHistory.length > 100) {
           uiState.dspPerformanceHistory.shift();
         }

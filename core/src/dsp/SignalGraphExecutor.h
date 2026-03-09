@@ -26,6 +26,9 @@ namespace guitarfx
       double realTimeUs = 0.0;             // Real-time equivalent in microseconds
       double dspLoadPercent = 0.0;         // % of real-time
       std::map<std::string, double> nodeProcessingTimesUs; // Per-node times
+      std::map<std::string, double> scopedNodeProcessingTimesUs; // Optional scoped keys for UI correlation
+      std::map<std::string, int> nodeLatencySamples; // Per-node algorithmic latency
+      std::map<std::string, int> scopedNodeLatencySamples; // Optional scoped keys for UI correlation
     };
 
     struct NodeSignalLevel
@@ -83,7 +86,7 @@ namespace guitarfx
     [[nodiscard]] bool IsValid() const { return mIsValid; }
     [[nodiscard]] std::vector<std::string> GetExecutionOrder() const { return mExecutionOrder; }
     [[nodiscard]] DSPPerformanceStats GetPerformanceStats() const;
-    /// Returns the sum of GetLatencySamples() for all active nodes in execution order.
+    /// Returns the enabled-node longest-path latency through the graph.
     [[nodiscard]] int GetTotalLatencySamples() const;
 
   private:

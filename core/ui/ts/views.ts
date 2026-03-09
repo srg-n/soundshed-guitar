@@ -4,7 +4,9 @@ import { addActivePreset, removeActivePreset, setPresetMix, setPresetPan, setPre
 import { escapeHtml, idAccentColor } from "./utils.js";
 import { updateSignalPathClipIndicators, renderSignalPathBar } from "./signalPath.js";
 import { renderIcon } from "./iconAssets.js";
-import type { Preset, PresetFolder } from "./types.js";
+import { EffectGuids } from "./effectGuids.js";
+import { EffectTypeRegistry } from "./presetV2.js";
+import type { GraphEdge, GraphNode, Preset, PresetFolder, SignalGraph, SignalLevelNodeMetrics } from "./types.js";
 
 const presetListElement = document.getElementById("preset-list");
 const presetDetailsElement = document.getElementById("preset-details");
@@ -786,12 +788,9 @@ export function updateDSPPerformancePlot(): void {
     peakValue.textContent = `${peakLoad.toFixed(1)}%`;
   }
 
-  // Update per-effect details
-  const detailsList = document.getElementById("performance-details-list");
-  if (detailsList && currentStat.nodeProcessingTimesUs) {
-    detailsList.innerHTML = Object.entries(currentStat.nodeProcessingTimesUs)
-      .map(([nodeId, timeUs]) => `<div class="performance-detail-item">${nodeId}: ${(timeUs as number).toFixed(1)} μs</div>`)
-      .join("");
+  const latencyValue = document.getElementById("dsp-latency-value");
+  if (latencyValue) {
+    latencyValue.textContent = formatLatencyValue(currentStat);
   }
 }
 
@@ -870,6 +869,367 @@ function setClipStatusText(el: HTMLElement, text: string): void {
       break;
     }
   }
+}
+
+function sortGraphEdges(edges: GraphEdge[]): GraphEdge[] {
+  return edges.slice().sort((left, right) => (
+    (left.fromPort - right.fromPort)
+    || (left.toPort - right.toPort)
+    || left.from.localeCompare(right.from)
+    || left.to.localeCompare(right.to)
+  ));
+}
+
+function getFriendlyGraphNodeName(node: GraphNode | undefined, fallbackNodeType: string, fallbackNodeId: string): string {
+  if (node) {
+    if (node.id === "__input__" || node.type === "input") return "Input";
+    if (node.id === "__output__" || node.type === "output") return "Output";
+    if (typeof node.displayName === "string" && node.displayName.trim()) {
+      return node.displayName.trim();
+    }
+    const nodeTypeInfo = node.type ? EffectTypeRegistry.get(node.type) : undefined;
+    return nodeTypeInfo?.displayName || node.type || fallbackNodeId || "(Unknown)";
+  }
+
+  const typeInfo = fallbackNodeType ? EffectTypeRegistry.get(fallbackNodeType) : undefined;
+  return typeInfo?.displayName || fallbackNodeType || fallbackNodeId || "(Unknown)";
+}
+
+function getDiagnosticsGraphContext(node: SignalLevelNodeMetrics): { graph?: SignalGraph; presetName?: string } {
+  if (node.scope === "pre") {
+    return { graph: uiState.globalSignalChain?.preChainGraph };
+  }
+
+  if (node.scope === "post") {
+    return { graph: uiState.globalSignalChain?.postChainGraph };
+  }
+
+  const presetId = node.presetId ?? uiState.activePresetId ?? "";
+  if (!presetId) {
+    return {};
+  }
+
+  const preset = uiState.presetCache.get(presetId) ?? uiState.presets.find((entry) => entry.id === presetId);
+  const mixerPresetName = uiState.mixer?.presets?.[presetId]?.name;
+  return {
+    graph: preset?.graph,
+    presetName: mixerPresetName || preset?.name || presetId,
+  };
+}
+
+function getSplitterBranchSuffix(graph: SignalGraph | undefined, nodeId: string): string {
+  if (!graph || nodeId === "__input__" || nodeId === "__output__") {
+    return "";
+  }
+
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const incomingByNode = new Map<string, GraphEdge[]>();
+  const outgoingByNode = new Map<string, GraphEdge[]>();
+
+  for (const edge of graph.edges) {
+    const incoming = incomingByNode.get(edge.to);
+    if (incoming) {
+      incoming.push(edge);
+    } else {
+      incomingByNode.set(edge.to, [edge]);
+    }
+
+    const outgoing = outgoingByNode.get(edge.from);
+    if (outgoing) {
+      outgoing.push(edge);
+    } else {
+      outgoingByNode.set(edge.from, [edge]);
+    }
+  }
+
+  let currentNodeId = nodeId;
+  const visited = new Set<string>();
+
+  while (currentNodeId && !visited.has(currentNodeId)) {
+    visited.add(currentNodeId);
+    const incomingEdges = sortGraphEdges(incomingByNode.get(currentNodeId) ?? []);
+    if (incomingEdges.length !== 1) {
+      return "";
+    }
+
+    const incomingEdge = incomingEdges[0];
+    const upstreamNode = nodeById.get(incomingEdge.from);
+    if (!upstreamNode) {
+      return "";
+    }
+
+    const upstreamOutgoing = sortGraphEdges(outgoingByNode.get(upstreamNode.id) ?? []);
+    const isSplitter = upstreamNode.type === EffectGuids.kSplitter || upstreamOutgoing.length > 1;
+    if (isSplitter) {
+      const splitterName = getFriendlyGraphNodeName(upstreamNode, upstreamNode.type, upstreamNode.id);
+      return ` (${splitterName} ch ${incomingEdge.fromPort + 1})`;
+    }
+
+    currentNodeId = upstreamNode.id;
+  }
+
+  return "";
+}
+
+function getSignalDiagnosticsNodeLabel(node: SignalLevelNodeMetrics): string {
+  const { graph, presetName } = getDiagnosticsGraphContext(node);
+  const graphNode = graph?.nodes.find((entry) => entry.id === node.nodeId);
+  const nodeName = getFriendlyGraphNodeName(graphNode, node.nodeType, node.nodeId);
+  const branchSuffix = getSplitterBranchSuffix(graph, node.nodeId);
+  const presetPrefix = node.scope === "preset" && presetName ? `${presetName} · ` : "";
+  return `${presetPrefix}${nodeName}${branchSuffix}`;
+}
+
+function getSignalDiagnosticsPerformanceKey(node: SignalLevelNodeMetrics): string {
+  if (node.scope === "preset") {
+    return `${node.presetId ?? uiState.activePresetId ?? ""}::${node.nodeId}`;
+  }
+  return `${node.scope}::${node.nodeId}`;
+}
+
+function getSignalDiagnosticsNodeTimeUs(node: SignalLevelNodeMetrics): number | null {
+  const performance = uiState.dspPerformance;
+  if (!performance) {
+    return null;
+  }
+
+  const scopedKey = getSignalDiagnosticsPerformanceKey(node);
+  const scopedTime = performance.scopedNodeProcessingTimesUs?.[scopedKey];
+  if (typeof scopedTime === "number" && isFinite(scopedTime)) {
+    return scopedTime;
+  }
+
+  const legacyTime = performance.nodeProcessingTimesUs?.[node.nodeId];
+  return typeof legacyTime === "number" && isFinite(legacyTime) ? legacyTime : null;
+}
+
+function getSignalDiagnosticsNodeLatencySamples(node: SignalLevelNodeMetrics): number | null {
+  const performance = uiState.dspPerformance;
+  if (!performance) {
+    return null;
+  }
+
+  const scopedKey = getSignalDiagnosticsPerformanceKey(node);
+  const scopedLatency = performance.scopedNodeLatencySamples?.[scopedKey];
+  if (typeof scopedLatency === "number" && isFinite(scopedLatency)) {
+    return scopedLatency;
+  }
+
+  const legacyLatency = performance.nodeLatencySamples?.[node.nodeId];
+  return typeof legacyLatency === "number" && isFinite(legacyLatency) ? legacyLatency : null;
+}
+
+function getSignalDiagnosticsNodeProcessingShare(timeUs: number | null | undefined): number | null {
+  if (typeof timeUs !== "number" || !isFinite(timeUs)) {
+    return null;
+  }
+
+  const totalUs = uiState.dspPerformance?.totalProcessingTimeUs ?? 0;
+  if (!(totalUs > 0)) {
+    return null;
+  }
+
+  return (timeUs / totalUs) * 100.0;
+}
+
+function formatTimeUs(value: number | null | undefined): string {
+  if (typeof value !== "number" || !isFinite(value)) {
+    return "—";
+  }
+  return `${value.toFixed(1)} μs`;
+}
+
+function formatTimeShare(value: number | null | undefined): string {
+  const timeText = formatTimeUs(value);
+  if (timeText === "—") {
+    return timeText;
+  }
+
+  const share = getSignalDiagnosticsNodeProcessingShare(value);
+  if (share == null || !isFinite(share)) {
+    return timeText;
+  }
+
+  return `${timeText} (${share.toFixed(1)}%)`;
+}
+
+function formatNodeLatencySamples(value: number | null | undefined, sampleRate?: number): string {
+  if (typeof value !== "number" || !isFinite(value) || value <= 0) {
+    return "—";
+  }
+
+  if (sampleRate && sampleRate > 0) {
+    const latencyMs = (value / sampleRate) * 1000.0;
+    return `${value} smp (${latencyMs.toFixed(2)} ms)`;
+  }
+
+  return `${value} smp`;
+}
+
+function formatLatencyValue(stats: import("./types.js").DSPPerformanceStats | null | undefined): string {
+  if (!stats) {
+    return "—";
+  }
+
+  const latencySamples = stats.totalLatencySamples;
+  if (typeof latencySamples !== "number" || !isFinite(latencySamples) || latencySamples < 0) {
+    return "—";
+  }
+
+  const sampleRate = stats.sampleRate ?? 0;
+  if (sampleRate > 0) {
+    const latencyMs = (latencySamples / sampleRate) * 1000.0;
+    return `${latencySamples} samples (${latencyMs.toFixed(2)} ms)`;
+  }
+
+  return `${latencySamples} samples`;
+}
+
+function computeGraphCriticalPathNodeIds(graph: SignalGraph | undefined, scopedPrefix: string): Set<string> {
+  if (!graph || !graph.nodes.length) {
+    return new Set<string>();
+  }
+
+  const scopedLatencies = uiState.dspPerformance?.scopedNodeLatencySamples ?? {};
+  const incomingByNode = new Map<string, GraphEdge[]>();
+  const outgoingByNode = new Map<string, GraphEdge[]>();
+  const indegree = new Map<string, number>();
+
+  for (const node of graph.nodes) {
+    indegree.set(node.id, 0);
+  }
+
+  for (const edge of graph.edges) {
+    const incoming = incomingByNode.get(edge.to);
+    if (incoming) {
+      incoming.push(edge);
+    } else {
+      incomingByNode.set(edge.to, [edge]);
+    }
+
+    const outgoing = outgoingByNode.get(edge.from);
+    if (outgoing) {
+      outgoing.push(edge);
+    } else {
+      outgoingByNode.set(edge.from, [edge]);
+    }
+
+    indegree.set(edge.to, (indegree.get(edge.to) ?? 0) + 1);
+  }
+
+  const queue = graph.nodes
+    .map((node) => node.id)
+    .filter((nodeId) => (indegree.get(nodeId) ?? 0) === 0);
+  const topoOrder: string[] = [];
+
+  while (queue.length) {
+    const nodeId = queue.shift() ?? "";
+    if (!nodeId) {
+      continue;
+    }
+
+    topoOrder.push(nodeId);
+    for (const edge of outgoingByNode.get(nodeId) ?? []) {
+      const remaining = (indegree.get(edge.to) ?? 0) - 1;
+      indegree.set(edge.to, remaining);
+      if (remaining === 0) {
+        queue.push(edge.to);
+      }
+    }
+  }
+
+  const score = new Map<string, number>();
+  const previous = new Map<string, string | null>();
+
+  for (const nodeId of topoOrder) {
+    let bestIncoming = 0;
+    let bestPrevious: string | null = null;
+    for (const edge of incomingByNode.get(nodeId) ?? []) {
+      const candidate = score.get(edge.from) ?? 0;
+      if (candidate >= bestIncoming) {
+        bestIncoming = candidate;
+        bestPrevious = edge.from;
+      }
+    }
+
+    const ownLatency = scopedLatencies[`${scopedPrefix}${nodeId}`] ?? 0;
+    score.set(nodeId, bestIncoming + ownLatency);
+    previous.set(nodeId, bestPrevious);
+  }
+
+  let cursor = graph.nodes.find((node) => node.id === "__output__")?.id ?? null;
+  if (!cursor) {
+    let bestNode: string | null = null;
+    let bestScore = -1;
+    for (const nodeId of topoOrder) {
+      const candidate = score.get(nodeId) ?? 0;
+      if (candidate >= bestScore) {
+        bestScore = candidate;
+        bestNode = nodeId;
+      }
+    }
+    cursor = bestNode;
+  }
+
+  const path = new Set<string>();
+  while (cursor) {
+    path.add(cursor);
+    cursor = previous.get(cursor) ?? null;
+  }
+
+  return path;
+}
+
+function getOverallCriticalPathMembership(diagnostics: import("./types.js").SignalLevelDiagnostics | null | undefined): Set<string> {
+  const membership = new Set<string>();
+  if (!diagnostics?.nodes?.length) {
+    return membership;
+  }
+
+  for (const nodeId of computeGraphCriticalPathNodeIds(uiState.globalSignalChain?.preChainGraph, "pre::")) {
+    membership.add(`pre::${nodeId}`);
+  }
+
+  for (const nodeId of computeGraphCriticalPathNodeIds(uiState.globalSignalChain?.postChainGraph, "post::")) {
+    membership.add(`post::${nodeId}`);
+  }
+
+  const presetIds = Array.from(new Set(
+    diagnostics.nodes
+      .filter((node) => node.scope === "preset" && typeof node.presetId === "string" && node.presetId)
+      .map((node) => node.presetId as string)
+  ));
+
+  let winningPresetId: string | null = null;
+  let winningPresetNodes = new Set<string>();
+  let winningPresetLatency = -1;
+  const scopedLatencies = uiState.dspPerformance?.scopedNodeLatencySamples ?? {};
+
+  for (const presetId of presetIds) {
+    const preset = uiState.presetCache.get(presetId) ?? uiState.presets.find((entry) => entry.id === presetId);
+    const criticalNodes = computeGraphCriticalPathNodeIds(preset?.graph, `${presetId}::`);
+    let totalLatency = 0;
+    for (const nodeId of criticalNodes) {
+      totalLatency += scopedLatencies[`${presetId}::${nodeId}`] ?? 0;
+    }
+    if (totalLatency >= winningPresetLatency) {
+      winningPresetLatency = totalLatency;
+      winningPresetId = presetId;
+      winningPresetNodes = criticalNodes;
+    }
+  }
+
+  if (winningPresetId) {
+    for (const nodeId of winningPresetNodes) {
+      membership.add(`${winningPresetId}::${nodeId}`);
+    }
+  }
+
+  return membership;
+}
+
+function isNodeOnCriticalPath(node: SignalLevelNodeMetrics, criticalPathMembership: Set<string>): boolean {
+  return criticalPathMembership.has(getSignalDiagnosticsPerformanceKey(node));
 }
 
 // Threshold (dBFS) for each segment, top → bottom in the DOM (rendered bottom-up via flex column-reverse).
@@ -1037,9 +1397,14 @@ export function updateSignalDiagnosticsView(): void {
   }
 
   if (listEl) {
+    const criticalPathMembership = getOverallCriticalPathMembership(diagnostics);
+
     const makeNodeRow = (
       scope: string,
       label: string,
+      isCriticalPath: boolean,
+      timeUs: number | null,
+      latencySamples: number | null,
       peakDbfs: number,
       headroomDb: number,
       clipped: boolean,
@@ -1047,10 +1412,15 @@ export function updateSignalDiagnosticsView(): void {
     ): string => {
       const clipClass = clipped ? "clip-on" : "clip-off";
       const clipText = clipped ? `Clipping (${clipCount})` : "OK";
+      const criticalBadge = isCriticalPath
+        ? '<span class="critical-path-badge" title="Contributes to reported plugin latency">Critical</span>'
+        : "";
       return `
         <div class="signal-diagnostics-item">
           <span class="signal-diagnostics-cell scope">${escapeHtml(scope)}</span>
-          <span class="signal-diagnostics-cell node">${label}</span>
+          <span class="signal-diagnostics-cell node">${criticalBadge}${label}</span>
+          <span class="signal-diagnostics-cell">${formatTimeShare(timeUs)}</span>
+          <span class="signal-diagnostics-cell">${formatNodeLatencySamples(latencySamples, uiState.dspPerformance?.sampleRate)}</span>
           <span class="signal-diagnostics-cell">${formatDb(peakDbfs)} dBFS</span>
           <span class="signal-diagnostics-cell">${formatDb(headroomDb)} dB</span>
           <span class="signal-diagnostics-cell clip ${clipClass}">
@@ -1064,6 +1434,9 @@ export function updateSignalDiagnosticsView(): void {
     const inputRow = makeNodeRow(
       "in",
       "chain input",
+      false,
+      null,
+      null,
       hold?.input.peakDbfs ?? input.peakDbfs,
       input.headroomDb,
       input.clipped,
@@ -1072,11 +1445,13 @@ export function updateSignalDiagnosticsView(): void {
 
     const nodeRows = (diagnostics.nodes ?? [])
       .map((node) => {
-        const presetLabel = node.presetId ? `${escapeHtml(node.presetId)} · ` : "";
-        const nodeLabel = `${presetLabel}${escapeHtml(node.nodeId)} (${escapeHtml(node.nodeType)})`;
+        const nodeLabel = escapeHtml(getSignalDiagnosticsNodeLabel(node));
+        const isCriticalPath = isNodeOnCriticalPath(node, criticalPathMembership);
+        const nodeTimeUs = getSignalDiagnosticsNodeTimeUs(node);
+        const nodeLatencySamples = getSignalDiagnosticsNodeLatencySamples(node);
         const levels = node.levels ?? { peakDbfs: Number.NaN, headroomDb: Number.NaN, clipped: false, clipCount: 0 };
         const holdEntry = hold?.nodes[node.nodeId];
-        return makeNodeRow(node.scope, nodeLabel, holdEntry?.peakDbfs ?? levels.peakDbfs, levels.headroomDb, levels.clipped, levels.clipCount);
+        return makeNodeRow(node.scope, nodeLabel, isCriticalPath, nodeTimeUs, nodeLatencySamples, holdEntry?.peakDbfs ?? levels.peakDbfs, levels.headroomDb, levels.clipped, levels.clipCount);
       })
       .join("");
 
@@ -1086,6 +1461,8 @@ export function updateSignalDiagnosticsView(): void {
       <div class=\"signal-diagnostics-header\">
         <span class=\"signal-diagnostics-cell scope\">Scope</span>
         <span class=\"signal-diagnostics-cell node\">Node</span>
+        <span class="signal-diagnostics-cell">CPU</span>
+        <span class="signal-diagnostics-cell">Latency</span>
         <span class=\"signal-diagnostics-cell\">Peak</span>
         <span class=\"signal-diagnostics-cell\">Headroom</span>
         <span class=\"signal-diagnostics-cell\">Clip</span>

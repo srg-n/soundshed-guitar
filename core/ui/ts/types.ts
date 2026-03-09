@@ -311,6 +311,12 @@ export interface DSPPerformanceStats {
   realTimeUs: number;
   dspLoadPercent: number;
   nodeProcessingTimesUs: Record<string, number>;
+  scopedNodeProcessingTimesUs?: Record<string, number>;
+  nodeLatencySamples?: Record<string, number>;
+  scopedNodeLatencySamples?: Record<string, number>;
+  totalLatencySamples?: number;
+  sampleRate?: number;
+  blockSize?: number;
 }
 
 export interface SignalLevelMetrics {
