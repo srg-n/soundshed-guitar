@@ -14,6 +14,7 @@ const presetFolderTreeElement = document.getElementById("preset-folder-tree");
 
 const PRESET_FOLDER_ALL_ID = "__all__";
 const PRESET_FOLDER_FAVORITES_ID = "__favorites__";
+const PRESET_FOLDER_RECENTS_ID = "__recents__";
 
 interface RenderHooks {
   onPresetSelected: (presetId: string) => Promise<void> | void;
@@ -274,6 +275,9 @@ export function renderPresetList(
     getRating: (presetId: string) => number | null;
     onRate: (presetId: string, rating: number | null) => void;
     getFolderPath?: (presetId: string) => string | null;
+    recentsCount: number;
+    recentsActive: boolean;
+    onSelectRecents: () => void;
     favoritesCount: number;
     favoritesActive: boolean;
     onSelectFavorites: () => void;
@@ -284,7 +288,7 @@ export function renderPresetList(
   }
 
   if (presetFolderTreeElement && options) {
-    const { folders, activeFolderId, onSelectFolder, onMovePresetToFolder, onMoveFolder, favoritesCount, favoritesActive, onSelectFavorites } = options;
+    const { folders, activeFolderId, onSelectFolder, onMovePresetToFolder, onMoveFolder, recentsCount, recentsActive, onSelectRecents, favoritesCount, favoritesActive, onSelectFavorites } = options;
     const activeId = activeFolderId ?? PRESET_FOLDER_ALL_ID;
     const allPresetCount = uiState.presets.length;
 
@@ -306,6 +310,10 @@ export function renderPresetList(
         .join("");
 
     presetFolderTreeElement.innerHTML = `
+      <div class="preset-folder-item ${recentsActive ? "active" : ""}" data-folder-id="${PRESET_FOLDER_RECENTS_ID}">
+        <span class="folder-name">Recents</span>
+        <span class="folder-count">${recentsCount}</span>
+      </div>
       <div class="preset-folder-item ${favoritesActive ? "active" : ""}" data-folder-id="${PRESET_FOLDER_FAVORITES_ID}">
         <span class="folder-name">Favourites</span>
         <span class="folder-count">${favoritesCount}</span>
@@ -320,7 +328,9 @@ export function renderPresetList(
     presetFolderTreeElement.querySelectorAll<HTMLElement>(".preset-folder-item").forEach((item) => {
       item.addEventListener("click", () => {
         const folderId = item.dataset.folderId ?? PRESET_FOLDER_ALL_ID;
-        if (folderId === PRESET_FOLDER_FAVORITES_ID) {
+        if (folderId === PRESET_FOLDER_RECENTS_ID) {
+          onSelectRecents();
+        } else if (folderId === PRESET_FOLDER_FAVORITES_ID) {
           onSelectFavorites();
         } else {
           onSelectFolder(folderId);
@@ -338,7 +348,7 @@ export function renderPresetList(
 
       item.addEventListener("dragstart", (event) => {
         const folderId = item.dataset.folderId ?? "";
-        if (!folderId || folderId === PRESET_FOLDER_FAVORITES_ID || folderId === PRESET_FOLDER_ALL_ID) {
+        if (!folderId || folderId === PRESET_FOLDER_RECENTS_ID || folderId === PRESET_FOLDER_FAVORITES_ID || folderId === PRESET_FOLDER_ALL_ID) {
           return;
         }
         event.dataTransfer?.setData("application/x-preset-folder", folderId);
@@ -352,7 +362,7 @@ export function renderPresetList(
         const presetId = event.dataTransfer?.getData("text/plain") ?? "";
         const folderId = item.dataset.folderId ?? PRESET_FOLDER_ALL_ID;
         if (folderDragId) {
-          if (folderId === PRESET_FOLDER_FAVORITES_ID) {
+          if (folderId === PRESET_FOLDER_RECENTS_ID || folderId === PRESET_FOLDER_FAVORITES_ID) {
             return;
           }
           const offsetX = (event as DragEvent).offsetX ?? 0;

@@ -8,12 +8,13 @@ import { buildArchiveFileNameWithHash, generateResourceId, requestResourceData, 
 import type { Preset, Attachment, BlendDefinition, ResourceRef, LibraryResource, PresetFolder, Setlist, GraphNode } from "./types.js";
 import { createEmptyPresetV2, migratePresetNodeTypes } from "./presetV2.js";
 import { bindDemoAudioControls } from "./demoAudio.js";
-import { postMessage } from "./bridge.js";
+import { postMessage, setAppSetting } from "./bridge.js";
 import { renderSignalPathBar } from "./signalPath.js";
 import { showConfirm } from "./dialogs.js";
 import { isToneSharingSignedIn, openToneSharingPublishPresetModal, registerInstalledToneSharingPack } from "./toneSharingPanel.js";
 import type { InstalledPackMetadata } from "./toneSharingPanel.js";
 import { downloadTone3000ResourceByModelUrl } from "./tone3000.js";
+import { updateUiSettings } from "./windowSettings.js";
 
 const presetChooserLabel = document.getElementById("preset-chooser-label") as HTMLButtonElement | null;
 const presetFavoriteToggle = document.getElementById("preset-favorite");
@@ -38,8 +39,11 @@ const setlistPanel = document.getElementById("setlist-panel");
 
 const PRESET_FOLDER_ALL_ID = "__all__";
 const PRESET_FOLDER_FAVORITES_ID = "__favorites__";
+const PRESET_FOLDER_RECENTS_ID = "__recents__";
 const PRESET_FOLDER_IMPORTED_NAME = "Imported";
 const PRESET_REQUEST_TIMEOUT_MS = 5000;
+const PRESET_RECENTS_SETTING = "presets.recents";
+const MAX_RECENT_PRESETS = 4;
 
 const activeTagFilters = new Set<string>();
 
@@ -55,6 +59,12 @@ function normalizeFolderName(name: string): string {
 
 function normalizeSetlistName(name: string): string {
   return name.trim();
+}
+
+function isVirtualPresetFolderId(folderId: string | null | undefined): boolean {
+  return folderId === PRESET_FOLDER_ALL_ID
+    || folderId === PRESET_FOLDER_FAVORITES_ID
+    || folderId === PRESET_FOLDER_RECENTS_ID;
 }
 
 const PRESET_ALLOWED_KEYS = new Set([
@@ -479,6 +489,63 @@ function loadFavoritePresetIds(): Set<string> {
   return uiState.presetFavorites ? new Set(uiState.presetFavorites) : new Set();
 }
 
+function normalizeRecentPresetIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const ids: string[] = [];
+  value.forEach((entry) => {
+    if (typeof entry !== "string") {
+      return;
+    }
+    const id = entry.trim();
+    if (!id || ids.includes(id)) {
+      return;
+    }
+    ids.push(id);
+  });
+
+  return ids.slice(0, MAX_RECENT_PRESETS);
+}
+
+function loadRecentPresetIds(): string[] {
+  return normalizeRecentPresetIds(uiState.uiSettings?.presetRecents);
+}
+
+function saveRecentPresetIds(ids: string[]): void {
+  const normalized = normalizeRecentPresetIds(ids);
+  const current = loadRecentPresetIds();
+  const unchanged = normalized.length === current.length && normalized.every((id, index) => current[index] === id);
+  if (unchanged) {
+    return;
+  }
+  uiState.uiSettings = {
+    ...(uiState.uiSettings ?? { zoom: 1 }),
+    presetRecents: normalized,
+  };
+  updateUiSettings({ presetRecents: normalized });
+}
+
+function getRecentPresets(): Preset[] {
+  return loadRecentPresetIds()
+    .map((presetId) => uiState.presetCache.get(presetId) ?? uiState.presets.find((preset) => preset.id === presetId) ?? null)
+    .filter((preset): preset is Preset => Boolean(preset))
+    .map((preset) => clonePreset(preset));
+}
+
+function trackRecentPreset(presetId: string | null | undefined): void {
+  const id = typeof presetId === "string" ? presetId.trim() : "";
+  if (!id) {
+    return;
+  }
+  const current = loadRecentPresetIds();
+  if (current.includes(id)) {
+    return;
+  }
+  saveRecentPresetIds([id, ...current]);
+}
+
 function saveFavoritePresetIds(ids: Set<string>): void {
   uiState.presetFavorites = new Set(ids);
   postMessage({ type: "setPresetFavorites", favorites: Array.from(ids) });
@@ -540,6 +607,33 @@ function setPresetRating(presetId: string, rating: number | null): void {
 export function applyPresetFavoritesFromBackend(favorites: string[]): void {
   uiState.presetFavorites = new Set(favorites);
   setFavoriteToggleState(uiState.activePresetId);
+}
+
+export function applyPresetRecentsFromAppSettings(): void {
+  const uiRecents = normalizeRecentPresetIds(uiState.uiSettings?.presetRecents);
+  const legacyRecents = normalizeRecentPresetIds(uiState.appSettings?.[PRESET_RECENTS_SETTING]);
+  const normalized = uiRecents.length ? uiRecents : legacyRecents;
+  uiState.uiSettings = {
+    ...(uiState.uiSettings ?? { zoom: 1 }),
+    presetRecents: normalized,
+  };
+  if (!uiRecents.length && legacyRecents.length) {
+    updateUiSettings({ presetRecents: normalized });
+    uiState.appSettings[PRESET_RECENTS_SETTING] = normalized as unknown as import("./types.js").AppSettingValue;
+    setAppSetting(PRESET_RECENTS_SETTING, null);
+  }
+  if (uiState.activePresetFolderId === PRESET_FOLDER_RECENTS_ID) {
+    filterPresets(presetSearchElement?.value ?? "");
+    return;
+  }
+  renderPresetUI(uiState.presetCache.get(uiState.activePresetId ?? "") ?? null);
+}
+
+export function recordRecentPreset(presetId: string | null | undefined): void {
+  trackRecentPreset(presetId);
+  if (uiState.activePresetFolderId === PRESET_FOLDER_RECENTS_ID) {
+    filterPresets(presetSearchElement?.value ?? "");
+  }
 }
 
 export function applyPresetRatingsFromBackend(ratings: Record<string, number>): void {
@@ -715,7 +809,7 @@ function ensurePresetFolders(persistChanges: boolean = true): void {
   }
   uiState.presetFolders = stored;
 
-  const resolvedActive = uiState.activePresetFolderId && uiState.activePresetFolderId !== PRESET_FOLDER_ALL_ID
+  const resolvedActive = uiState.activePresetFolderId && !isVirtualPresetFolderId(uiState.activePresetFolderId)
     ? findFolderById(stored, uiState.activePresetFolderId)?.id
     : uiState.activePresetFolderId;
   uiState.activePresetFolderId = resolvedActive || PRESET_FOLDER_ALL_ID;
@@ -955,6 +1049,9 @@ function movePresetToFolder(presetId: string, folderId: string): void {
     toggleFavoritePreset(presetId);
     return;
   }
+  if (folderId === PRESET_FOLDER_RECENTS_ID) {
+    return;
+  }
   const folders = uiState.presetFolders ?? [];
   removePresetFromFolders(folders, presetId);
   if (folderId !== PRESET_FOLDER_ALL_ID) {
@@ -965,10 +1062,10 @@ function movePresetToFolder(presetId: string, folderId: string): void {
 }
 
 function movePresetFolder(folderId: string, targetParentId: string): void {
-  if (!folderId || folderId === PRESET_FOLDER_ALL_ID || folderId === PRESET_FOLDER_FAVORITES_ID) {
+  if (!folderId || isVirtualPresetFolderId(folderId)) {
     return;
   }
-  if (targetParentId === PRESET_FOLDER_FAVORITES_ID) {
+  if (targetParentId === PRESET_FOLDER_FAVORITES_ID || targetParentId === PRESET_FOLDER_RECENTS_ID) {
     return;
   }
 
@@ -1024,6 +1121,9 @@ function getPresetsForFolderId(folderId: string): Preset[] {
     presets = presets.filter((preset) => favorites.has(preset.id));
     return presets;
   }
+  if (folderId === PRESET_FOLDER_RECENTS_ID) {
+    return getRecentPresets();
+  }
   if (folderId !== PRESET_FOLDER_ALL_ID) {
     const folder = findFolderById(uiState.presetFolders ?? [], folderId);
     if (!folder) {
@@ -1042,6 +1142,9 @@ function getPresetFolderExportName(folderId: string): string {
   if (folderId === PRESET_FOLDER_FAVORITES_ID) {
     return "Favorite-Presets";
   }
+  if (folderId === PRESET_FOLDER_RECENTS_ID) {
+    return "Recent-Presets";
+  }
   const folder = findFolderById(uiState.presetFolders ?? [], folderId);
   return folder?.name || "Preset-Folder";
 }
@@ -1056,7 +1159,11 @@ function getFilteredPresets(query: string): Preset[] {
     basePresets = basePresets.filter((preset) => favorites.has(preset.id));
   }
 
-  if (activeFolderId !== PRESET_FOLDER_ALL_ID) {
+  if (activeFolderId === PRESET_FOLDER_RECENTS_ID) {
+    basePresets = getRecentPresets();
+  }
+
+  if (!isVirtualPresetFolderId(activeFolderId)) {
     const folder = findFolderById(uiState.presetFolders ?? [], activeFolderId);
     if (folder) {
       const allowedIds = collectPresetIds(folder);
@@ -1187,6 +1294,9 @@ function renderPresetUI(preset: Preset | null): void {
     getRating: getPresetRating,
     onRate: setPresetRating,
     getFolderPath: getPresetFolderPath,
+    recentsCount: getRecentPresets().length,
+    recentsActive: uiState.activePresetFolderId === PRESET_FOLDER_RECENTS_ID,
+    onSelectRecents: () => setActivePresetFolder(PRESET_FOLDER_RECENTS_ID),
     favoritesCount: loadFavoritePresetIds().size,
     favoritesActive: uiState.activePresetFolderId === PRESET_FOLDER_FAVORITES_ID,
     onSelectFavorites: () => setActivePresetFolder(PRESET_FOLDER_FAVORITES_ID),
@@ -1724,7 +1834,8 @@ export function initializePresetControls(): void {
       if (!name.trim()) {
         name = window.prompt("Folder name", "") ?? "";
       }
-      const parentId = uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID;
+      const activeFolderId = uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID;
+      const parentId = isVirtualPresetFolderId(activeFolderId) ? PRESET_FOLDER_ALL_ID : activeFolderId;
       const created = createFolder(name, parentId);
       if (created && presetFolderNameInput) {
         presetFolderNameInput.value = "";
@@ -1765,7 +1876,7 @@ export function openSavePresetModal(): void {
   const descriptionInput = document.getElementById("preset-description-input") as HTMLTextAreaElement | null;
 
   const activeFolderId = uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID;
-  const defaultFolderId = activeFolderId === PRESET_FOLDER_FAVORITES_ID ? PRESET_FOLDER_ALL_ID : activeFolderId;
+  const defaultFolderId = isVirtualPresetFolderId(activeFolderId) ? PRESET_FOLDER_ALL_ID : activeFolderId;
   populatePresetFolderSelect(folderSelect, defaultFolderId);
 
   if (nameInput) nameInput.value = "";
@@ -1799,7 +1910,7 @@ export function closeSavePresetModal(): void {
 export function createDefaultPreset(): void {
   const newPreset = createEmptyPresetV2();
   const activeFolderId = uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID;
-  const selectedFolderId = activeFolderId === PRESET_FOLDER_FAVORITES_ID ? PRESET_FOLDER_ALL_ID : activeFolderId;
+  const selectedFolderId = isVirtualPresetFolderId(activeFolderId) ? PRESET_FOLDER_ALL_ID : activeFolderId;
 
   uiState.presets.unshift(newPreset);
   uiState.filteredPresets = uiState.presets.slice();
@@ -3289,6 +3400,8 @@ function updatePresetFolderExportButtons(): void {
     ? "All Presets"
     : activeFolderId === PRESET_FOLDER_FAVORITES_ID
       ? "Favourites"
+      : activeFolderId === PRESET_FOLDER_RECENTS_ID
+        ? "Recents"
       : (findFolderById(uiState.presetFolders ?? [], activeFolderId)?.name ?? "Folder");
 
   if (presetExportFolderButton) {

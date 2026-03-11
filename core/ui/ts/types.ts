@@ -106,6 +106,7 @@ export interface UiSettings {
     width: number;
     height: number;
   };
+  presetRecents?: string[];
 }
 
 export interface UiViewState {

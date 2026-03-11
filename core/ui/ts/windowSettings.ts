@@ -33,6 +33,11 @@ function scheduleSend() {
   }, sendDelayMs);
 }
 
+export function updateUiSettings(patch: Partial<UiSettings>): void {
+  currentSettings = { ...currentSettings, ...patch };
+  scheduleSend();
+}
+
 export function applyUiSettings(settings?: UiSettings): void {
   if (!settings) return;
   currentSettings = { ...currentSettings, ...settings };
@@ -70,6 +75,7 @@ export function applyUiSettings(settings?: UiSettings): void {
 export function startUiSettingsTracking(): void {
   const updateMetrics = () => {
     currentSettings = {
+      ...currentSettings,
       zoom: captureZoom(),
       bounds: captureBounds(),
     };

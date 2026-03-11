@@ -1,5 +1,5 @@
 import { uiState, clonePreset, getActivePresetForRender, setActivePresetDraft, setActivePresetSnapshot, setPresetDirty } from "./state.js";
-import { renderActivePreset, applyPresetFromLibrary, populatePresetDropdown, updatePresetDropdownSelection, cachePresetInMemory, updatePresetActionButtons, applyPresetFoldersFromBackend, applyPresetFavoritesFromBackend, applyPresetRatingsFromBackend, applySetlistsFromBackend, handlePresetDataMessage, refreshSavePresetModalPeakInfoIfOpen } from "./presets.js";
+import { renderActivePreset, applyPresetFromLibrary, populatePresetDropdown, updatePresetDropdownSelection, cachePresetInMemory, updatePresetActionButtons, applyPresetFoldersFromBackend, applyPresetFavoritesFromBackend, applyPresetRecentsFromAppSettings, applyPresetRatingsFromBackend, applySetlistsFromBackend, handlePresetDataMessage, recordRecentPreset, refreshSavePresetModalPeakInfoIfOpen } from "./presets.js";
 import { syncControlsFromState, handleInputModeChanged, handleAmpCabStateChanged, syncAutoLevelControlsFromState, applyStoredInputChannel } from "./controls.js";
 import { showNotification } from "./notifications.js";
 import { appendLog } from "./logging.js";
@@ -197,6 +197,7 @@ export function handleIncomingMessage(message: string): void {
         applyStoredInputChannel();
         applyToneSharingAppSettings(appSettings);
         applyJamAppSettings();
+        applyPresetRecentsFromAppSettings();
         triggerUpdateCheck();
       }
       const globalSignalChain = (payload as { globalSignalChain?: GlobalSignalChainConfig }).globalSignalChain;
@@ -476,6 +477,7 @@ export function handleIncomingMessage(message: string): void {
       if (preset) {
         migratePresetNodeTypes(preset);
         normalizePresetResources(preset);
+        recordRecentPreset(preset.id);
         uiState.activePresetId = preset.id;
         uiState.presetCache.set(preset.id, clonePreset(preset));
         setActivePresetSnapshot(preset);
@@ -877,6 +879,7 @@ export function handleIncomingMessage(message: string): void {
       if (uiSettings) {
         uiState.uiSettings = uiSettings;
         applyUiSettings(uiSettings);
+        applyPresetRecentsFromAppSettings();
       }
       break;
     }
