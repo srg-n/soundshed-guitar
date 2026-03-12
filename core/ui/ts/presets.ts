@@ -15,6 +15,7 @@ import { isToneSharingSignedIn, openToneSharingPublishPresetModal, registerInsta
 import type { InstalledPackMetadata } from "./toneSharingPanel.js";
 import { downloadTone3000ResourceByModelUrl } from "./tone3000.js";
 import { updateUiSettings } from "./windowSettings.js";
+import { normalizePresetScenes } from "./presetScenes.js";
 
 const presetChooserLabel = document.getElementById("preset-chooser-label") as HTMLButtonElement | null;
 const presetFavoriteToggle = document.getElementById("preset-favorite");
@@ -80,6 +81,7 @@ const PRESET_ALLOWED_KEYS = new Set([
   "customIrPath",
   "formatVersion",
   "graph",
+  "scenes",
   "globalSignalChain",
   "embeddedResources",
   "version",
@@ -101,6 +103,7 @@ const PRESET_OPTIONAL_ARRAY_KEYS = [
   "attachments",
   "fxChain",
   "embeddedResources",
+  "scenes",
   "tags",
 ];
 
@@ -176,6 +179,10 @@ function validatePresetForUi(preset: Preset | null): string[] {
         issues.push(`Graph edge #${index + 1} is missing valid endpoints.`);
       }
     });
+  }
+
+  if (preset.scenes && !Array.isArray(preset.scenes)) {
+    issues.push("Preset scenes must be an array when present.");
   }
 
   return issues;
@@ -1488,6 +1495,8 @@ export async function applyPresetFromLibrary(presetId: string): Promise<void> {
       attachments,
       ...(hasGlobalChain && resolvedChain ? { globalSignalChain: resolvedChain } : {}),
     };
+    const sceneId = normalizePresetScenes(presetPayload, uiState.activePresetSceneId ?? undefined);
+    uiState.activePresetSceneId = sceneId;
 
     if (hasGlobalChain && resolvedChain) {
       uiState.globalSignalChain = resolvedChain;
@@ -1504,6 +1513,7 @@ export async function applyPresetFromLibrary(presetId: string): Promise<void> {
     postMessage({
       type: "loadPreset",
       preset: presetPayload,
+      ...(sceneId ? { sceneId } : {}),
     });
   } catch (error) {
     console.error("Failed to apply preset", error);
@@ -1513,6 +1523,7 @@ export async function applyPresetFromLibrary(presetId: string): Promise<void> {
 
 export function cachePresetInMemory(preset: Preset): void {
   const cleanedPreset = stripLegacyGlobals(preset);
+  normalizePresetScenes(cleanedPreset);
   uiState.presetCache.set(cleanedPreset.id, cleanedPreset);
   if (!uiState.presets.some((p) => p.id === cleanedPreset.id)) {
     uiState.presets.push(cleanedPreset);
@@ -1909,6 +1920,7 @@ export function closeSavePresetModal(): void {
 
 export function createDefaultPreset(): void {
   const newPreset = createEmptyPresetV2();
+  uiState.activePresetSceneId = normalizePresetScenes(newPreset);
   const activeFolderId = uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID;
   const selectedFolderId = isVirtualPresetFolderId(activeFolderId) ? PRESET_FOLDER_ALL_ID : activeFolderId;
 
@@ -1929,6 +1941,7 @@ export function createDefaultPreset(): void {
   postMessage({
     type: "loadPreset",
     preset: newPreset,
+    ...(uiState.activePresetSceneId ? { sceneId: uiState.activePresetSceneId } : {}),
   });
 }
 
@@ -1983,6 +1996,8 @@ export function saveCurrentPreset(): void {
       if (stagedDesignedPeak !== undefined && isFinite(stagedDesignedPeak)) {
         updatedPreset.designedPeakInputDbfs = Math.round(stagedDesignedPeak * 10) / 10;
       }
+      const sceneId = normalizePresetScenes(updatedPreset, uiState.activePresetSceneId ?? undefined);
+      uiState.activePresetSceneId = sceneId;
       delete (updatedPreset as Record<string, unknown>).globalSignalChain;
 
       cachePresetInMemory(updatedPreset);
@@ -1993,6 +2008,7 @@ export function saveCurrentPreset(): void {
         name: updatedPreset.name,
         category: updatedPreset.category,
         description: updatedPreset.description,
+        ...(sceneId ? { sceneId } : {}),
         includeGlobalSignalChain: includeGlobalFx,
         preset: stripGlobalSignalChainForSave(updatedPreset),
       };
@@ -2032,6 +2048,8 @@ export function saveCurrentPreset(): void {
   if (stagedDesignedPeak !== undefined && isFinite(stagedDesignedPeak)) {
     newPreset.designedPeakInputDbfs = Math.round(stagedDesignedPeak * 10) / 10;
   }
+  const sceneId = normalizePresetScenes(newPreset, uiState.activePresetSceneId ?? undefined);
+  uiState.activePresetSceneId = sceneId;
   delete (newPreset as Record<string, unknown>).globalSignalChain;
 
   cachePresetInMemory(newPreset);
@@ -2042,6 +2060,7 @@ export function saveCurrentPreset(): void {
     name: newPreset.name,
     category: newPreset.category,
     description: newPreset.description,
+    ...(sceneId ? { sceneId } : {}),
     includeGlobalSignalChain: includeGlobalFx,
     preset: stripGlobalSignalChainForSave(newPreset),
   };

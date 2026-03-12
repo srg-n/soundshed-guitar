@@ -32,6 +32,7 @@ import { EffectTypeRegistry } from "./presetV2.js";
 import { themeSwitcher } from "./theme-switcher.js";
 import { applyUiViewState } from "./navigation.js";
 import { triggerUpdateCheck } from "./updateCheck.js";
+import { getPresetSceneGraphs, normalizePresetScenes } from "./presetScenes.js";
 
 function normalizeResourceRef(ref?: ResourceRef | null): void {
   if (!ref) return;
@@ -52,12 +53,13 @@ function normalizeResourceRef(ref?: ResourceRef | null): void {
 }
 
 function normalizePresetResources(preset?: Preset | null): void {
-  if (!preset?.graph?.nodes) return;
-  preset.graph.nodes.forEach((node) => {
-    if (Array.isArray(node.resources)) {
-      node.resources.forEach((ref) => normalizeResourceRef(ref));
-    }
-  });
+  for (const graph of getPresetSceneGraphs(preset)) {
+    graph.nodes.forEach((node) => {
+      if (Array.isArray(node.resources)) {
+        node.resources.forEach((ref) => normalizeResourceRef(ref));
+      }
+    });
+  }
 }
 
 function presetSignature(preset?: Preset | null): string {
@@ -153,6 +155,7 @@ export function handleIncomingMessage(message: string): void {
   switch (type) {
     case "state": {
       uiState.activePresetId = (payload as { activePresetId?: string }).activePresetId ?? null;
+      uiState.activePresetSceneId = (payload as { activeSceneId?: string }).activeSceneId ?? uiState.activePresetSceneId ?? null;
       const parameters = (payload as { parameters?: Record<string, unknown> }).parameters;
       if (parameters) {
         uiState.parameters = {
@@ -291,6 +294,7 @@ export function handleIncomingMessage(message: string): void {
                 const p = presetData as Preset;
                 migratePresetNodeTypes(p);
                 normalizePresetResources(p);
+                normalizePresetScenes(p);
                 uiState.presetCache.set(slotId, p);
               }
             }
@@ -301,6 +305,7 @@ export function handleIncomingMessage(message: string): void {
       const preset = (payload as { preset?: Preset }).preset;
       if (preset) {
         normalizePresetResources(preset);
+        uiState.activePresetSceneId = normalizePresetScenes(preset, uiState.activePresetSceneId ?? undefined);
         const snapshot = uiState.activePresetSnapshot;
         const isNewPreset = !snapshot || snapshot.id !== preset.id;
         if (isNewPreset) {
@@ -477,6 +482,7 @@ export function handleIncomingMessage(message: string): void {
       if (preset) {
         migratePresetNodeTypes(preset);
         normalizePresetResources(preset);
+        uiState.activePresetSceneId = normalizePresetScenes(preset, (payload as { sceneId?: string }).sceneId ?? uiState.activePresetSceneId ?? undefined);
         recordRecentPreset(preset.id);
         uiState.activePresetId = preset.id;
         uiState.presetCache.set(preset.id, clonePreset(preset));
@@ -696,6 +702,8 @@ export function handleIncomingMessage(message: string): void {
       appendLog(`preset saved ← ${(payload as { preset?: Preset }).preset?.name ?? "unknown"}`);
       const savedPreset = (payload as { preset?: Preset }).preset;
       if (savedPreset) {
+        normalizePresetResources(savedPreset);
+        uiState.activePresetSceneId = normalizePresetScenes(savedPreset, (payload as { sceneId?: string }).sceneId ?? uiState.activePresetSceneId ?? undefined);
         cachePresetInMemory(savedPreset);
         uiState.activePresetId = savedPreset.id;
         uiState.presetCache.set(savedPreset.id, clonePreset(savedPreset));
@@ -752,6 +760,8 @@ export function handleIncomingMessage(message: string): void {
       const presetPayload = payload as { preset?: Preset };
       if (presetPayload.preset) {
         migratePresetNodeTypes(presetPayload.preset);
+        normalizePresetResources(presetPayload.preset);
+        normalizePresetScenes(presetPayload.preset);
         handlePresetDataMessage(presetPayload.preset);
       }
       break;

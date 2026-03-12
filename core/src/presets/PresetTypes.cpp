@@ -8,6 +8,11 @@ namespace guitarfx
 {
 namespace
 {
+  std::string BuildDefaultSceneId(std::size_t index)
+  {
+    return "scene-" + std::to_string(index + 1);
+  }
+
   void ApplyDefaultParamsFromRegistry(GraphNode& node)
   {
     auto info = EffectRegistry::Instance().GetTypeInfo(node.type);
@@ -90,6 +95,94 @@ void EnsurePresetBoundaryGainNodes(SignalGraph& graph)
         node->params["gainDb"] = 0.0;
     }
   }
+}
+
+void NormalizePresetScenes(Preset& preset)
+{
+  if (preset.scenes.empty())
+  {
+    PresetScene scene;
+    scene.id = "scene-1";
+    scene.title = "Scene 1";
+    scene.graph = preset.graph;
+    EnsurePresetBoundaryGainNodes(scene.graph);
+    preset.scenes.push_back(std::move(scene));
+  }
+
+  for (std::size_t index = 0; index < preset.scenes.size(); ++index)
+  {
+    auto& scene = preset.scenes[index];
+    if (scene.id.empty())
+      scene.id = BuildDefaultSceneId(index);
+    if (scene.title.empty())
+      scene.title = "Scene " + std::to_string(index + 1);
+    EnsurePresetBoundaryGainNodes(scene.graph);
+  }
+
+  if (preset.graph.nodes.empty() && preset.graph.edges.empty() && !preset.scenes.empty())
+    preset.graph = preset.scenes.front().graph;
+
+  EnsurePresetBoundaryGainNodes(preset.graph);
+}
+
+PresetScene* FindPresetScene(Preset& preset, const std::string& sceneId)
+{
+  for (auto& scene : preset.scenes)
+  {
+    if (scene.id == sceneId)
+      return &scene;
+  }
+  return nullptr;
+}
+
+const PresetScene* FindPresetScene(const Preset& preset, const std::string& sceneId)
+{
+  for (const auto& scene : preset.scenes)
+  {
+    if (scene.id == sceneId)
+      return &scene;
+  }
+  return nullptr;
+}
+
+std::string GetDefaultPresetSceneId(const Preset& preset)
+{
+  if (!preset.scenes.empty())
+    return preset.scenes.front().id;
+  return "scene-1";
+}
+
+bool SetPresetActiveScene(Preset& preset, const std::string& sceneId, std::string* resolvedSceneId)
+{
+  NormalizePresetScenes(preset);
+
+  auto* scene = FindPresetScene(preset, sceneId);
+  if (!scene && !preset.scenes.empty())
+    scene = &preset.scenes.front();
+  if (!scene)
+    return false;
+
+  preset.graph = scene->graph;
+  EnsurePresetBoundaryGainNodes(preset.graph);
+
+  if (resolvedSceneId)
+    *resolvedSceneId = scene->id;
+  return true;
+}
+
+void SyncPresetSceneFromGraph(Preset& preset, const std::string& sceneId)
+{
+  NormalizePresetScenes(preset);
+
+  auto* scene = FindPresetScene(preset, sceneId);
+  if (!scene && !preset.scenes.empty())
+    scene = &preset.scenes.front();
+  if (!scene)
+    return;
+
+  EnsurePresetBoundaryGainNodes(preset.graph);
+  scene->graph = preset.graph;
+  EnsurePresetBoundaryGainNodes(scene->graph);
 }
 
 SignalGraph GlobalSignalChainConfig::BuildPreChainGraph() const

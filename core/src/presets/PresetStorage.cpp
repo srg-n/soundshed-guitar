@@ -277,64 +277,126 @@ namespace guitarfx
         baseDirectory);
       return res;
     }
+
+    nlohmann::json SerializePresetScene(const PresetScene& scene,
+                                        const std::optional<std::filesystem::path>& baseDirectory)
+    {
+      nlohmann::json json;
+      json["id"] = scene.id;
+      if (!scene.title.empty())
+        json["title"] = scene.title;
+
+      nlohmann::json graph;
+      graph["nodes"] = nlohmann::json::array();
+      for (const auto& node : scene.graph.nodes)
+      {
+        graph["nodes"].push_back(SerializeGraphNode(node, baseDirectory));
+      }
+      graph["edges"] = nlohmann::json::array();
+      for (const auto& edge : scene.graph.edges)
+      {
+        graph["edges"].push_back(SerializeGraphEdge(edge));
+      }
+      json["graph"] = std::move(graph);
+      return json;
+    }
+
+    PresetScene DeserializePresetScene(const nlohmann::json& json,
+                                       const std::optional<std::filesystem::path>& baseDirectory)
+    {
+      PresetScene scene;
+      scene.id = json.value("id", "");
+      scene.title = json.value("title", "");
+      if (json.contains("graph") && json["graph"].is_object())
+      {
+        const auto& graph = json["graph"];
+        if (graph.contains("nodes") && graph["nodes"].is_array())
+        {
+          for (const auto& nodeJson : graph["nodes"])
+          {
+            scene.graph.nodes.push_back(DeserializeGraphNode(nodeJson, baseDirectory));
+          }
+        }
+        if (graph.contains("edges") && graph["edges"].is_array())
+        {
+          for (const auto& edgeJson : graph["edges"])
+          {
+            scene.graph.edges.push_back(DeserializeGraphEdge(edgeJson));
+          }
+        }
+      }
+      EnsurePresetBoundaryGainNodes(scene.graph);
+      return scene;
+    }
   } // namespace
 
   std::string PresetStorage::SerializeToJson(const Preset& preset)
   {
     const std::optional<std::filesystem::path> noBaseDirectory;
     nlohmann::json json;
+    Preset normalizedPreset = preset;
+    NormalizePresetScenes(normalizedPreset);
 
     // Metadata
-    json["id"] = preset.id;
-    json["name"] = preset.name;
-    json["version"] = preset.version;
-    if (!preset.author.empty())
-      json["author"] = preset.author;
-    if (!preset.category.empty())
-      json["category"] = preset.category;
-    if (!preset.description.empty())
-      json["description"] = preset.description;
-    if (!preset.createdAt.empty())
-      json["createdAt"] = preset.createdAt;
-    if (!preset.modifiedAt.empty())
-      json["modifiedAt"] = preset.modifiedAt;
-    if (!preset.tags.empty())
-      json["tags"] = preset.tags;
-    if (preset.designedPeakInputDbfs.has_value())
-      json["designedPeakInputDbfs"] = preset.designedPeakInputDbfs.value();
+    json["id"] = normalizedPreset.id;
+    json["name"] = normalizedPreset.name;
+    json["version"] = normalizedPreset.version;
+    if (!normalizedPreset.author.empty())
+      json["author"] = normalizedPreset.author;
+    if (!normalizedPreset.category.empty())
+      json["category"] = normalizedPreset.category;
+    if (!normalizedPreset.description.empty())
+      json["description"] = normalizedPreset.description;
+    if (!normalizedPreset.createdAt.empty())
+      json["createdAt"] = normalizedPreset.createdAt;
+    if (!normalizedPreset.modifiedAt.empty())
+      json["modifiedAt"] = normalizedPreset.modifiedAt;
+    if (!normalizedPreset.tags.empty())
+      json["tags"] = normalizedPreset.tags;
+    if (normalizedPreset.designedPeakInputDbfs.has_value())
+      json["designedPeakInputDbfs"] = normalizedPreset.designedPeakInputDbfs.value();
 
     // Global settings
     nlohmann::json global;
-    global["inputTrim"] = preset.global.inputTrim;
-    global["outputTrim"] = preset.global.outputTrim;
-    global["outputVolume"] = preset.global.outputVolume;
-    global["autoLevelInput"] = preset.global.autoLevelInput;
-    global["autoLevelOutput"] = preset.global.autoLevelOutput;
-    global["transpose"] = preset.global.transpose;
+    global["inputTrim"] = normalizedPreset.global.inputTrim;
+    global["outputTrim"] = normalizedPreset.global.outputTrim;
+    global["outputVolume"] = normalizedPreset.global.outputVolume;
+    global["autoLevelInput"] = normalizedPreset.global.autoLevelInput;
+    global["autoLevelOutput"] = normalizedPreset.global.autoLevelOutput;
+    global["transpose"] = normalizedPreset.global.transpose;
     json["global"] = global;
 
-    if (preset.globalSignalChain.has_value())
-      json["globalSignalChain"] = *preset.globalSignalChain;
+    if (normalizedPreset.globalSignalChain.has_value())
+      json["globalSignalChain"] = *normalizedPreset.globalSignalChain;
 
     // Signal graph
     nlohmann::json graph;
     graph["nodes"] = nlohmann::json::array();
-    for (const auto& node : preset.graph.nodes)
+    for (const auto& node : normalizedPreset.graph.nodes)
     {
       graph["nodes"].push_back(SerializeGraphNode(node, noBaseDirectory));
     }
     graph["edges"] = nlohmann::json::array();
-    for (const auto& edge : preset.graph.edges)
+    for (const auto& edge : normalizedPreset.graph.edges)
     {
       graph["edges"].push_back(SerializeGraphEdge(edge));
     }
     json["graph"] = graph;
 
+    if (!normalizedPreset.scenes.empty())
+    {
+      json["scenes"] = nlohmann::json::array();
+      for (const auto& scene : normalizedPreset.scenes)
+      {
+        json["scenes"].push_back(SerializePresetScene(scene, noBaseDirectory));
+      }
+    }
+
     // Embedded resources
-    if (!preset.embeddedResources.empty())
+    if (!normalizedPreset.embeddedResources.empty())
     {
       json["embeddedResources"] = nlohmann::json::array();
-      for (const auto& res : preset.embeddedResources)
+      for (const auto& res : normalizedPreset.embeddedResources)
       {
         json["embeddedResources"].push_back(SerializeEmbeddedResource(res, noBaseDirectory));
       }
@@ -436,7 +498,16 @@ namespace guitarfx
         }
       }
 
-      EnsurePresetBoundaryGainNodes(preset.graph);
+      if (json.contains("scenes") && json["scenes"].is_array())
+      {
+        for (const auto& sceneJson : json["scenes"])
+        {
+          if (sceneJson.is_object())
+            preset.scenes.push_back(DeserializePresetScene(sceneJson, std::nullopt));
+        }
+      }
+
+      NormalizePresetScenes(preset);
 
       // Embedded resources
       if (json.contains("embeddedResources") && json["embeddedResources"].is_array())
@@ -466,54 +537,65 @@ namespace guitarfx
         return false;
       }
       const std::optional<std::filesystem::path> baseDirectory = path.parent_path();
+      Preset normalizedPreset = preset;
+      NormalizePresetScenes(normalizedPreset);
 
       nlohmann::json json;
 
-      json["id"] = preset.id;
-      json["name"] = preset.name;
-      json["version"] = preset.version;
-      if (!preset.author.empty())
-        json["author"] = preset.author;
-      if (!preset.category.empty())
-        json["category"] = preset.category;
-      if (!preset.description.empty())
-        json["description"] = preset.description;
-      if (!preset.createdAt.empty())
-        json["createdAt"] = preset.createdAt;
-      if (!preset.modifiedAt.empty())
-        json["modifiedAt"] = preset.modifiedAt;
-      if (!preset.tags.empty())
-        json["tags"] = preset.tags;
+      json["id"] = normalizedPreset.id;
+      json["name"] = normalizedPreset.name;
+      json["version"] = normalizedPreset.version;
+      if (!normalizedPreset.author.empty())
+        json["author"] = normalizedPreset.author;
+      if (!normalizedPreset.category.empty())
+        json["category"] = normalizedPreset.category;
+      if (!normalizedPreset.description.empty())
+        json["description"] = normalizedPreset.description;
+      if (!normalizedPreset.createdAt.empty())
+        json["createdAt"] = normalizedPreset.createdAt;
+      if (!normalizedPreset.modifiedAt.empty())
+        json["modifiedAt"] = normalizedPreset.modifiedAt;
+      if (!normalizedPreset.tags.empty())
+        json["tags"] = normalizedPreset.tags;
 
       nlohmann::json global;
-      global["inputTrim"] = preset.global.inputTrim;
-      global["outputTrim"] = preset.global.outputTrim;
-      global["outputVolume"] = preset.global.outputVolume;
-      global["autoLevelInput"] = preset.global.autoLevelInput;
-      global["autoLevelOutput"] = preset.global.autoLevelOutput;
-      global["transpose"] = preset.global.transpose;
+      global["inputTrim"] = normalizedPreset.global.inputTrim;
+      global["outputTrim"] = normalizedPreset.global.outputTrim;
+      global["outputVolume"] = normalizedPreset.global.outputVolume;
+      global["autoLevelInput"] = normalizedPreset.global.autoLevelInput;
+      global["autoLevelOutput"] = normalizedPreset.global.autoLevelOutput;
+      global["transpose"] = normalizedPreset.global.transpose;
       json["global"] = global;
 
-      if (preset.globalSignalChain.has_value())
-        json["globalSignalChain"] = *preset.globalSignalChain;
+      if (normalizedPreset.globalSignalChain.has_value())
+        json["globalSignalChain"] = *normalizedPreset.globalSignalChain;
 
       nlohmann::json graph;
       graph["nodes"] = nlohmann::json::array();
-      for (const auto& node : preset.graph.nodes)
+      for (const auto& node : normalizedPreset.graph.nodes)
       {
         graph["nodes"].push_back(SerializeGraphNode(node, baseDirectory));
       }
       graph["edges"] = nlohmann::json::array();
-      for (const auto& edge : preset.graph.edges)
+      for (const auto& edge : normalizedPreset.graph.edges)
       {
         graph["edges"].push_back(SerializeGraphEdge(edge));
       }
       json["graph"] = graph;
 
-      if (!preset.embeddedResources.empty())
+      if (!normalizedPreset.scenes.empty())
+      {
+        json["scenes"] = nlohmann::json::array();
+        for (const auto& scene : normalizedPreset.scenes)
+        {
+          json["scenes"].push_back(SerializePresetScene(scene, baseDirectory));
+        }
+      }
+
+      if (!normalizedPreset.embeddedResources.empty())
       {
         json["embeddedResources"] = nlohmann::json::array();
-        for (const auto& res : preset.embeddedResources)
+        for (const auto& res : normalizedPreset.embeddedResources)
         {
           json["embeddedResources"].push_back(SerializeEmbeddedResource(res, baseDirectory));
         }
@@ -619,7 +701,16 @@ namespace guitarfx
         }
       }
 
-      EnsurePresetBoundaryGainNodes(preset.graph);
+      if (json.contains("scenes") && json["scenes"].is_array())
+      {
+        for (const auto& sceneJson : json["scenes"])
+        {
+          if (sceneJson.is_object())
+            preset.scenes.push_back(DeserializePresetScene(sceneJson, baseDirectory));
+        }
+      }
+
+      NormalizePresetScenes(preset);
 
       if (json.contains("embeddedResources") && json["embeddedResources"].is_array())
       {

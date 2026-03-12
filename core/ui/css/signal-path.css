@@ -46,16 +46,24 @@
 /* ── Mixer preset tab bar ──────────────────────────────────────────── */
 .mixer-preset-tabs {
   display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-medium);
+  flex-shrink: 0;
+}
+
+.mixer-preset-tab-row {
+  display: flex;
   align-items: stretch;
   gap: 0;
   padding: 4px 12px 0;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-medium);
   overflow-x: auto;
   scrollbar-width: none;
-  flex-shrink: 0;
 }
-.mixer-preset-tabs::-webkit-scrollbar { display: none; }
+
+.mixer-preset-tab-row::-webkit-scrollbar { display: none; }
 
 .mixer-preset-tab {
   flex-shrink: 0;
@@ -115,6 +123,95 @@
 .mixer-tab-close:hover {
   background: rgba(220, 60, 60, 0.25);
   color: #e05050;
+}
+
+.mixer-preset-scene-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: var(--bg-primary);
+  flex-wrap: wrap;
+}
+
+.preset-scene-tab-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1 1 auto;
+}
+
+.preset-scene-tab-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.preset-scene-tab {
+  border: 1px solid var(--border-medium);
+  background: var(--overlay-light);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.preset-scene-tab:hover {
+  background: var(--overlay-medium);
+  color: var(--text-primary);
+}
+
+.preset-scene-tab.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.preset-scene-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex: 1;
+  justify-content: flex-end;
+  min-width: 220px;
+}
+
+.preset-scene-title-input {
+  min-width: 140px;
+  max-width: 240px;
+  flex: 1;
+  border: 1px solid var(--border-medium);
+  background: var(--overlay-light);
+  color: var(--text-primary);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.preset-scene-action {
+  border: 1px solid var(--border-medium);
+  background: var(--overlay-light);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.preset-scene-action:hover:not(:disabled) {
+  background: var(--overlay-medium);
+  color: var(--text-primary);
+}
+
+.preset-scene-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* ── Inline mixer panel (shown when Mix tab active) ────────────────── */
@@ -2963,11 +3060,6 @@
   text-overflow: ellipsis;
   overflow: hidden;
   max-width: 80px;
-}
-
-/* Knob style presets for custom layouts */
-.custom-knob-default {
-  /* Standard dark knob (inherits from .knob) */
 }
 
 .custom-knob-pedal {

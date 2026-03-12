@@ -1,4 +1,4 @@
-import { uiState, getActivePresetForRender, getSignalPathPreset, setFocusedMixerPresetId, setPresetDirty, isCompositeEditMode, isAdvancedOptionsEnabled, isExperimentalFeaturesEnabled } from "./state.js";
+import { uiState, clonePreset, getActivePresetForRender, getSignalPathPreset, setActivePresetDraft, setFocusedMixerPresetId, setPresetDirty, isCompositeEditMode, isAdvancedOptionsEnabled, isExperimentalFeaturesEnabled } from "./state.js";
 import { buildBlendModelMappingsFromIds } from "./blendUtils.js";
 import type {
   Preset,
@@ -52,6 +52,7 @@ import {
   openBlendEditorWithDefinition,
   bindBlendEditorControls,
 } from "./signalPathBlend.js";
+import { createPresetScene, findPresetScene, normalizePresetScenes, removePresetScene, selectPresetScene } from "./presetScenes.js";
 export { initializeBlendEditorModal, openBlendEditorWithDefinition } from "./signalPathBlend.js";
 
 const signalPathNodesElement = document.getElementById("signal-path-nodes");
@@ -483,7 +484,7 @@ export function renderSignalPathBar(): void {
   // Show/hide composite edit mode banner
   updateCompositeEditBanner();
 
-  // Render preset selection tabs when multiple presets are active in the mixer
+  // Render preset selection tabs and scene controls in a single bar.
   renderMixerPresetTabs();
 
   // Show inline mixer panel instead of signal chain when Mix tab is active
@@ -2844,16 +2845,91 @@ function updateCompositeEditBanner(): void {
   }
 }
 
-/**
- * Renders the preset tab row above the signal path nodes when multiple presets
- * are active in the mixer. In single-preset mode the tab row is hidden.
- */
+function buildPresetScenePanelMarkup(preset: Preset, activeSceneId: string): string {
+  const scenes = preset.scenes ?? [];
+  if (scenes.length <= 1) {
+    return "";
+  }
+
+  const activeScene = findPresetScene(preset, activeSceneId) ?? scenes[0] ?? null;
+  const tabsHtml = scenes.map((scene) => {
+    const active = scene.id === activeSceneId;
+    return `<button class="preset-scene-tab${active ? " active" : ""}" type="button" data-scene-id="${escapeHtml(scene.id)}">${escapeHtml(scene.title)}</button>`;
+  }).join("");
+
+  return `
+    <div class="mixer-preset-scene-panel" data-scene-panel-for="${escapeHtml(preset.id)}">
+      <div class="preset-scene-tab-strip">${tabsHtml}</div>
+      <div class="preset-scene-controls">
+        <input class="preset-scene-title-input" type="text" value="${escapeHtml(activeScene?.title ?? "")}" maxlength="80" placeholder="Scene title" />
+        <button class="preset-scene-action" type="button" data-scene-action="add" title="Add scene">+ Scene</button>
+        <button class="preset-scene-action" type="button" data-scene-action="remove" title="Remove scene" ${scenes.length <= 1 ? "disabled" : ""}>Remove</button>
+      </div>
+    </div>
+  `;
+}
+
+function bindPresetScenePanel(panel: HTMLElement, renderedPreset: Preset): void {
+  panel.querySelectorAll<HTMLButtonElement>(".preset-scene-tab").forEach((button) => {
+    button.addEventListener("click", () => {
+      const nextSceneId = button.dataset.sceneId ?? "";
+      if (!nextSceneId || nextSceneId === uiState.activePresetSceneId) {
+        return;
+      }
+      const editablePreset = getEditableSignalPathPreset(renderedPreset);
+      uiState.activePresetSceneId = selectPresetScene(editablePreset, nextSceneId);
+      pushScenePresetToBackend(editablePreset);
+      renderSignalPathBar();
+    });
+  });
+
+  const titleInput = panel.querySelector<HTMLInputElement>(".preset-scene-title-input");
+  titleInput?.addEventListener("change", () => {
+    const editablePreset = getEditableSignalPathPreset(renderedPreset);
+    const selectedScene = findPresetScene(editablePreset, uiState.activePresetSceneId ?? undefined);
+    if (!selectedScene) {
+      return;
+    }
+    const nextTitle = titleInput.value.trim() || "Scene";
+    if (selectedScene.title === nextTitle) {
+      return;
+    }
+    selectedScene.title = nextTitle;
+    setPresetDirty(true);
+    pushScenePresetToBackend(editablePreset);
+    renderSignalPathBar();
+  });
+
+  panel.querySelector<HTMLButtonElement>("[data-scene-action='add']")?.addEventListener("click", () => {
+    const editablePreset = getEditableSignalPathPreset(renderedPreset);
+    const newScene = createPresetScene(editablePreset, uiState.activePresetSceneId ?? undefined);
+    uiState.activePresetSceneId = newScene.id;
+    setPresetDirty(true);
+    pushScenePresetToBackend(editablePreset);
+    renderSignalPathBar();
+  });
+
+  panel.querySelector<HTMLButtonElement>("[data-scene-action='remove']")?.addEventListener("click", () => {
+    const editablePreset = getEditableSignalPathPreset(renderedPreset);
+    if ((editablePreset.scenes?.length ?? 0) <= 1) {
+      showNotification("A preset must keep at least one scene");
+      return;
+    }
+    const nextSceneId = removePresetScene(editablePreset, uiState.activePresetSceneId ?? "");
+    uiState.activePresetSceneId = nextSceneId;
+    setPresetDirty(true);
+    pushScenePresetToBackend(editablePreset);
+    renderSignalPathBar();
+  });
+}
+
 function renderMixerPresetTabs(): void {
   let tabBar = document.getElementById("mixer-preset-tabs");
   const signalPathBar = document.getElementById("signal-path-bar");
   const mixer = uiState.mixer;
 
-  const shouldShowTabs = !isCompositeEditMode() && !!mixer && mixer.activePresetIds.length > 1;
+  const renderedPreset = getSignalPathPreset();
+  const shouldShowTabs = !isCompositeEditMode() && !!renderedPreset;
 
   if (!shouldShowTabs) {
     if (tabBar) tabBar.remove();
@@ -2861,7 +2937,10 @@ function renderMixerPresetTabs(): void {
     return;
   }
 
-  const activeMixer = mixer;
+  const multiPresetMode = !!mixer && mixer.activePresetIds.length > 1;
+  const activePreset = getEditableSignalPathPreset(renderedPreset);
+  const activeSceneId = normalizePresetScenes(activePreset, uiState.activePresetSceneId ?? undefined);
+  uiState.activePresetSceneId = activeSceneId;
 
   if (!tabBar) {
     tabBar = document.createElement("div");
@@ -2875,11 +2954,12 @@ function renderMixerPresetTabs(): void {
     }
   }
 
-  const focusedId = uiState.focusedMixerPresetId ?? activeMixer.activePresetIds[0];
+  const presetIds = multiPresetMode ? (mixer?.activePresetIds ?? []) : [activePreset.id];
+  const focusedId = multiPresetMode ? (uiState.focusedMixerPresetId ?? presetIds[0]) : activePreset.id;
 
-  const presetTabsHtml = activeMixer.activePresetIds.map((id) => {
-    const name = uiState.presetCache.get(id)?.name ?? activeMixer.presets[id]?.name ?? id;
-    const ps = activeMixer.presets[id];
+  const presetTabsHtml = presetIds.map((id) => {
+    const name = uiState.presetCache.get(id)?.name ?? mixer?.presets[id]?.name ?? id;
+    const ps = mixer?.presets[id];
     const muted = ps?.mute ?? false;
     const soloed = ps?.solo ?? false;
     const active = !mixTabActive && id === focusedId;
@@ -2887,15 +2967,22 @@ function renderMixerPresetTabs(): void {
       muted ? `<span class="tab-indicator muted" title="Muted">M</span>` : "",
       soloed ? `<span class="tab-indicator soloed" title="Solo">S</span>` : "",
     ].join("");
-    const closeBtn = `<span class="mixer-tab-close" data-close-preset-id="${escapeHtml(id)}" title="Remove from mixer" role="button" aria-label="Remove ${escapeHtml(name)}">×</span>`;
+    const closeBtn = multiPresetMode
+      ? `<span class="mixer-tab-close" data-close-preset-id="${escapeHtml(id)}" title="Remove from mixer" role="button" aria-label="Remove ${escapeHtml(name)}">×</span>`
+      : "";
     return `<button class="mixer-preset-tab${active ? " active" : ""}" data-preset-id="${escapeHtml(id)}" type="button">${escapeHtml(name)}${indicators}${closeBtn}</button>`;
   }).join("");
 
-  const mixTabHtml = `<button class="mixer-preset-tab mixer-tab-mix${mixTabActive ? " active" : ""}" data-mix-tab="1" type="button">⚖ Mix</button>`;
+  const mixTabHtml = multiPresetMode
+    ? `<button class="mixer-preset-tab mixer-tab-mix${mixTabActive ? " active" : ""}" data-mix-tab="1" type="button">⚖ Mix</button>`
+    : "";
 
-  tabBar.innerHTML = presetTabsHtml + mixTabHtml;
+  tabBar.innerHTML = `
+    <div class="mixer-preset-tab-row">${presetTabsHtml}${mixTabHtml}</div>
+    ${!mixTabActive ? buildPresetScenePanelMarkup(activePreset, activeSceneId ?? "") : ""}
+  `;
 
-  tabBar.querySelectorAll<HTMLButtonElement>(".mixer-preset-tab:not([data-mix-tab])").forEach((btn) => {
+  tabBar.querySelectorAll<HTMLButtonElement>(".mixer-preset-tab-row .mixer-preset-tab:not([data-mix-tab])").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       // Don't switch tab when close button was clicked
       if ((e.target as HTMLElement).closest(".mixer-tab-close")) return;
@@ -2932,9 +3019,42 @@ function renderMixerPresetTabs(): void {
     });
   });
 
-  tabBar.querySelector<HTMLButtonElement>("[data-mix-tab]")?.addEventListener("click", () => {
+  tabBar.querySelector<HTMLButtonElement>(".mixer-preset-tab-row [data-mix-tab]")?.addEventListener("click", () => {
     mixTabActive = !mixTabActive;
     renderSignalPathBar();
+  });
+
+  const scenePanel = tabBar.querySelector<HTMLElement>(".mixer-preset-scene-panel");
+  if (scenePanel) {
+    bindPresetScenePanel(scenePanel, activePreset);
+  }
+}
+
+function getEditableSignalPathPreset(sourcePreset: Preset): Preset {
+  const existingDraft = uiState.activePresetDraft;
+  if (existingDraft && existingDraft.id === sourcePreset.id) {
+    normalizePresetScenes(existingDraft, uiState.activePresetSceneId ?? undefined);
+    return existingDraft;
+  }
+
+  const draft = clonePreset(sourcePreset);
+  uiState.activePresetId = sourcePreset.id;
+  setFocusedMixerPresetId(sourcePreset.id);
+  uiState.activePresetSceneId = normalizePresetScenes(draft, uiState.activePresetSceneId ?? undefined);
+  setActivePresetDraft(draft);
+  return uiState.activePresetDraft ?? draft;
+}
+
+function pushScenePresetToBackend(preset: Preset): void {
+  const sceneId = normalizePresetScenes(preset, uiState.activePresetSceneId ?? undefined);
+  uiState.activePresetSceneId = sceneId;
+  uiState.activePresetId = preset.id;
+  setFocusedMixerPresetId(preset.id);
+  setActivePresetDraft(preset);
+  postMessage({
+    type: "loadPreset",
+    preset: uiState.activePresetDraft ?? preset,
+    ...(sceneId ? { sceneId } : {}),
   });
 }
 

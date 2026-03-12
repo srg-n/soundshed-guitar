@@ -1,5 +1,6 @@
 import type { Attachment, AudioFxModelEntry, IrLibraryEntry, Preset, GraphNode } from "./types.js";
 import { EffectGuids } from "./effectGuids.js";
+import { getPresetSceneGraphs } from "./presetScenes.js";
 
 export const REMOTE_BASE_URL = window.AUDIOFX_REMOTE_BASE_URL ?? "";
 
@@ -69,18 +70,18 @@ function extractResourceIdsFromGraph(
   resourceType: string,
 ): string[] {
   const ids: string[] = [];
-  if (!preset.graph?.nodes) return ids;
-
-  for (const node of preset.graph.nodes as GraphNode[]) {
-    if (node.type !== nodeType) {
-      continue;
-    }
-    if (Array.isArray(node.resources)) {
-      node.resources.forEach((res) => {
-        if (res.type === resourceType && res.id) {
-          ids.push(res.id);
-        }
-      });
+  for (const graph of getPresetSceneGraphs(preset)) {
+    for (const node of graph.nodes as GraphNode[]) {
+      if (node.type !== nodeType) {
+        continue;
+      }
+      if (Array.isArray(node.resources)) {
+        node.resources.forEach((res) => {
+          if (res.type === resourceType && res.id) {
+            ids.push(res.id);
+          }
+        });
+      }
     }
   }
   return ids;
@@ -91,7 +92,7 @@ function extractResourceIdsFromGraph(
  */
 export function buildAttachmentsFromPreset(preset: Preset): Attachment[] {
   // For v2 presets, extract from graph nodes
-  if (preset.formatVersion === 2 && preset.graph?.nodes) {
+  if ((preset.graph?.nodes && preset.graph.nodes.length > 0) || (preset.scenes?.length ?? 0) > 0) {
     const modelIds = extractResourceIdsFromGraph(preset, EffectGuids.kAmpNam, "nam");
     const irIds = extractResourceIdsFromGraph(preset, EffectGuids.kCabIr, "ir");
 

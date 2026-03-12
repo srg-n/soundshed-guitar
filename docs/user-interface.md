@@ -56,8 +56,8 @@ The UI is a web-based single-page application (SPA) hosted in a native WebView. 
 | Type | Payload | Description |
 |------|---------|-------------|
 | `state` | Full state object | Complete sync on startup/major changes |
-| `presetLoaded` | `{preset, activePresetIds, parameters}` | Preset load notification |
-| `presetSaved` | `{preset}` | Preset saved to disk confirmation |
+| `presetLoaded` | `{preset, sceneId, activePresetIds, parameters}` | Preset load notification |
+| `presetSaved` | `{preset, sceneId}` | Preset saved to disk confirmation |
 | `presetList` | `{presets: [{id, name, category, source}]}` | Factory/user presets from disk |
 | `error` | `{message, detail}` | Error notification |
 | `signalPathTestResult` | `{frequency, duration, elapsed, ...}` | Signal test completed |
@@ -93,7 +93,7 @@ The UI is a web-based single-page application (SPA) hosted in a native WebView. 
 | `uiReady` | `{}` | WebView loaded and ready |
 | `requestState` | `{}` | Request full state sync |
 | `setParameter` | `{name, value}` | Update parameter value |
-| `loadPreset` | `{preset}` | Load preset with full object |
+| `loadPreset` | `{preset, sceneId?}` | Load preset with full object and optionally select a scene |
 | `savePreset` | `{name, category, description}` | Save current state as preset to disk |
 | `loadModel` | `{filePath}` | Load NAM model by path |
 | `loadIR` | `{filePath}` | Load IR cab by path |
@@ -201,6 +201,12 @@ Engine changes parameter (automation):
 
 ### Conflict Resolution
 Engine value is authoritative. If UI receives a state broadcast with a different value than it sent, it adopts the engine value.
+
+### Scene Editing
+
+Presets can expose multiple named scenes. The UI edits one scene at a time in the signal-path bar,
+while the engine keeps the full preset definition synchronized. Existing single-graph presets are
+treated as a one-scene preset automatically.
 
 ## UI Views
 

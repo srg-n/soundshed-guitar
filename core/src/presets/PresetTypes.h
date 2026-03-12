@@ -103,6 +103,13 @@ namespace guitarfx
     }
   };
 
+  struct PresetScene
+  {
+    std::string id;
+    std::string title;
+    SignalGraph graph;
+  };
+
   /**
    * Global settings for the preset.
    */
@@ -188,6 +195,7 @@ namespace guitarfx
 
     // Signal graph
     SignalGraph graph;
+    std::vector<PresetScene> scenes;
 
     // Embedded resources (optional, for sharing)
     std::vector<EmbeddedResource> embeddedResources;
@@ -284,9 +292,22 @@ namespace guitarfx
    */
   void EnsurePresetBoundaryGainNodes(SignalGraph& graph);
 
+  void NormalizePresetScenes(Preset& preset);
+  [[nodiscard]] PresetScene* FindPresetScene(Preset& preset, const std::string& sceneId);
+  [[nodiscard]] const PresetScene* FindPresetScene(const Preset& preset, const std::string& sceneId);
+  [[nodiscard]] std::string GetDefaultPresetSceneId(const Preset& preset);
+  [[nodiscard]] bool SetPresetActiveScene(Preset& preset,
+                                          const std::string& sceneId,
+                                          std::string* resolvedSceneId = nullptr);
+  void SyncPresetSceneFromGraph(Preset& preset, const std::string& sceneId);
+
   inline void EnsurePresetBoundaryGainNodes(Preset& preset)
   {
     EnsurePresetBoundaryGainNodes(preset.graph);
+    for (auto& scene : preset.scenes)
+    {
+      EnsurePresetBoundaryGainNodes(scene.graph);
+    }
   }
 
 } // namespace guitarfx

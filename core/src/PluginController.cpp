@@ -1897,6 +1897,11 @@ void PluginController::HandlePresetLoadRequest(const nlohmann::json& payload)
 
         if (!presetOpt) return;
         preset = std::move(*presetOpt);
+        NormalizePresetScenes(preset);
+
+        const std::string requestedSceneId = payload.value("sceneId", "");
+        if (!SetPresetActiveScene(preset, requestedSceneId, &mActiveSceneId))
+            mActiveSceneId = GetDefaultPresetSceneId(preset);
 
         ApplyBlendDefinitions(preset);
 
@@ -1916,6 +1921,7 @@ void PluginController::HandlePresetLoadRequest(const nlohmann::json& payload)
             for (const auto& id : mPresetMixer.GetActivePresetIds())
                 activeIds.push_back(id);
             loaded["activePresetIds"] = activeIds;
+            loaded["sceneId"] = GetResolvedActiveSceneId();
             SendMessageToUI(loaded.dump());
         }
 
@@ -2352,6 +2358,7 @@ void PluginController::HandleSavePresetRequest(const nlohmann::json& payload)
     try
     {
         Preset newPreset = payloadPreset ? *payloadPreset : *mActivePreset;
+        NormalizePresetScenes(newPreset);
         EnsurePresetBoundaryGainNodes(newPreset);
         newPreset.id = presetIdOverride.empty()
             ? "user-" + std::to_string(std::time(nullptr))
@@ -2387,6 +2394,10 @@ void PluginController::HandleSavePresetRequest(const nlohmann::json& payload)
             newPreset.globalSignalChain.reset();
         }
 
+        const std::string requestedSceneId = payload.value("sceneId", mActiveSceneId);
+        if (!SetPresetActiveScene(newPreset, requestedSceneId, &mActiveSceneId))
+            mActiveSceneId = GetDefaultPresetSceneId(newPreset);
+
         if (mUserPresetsPath.empty())
             mUserPresetsPath = mFileSystem.ResolvePresetDirectory() / "user";
         [[maybe_unused]] const auto ensuredUserPresetPath = mFileSystem.EnsureDirectory(mUserPresetsPath);
@@ -2407,6 +2418,7 @@ void PluginController::HandleSavePresetRequest(const nlohmann::json& payload)
         nlohmann::json reply;
         reply["type"] = "presetSaved";
         reply["preset"] = nlohmann::json::parse(mActivePresetJson);
+        reply["sceneId"] = GetResolvedActiveSceneId();
         SendMessageToUI(reply.dump());
     }
     catch (const std::exception& e)
@@ -2492,6 +2504,7 @@ void PluginController::HandleUpdateSignalPathNodeParamRequest(const nlohmann::js
     if (!node) return;
 
     node->params[paramKey] = value;
+    SyncActivePresetSceneGraph();
     mPresetMixer.SetNodeParam(presetId, nodeId, paramKey, value);
     mActivePresetJson = mActivePreset ? PresetStorage::SerializeToJson(*mActivePreset) : "{}";
 }
@@ -2512,6 +2525,7 @@ void PluginController::HandleUpdateSignalPathNodeBypassRequest(const nlohmann::j
     if (!node) return;
 
     node->enabled = enabled;
+    SyncActivePresetSceneGraph();
     mPresetMixer.SetNodeEnabled(presetId, nodeId, enabled);
     mActivePresetJson = mActivePreset ? PresetStorage::SerializeToJson(*mActivePreset) : "{}";
     mPendingStateBroadcast = true;
@@ -2614,7 +2628,7 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
         }
         else if (mActivePreset)
         {
-            mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+            SyncActivePresetSceneGraph();
             ApplyPreset(*mActivePreset);
             mPendingStateBroadcast = true;
         }
@@ -2644,7 +2658,7 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
             }
             else if (mActivePreset)
             {
-                mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+                SyncActivePresetSceneGraph();
                 ApplyPreset(*mActivePreset);
                 mPendingStateBroadcast = true;
             }
@@ -2797,7 +2811,7 @@ void PluginController::HandleAddSignalPathNodeRequest(const nlohmann::json& payl
         graph.nodes.push_back(splitter); graph.nodes.push_back(mixer);
 
         if (IsCompositeEditMode()) BroadcastCompositeEditState();
-        else if (mActivePreset) { mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset); ApplyPreset(*mActivePreset); BroadcastState(); }
+        else if (mActivePreset) { SyncActivePresetSceneGraph(); ApplyPreset(*mActivePreset); BroadcastState(); }
         return;
     }
 
@@ -2843,7 +2857,7 @@ void PluginController::HandleAddSignalPathNodeRequest(const nlohmann::json& payl
     }
 
     if (IsCompositeEditMode()) BroadcastCompositeEditState();
-    else if (mActivePreset) { mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset); ApplyPreset(*mActivePreset); BroadcastState(); }
+    else if (mActivePreset) { SyncActivePresetSceneGraph(); ApplyPreset(*mActivePreset); BroadcastState(); }
 }
 
 void PluginController::HandleSplitSignalPathEdgeRequest(const nlohmann::json& payload)
@@ -2885,7 +2899,7 @@ void PluginController::HandleSplitSignalPathEdgeRequest(const nlohmann::json& pa
     targetGraph->nodes.push_back(splitter); targetGraph->nodes.push_back(mixer);
 
     if (IsCompositeEditMode()) BroadcastCompositeEditState();
-    else if (mActivePreset) { mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset); ApplyPreset(*mActivePreset); BroadcastState(); }
+    else if (mActivePreset) { SyncActivePresetSceneGraph(); ApplyPreset(*mActivePreset); BroadcastState(); }
 }
 
 void PluginController::HandleCollapseSignalPathSplitRequest(const nlohmann::json& payload)
@@ -2926,7 +2940,7 @@ void PluginController::HandleCollapseSignalPathSplitRequest(const nlohmann::json
         [&](const GraphNode& n) { return n.id == splitterId || n.id == mixerId; }), targetGraph->nodes.end());
 
     if (IsCompositeEditMode()) BroadcastCompositeEditState();
-    else if (mActivePreset) { mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset); ApplyPreset(*mActivePreset); BroadcastState(); }
+    else if (mActivePreset) { SyncActivePresetSceneGraph(); ApplyPreset(*mActivePreset); BroadcastState(); }
 }
 
 void PluginController::HandleReplaceSignalPathNodeRequest(const nlohmann::json& payload)
@@ -2970,7 +2984,7 @@ void PluginController::HandleReplaceSignalPathNodeRequest(const nlohmann::json& 
     if (!categoryOverride.empty()) node->category = categoryOverride;
 
     if (IsCompositeEditMode()) BroadcastCompositeEditState();
-    else if (mActivePreset) { mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset); ApplyPreset(*mActivePreset); BroadcastState(); }
+    else if (mActivePreset) { SyncActivePresetSceneGraph(); ApplyPreset(*mActivePreset); BroadcastState(); }
 }
 
 void PluginController::HandleReorderSignalPathNodeRequest(const nlohmann::json& payload)
@@ -3048,7 +3062,7 @@ void PluginController::HandleReorderSignalPathNodeRequest(const nlohmann::json& 
     }
 
     if (IsCompositeEditMode()) BroadcastCompositeEditState();
-    else if (mActivePreset) { mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset); ApplyPreset(*mActivePreset); BroadcastState(); }
+    else if (mActivePreset) { SyncActivePresetSceneGraph(); ApplyPreset(*mActivePreset); BroadcastState(); }
 }
 
 void PluginController::HandleDeleteSignalPathNodeRequest(const nlohmann::json& payload)
@@ -3090,7 +3104,7 @@ void PluginController::HandleDeleteSignalPathNodeRequest(const nlohmann::json& p
     nodes.erase(std::remove_if(nodes.begin(), nodes.end(), [&](const GraphNode& n) { return n.id == nodeId; }), nodes.end());
 
     if (IsCompositeEditMode()) BroadcastCompositeEditState();
-    else if (mActivePreset) { mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset); ApplyPreset(*mActivePreset); BroadcastState(); }
+    else if (mActivePreset) { SyncActivePresetSceneGraph(); ApplyPreset(*mActivePreset); BroadcastState(); }
 }
 
 void PluginController::HandleImportRemoteResourceRequest(const nlohmann::json& payload)
@@ -5250,8 +5264,10 @@ void PluginController::BroadcastState()
     // Current preset
     if (mActivePreset)
     {
+        SyncActivePresetSceneGraph();
         state["preset"] = nlohmann::json::parse(PresetStorage::SerializeToJson(*mActivePreset));
         state["activePresetId"] = mActivePresetId;
+        state["activeSceneId"] = GetResolvedActiveSceneId();
     }
 
     // App settings — UI reads "appSettings"
@@ -5389,6 +5405,11 @@ void PluginController::ApplyPreset(const Preset& preset)
     std::lock_guard<std::mutex> lock(mDSPMutex);
 
     Preset normalizedPreset = preset;
+    NormalizePresetScenes(normalizedPreset);
+    std::string resolvedSceneId = mActiveSceneId;
+    if (!SetPresetActiveScene(normalizedPreset, resolvedSceneId, &resolvedSceneId))
+        resolvedSceneId = GetDefaultPresetSceneId(normalizedPreset);
+    mActiveSceneId = resolvedSceneId;
     EnsurePresetBoundaryGainNodes(normalizedPreset);
 
     // Apply global signal chain config under the DSP lock so the audio thread
@@ -5553,8 +5574,43 @@ SignalGraph* PluginController::ResolveEditTarget()
     if (mEditingComposite)
         return &mEditingComposite->innerGraph;
     if (mActivePreset)
+    {
+        NormalizePresetScenes(*mActivePreset);
+        if (auto* scene = FindPresetScene(*mActivePreset, GetResolvedActiveSceneId()))
+            return &scene->graph;
         return &mActivePreset->graph;
+    }
     return nullptr;
+}
+
+std::string PluginController::GetResolvedActiveSceneId() const
+{
+    if (mActivePreset)
+    {
+        if (FindPresetScene(*mActivePreset, mActiveSceneId))
+            return mActiveSceneId;
+        return GetDefaultPresetSceneId(*mActivePreset);
+    }
+    return mActiveSceneId;
+}
+
+void PluginController::SyncActivePresetSceneGraph()
+{
+    if (!mActivePreset)
+        return;
+
+    NormalizePresetScenes(*mActivePreset);
+    const std::string resolvedSceneId = GetResolvedActiveSceneId();
+    if (auto* scene = FindPresetScene(*mActivePreset, resolvedSceneId))
+    {
+        EnsurePresetBoundaryGainNodes(scene->graph);
+        mActivePreset->graph = scene->graph;
+        EnsurePresetBoundaryGainNodes(mActivePreset->graph);
+        mActiveSceneId = resolvedSceneId;
+        return;
+    }
+
+    (void)SetPresetActiveScene(*mActivePreset, resolvedSceneId, &mActiveSceneId);
 }
 
 void PluginController::BroadcastCompositeEditState()

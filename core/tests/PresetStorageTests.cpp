@@ -254,6 +254,114 @@ bool TestSaveLoadFile()
   return true;
 }
 
+bool TestLegacyGraphCreatesSingleScene()
+{
+  std::cout << "Test: LegacyGraphCreatesSingleScene... ";
+
+  const std::string json = R"JSON({
+    "id": "legacy-scene-test",
+    "name": "Legacy Scene Test",
+    "version": 2,
+    "graph": {
+      "nodes": [
+        {"id": "__input__", "type": "input"},
+        {"id": "amp", "type": "amp_nam"},
+        {"id": "__output__", "type": "output"}
+      ],
+      "edges": [
+        {"from": "__input__", "to": "amp"},
+        {"from": "amp", "to": "__output__"}
+      ]
+    }
+  })JSON";
+
+  auto preset = guitarfx::PresetStorage::DeserializeFromJson(json);
+  if (!preset)
+  {
+    std::cout << "FAIL (deserialization failed)" << std::endl;
+    return false;
+  }
+
+  if (preset->scenes.size() != 1)
+  {
+    std::cout << "FAIL (expected 1 synthesized scene, got " << preset->scenes.size() << ")" << std::endl;
+    return false;
+  }
+
+  if (preset->scenes[0].id != "scene-1" || preset->scenes[0].title != "Scene 1")
+  {
+    std::cout << "FAIL (legacy scene defaults incorrect)" << std::endl;
+    return false;
+  }
+
+  if (preset->graph.nodes.size() != preset->scenes[0].graph.nodes.size())
+  {
+    std::cout << "FAIL (legacy graph and synthesized scene graph differ)" << std::endl;
+    return false;
+  }
+
+  std::cout << "PASS" << std::endl;
+  return true;
+}
+
+bool TestSerializeDeserializeScenes()
+{
+  std::cout << "Test: SerializeDeserializeScenes... ";
+
+  auto preset = CreateTestPreset("scene-roundtrip", "Scene Roundtrip", "models/amp.nam");
+  guitarfx::PresetScene cleanScene;
+  cleanScene.id = "scene-clean";
+  cleanScene.title = "Clean";
+  cleanScene.graph = preset.graph;
+
+  guitarfx::PresetScene leadScene = cleanScene;
+  leadScene.id = "scene-lead";
+  leadScene.title = "Lead";
+  if (auto* ampNode = leadScene.graph.FindNode("amp"))
+  {
+    ampNode->params["drive"] = 0.9;
+  }
+  else
+  {
+    std::cout << "FAIL (test preset missing amp node)" << std::endl;
+    return false;
+  }
+
+  preset.scenes = { cleanScene, leadScene };
+  preset.graph = leadScene.graph;
+
+  const std::string json = guitarfx::PresetStorage::SerializeToJson(preset);
+  auto roundTripped = guitarfx::PresetStorage::DeserializeFromJson(json);
+  if (!roundTripped)
+  {
+    std::cout << "FAIL (round-trip deserialize failed)" << std::endl;
+    return false;
+  }
+
+  if (roundTripped->scenes.size() != 2)
+  {
+    std::cout << "FAIL (expected 2 scenes, got " << roundTripped->scenes.size() << ")" << std::endl;
+    return false;
+  }
+
+  const auto* lead = guitarfx::FindPresetScene(*roundTripped, "scene-lead");
+  if (!lead)
+  {
+    std::cout << "FAIL (lead scene missing after round-trip)" << std::endl;
+    return false;
+  }
+
+  const auto* ampNode = lead->graph.FindNode("amp");
+  if (!ampNode || ampNode->params.find("drive") == ampNode->params.end() || ampNode->params.at("drive") != 0.9)
+  {
+    std::cout << "FAIL (lead scene graph contents not preserved)" << std::endl;
+    return false;
+  }
+
+  std::cout << "PASS" << std::endl;
+  return true;
+}
+
 // Test: Load all presets from directory
 bool TestLoadAllFromDirectory()
 {
@@ -685,6 +793,8 @@ int main()
 
   runTest(TestSerializeDeserialize);
   runTest(TestSaveLoadFile);
+  runTest(TestLegacyGraphCreatesSingleScene);
+  runTest(TestSerializeDeserializeScenes);
   runTest(TestLoadAllFromDirectory);
   runTest(TestGraphNodeFinding);
   runTest(TestResourceRefValidation);

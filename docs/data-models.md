@@ -32,7 +32,19 @@ Top-level preset structure (schema version 2).
 | `modifiedAt` | datetime | No | Last modification |
 | `global` | GlobalSettings | Yes | Global parameters |
 | `graph` | SignalGraph | Yes | Effect signal graph |
+| `scenes` | PresetScene[] | No | Multiple named signal-chain variants within one preset |
 | `embeddedResources` | EmbeddedResource[] | No | Portable resources |
+
+### PresetScene
+
+When present, `scenes` is the source of truth for per-scene signal chains. The top-level `graph`
+field remains for backward compatibility and mirrors the currently active scene graph.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Stable scene identifier within the preset |
+| `title` | string | Yes | User-facing scene title |
+| `graph` | SignalGraph | Yes | Signal chain for this scene |
 
 ### GlobalSettings
 
@@ -127,7 +139,24 @@ For portable preset sharing.
       {"from": "amp", "to": "cab"},
       {"from": "cab", "to": "out"}
     ]
-  }
+  },
+  "scenes": [
+    {
+      "id": "scene-clean",
+      "title": "Clean",
+      "graph": {
+        "nodes": [
+          {"id": "in", "type": "input"},
+          {"id": "amp", "type": "amp_nam"},
+          {"id": "out", "type": "output"}
+        ],
+        "edges": [
+          {"from": "in", "to": "amp"},
+          {"from": "amp", "to": "out"}
+        ]
+      }
+    }
+  ]
 }
 ```
 

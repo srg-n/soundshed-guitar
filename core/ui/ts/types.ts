@@ -66,6 +66,7 @@ export interface Preset {
   customIrPath?: string | null;
   formatVersion?: number;
   graph?: SignalGraph;
+  scenes?: PresetScene[];
   globals?: GlobalSettings;
   embeddedResources?: EmbeddedResource[];
   [key: string]: unknown;
@@ -153,6 +154,12 @@ export interface GraphEdge {
 export interface SignalGraph {
   nodes: GraphNode[];
   edges: GraphEdge[];
+}
+
+export interface PresetScene {
+  id: string;
+  title: string;
+  graph: SignalGraph;
 }
 
 export interface EmbeddedResource {
@@ -449,6 +456,7 @@ export interface UiState {
   presetCache: Map<string, Preset>;
   activePresetSnapshot?: Preset | null;
   activePresetDraft?: Preset | null;
+  activePresetSceneId?: string | null;
   presetDirty?: boolean;
   presetFolders?: PresetFolder[];
   activePresetFolderId?: string | null;

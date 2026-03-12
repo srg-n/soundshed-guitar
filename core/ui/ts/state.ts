@@ -2,6 +2,7 @@ import type { DemoSample, GlobalSignalChainConfig, Preset, SignalGraph, UiState 
 import type { CompositeEffectDefinition } from "./compositeTypes.js";
 import { createEmptyLayoutLibrary } from "./layoutTypes.js";
 import { EffectGuids } from "./effectGuids.js";
+import { normalizePresetScenes } from "./presetScenes.js";
 
 export const LOG_ENTRY_LIMIT = 200;
 
@@ -170,6 +171,7 @@ export const uiState: UiState = {
   presetCache: new Map<string, Preset>(),
   activePresetSnapshot: null,
   activePresetDraft: null,
+  activePresetSceneId: null,
   presetDirty: false,
   presetFolders: [],
   activePresetFolderId: "__all__",
@@ -338,11 +340,25 @@ export function setFocusedMixerPresetId(presetId: string | null): void {
 }
 
 export function setActivePresetSnapshot(preset: Preset | null): void {
-  uiState.activePresetSnapshot = preset ? clonePreset(preset) : null;
+  if (!preset) {
+    uiState.activePresetSnapshot = null;
+    return;
+  }
+
+  const snapshot = clonePreset(preset);
+  normalizePresetScenes(snapshot, uiState.activePresetSceneId ?? undefined);
+  uiState.activePresetSnapshot = snapshot;
 }
 
 export function setActivePresetDraft(preset: Preset | null): void {
-  uiState.activePresetDraft = preset ? clonePreset(preset) : null;
+  if (!preset) {
+    uiState.activePresetDraft = null;
+    return;
+  }
+
+  const draft = clonePreset(preset);
+  uiState.activePresetSceneId = normalizePresetScenes(draft, uiState.activePresetSceneId ?? undefined);
+  uiState.activePresetDraft = draft;
 }
 
 export function setPresetDirty(isDirty: boolean): void {

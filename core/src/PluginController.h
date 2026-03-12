@@ -311,6 +311,8 @@ private:
     // Composite edit helpers
     [[nodiscard]] bool IsCompositeEditMode() const;
     [[nodiscard]] SignalGraph* ResolveEditTarget();
+    [[nodiscard]] std::string GetResolvedActiveSceneId() const;
+    void SyncActivePresetSceneGraph();
     void BroadcastCompositeEditState();
 
     // Resource helpers
@@ -388,6 +390,7 @@ private:
     std::optional<Preset> mActivePreset;
     std::string mActivePresetJson;
     std::string mActivePresetId;
+    std::string mActiveSceneId;
 
     // Per-slot preset JSON cache, kept in sync with MultiPresetMixer instances.
     // Used by BroadcastState to send full graph data to the UI for each mixer slot.
