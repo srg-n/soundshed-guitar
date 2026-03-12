@@ -479,6 +479,8 @@ export function renderSignalPathBar(): void {
   }
 
   const signalPathBar = document.getElementById("signal-path-bar");
+  const sceneToolbarHost = document.getElementById("signal-path-scene-toolbar");
+  const toolbarRow = document.getElementById("signal-path-toolbar");
   signalPathBar?.classList.toggle("mix-tab-active", mixTabActive);
 
   // Show/hide composite edit mode banner
@@ -491,6 +493,8 @@ export function renderSignalPathBar(): void {
   const scroll = document.querySelector<HTMLElement>(".signal-path-scroll");
   if (mixTabActive) {
     if (scroll) scroll.hidden = true;
+    if (sceneToolbarHost) sceneToolbarHost.innerHTML = "";
+    toolbarRow?.classList.add("scene-toolbar-empty");
     renderInlineMixer();
     return;
   }
@@ -507,6 +511,8 @@ export function renderSignalPathBar(): void {
   
   if (!activePreset) {
     signalPathNodesElement.innerHTML = "";
+    if (sceneToolbarHost) sceneToolbarHost.innerHTML = "";
+    toolbarRow?.classList.add("scene-toolbar-empty");
     updateEffectVisualization();
     return;
   }
@@ -548,6 +554,19 @@ export function renderSignalPathBar(): void {
 
     // Bind minimal handlers (legacy fallback uses insertAfter=__input__)
     bindAddButtonHandlers();
+  }
+
+  if (sceneToolbarHost) {
+    const editablePreset = getEditableSignalPathPreset(activePreset);
+    const activeSceneId = normalizePresetScenes(editablePreset, uiState.activePresetSceneId ?? undefined);
+    uiState.activePresetSceneId = activeSceneId;
+    const sceneMarkup = buildPresetScenePanelMarkup(editablePreset, activeSceneId ?? "");
+    sceneToolbarHost.innerHTML = sceneMarkup;
+    toolbarRow?.classList.toggle("scene-toolbar-empty", !sceneMarkup);
+    const scenePanel = sceneToolbarHost.querySelector<HTMLElement>(".mixer-preset-scene-panel");
+    if (scenePanel) {
+      bindPresetScenePanel(scenePanel, editablePreset);
+    }
   }
 
   updateSignalPathClipIndicators();
@@ -2939,8 +2958,6 @@ function renderMixerPresetTabs(): void {
 
   const multiPresetMode = !!mixer && mixer.activePresetIds.length > 1;
   const activePreset = getEditableSignalPathPreset(renderedPreset);
-  const activeSceneId = normalizePresetScenes(activePreset, uiState.activePresetSceneId ?? undefined);
-  uiState.activePresetSceneId = activeSceneId;
 
   if (!tabBar) {
     tabBar = document.createElement("div");
@@ -2977,10 +2994,7 @@ function renderMixerPresetTabs(): void {
     ? `<button class="mixer-preset-tab mixer-tab-mix${mixTabActive ? " active" : ""}" data-mix-tab="1" type="button">⚖ Mix</button>`
     : "";
 
-  tabBar.innerHTML = `
-    <div class="mixer-preset-tab-row">${presetTabsHtml}${mixTabHtml}</div>
-    ${!mixTabActive ? buildPresetScenePanelMarkup(activePreset, activeSceneId ?? "") : ""}
-  `;
+  tabBar.innerHTML = `<div class="mixer-preset-tab-row">${presetTabsHtml}${mixTabHtml}</div>`;
 
   tabBar.querySelectorAll<HTMLButtonElement>(".mixer-preset-tab-row .mixer-preset-tab:not([data-mix-tab])").forEach((btn) => {
     btn.addEventListener("click", (e) => {
@@ -3023,11 +3037,6 @@ function renderMixerPresetTabs(): void {
     mixTabActive = !mixTabActive;
     renderSignalPathBar();
   });
-
-  const scenePanel = tabBar.querySelector<HTMLElement>(".mixer-preset-scene-panel");
-  if (scenePanel) {
-    bindPresetScenePanel(scenePanel, activePreset);
-  }
 }
 
 function getEditableSignalPathPreset(sourcePreset: Preset): Preset {
