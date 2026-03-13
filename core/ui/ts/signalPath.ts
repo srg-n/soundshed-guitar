@@ -2951,6 +2951,8 @@ signalPathToolbarSceneButton?.addEventListener("click", () => {
   addSceneFromToolbar();
 });
 
+const mixerPresetTabCollator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
+
 function renderMixerPresetTabs(): void {
   let tabBar = document.getElementById("mixer-preset-tabs");
   const signalPathBar = document.getElementById("signal-path-bar");
@@ -2980,7 +2982,18 @@ function renderMixerPresetTabs(): void {
     }
   }
 
-  const presetIds = multiPresetMode ? (mixer?.activePresetIds ?? []) : [activePreset.id];
+  const presetIds = multiPresetMode ? [...(mixer?.activePresetIds ?? [])] : [activePreset.id];
+  if (multiPresetMode) {
+    presetIds.sort((leftId, rightId) => {
+      const leftName = uiState.presetCache.get(leftId)?.name ?? mixer?.presets[leftId]?.name ?? leftId;
+      const rightName = uiState.presetCache.get(rightId)?.name ?? mixer?.presets[rightId]?.name ?? rightId;
+      const nameComparison = mixerPresetTabCollator.compare(leftName, rightName);
+      if (nameComparison !== 0) {
+        return nameComparison;
+      }
+      return mixerPresetTabCollator.compare(leftId, rightId);
+    });
+  }
   const focusedId = multiPresetMode ? (uiState.focusedMixerPresetId ?? presetIds[0]) : activePreset.id;
 
   const presetTabsHtml = presetIds.map((id) => {

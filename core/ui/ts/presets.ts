@@ -47,6 +47,7 @@ const PRESET_RECENTS_SETTING = "presets.recents";
 const MAX_RECENT_PRESETS = 4;
 
 const activeTagFilters = new Set<string>();
+const presetNameCollator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
 
 const pendingPresetRequests = new Map<string, {
   resolve: (preset: Preset) => void;
@@ -60,6 +61,38 @@ function normalizeFolderName(name: string): string {
 
 function normalizeSetlistName(name: string): string {
   return name.trim();
+}
+
+function comparePresetNames(left: Preset, right: Preset): number {
+  const leftName = left.name?.trim() || left.id;
+  const rightName = right.name?.trim() || right.id;
+  const nameComparison = presetNameCollator.compare(leftName, rightName);
+  if (nameComparison !== 0) {
+    return nameComparison;
+  }
+  return presetNameCollator.compare(left.id, right.id);
+}
+
+function compareFolderNames(left: PresetFolder, right: PresetFolder): number {
+  const nameComparison = presetNameCollator.compare(left.name.trim(), right.name.trim());
+  if (nameComparison !== 0) {
+    return nameComparison;
+  }
+  return presetNameCollator.compare(left.id, right.id);
+}
+
+function sortPresetsAlphabetically(presets: Preset[]): Preset[] {
+  return [...presets].sort(comparePresetNames);
+}
+
+function sortPresetFoldersAlphabetically(folders: PresetFolder[]): PresetFolder[] {
+  return folders
+    .map((folder) => ({
+      ...folder,
+      children: sortPresetFoldersAlphabetically(folder.children ?? []),
+      presetIds: [...(folder.presetIds ?? [])],
+    }))
+    .sort(compareFolderNames);
 }
 
 function isVirtualPresetFolderId(folderId: string | null | undefined): boolean {
@@ -678,7 +711,7 @@ function togglePresetLibraryPopover(): void {
 }
 
 function loadPresetFoldersFromState(): PresetFolder[] {
-  return uiState.presetFolders ? [...uiState.presetFolders] : [];
+  return uiState.presetFolders ? sortPresetFoldersAlphabetically(uiState.presetFolders) : [];
 }
 
 function savePresetFoldersToBackend(folders: PresetFolder[], activeFolderId?: string | null): void {
@@ -776,7 +809,7 @@ function getPresetFolderPath(presetId: string): string | null {
 function populatePresetFolderSelect(select: HTMLSelectElement | null, selectedId?: string | null): void {
   if (!select) return;
 
-  const folders = uiState.presetFolders ?? [];
+  const folders = sortPresetFoldersAlphabetically(uiState.presetFolders ?? []);
   const options: Array<{ id: string; label: string }> = [
     { id: PRESET_FOLDER_ALL_ID, label: "All Presets" },
   ];
@@ -1126,7 +1159,7 @@ function getPresetsForFolderId(folderId: string): Preset[] {
   if (folderId === PRESET_FOLDER_FAVORITES_ID) {
     const favorites = loadFavoritePresetIds();
     presets = presets.filter((preset) => favorites.has(preset.id));
-    return presets;
+    return sortPresetsAlphabetically(presets);
   }
   if (folderId === PRESET_FOLDER_RECENTS_ID) {
     return getRecentPresets();
@@ -1139,7 +1172,7 @@ function getPresetsForFolderId(folderId: string): Preset[] {
     const allowedIds = collectPresetIds(folder);
     presets = presets.filter((preset) => allowedIds.has(preset.id));
   }
-  return presets;
+  return sortPresetsAlphabetically(presets);
 }
 
 function getPresetFolderExportName(folderId: string): string {
@@ -1159,6 +1192,7 @@ function getPresetFolderExportName(folderId: string): string {
 function getFilteredPresets(query: string): Preset[] {
   const normalized = query.trim().toLowerCase();
   const activeFolderId = uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID;
+  const preserveOrder = activeFolderId === PRESET_FOLDER_RECENTS_ID;
   let basePresets = uiState.presets.slice();
 
   if (activeFolderId === PRESET_FOLDER_FAVORITES_ID) {
@@ -1186,13 +1220,15 @@ function getFilteredPresets(query: string): Preset[] {
   }
 
   if (!normalized) {
-    return basePresets;
+    return preserveOrder ? basePresets : sortPresetsAlphabetically(basePresets);
   }
 
-  return basePresets.filter((preset) => {
+  const filteredPresets = basePresets.filter((preset) => {
     const tokens = [preset.name, preset.category, preset.description];
     return tokens.some((token) => token && token.toLowerCase().includes(normalized));
   });
+
+  return preserveOrder ? filteredPresets : sortPresetsAlphabetically(filteredPresets);
 }
 
 function createFolder(name: string, parentId?: string): boolean {
@@ -1290,10 +1326,14 @@ export function requestSignalPathTest(): void {
 }
 
 function renderPresetUI(preset: Preset | null): void {
-  renderPresetList(uiState.filteredPresets, uiState.activePresetId, async (presetId) => {
+  const visiblePresets = uiState.activePresetFolderId === PRESET_FOLDER_RECENTS_ID
+    ? uiState.filteredPresets
+    : sortPresetsAlphabetically(uiState.filteredPresets);
+
+  renderPresetList(visiblePresets, uiState.activePresetId, async (presetId) => {
     await applyPresetFromLibrary(presetId);
   }, {
-    folders: uiState.presetFolders ?? [],
+    folders: sortPresetFoldersAlphabetically(uiState.presetFolders ?? []),
     activeFolderId: uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID,
     onSelectFolder: setActivePresetFolder,
     onMovePresetToFolder: movePresetToFolder,
