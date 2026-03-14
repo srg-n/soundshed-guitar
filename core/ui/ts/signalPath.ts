@@ -420,6 +420,12 @@ function applySignalPathNodeBypassState(node: GraphNode, preset: Preset, bypasse
   if (selectedNodeId === node.id && nodeParamsPanelElement?.classList.contains("visible")) {
     showNodeParamsPanel(node, preset);
   }
+  if (selectedNodeId === node.id) {
+    queueMicrotask(() => {
+      const selectedNode = signalPathNodesElement?.querySelector<HTMLElement>(`.signal-node[data-node-id="${node.id}"]`);
+      selectedNode?.focus({ preventScroll: true });
+    });
+  }
 }
 
 function toggleSignalPathNodeBypass(node: GraphNode, preset: Preset): void {
@@ -435,11 +441,7 @@ function isToggleableSignalPathNode(node: GraphNode | null | undefined): node is
     return false;
   }
 
-  return node.id !== "__input__"
-    && node.id !== "__output__"
-    && node.type !== "input"
-    && node.type !== "output"
-    && !isProtectedSignalPathNode(node);
+  return !isProtectedSignalPathNode(node);
 }
 
 function getSelectedSignalPathNode(preset: Preset | null | undefined): GraphNode | null {

@@ -444,14 +444,15 @@ namespace guitarfx
       const auto *node = mGraph.FindNode(id);
       if (node && (node->type == kNodeTypeInput || node->id == "__input__"))
       {
-        if (inputs[0])
+        const bool inputEnabled = !state.processor || state.processor->IsEnabled();
+        if (inputEnabled && inputs[0])
         {
           for (int i = 0; i < numSamples; ++i)
           {
             state.bufferLeft[static_cast<size_t>(i)] = inputs[0][i] * inputGain;
           }
         }
-        if (inputs[1])
+        if (inputEnabled && inputs[1])
         {
           for (int i = 0; i < numSamples; ++i)
           {
@@ -566,6 +567,11 @@ namespace guitarfx
       {
         if (nodeType == kNodeTypeSplitter || nodeType == kNodeTypeOutput)
         {
+          if (nodeType == kNodeTypeOutput && !state->processor->IsEnabled())
+          {
+            std::fill(state->bufferLeft.begin(), state->bufferLeft.begin() + numSamples, 0.0f);
+            std::fill(state->bufferRight.begin(), state->bufferRight.begin() + numSamples, 0.0f);
+          }
           // These nodes just pass through (routing handled above)
         }
         else if (nodeType == kNodeTypeMixer)
@@ -624,18 +630,19 @@ namespace guitarfx
     {
       if ((state.type == kNodeTypeOutput || id == "__output__") && state.hasInput)
       {
+        const bool outputEnabled = !state.processor || state.processor->IsEnabled();
         if (outputs[0])
         {
           for (int i = 0; i < numSamples; ++i)
           {
-            outputs[0][i] = state.bufferLeft[static_cast<size_t>(i)] * outputGain;
+            outputs[0][i] = outputEnabled ? (state.bufferLeft[static_cast<size_t>(i)] * outputGain) : 0.0f;
           }
         }
         if (outputs[1])
         {
           for (int i = 0; i < numSamples; ++i)
           {
-            outputs[1][i] = state.bufferRight[static_cast<size_t>(i)] * outputGain;
+            outputs[1][i] = outputEnabled ? (state.bufferRight[static_cast<size_t>(i)] * outputGain) : 0.0f;
           }
         }
         break;

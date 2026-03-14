@@ -91,7 +91,7 @@ function bindDemoAudioControlsSet(config: DemoAudioBindConfig): void {
   const selectElement = document.getElementById(config.selectId) as HTMLSelectElement | null;
   if (selectElement) {
     selectElement.value = uiState.demoAudioSelectedId ?? selectElement.value;
-    selectElement.addEventListener("change", (event) => {
+    selectElement.addEventListener("change", async (event) => {
       const value = (event.target as HTMLSelectElement).value;
       uiState.demoAudioSelectedId = value;
       if (config.syncSelectId) {
@@ -99,6 +99,11 @@ function bindDemoAudioControlsSet(config: DemoAudioBindConfig): void {
         if (syncSelect) {
           syncSelect.value = value;
         }
+      }
+
+      if (demoAudioPlaying) {
+        stopDemoAudio();
+        await previewSelectedDemoAudio();
       }
     });
   }
