@@ -211,11 +211,11 @@ function getPresetToneSharingOrigin(preset: Preset | null | undefined): { itemId
   if (!preset || !preset.toneSharingOrigin || typeof preset.toneSharingOrigin !== "object") {
     return null;
   }
-  const origin = preset.toneSharingOrigin as Record<string, unknown>;
+  const origin = preset.toneSharingOrigin;
   if (origin.source !== "toneSharingApi") {
     return null;
   }
-  const itemId = typeof origin.itemId === "string" ? origin.itemId.trim() : "";
+  const itemId = origin.itemId.trim();
   if (!itemId) {
     return null;
   }
@@ -572,6 +572,19 @@ async function loadMyDraftPacksForSelect(): Promise<void> {
       drafts.map((p) => `<option value="${p.id}">${p.title}</option>`).join("");
   } catch {
   }
+}
+
+async function addItemToExistingPack(packId: string, itemId: string): Promise<void> {
+  const details = await apiFetch<ToneSharingPackDetails>(`/packs/${packId}`);
+  const existingIds = details.items.map((item) => item.itemId);
+  if (!existingIds.includes(itemId)) {
+    existingIds.push(itemId);
+  }
+  await apiFetch(`/packs/${packId}/items`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ itemIds: existingIds })
+  });
 }
 
 async function savePack(publish: boolean): Promise<void> {

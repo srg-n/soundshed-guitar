@@ -38,7 +38,7 @@ interface Tone3000Tone {
   platform?: string;
   models_count?: number;
   downloads_count?: number;
-  user?: { username?: string };
+  user?: { id?: string | number; username?: string; name?: string; display_name?: string };
   images?: string[];
   equipment_image_url?: string;
   image_url?: string;
