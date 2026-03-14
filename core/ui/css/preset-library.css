@@ -77,6 +77,16 @@
   flex-wrap: wrap;
 }
 
+.preset-library-tabs {
+  display: inline-flex;
+  gap: 0;
+  align-items: center;
+}
+
+.preset-library-popover-simple .preset-library-header {
+  align-items: stretch;
+}
+
 .preset-library-header input[type="text"] {
   padding: 8px 10px;
   border-radius: 6px;

@@ -309,6 +309,7 @@ function initAdvancedOptionsToggle(): void {
     uiState.appSettings[ADVANCED_OPTIONS_SETTING] = enabled;
     setAppSetting(ADVANCED_OPTIONS_SETTING, enabled);
     updateAdvancedTabVisibility();
+    document.dispatchEvent(new CustomEvent("advancedOptionsChanged"));
   });
 }
 

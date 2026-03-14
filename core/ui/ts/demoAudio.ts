@@ -47,6 +47,24 @@ function getSelectedDemoAudio(): DemoAudioSource | null {
   return sources.find((sample) => sample.id === selectedId) ?? sources[0];
 }
 
+function normalizeDemoAudioSourceId(id: string | null | undefined): string | null {
+  if (!id) {
+    return null;
+  }
+
+  const sources = getDemoAudioSources();
+  if (sources.some((sample) => sample.id === id)) {
+    return id;
+  }
+
+  const riffId = `riff:${id}`;
+  if (sources.some((sample) => sample.id === riffId)) {
+    return riffId;
+  }
+
+  return null;
+}
+
 function renderDemoAudioOptions(): string {
   const sources = getDemoAudioSources();
   if (!sources.length) {
@@ -301,6 +319,25 @@ export function refreshDemoAudioSelectors(): void {
   if (footerSelect) {
     footerSelect.innerHTML = options;
     footerSelect.value = selectedId;
+  }
+}
+
+export function syncDemoAudioSelectionFromPreview(previewId: string | null | undefined): void {
+  const normalizedId = normalizeDemoAudioSourceId(previewId);
+  if (!normalizedId) {
+    return;
+  }
+
+  uiState.demoAudioSelectedId = normalizedId;
+
+  const mainSelect = document.getElementById("demo-audio-select") as HTMLSelectElement | null;
+  if (mainSelect) {
+    mainSelect.value = normalizedId;
+  }
+
+  const footerSelect = document.getElementById("footer-demo-audio-select") as HTMLSelectElement | null;
+  if (footerSelect) {
+    footerSelect.value = normalizedId;
   }
 }
 

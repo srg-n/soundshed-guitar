@@ -430,6 +430,90 @@ function isProtectedSignalPathNode(node: GraphNode): boolean {
   return node.type === EffectGuids.kSplitter || node.type === EffectGuids.kMixer;
 }
 
+function isToggleableSignalPathNode(node: GraphNode | null | undefined): node is GraphNode {
+  if (!node) {
+    return false;
+  }
+
+  return node.id !== "__input__"
+    && node.id !== "__output__"
+    && node.type !== "input"
+    && node.type !== "output"
+    && !isProtectedSignalPathNode(node);
+}
+
+function getSelectedSignalPathNode(preset: Preset | null | undefined): GraphNode | null {
+  if (!selectedNodeId || !preset?.graph) {
+    return null;
+  }
+
+  return preset.graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
+}
+
+function isTextEntryElement(element: HTMLElement | null): boolean {
+  if (!element) {
+    return false;
+  }
+
+  if (element.isContentEditable) {
+    return true;
+  }
+
+  const editableRoot = element.closest("input, textarea, select, [contenteditable=''], [contenteditable='true'], [role='textbox']");
+  return Boolean(editableRoot);
+}
+
+function isStandardInteractiveElement(element: HTMLElement | null): boolean {
+  if (!element) {
+    return false;
+  }
+
+  return Boolean(element.closest("button, a[href], summary, audio, video, [role='button'], [role='link'], [role='switch'], [role='checkbox'], [role='slider']"));
+}
+
+function isSignalPathShortcutContext(element: HTMLElement | null): boolean {
+  if (!element) {
+    return false;
+  }
+
+  return Boolean(element.closest("#signal-path-bar, #signal-path-nodes, #node-params-panel, #effect-visualization"));
+}
+
+function toggleSelectedSignalPathNodeBypass(): boolean {
+  const preset = getSignalPathPreset();
+  const node = getSelectedSignalPathNode(preset);
+  if (!preset || !isToggleableSignalPathNode(node)) {
+    return false;
+  }
+
+  toggleSignalPathNodeBypass(node, preset);
+  return true;
+}
+
+function handleSignalPathShortcutKeyDown(event: KeyboardEvent): void {
+  if (event.code !== "Space" || event.repeat || event.altKey || event.ctrlKey || event.metaKey) {
+    return;
+  }
+
+  const target = event.target instanceof HTMLElement ? event.target : null;
+  if (!isSignalPathShortcutContext(target)) {
+    return;
+  }
+
+  if (isTextEntryElement(target) || isStandardInteractiveElement(target)) {
+    return;
+  }
+
+  if (!toggleSelectedSignalPathNodeBypass()) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}
+
+document.addEventListener("keydown", handleSignalPathShortcutKeyDown, true);
+
 function updateNodeDragPoint(event: DragEvent): void {
   if (Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
     lastNodeDragPoint = { x: event.clientX, y: event.clientY };

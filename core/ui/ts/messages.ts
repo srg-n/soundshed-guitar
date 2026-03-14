@@ -3,7 +3,7 @@ import { renderActivePreset, applyPresetFromLibrary, populatePresetDropdown, upd
 import { syncControlsFromState, handleInputModeChanged, handleAmpCabStateChanged, syncAutoLevelControlsFromState, applyStoredInputChannel } from "./controls.js";
 import { showNotification } from "./notifications.js";
 import { appendLog } from "./logging.js";
-import { previewSelectedDemoAudio, onDemoAudioStarted, onDemoAudioStopped, refreshDemoAudioSelectors } from "./demoAudio.js";
+import { previewSelectedDemoAudio, onDemoAudioStarted, onDemoAudioStopped, refreshDemoAudioSelectors, syncDemoAudioSelectionFromPreview } from "./demoAudio.js";
 import { handleTunerUpdate, handleTunerStarted, handleTunerStopped, handleTunerReferenceChanged, handleTunerLiveModeChanged } from "./tuner.js";
 import { applyUiSettings } from "./windowSettings.js";
 import { updateDSPPerformancePlot, updateSignalDiagnosticsView } from "./views.js";
@@ -561,11 +561,7 @@ export function handleIncomingMessage(message: string): void {
     case "previewStarted": {
       appendLog(`preview started ← ${(payload as { title?: string; id?: string }).title ?? (payload as { id?: string }).id ?? "demo"}`);
       handleRiffPreviewPlayback("start", (payload as { id?: string }).id ?? "");
-      uiState.demoAudioSelectedId = (payload as { id?: string }).id ?? uiState.demoAudioSelectedId;
-      const selector = document.getElementById("demo-audio-select") as HTMLSelectElement | null;
-      if (selector && uiState.demoAudioSelectedId) {
-        selector.value = uiState.demoAudioSelectedId;
-      }
+      syncDemoAudioSelectionFromPreview((payload as { id?: string }).id ?? null);
       onDemoAudioStarted();
       showNotification("Playing demo audio", (payload as { title?: string }).title ?? "Demo");
       break;

@@ -1,7 +1,7 @@
 import { appendLog } from "./logging.js";
 import { clearNotification, showNotification } from "./notifications.js";
 import { renderPresetDetails, renderPresetList, renderMixerPanel } from "./views.js";
-import { clonePreset, uiState, DEFAULT_GLOBAL_SIGNAL_CHAIN, getActivePresetForRender, setActivePresetDraft, setActivePresetSnapshot, setPresetDirty } from "./state.js";
+import { clonePreset, uiState, DEFAULT_GLOBAL_SIGNAL_CHAIN, getActivePresetForRender, setActivePresetDraft, setActivePresetSnapshot, setPresetDirty, isAdvancedOptionsEnabled } from "./state.js";
 import { buildAttachments, buildAttachmentsFromPreset, getDefaultPresets, initializeDataLibraries, REMOTE_BASE_URL } from "./dataLibraries.js";
 import { arrayBufferToBase64, isRemoteUrl, resolveAttachmentUrl, sha256HexFromBase64 } from "./utils.js";
 import { buildArchiveFileNameWithHash, generateResourceId, requestResourceData, sanitizeFilename } from "./archiveUtils.js";
@@ -27,6 +27,11 @@ const randomPresetBtn = document.getElementById("preset-random-btn");
 const presetSearchElement = document.getElementById("preset-search") as HTMLInputElement | null;
 const presetSelector = document.getElementById("preset-selector");
 const presetLibraryPopover = document.getElementById("preset-library-popover");
+const presetLibraryTabs = document.querySelector(".preset-library-tabs") as HTMLElement | null;
+const presetLibraryPresetsPanel = document.getElementById("preset-library-presets-panel") as HTMLElement | null;
+const presetLibraryMultiRigTab = document.getElementById("preset-lib-tab-multi-rig") as HTMLButtonElement | null;
+const presetLibraryPresetsTab = document.getElementById("preset-lib-tab-presets") as HTMLButtonElement | null;
+const presetLibraryMultiRigPanel = document.getElementById("preset-library-multi-rig-panel") as HTMLElement | null;
 const presetFolderNameInput = document.getElementById("preset-folder-name") as HTMLInputElement | null;
 const presetFolderAddButton = document.getElementById("preset-folder-add");
 const presetExportFolderButton = document.getElementById("preset-export-folder-btn") as HTMLButtonElement | null;
@@ -698,6 +703,7 @@ function openPresetLibraryPopover(): void {
   if (!presetLibraryPopover) {
     return;
   }
+  syncPresetLibraryFeatureVisibility();
   presetLibraryPopover.classList.add("open");
   presetLibraryPopover.setAttribute("aria-hidden", "false");
   presetChooserLabel?.setAttribute("aria-expanded", "true");
@@ -722,6 +728,40 @@ function togglePresetLibraryPopover(): void {
     openPresetLibraryPopover();
   }
 }
+
+export function syncPresetLibraryFeatureVisibility(): void {
+  const multiRigEnabled = isAdvancedOptionsEnabled();
+
+  presetLibraryPopover?.classList.toggle("preset-library-popover-simple", !multiRigEnabled);
+
+  if (presetLibraryTabs) {
+    presetLibraryTabs.hidden = !multiRigEnabled;
+    presetLibraryTabs.setAttribute("aria-hidden", String(!multiRigEnabled));
+  }
+
+  if (presetLibraryMultiRigTab) {
+    presetLibraryMultiRigTab.hidden = !multiRigEnabled;
+    presetLibraryMultiRigTab.setAttribute("aria-hidden", String(!multiRigEnabled));
+    presetLibraryMultiRigTab.tabIndex = multiRigEnabled ? 0 : -1;
+  }
+
+  if (!multiRigEnabled) {
+    presetLibraryPresetsTab?.classList.add("active");
+    presetLibraryPresetsTab?.setAttribute("aria-selected", "true");
+    presetLibraryMultiRigTab?.classList.remove("active");
+    presetLibraryMultiRigTab?.setAttribute("aria-selected", "false");
+    if (presetLibraryPresetsPanel) {
+      presetLibraryPresetsPanel.hidden = false;
+    }
+    if (presetLibraryMultiRigPanel) {
+      presetLibraryMultiRigPanel.hidden = true;
+    }
+  }
+}
+
+document.addEventListener("advancedOptionsChanged", () => {
+  syncPresetLibraryFeatureVisibility();
+});
 
 function loadPresetFoldersFromState(): PresetFolder[] {
   return uiState.presetFolders ? sortPresetFoldersAlphabetically(uiState.presetFolders) : [];
@@ -1780,6 +1820,8 @@ export async function selectNextPreset(): Promise<void> {
 }
 
 export function initializePresetControls(): void {
+  syncPresetLibraryFeatureVisibility();
+
   if (presetSelector) {
     presetSelector.addEventListener("click", (event) => {
       event.stopPropagation();

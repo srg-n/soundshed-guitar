@@ -8,7 +8,7 @@
  *   - Removing a composite preset
  */
 
-import { uiState } from "./state.js";
+import { uiState, isAdvancedOptionsEnabled } from "./state.js";
 import type { CompositePreset } from "./types.js";
 import {
   saveCompositePreset,
@@ -172,6 +172,11 @@ export function initMultiRigTab(): void {
   });
 
   multiRigTab.addEventListener("click", () => {
+    if (!isAdvancedOptionsEnabled()) {
+      presetsTab.click();
+      return;
+    }
+
     multiRigTab.classList.add("active");
     presetsTab.classList.remove("active");
     presetsPanel.hidden = true;
@@ -182,6 +187,10 @@ export function initMultiRigTab(): void {
 
   // "Save Multi-Rig…" button in the mixer panel fires a custom event
   document.addEventListener("mixerSaveMultiRig", () => {
+    if (!isAdvancedOptionsEnabled()) {
+      return;
+    }
+
     // Switch to Multi-Rig tab so the save form is visible
     multiRigTab.click();
     handleSaveCompositePresetFlow();
