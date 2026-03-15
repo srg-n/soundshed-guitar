@@ -157,59 +157,69 @@ PluginEditor::PluginEditor (PluginProcessorAdapter& p)
 
         return juce::File (resolved.string());
     }()),
-      webView (juce::WebBrowserComponent::Options{}
-                   .withBackend (juce::WebBrowserComponent::Options::Backend::webview2)
-                   .withWinWebView2Options (juce::WebBrowserComponent::Options::WinWebView2{}
-                                                .withUserDataFolder (
-                                                    juce::File::getSpecialLocation (juce::File::tempDirectory)
-                                                        .getChildFile ("SoundshedGuitarWebView2")
-                                                        .getChildFile (juce::String (juce::Time::getCurrentTime().toMilliseconds()))))
-                   .withUserScript (
-                       "window.IPlugSendMsg = function(payload) {"
-                       "  try {"
-                       "    const data = (typeof payload === 'string') ? payload : JSON.stringify(payload);"
-                       "    window.__JUCE__.backend.emitEvent('iplugSendMsg', data);"
-                       "  } catch (e) {"
-                       "    window.__JUCE__.backend.emitEvent('iplugSendMsg', '');"
-                       "  }"
-                       "};")
-                   .withNativeIntegrationEnabled()
-                   .withEventListener ("iplugSendMsg", [this] (const juce::var& payload)
-                   {
-                       const auto message = payload.isString() ? payload.toString()
-                                                               : juce::JSON::toString (payload);
-                       if (message.isNotEmpty())
-                           processorRef.handleWebMessage (message);
-                   })
-                   .withNativeFunction ("IPlugSendMsg", [this] (const juce::Array<juce::var>& args, auto complete)
-                   {
-                       if (args.size() > 0)
-                       {
-                           const auto& arg = args[0];
-                           const auto payload = arg.isString() ? arg.toString()
-                                                               : juce::JSON::toString (arg);
-                           processorRef.handleWebMessage (payload);
-                       }
+      webView ([this]
+      {
+          auto options = juce::WebBrowserComponent::Options{}
+                             .withBackend (juce::WebBrowserComponent::Options::Backend::webview2)
+                             .withWinWebView2Options (juce::WebBrowserComponent::Options::WinWebView2{}
+                                                          .withUserDataFolder (
+                                                              juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                                                  .getChildFile ("SoundshedGuitarWebView2")
+                                                                  .getChildFile (juce::String (juce::Time::getCurrentTime().toMilliseconds()))))
+                             .withUserScript (
+                                 "window.IPlugSendMsg = function(payload) {"
+                                 "  try {"
+                                 "    const data = (typeof payload === 'string') ? payload : JSON.stringify(payload);"
+                                 "    window.__JUCE__.backend.emitEvent('iplugSendMsg', data);"
+                                 "  } catch (e) {"
+                                 "    window.__JUCE__.backend.emitEvent('iplugSendMsg', '');"
+                                 "  }"
+                                 "};")
+                             .withNativeIntegrationEnabled()
+                             .withEventListener ("iplugSendMsg", [this] (const juce::var& payload)
+                             {
+                                 const auto message = payload.isString() ? payload.toString()
+                                                                         : juce::JSON::toString (payload);
+                                 if (message.isNotEmpty())
+                                     processorRef.handleWebMessage (message);
+                             })
+                             .withNativeFunction ("IPlugSendMsg", [this] (const juce::Array<juce::var>& args, auto complete)
+                             {
+                                 if (args.size() > 0)
+                                 {
+                                     const auto& arg = args[0];
+                                     const auto payload = arg.isString() ? arg.toString()
+                                                                         : juce::JSON::toString (arg);
+                                     processorRef.handleWebMessage (payload);
+                                 }
 
-                       complete (juce::var());
-                   })
-                   .withNativeFunction ("postMessage", [this] (const juce::Array<juce::var>& args, auto complete)
-                   {
-                       if (args.size() > 0)
-                       {
-                           const auto& arg = args[0];
-                           const auto payload = arg.isString() ? arg.toString()
-                                                               : juce::JSON::toString (arg);
-                           processorRef.handleWebMessage (payload);
-                       }
+                                 complete (juce::var());
+                             })
+                             .withNativeFunction ("postMessage", [this] (const juce::Array<juce::var>& args, auto complete)
+                             {
+                                 if (args.size() > 0)
+                                 {
+                                     const auto& arg = args[0];
+                                     const auto payload = arg.isString() ? arg.toString()
+                                                                         : juce::JSON::toString (arg);
+                                     processorRef.handleWebMessage (payload);
+                                 }
 
-                       complete (juce::var());
-                   })
-                   .withResourceProvider ([this] (const auto& url)
-                                         {
-                                             return getResource (url);
-                                         },
-                                         std::optional<juce::String> { getResourceRootUrl() }))
+                                 complete (juce::var());
+                             });
+
+         #if JUCE_WEB_BROWSER_RESOURCE_PROVIDER_AVAILABLE
+          options = options.withResourceProvider ([this] (const auto& url)
+                                                  {
+                                                      return getResource (url);
+                                                  },
+                                                  std::optional<juce::String> { getResourceRootUrl() });
+         #else
+          writeStartupLog ("[PluginEditor] Resource provider unavailable for this JUCE configuration; using file:// UI loading");
+         #endif
+
+          return options;
+      }())
 {
     addAndMakeVisible (webView);
 
@@ -251,7 +261,18 @@ PluginEditor::PluginEditor (PluginProcessorAdapter& p)
    #endif
     {
         const auto cacheBust = "?v=" + juce::String (juce::Time::getCurrentTime().toMilliseconds());
-        const auto startUrl = juce::WebBrowserComponent::getResourceProviderRoot() + cacheBust;
+        juce::String startUrl;
+
+       #if JUCE_WEB_BROWSER_RESOURCE_PROVIDER_AVAILABLE
+        startUrl = juce::WebBrowserComponent::getResourceProviderRoot() + cacheBust;
+       #else
+        const auto indexFile = resourceRoot.getChildFile ("ui").getChildFile ("index.html");
+        if (indexFile.existsAsFile())
+            startUrl = indexFile.getFullPathName() + cacheBust;
+        else
+            startUrl = "data:text/html;charset=UTF-8,<html><body><h2>UI not found</h2></body></html>";
+       #endif
+
         writeStartupLog ("[PluginEditor] goToURL: " + startUrl);
         webView.goToURL (startUrl);
     }

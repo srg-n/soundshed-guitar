@@ -325,10 +325,9 @@ void PluginProcessorAdapter::OpenAudioPreferences()
         return;
     }
 
-    juce::MessageManager::callAsync([]
-    {
-        juce::juce_showStandaloneAudioSettingsDialog();
-    });
+    // This adapter is built into shared code used by multiple plugin targets.
+    // Avoid directly linking standalone-only helper symbols here.
+    DBG ("OpenAudioPreferences requested in standalone wrapper; no shared-code dialog hook is available in this target.");
 }
 
 void PluginProcessorAdapter::NotifyStateChanged()

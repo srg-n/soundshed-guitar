@@ -228,6 +228,7 @@ export function handleIncomingMessage(message: string): void {
           os: environment.os,
           cpu: environment.cpu
         });
+        refreshSettingsView();
       }
       const metronome = (payload as { metronome?: { bpm?: number; enabled?: boolean; editable?: boolean; source?: string; volumeDb?: number; pan?: number; clickType?: string; beatPattern?: string; clickTypes?: Array<{ id?: string; label?: string }> } }).metronome;
       if (metronome) {

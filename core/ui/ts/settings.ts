@@ -29,6 +29,8 @@ const saveButton = document.getElementById("tone3000-api-key-save");
 const clearButton = document.getElementById("tone3000-api-key-clear");
 const sessionStatus = document.getElementById("tone3000-session-status");
 const openAudioPreferencesButton = document.getElementById("open-audio-preferences");
+const openAudioPreferencesRow = document.getElementById("open-audio-preferences-row");
+const openAudioPreferencesHint = document.getElementById("open-audio-preferences-hint");
 const diagnosticsToggle = document.getElementById("signal-diagnostics-toggle") as HTMLInputElement | null;
 const interfaceCalibrationToggle = document.getElementById("interface-calibration-toggle") as HTMLInputElement | null;
 const interfaceCalibrationReferenceInput = document.getElementById("interface-calibration-reference") as HTMLInputElement | null;
@@ -428,6 +430,9 @@ export function refreshSettingsView(): void {
     const updateCheckEnabled = getSettingValue(UPDATE_CHECK_ENABLED_SETTING);
     updateCheckToggle.checked = updateCheckEnabled === null ? true : Boolean(updateCheckEnabled);
   }
+  const showAudioPreferences = Boolean(uiState.environment?.standalone);
+  openAudioPreferencesRow?.toggleAttribute("hidden", !showAudioPreferences);
+  openAudioPreferencesHint?.toggleAttribute("hidden", !showAudioPreferences);
   updateAdvancedTabVisibility();
   updateSessionStatus();
   updateSignalDiagnosticsView();
