@@ -1,6 +1,6 @@
 import { postMessage, setAppSetting } from "./bridge.js";
 import { showConfirm } from "./dialogs.js";
-import { buildToneSharingPresetArchiveBlobs, importPackWithConfirmation } from "./presets.js";
+import { buildToneSharingPresetArchiveBlobs, importPackWithConfirmation, importPresetArchive } from "./presets.js";
 import { clonePreset, uiState } from "./state.js";
 import type { Preset, PresetFolder } from "./types.js";
 import { escapeHtml, idAccentColor } from "./utils.js";
@@ -1148,6 +1148,9 @@ async function renderFeedRows(rows: ToneSharingRow[]): Promise<void> {
     return;
   }
 
+  const useTiledLayout = browseMode === "featured" || browseMode === "items";
+  feed.classList.toggle("tone-sharing-feed--tiled", useTiledLayout);
+
   if (!rows.length) {
     feed.innerHTML = `<div class="tone-sharing-status">No content yet. Publish the first tone.</div>`;
     return;
@@ -1946,17 +1949,36 @@ async function previewPreset(itemId: string, itemTitle: string): Promise<void> {
     throw new Error(`Preview download failed (${response.status})`);
   }
 
-  const buffer = await response.arrayBuffer();
+  const disposition = response.headers.get("content-disposition") || "";
+  const fileMatch = disposition.match(/filename=\"?([^\"]+)\"?/i);
+  const fileName = fileMatch?.[1] || `item-${itemId}.soundshed.preset`;
+  const blob = await response.blob();
 
-  // Import any embedded resources (NAM models, IR files, etc.) into the
-  // local library before loading the preset so the DSP graph can resolve
-  // every resource reference during playback.
-  const idMap = await importPreviewResources(buffer);
-
-  const preset = await readPresetFromArchive(buffer);
-  if (idMap.size > 0) {
-    remapPresetResourceIds(preset, idMap);
+  let itemMeta: ToneSharingItem | null = null;
+  try {
+    const itemResponse = await apiFetch<{ item: ToneSharingItem }>(`/items/${itemId}`);
+    itemMeta = itemResponse.item;
+  } catch {
+    itemMeta = null;
   }
+
+  const importFile = new File([blob], fileName, { type: blob.type || "application/octet-stream" });
+  const importedPresets = await importPresetArchive(importFile, {
+    source: "toneSharingApi",
+    itemId,
+    creatorId: itemMeta?.creatorUserId ?? undefined,
+    creatorHandle: resolveCreatorProfileHandle((itemMeta ?? {}) as unknown as Record<string, unknown>) ?? undefined,
+    titleHint: fileName.replace(/\.(soundshed\.preset|soundshed\.presets|zip)$/i, ""),
+  }, {
+    previewOnly: true,
+    suppressNotifications: true,
+  });
+
+  const preset = importedPresets[importedPresets.length - 1];
+  if (!preset) {
+    throw new Error("Preview import produced no preset");
+  }
+
   postMessage({ type: "loadPreset", preset, presetId: `preview-${itemId}` });
 
   // Update DOM to reflect new preview state without a full re-fetch

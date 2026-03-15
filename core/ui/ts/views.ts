@@ -281,6 +281,8 @@ export function renderPresetList(
     favoritesCount: number;
     favoritesActive: boolean;
     onSelectFavorites: () => void;
+    hasAnyPresets?: boolean;
+    onOpenToneSharing?: () => void;
   },
 ): void {
   if (!presetListElement) {
@@ -383,7 +385,26 @@ export function renderPresetList(
   }
 
   if (!presets.length) {
-    presetListElement.innerHTML = '<p class="preset-library-empty">No presets available.</p>';
+    const hasAnyPresets = options?.hasAnyPresets ?? uiState.presets.length > 0;
+
+    if (hasAnyPresets) {
+      presetListElement.innerHTML = '<p class="preset-library-empty">No presets match your current search or folder.</p>';
+      return;
+    }
+
+    presetListElement.innerHTML = `
+      <div class="preset-library-empty">
+        <p>No presets available yet.</p>
+        <button type="button" class="btn btn-secondary" data-empty-preset-cta="tone-sharing">Browse Tone Sharing</button>
+      </div>
+    `;
+
+    const ctaButton = presetListElement.querySelector<HTMLButtonElement>('[data-empty-preset-cta="tone-sharing"]');
+    if (ctaButton && options?.onOpenToneSharing) {
+      ctaButton.addEventListener("click", () => {
+        options.onOpenToneSharing?.();
+      });
+    }
     return;
   }
 

@@ -279,7 +279,7 @@ PluginEditor::PluginEditor (PluginProcessorAdapter& p)
 
     setResizable (true, true);
 
-    const auto initialDisplayArea = getDisplayAreaForBounds ({ 0, 0, 1600, 1200 });
+    const auto initialDisplayArea = getDisplayAreaForBounds ({ 0, 0, 1200, 900 });
     const auto maxWidth = juce::jmax (640, initialDisplayArea.getWidth());
     const auto maxHeight = juce::jmax (480, initialDisplayArea.getHeight());
     setResizeLimits (juce::jmin (1024, maxWidth), juce::jmin (768, maxHeight), maxWidth, maxHeight);
@@ -313,8 +313,8 @@ juce::File PluginEditor::getStandaloneWindowStateFile() const
 
 juce::Rectangle<int> PluginEditor::loadStandaloneWindowSize() const
 {
-    constexpr int kDefaultWidth = 1600;
-    constexpr int kDefaultHeight = 1200;
+    constexpr int kDefaultWidth = 1200;
+    constexpr int kDefaultHeight = 900;
     constexpr int kMinWidth = 1024;
     constexpr int kMinHeight = 768;
     constexpr int kMaxWidth = 4096;

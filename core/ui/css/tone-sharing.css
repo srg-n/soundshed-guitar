@@ -383,6 +383,18 @@
   padding-bottom: 3px;
 }
 
+.tone-sharing-feed--tiled {
+  gap: 14px;
+}
+
+.tone-sharing-feed--tiled .tone-sharing-row-track {
+  grid-auto-flow: row;
+  grid-auto-columns: initial;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  overflow-x: visible;
+  padding-bottom: 0;
+}
+
 .tone-sharing-card-item {
   background: color-mix(in srgb, var(--bg-control), #000 12%);
   border: 1px solid var(--border-medium);

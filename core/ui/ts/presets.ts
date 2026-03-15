@@ -1419,6 +1419,11 @@ function renderPresetUI(preset: Preset | null): void {
     favoritesCount: loadFavoritePresetIds().size,
     favoritesActive: uiState.activePresetFolderId === PRESET_FOLDER_FAVORITES_ID,
     onSelectFavorites: () => setActivePresetFolder(PRESET_FOLDER_FAVORITES_ID),
+    hasAnyPresets: uiState.presets.length > 0,
+    onOpenToneSharing: () => {
+      closePresetLibraryPopover();
+      switchMainPanel("sharing");
+    },
   });
 
   renderPresetDetails(preset, {
@@ -2968,6 +2973,11 @@ type ArchiveImportContext = {
   titleHint?: string;
 };
 
+type ArchiveImportOptions = {
+  previewOnly?: boolean;
+  suppressNotifications?: boolean;
+};
+
 function normalizeToneSharingOrigin(value: unknown): ToneSharingOriginMetadata | undefined {
   if (!value || typeof value !== "object") {
     return undefined;
@@ -3035,11 +3045,21 @@ async function importTone3000ArchiveResources(
   idMap: Map<string, string>,
   importedResources: Array<{ type: string; id: string }>,
 ): Promise<void> {
-  const session = uiState.tone3000Session;
-  if (!session?.accessToken) {
-    const granted = await promptForTone3000ApiKey(refs.length);
-    if (!granted) {
-      throw new Error("Tone3000 API key is required to import this shared preset");
+  if (!uiState.tone3000Session?.accessToken) {
+    const storedApiKey = typeof uiState.appSettings["tone3000.apiKey"] === "string"
+      ? (uiState.appSettings["tone3000.apiKey"] as string).trim()
+      : "";
+
+    if (storedApiKey) {
+      appendLog("tone3000 session missing; attempting auto-start from saved API key");
+      await saveTone3000ApiKey(storedApiKey);
+    }
+
+    if (!uiState.tone3000Session?.accessToken) {
+      const granted = await promptForTone3000ApiKey(refs.length);
+      if (!granted) {
+        throw new Error("Tone3000 API key is required to import this shared preset");
+      }
     }
   }
 
@@ -3104,11 +3124,23 @@ async function importTone3000ArchiveResources(
   }
 }
 
-async function importPresetArchive(file: File, context: ArchiveImportContext = { source: "zipImport" }): Promise<void> {
+export async function importPresetArchive(
+  file: File,
+  context: ArchiveImportContext = { source: "zipImport" },
+  options: ArchiveImportOptions = {},
+): Promise<Preset[]> {
+  const previewOnly = Boolean(options.previewOnly);
+  const suppressNotifications = Boolean(options.suppressNotifications);
+  const notifyImportError = (title: string, message: string): void => {
+    if (!suppressNotifications) {
+      showNotification(title, message);
+    }
+  };
+
   const zipLib = window.JSZip;
   if (!zipLib) {
-    showNotification("Import failed", "Archive library not available");
-    return;
+    notifyImportError("Import failed", "Archive library not available");
+    return [];
   }
 
   const buffer = await file.arrayBuffer();
@@ -3116,8 +3148,8 @@ async function importPresetArchive(file: File, context: ArchiveImportContext = {
   const presetEntry = zip.file("preset.json");
   const presetsEntry = zip.file("presets.json");
   if (!presetEntry && !presetsEntry) {
-    showNotification("Import failed", "Archive is missing preset.json or presets.json");
-    return;
+    notifyImportError("Import failed", "Archive is missing preset.json or presets.json");
+    return [];
   }
 
   let resourcesToImport: PresetArchiveResource[] = [];
@@ -3129,8 +3161,8 @@ async function importPresetArchive(file: File, context: ArchiveImportContext = {
     const presetText = await presetEntry.async("text");
     const archive = JSON.parse(presetText) as PresetArchive;
     if (!archive.preset) {
-      showNotification("Import failed", "Archive has no preset data");
-      return;
+      notifyImportError("Import failed", "Archive has no preset data");
+      return [];
     }
     resourcesToImport = archive.resources ?? [];
     tone3000ResourcesToImport = archive.tone3000Resources ?? [];
@@ -3140,8 +3172,8 @@ async function importPresetArchive(file: File, context: ArchiveImportContext = {
     const presetsText = await presetsEntry.async("text");
     const archive = JSON.parse(presetsText) as PresetCollectionArchive;
     if (!Array.isArray(archive.presets) || archive.presets.length === 0) {
-      showNotification("Import failed", "Archive has no presets data");
-      return;
+      notifyImportError("Import failed", "Archive has no presets data");
+      return [];
     }
     resourcesToImport = archive.resources ?? [];
     tone3000ResourcesToImport = archive.tone3000Resources ?? [];
@@ -3285,16 +3317,22 @@ async function importPresetArchive(file: File, context: ArchiveImportContext = {
       }));
     }
 
-    cachePresetInMemory(importedPreset);
-    uiState.presets.unshift(importedPreset);
-    addPresetToImportedFolder(importedPreset.id);
-    uiState.presetCache.set(importedPreset.id, importedPreset);
+    if (!previewOnly) {
+      cachePresetInMemory(importedPreset);
+      uiState.presets = [importedPreset, ...uiState.presets.filter((preset) => preset.id !== importedPreset.id)];
+      addPresetToImportedFolder(importedPreset.id);
+      uiState.presetCache.set(importedPreset.id, importedPreset);
+    }
     importedPresets.push(importedPreset);
   }
 
   if (importedPresets.length === 0) {
-    showNotification("Import failed", "No presets were imported");
-    return;
+    notifyImportError("Import failed", "No presets were imported");
+    return [];
+  }
+
+  if (previewOnly) {
+    return importedPresets;
   }
 
   uiState.filteredPresets = getFilteredPresets(presetSearchElement?.value ?? "");
@@ -3319,6 +3357,8 @@ async function importPresetArchive(file: File, context: ArchiveImportContext = {
     ? (latestPreset.name ?? "")
     : `${importedPresets.length} presets imported`);
   updatePresetActionButtons();
+
+  return importedPresets;
 }
 
 interface GeneratorPackManifest {
@@ -3495,7 +3535,7 @@ export async function importGeneratedPack(file: File, context: ArchiveImportCont
     });
 
     cachePresetInMemory(appPreset);
-    uiState.presets.unshift(appPreset);
+    uiState.presets = [appPreset, ...uiState.presets.filter((preset) => preset.id !== appPreset.id)];
     addPresetToImportedFolder(importedId);
     uiState.presetCache.set(importedId, appPreset);
     importedPresets.push(appPreset);
