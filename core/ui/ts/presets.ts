@@ -2361,6 +2361,8 @@ type ImportPackContext = {
   source: ImportPackSource;
   packId?: string;
   itemId?: string;
+  creatorId?: string;
+  creatorHandle?: string;
   titleHint?: string;
 };
 
@@ -2961,6 +2963,8 @@ type ArchiveImportContext = {
   source: InstalledPackMetadata["source"];
   packId?: string;
   itemId?: string;
+  creatorId?: string;
+  creatorHandle?: string;
   titleHint?: string;
 };
 
@@ -2980,17 +2984,25 @@ function normalizeToneSharingOrigin(value: unknown): ToneSharingOriginMetadata |
     originalPresetId: typeof origin.originalPresetId === "string" ? origin.originalPresetId : undefined,
     importedAt: typeof origin.importedAt === "string" ? origin.importedAt : undefined,
     importedFromPackId: typeof origin.importedFromPackId === "string" ? origin.importedFromPackId : undefined,
+    creatorId: typeof origin.creatorId === "string" ? origin.creatorId : undefined,
+    creatorHandle: typeof origin.creatorHandle === "string" ? origin.creatorHandle : undefined,
     republishBlocked: origin.republishBlocked !== false,
   };
 }
 
-function createToneSharingOrigin(itemId: string, sourcePresetId: string, packId?: string): ToneSharingOriginMetadata {
+function createToneSharingOrigin(
+  itemId: string,
+  sourcePresetId: string,
+  options?: { packId?: string; creatorId?: string; creatorHandle?: string },
+): ToneSharingOriginMetadata {
   return {
     source: "toneSharingApi",
     itemId,
     originalPresetId: sourcePresetId,
     importedAt: new Date().toISOString(),
-    importedFromPackId: packId,
+    importedFromPackId: options?.packId,
+    creatorId: options?.creatorId,
+    creatorHandle: options?.creatorHandle,
     republishBlocked: true,
   };
 }
@@ -3222,7 +3234,11 @@ async function importPresetArchive(file: File, context: ArchiveImportContext = {
     importedPreset.id = generateResourceId(sourcePresetId);
     importedPreset.name = importedPreset.name || "Imported Preset";
     const contextOrigin = context.source === "toneSharingApi" && context.itemId
-      ? createToneSharingOrigin(context.itemId, sourcePresetId, context.packId)
+      ? createToneSharingOrigin(context.itemId, sourcePresetId, {
+          packId: context.packId,
+          creatorId: context.creatorId,
+          creatorHandle: context.creatorHandle,
+        })
       : undefined;
     const resolvedOrigin = archiveOrigin ?? contextOrigin;
     if (resolvedOrigin) {
@@ -3231,6 +3247,8 @@ async function importPresetArchive(file: File, context: ArchiveImportContext = {
         originalPresetId: resolvedOrigin.originalPresetId ?? sourcePresetId,
         importedAt: resolvedOrigin.importedAt ?? new Date().toISOString(),
         importedFromPackId: resolvedOrigin.importedFromPackId ?? context.packId,
+        creatorId: resolvedOrigin.creatorId ?? context.creatorId,
+        creatorHandle: resolvedOrigin.creatorHandle ?? context.creatorHandle,
         republishBlocked: resolvedOrigin.republishBlocked !== false,
       };
     }

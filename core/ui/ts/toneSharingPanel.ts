@@ -19,9 +19,13 @@ type ToneSharingItem = {
   id: string;
   title: string;
   type: string;
+  creatorUserId?: string | null;
   moderationStatus?: string;
   creatorEmail?: string | null;
   creatorDisplayName?: string | null;
+  creatorHandle?: string | null;
+  creatorProfileHandle?: string | null;
+  profileHandle?: string | null;
   favoriteCount?: number;
   ratingCount?: number;
   averageRating?: number | null;
@@ -34,9 +38,13 @@ type ToneSharingItem = {
 type ToneSharingPack = {
   id: string;
   title: string;
+  creatorUserId?: string | null;
   moderationStatus?: string;
   creatorEmail?: string | null;
   creatorDisplayName?: string | null;
+  creatorHandle?: string | null;
+  creatorProfileHandle?: string | null;
+  profileHandle?: string | null;
   description?: string | null;
   thumbnailUrl?: string | null;
   thumbnailAssetId?: string | null;
@@ -745,6 +753,51 @@ function normalizeBase(input: string): string {
   return trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
 }
 
+function normalizeCreatorHandle(raw: unknown): string | null {
+  if (typeof raw !== "string") {
+    return null;
+  }
+
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const withoutPrefix = trimmed.replace(/^@+/, "");
+  if (!withoutPrefix || /\s/.test(withoutPrefix)) {
+    return null;
+  }
+
+  if (!/^[A-Za-z0-9._-]{2,64}$/.test(withoutPrefix)) {
+    return null;
+  }
+
+  return `@${withoutPrefix}`;
+}
+
+function resolveCreatorProfileHandle(item: Record<string, unknown>): string | null {
+  const explicit = [
+    item.creatorProfileHandle,
+    item.creatorHandle,
+    item.profileHandle,
+    item.handle,
+  ];
+
+  for (const candidate of explicit) {
+    const handle = normalizeCreatorHandle(candidate);
+    if (handle) {
+      return handle;
+    }
+  }
+
+  const displayName = typeof item.creatorDisplayName === "string" ? item.creatorDisplayName.trim() : "";
+  if (displayName.startsWith("@")) {
+    return normalizeCreatorHandle(displayName);
+  }
+
+  return null;
+}
+
 function sanitizePublishFileName(raw: string): string {
   const cleaned = raw.trim().replace(/[^a-z0-9\-_. ]/gi, "").replace(/\s+/g, "-").replace(/\.+$/, "");
   return cleaned || "preset";
@@ -1129,11 +1182,14 @@ async function renderFeedRows(rows: ToneSharingRow[]): Promise<void> {
             ? ` style="border-left: 3px solid ${idAccentColor(item.id)}"`
             : "";
           const reviewMode = browseMode === "review";
+          const creatorHandle = resolveCreatorProfileHandle(item as unknown as Record<string, unknown>);
+          const typeLabel = item.kind === "item" ? (item.type ?? "preset") : "pack";
+          const metaText = [typeLabel, creatorHandle].filter((value): value is string => Boolean(value)).join(" · ");
           return `
                   <div class=\"${cardClass}${isPreviewing ? " is-previewing" : ""}\" data-kind=\"${item.kind}\" data-id=\"${item.id}\" data-title=\"${item.title}\"${backgroundStyle}${accentStyleAttr}>
                     <div class=\"tone-sharing-card-item-content\">
                       <div class=\"tone-sharing-card-item-title\">${item.title}</div>
-                      <div class=\"tone-sharing-card-item-meta\">${item.kind === "item" ? item.type ?? "preset" : "pack"}</div>
+                      <div class=\"tone-sharing-card-item-meta\">${escapeHtml(metaText)}</div>
                       ${item.description ? `<div class=\"tone-sharing-card-item-description\">${item.description}</div>` : ""}
                       ${item.kind === "item" && item.tags && item.tags.length > 0 ? `<div class=\"tone-sharing-card-tags\">${item.tags.map((t) => `<span class=\"tone-sharing-tag-badge\">${t}</span>`).join("")}</div>` : ""}
                     </div>
@@ -1185,6 +1241,9 @@ function buildSingleRow(title: string, entries: Array<{ id: string; title: strin
       moderationStatus: (entry as ToneSharingItem | ToneSharingPack).moderationStatus,
       creatorEmail: (entry as ToneSharingItem | ToneSharingPack).creatorEmail ?? null,
       creatorDisplayName: (entry as ToneSharingItem | ToneSharingPack).creatorDisplayName ?? null,
+      creatorHandle: (entry as ToneSharingItem | ToneSharingPack).creatorHandle ?? null,
+      creatorProfileHandle: (entry as ToneSharingItem | ToneSharingPack).creatorProfileHandle ?? null,
+      profileHandle: (entry as ToneSharingItem | ToneSharingPack).profileHandle ?? null,
       favoriteCount: kind === "item" ? (entry as ToneSharingItem).favoriteCount : undefined,
       ratingCount: kind === "item" ? (entry as ToneSharingItem).ratingCount : undefined,
       averageRating: kind === "item" ? (entry as ToneSharingItem).averageRating ?? null : undefined,
@@ -1542,6 +1601,8 @@ async function buildPackArchiveFromDetails(details: ToneSharingPackDetails): Pro
   const mergedTone3000Resources = new Map<string, Tone3000ResourceRef>();
 
   const sortedItems = [...details.items].sort((a, b) => a.sortOrder - b.sortOrder);
+  const packCreatorHandle = resolveCreatorProfileHandle(details.pack as unknown as Record<string, unknown>) ?? undefined;
+  const packCreatorId = details.pack.creatorUserId ?? undefined;
   for (const item of sortedItems) {
     const response = await fetch(buildApiUrl(`/items/${item.itemId}/download`), {
       headers: state.sessionId ? { "x-session-id": state.sessionId } : {},
@@ -1564,6 +1625,8 @@ async function buildPackArchiveFromDetails(details: ToneSharingPackDetails): Pro
         originalPresetId: typeof preset.id === "string" ? preset.id : item.itemId,
         importedAt: new Date().toISOString(),
         importedFromPackId: details.pack.id,
+        creatorId: packCreatorId,
+        creatorHandle: packCreatorHandle,
         republishBlocked: true,
       };
       mergedPresets.push(preset);
@@ -1583,6 +1646,8 @@ async function buildPackArchiveFromDetails(details: ToneSharingPackDetails): Pro
           originalPresetId: typeof parsed.preset.id === "string" ? parsed.preset.id : item.itemId,
           importedAt: new Date().toISOString(),
           importedFromPackId: details.pack.id,
+          creatorId: packCreatorId,
+          creatorHandle: packCreatorHandle,
           republishBlocked: true,
         };
         mergedPresets.push(parsed.preset);
@@ -1626,6 +1691,8 @@ async function buildPackArchiveFromDetails(details: ToneSharingPackDetails): Pro
           originalPresetId: typeof preset.id === "string" ? preset.id : item.itemId,
           importedAt: new Date().toISOString(),
           importedFromPackId: details.pack.id,
+          creatorId: packCreatorId,
+          creatorHandle: packCreatorHandle,
           republishBlocked: true,
         },
       })));
@@ -2317,6 +2384,14 @@ async function downloadAsset(kind: "item" | "pack", id: string): Promise<void> {
   const fileName = fileMatch?.[1] || `${kind}-${id}${kind === "pack" ? ".zip" : ""}`;
 
   if (kind === "pack") {
+    let packMeta: ToneSharingPack | null = null;
+    try {
+      const packResponse = await apiFetch<{ pack: ToneSharingPack }>(`/packs/${id}`);
+      packMeta = packResponse.pack;
+    } catch {
+      packMeta = null;
+    }
+
     let importBlob: Blob;
     let importFileName = fileName;
     if (response.ok) {
@@ -2332,12 +2407,22 @@ async function downloadAsset(kind: "item" | "pack", id: string): Promise<void> {
     await importPackWithConfirmation(importFile, {
       source: "toneSharingApi",
       packId: id,
+      creatorId: packMeta?.creatorUserId ?? undefined,
+      creatorHandle: resolveCreatorProfileHandle((packMeta ?? {}) as unknown as Record<string, unknown>) ?? undefined,
       titleHint: importFileName.replace(/\.zip$/i, ""),
     });
     return;
   }
 
   const blob = await response.blob();
+
+  let itemMeta: ToneSharingItem | null = null;
+  try {
+    const itemResponse = await apiFetch<{ item: ToneSharingItem }>(`/items/${id}`);
+    itemMeta = itemResponse.item;
+  } catch {
+    itemMeta = null;
+  }
 
   // Import the preset (and its bundled resources) directly into the local
   // library instead of triggering a browser file-save.  importPackWithConfirmation
@@ -2347,6 +2432,8 @@ async function downloadAsset(kind: "item" | "pack", id: string): Promise<void> {
   await importPackWithConfirmation(importFile, {
     source: "toneSharingApi",
     itemId: id,
+    creatorId: itemMeta?.creatorUserId ?? undefined,
+    creatorHandle: resolveCreatorProfileHandle((itemMeta ?? {}) as unknown as Record<string, unknown>) ?? undefined,
     titleHint: fileName.replace(/\.(soundshed\.preset|soundshed\.presets|zip)$/i, ""),
   });
 }

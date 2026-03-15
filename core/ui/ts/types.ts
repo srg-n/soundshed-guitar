@@ -79,6 +79,8 @@ export interface ToneSharingOriginMetadata {
   originalPresetId?: string;
   importedAt?: string;
   importedFromPackId?: string;
+  creatorId?: string;
+  creatorHandle?: string;
   republishBlocked?: boolean;
 }
 
