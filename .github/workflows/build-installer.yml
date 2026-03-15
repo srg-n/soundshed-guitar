@@ -278,8 +278,8 @@ jobs:
       - name: Configure JUCE CMake
         run: cmake -S juce -B juce/builds -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="${{ matrix.cmake_architectures }}"
 
-      - name: Build JUCE Standalone Release
-        run: cmake --build juce/builds --config Release --target SoundshedGuitar_Standalone --parallel
+      - name: Build JUCE Standalone + Plugin Release
+        run: cmake --build juce/builds --config Release --target SoundshedGuitar_Standalone SoundshedGuitar_VST3 SoundshedGuitar_AU SoundshedGuitar_CLAP --parallel
 
       - name: Export JUCE build env
         run: |
@@ -289,18 +289,58 @@ jobs:
           fi
           cat juce/.env >> "$GITHUB_ENV"
 
+      - name: Validate macOS bundles and UI resources
+        run: |
+          ARTEFACTS_BASE="juce/builds/${PROJECT_NAME}_artefacts/Release"
+          STANDALONE_PATH="$ARTEFACTS_BASE/Standalone/${PRODUCT_NAME}.app"
+          VST3_PATH="$ARTEFACTS_BASE/VST3/${PRODUCT_NAME}.vst3"
+          AU_PATH="$ARTEFACTS_BASE/AU/${PRODUCT_NAME}.component"
+          CLAP_PATH="$ARTEFACTS_BASE/CLAP/${PRODUCT_NAME}.clap"
+
+          for bundle in "$STANDALONE_PATH" "$VST3_PATH" "$AU_PATH"; do
+            if [ ! -d "$bundle" ]; then
+              echo "Required macOS bundle not found: $bundle"
+              exit 1
+            fi
+          done
+
+          for bundle in "$STANDALONE_PATH" "$VST3_PATH" "$AU_PATH"; do
+            if [ ! -f "$bundle/Contents/Resources/ui/index.html" ]; then
+              echo "Missing bundled UI resources in $bundle"
+              exit 1
+            fi
+          done
+
+          if [ -d "$CLAP_PATH" ]; then
+            if [ ! -f "$CLAP_PATH/Contents/Resources/ui/index.html" ]; then
+              echo "Missing bundled UI resources in $CLAP_PATH"
+              exit 1
+            fi
+          fi
+
+          echo "STANDALONE_PATH=$STANDALONE_PATH" >> "$GITHUB_ENV"
+          echo "VST3_PATH=$VST3_PATH" >> "$GITHUB_ENV"
+          echo "AU_PATH=$AU_PATH" >> "$GITHUB_ENV"
+          if [ -d "$CLAP_PATH" ]; then
+            echo "CLAP_PATH=$CLAP_PATH" >> "$GITHUB_ENV"
+          fi
+
       - name: Create DMG
         if: ${{ matrix.package_dmg }}
         run: |
-          APP_PATH="juce/builds/${PROJECT_NAME}_artefacts/Release/Standalone/${PRODUCT_NAME}.app"
-          if [ ! -d "$APP_PATH" ]; then
-            echo "Standalone app not found at $APP_PATH"
-            exit 1
-          fi
-
           STAGING_DIR="${RUNNER_TEMP}/dmg-root"
-          mkdir -p "$STAGING_DIR"
-          cp -R "$APP_PATH" "$STAGING_DIR/"
+          rm -rf "$STAGING_DIR"
+          mkdir -p "$STAGING_DIR/Plug-Ins/VST3"
+          mkdir -p "$STAGING_DIR/Plug-Ins/Components"
+
+          cp -R "$STANDALONE_PATH" "$STAGING_DIR/"
+          cp -R "$VST3_PATH" "$STAGING_DIR/Plug-Ins/VST3/"
+          cp -R "$AU_PATH" "$STAGING_DIR/Plug-Ins/Components/"
+
+          if [ -n "${CLAP_PATH:-}" ] && [ -d "$CLAP_PATH" ]; then
+            mkdir -p "$STAGING_DIR/Plug-Ins/CLAP"
+            cp -R "$CLAP_PATH" "$STAGING_DIR/Plug-Ins/CLAP/"
+          fi
 
           DMG_NAME="${PRODUCT_NAME}-${VERSION}-macOS.dmg"
           DMG_PATH="${RUNNER_TEMP}/${DMG_NAME}"

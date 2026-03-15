@@ -333,6 +333,8 @@ endfunction()
 
 soundshed_copy_ui_resources(${PROJECT_NAME}_Standalone)
 soundshed_copy_ui_resources(${PROJECT_NAME}_VST3)
+soundshed_copy_ui_resources(${PROJECT_NAME}_AU)
+soundshed_copy_ui_resources(${PROJECT_NAME}_CLAP)
 
 # Propagate IPP availability to the JUCE shared code and core DSP library.
 if(GUITARFX_IPP_AVAILABLE)
