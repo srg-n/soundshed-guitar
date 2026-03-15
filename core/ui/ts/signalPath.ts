@@ -3162,7 +3162,11 @@ function renderMixerPresetTabs(): void {
       const pid = btn.dataset.presetId ?? "";
       if (pid) {
         mixTabActive = false;
+        uiState.activePresetId = pid;
         setFocusedMixerPresetId(pid);
+        document.dispatchEvent(new CustomEvent("mixerPresetTabSelected", {
+          detail: { presetId: pid },
+        }));
         renderSignalPathBar();
       }
     });

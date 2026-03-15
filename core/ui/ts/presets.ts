@@ -763,6 +763,25 @@ document.addEventListener("advancedOptionsChanged", () => {
   syncPresetLibraryFeatureVisibility();
 });
 
+document.addEventListener("mixerPresetTabSelected", (event) => {
+  const customEvent = event as CustomEvent<{ presetId?: string }>;
+  const presetId = customEvent.detail?.presetId ?? "";
+  if (!presetId) {
+    return;
+  }
+
+  const preset = uiState.presetCache.get(presetId) ?? uiState.presets.find((candidate) => candidate.id === presetId) ?? null;
+  if (!preset) {
+    return;
+  }
+
+  uiState.activePresetId = presetId;
+  setFavoriteToggleState(presetId);
+  updatePresetDropdownSelection();
+  renderPresetUI(clonePreset(preset));
+  updatePresetActionButtons();
+});
+
 function loadPresetFoldersFromState(): PresetFolder[] {
   return uiState.presetFolders ? sortPresetFoldersAlphabetically(uiState.presetFolders) : [];
 }

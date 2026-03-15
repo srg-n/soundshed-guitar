@@ -1,5 +1,5 @@
 import { renderDemoAudioControls, bindDemoAudioControls } from "./demoAudio.js";
-import { uiState, setFocusedMixerPresetId } from "./state.js";
+import { uiState, setFocusedMixerPresetId, isAdvancedOptionsEnabled } from "./state.js";
 import { addActivePreset, removeActivePreset, setPresetMix, setPresetPan, setPresetMute, setPresetSolo, setMasterGain, setLimiterEnabled } from "./bridge.js";
 import { escapeHtml, idAccentColor } from "./utils.js";
 import { updateSignalPathClipIndicators, renderSignalPathBar } from "./signalPath.js";
@@ -411,7 +411,10 @@ export function renderPresetList(
           ? `<div class="preset-item-tags">${(preset.tags ?? []).map((t) => `<span class="preset-item-tag">${escapeHtml(t)}</span>`).join("")}</div>`
           : "";
         const inMixer = uiState.mixer?.activePresetIds.includes(preset.id) ?? false;
-        const addToMixerBtn = `<button class="preset-add-to-mixer-btn${inMixer ? " in-mixer" : ""}" data-preset-id="${preset.id}" title="${inMixer ? "Already in mixer" : "Add to mixer"}" type="button">${inMixer ? "✓ In Mixer" : "+ Mixer"}</button>`;
+        const showMixerControls = isAdvancedOptionsEnabled();
+        const addToMixerBtn = showMixerControls
+          ? `<button class="preset-add-to-mixer-btn${inMixer ? " in-mixer" : ""}" data-preset-id="${preset.id}" title="${inMixer ? "Already in mixer" : "Add to mixer"}" type="button">${inMixer ? "✓ In Mixer" : "+ Mixer"}</button>`
+          : "";
 
         return `
         <article class="preset-item ${preset.id === activePresetId ? "active" : ""}" data-id="${preset.id}" draggable="true" style="border-left: 3px solid ${idAccentColor(preset.id)}">

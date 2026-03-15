@@ -266,6 +266,7 @@
 
 .settings-hint {
   margin-top: 8px;
+  margin-bottom:16px;
   font-size: 11px;
   color: var(--text-secondary);
 }
