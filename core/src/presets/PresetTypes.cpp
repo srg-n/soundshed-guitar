@@ -42,7 +42,6 @@ namespace
     if (auto* existing = graph.FindNode(nodeId))
     {
       existing->type = nodeType;
-      existing->enabled = true;
       return existing;
     }
 
@@ -52,7 +51,6 @@ namespace
       {
         const std::string oldId = node.id;
         node.id = nodeId;
-        node.enabled = true;
 
         if (oldId != nodeId)
         {
@@ -95,7 +93,6 @@ void EnsurePresetBoundaryGainNodes(SignalGraph& graph)
   {
     if (auto* node = graph.FindNode(id))
     {
-      node->enabled = true;
       if (node->params.find("gainDb") == node->params.end())
         node->params["gainDb"] = 0.0;
     }

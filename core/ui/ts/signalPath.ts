@@ -413,7 +413,7 @@ function isNodeBypassed(node: GraphNode): boolean {
 }
 
 function applySignalPathNodeBypassState(node: GraphNode, preset: Preset, bypassed: boolean): void {
-  sendSignalPathNodeBypassUpdate(node.id, bypassed);
+  sendSignalPathNodeBypassUpdate(node.id, preset.id, bypassed);
   (node as unknown as { bypassed?: boolean }).bypassed = bypassed;
   (node as unknown as { enabled?: boolean }).enabled = !bypassed;
   renderSignalPathBar();
@@ -465,12 +465,18 @@ function isTextEntryElement(element: HTMLElement | null): boolean {
   return Boolean(editableRoot);
 }
 
-function isStandardInteractiveElement(element: HTMLElement | null): boolean {
+function isSignalPathShortcutSuppressedElement(element: HTMLElement | null): boolean {
   if (!element) {
     return false;
   }
 
-  return Boolean(element.closest("button, a[href], summary, audio, video, [role='button'], [role='link'], [role='switch'], [role='checkbox'], [role='slider']"));
+  // Allow Space to toggle bypass in visualization/panel context unless the user
+  // is actively editing a value (text/range/knob/select/etc.).
+  return Boolean(
+    element.closest(
+      "input, textarea, select, [contenteditable=''], [contenteditable='true'], [role='textbox'], [role='checkbox'], [role='slider'], .node-param-knob, .resource-dropdown, .resource-param-value",
+    ),
+  );
 }
 
 function isSignalPathShortcutContext(element: HTMLElement | null): boolean {
@@ -479,6 +485,22 @@ function isSignalPathShortcutContext(element: HTMLElement | null): boolean {
   }
 
   return Boolean(element.closest("#signal-path-bar, #signal-path-nodes, #node-params-panel, #effect-visualization"));
+}
+
+function resolveSignalPathShortcutNode(target: HTMLElement | null, preset: Preset | null | undefined): GraphNode | null {
+  if (!preset?.graph) {
+    return null;
+  }
+
+  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const focusedNodeElement = (target?.closest(".signal-node[data-node-id]") as HTMLElement | null)
+    ?? (activeElement?.closest(".signal-node[data-node-id]") as HTMLElement | null);
+  const focusedNodeId = focusedNodeElement?.dataset.nodeId;
+  if (focusedNodeId) {
+    return preset.graph.nodes.find((node) => node.id === focusedNodeId) ?? null;
+  }
+
+  return getSelectedSignalPathNode(preset);
 }
 
 function toggleSelectedSignalPathNodeBypass(): boolean {
@@ -498,17 +520,25 @@ function handleSignalPathShortcutKeyDown(event: KeyboardEvent): void {
   }
 
   const target = event.target instanceof HTMLElement ? event.target : null;
-  if (!isSignalPathShortcutContext(target)) {
+  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const shortcutContextElement = target ?? activeElement;
+  if (!isSignalPathShortcutContext(shortcutContextElement)) {
     return;
   }
 
-  if (isTextEntryElement(target) || isStandardInteractiveElement(target)) {
+  if (isTextEntryElement(shortcutContextElement) || isSignalPathShortcutSuppressedElement(shortcutContextElement)) {
     return;
   }
 
-  if (!toggleSelectedSignalPathNodeBypass()) {
+  const preset = getSignalPathPreset();
+  const node = resolveSignalPathShortcutNode(target, preset);
+  if (!preset || !isToggleableSignalPathNode(node)) {
     return;
   }
+
+  selectedNodeId = node.id;
+  updateLastSelectedNode(node);
+  toggleSignalPathNodeBypass(node, preset);
 
   event.preventDefault();
   event.stopImmediatePropagation();
@@ -609,10 +639,12 @@ export function renderSignalPathBar(): void {
     return;
   }
 
+  const editablePreset = getEditableSignalPathPreset(activePreset);
+
   // Render graph-based signal path (supports parallel paths)
-  if (activePreset.graph?.nodes) {
-    selectNodeForPreset(activePreset, presetChanged);
-    renderGraphSignalPath(activePreset);
+  if (editablePreset.graph?.nodes) {
+    selectNodeForPreset(editablePreset, presetChanged);
+    renderGraphSignalPath(editablePreset);
   } else {
     // Empty preset - show only input/output
     signalPathNodesElement.innerHTML = `
@@ -649,7 +681,6 @@ export function renderSignalPathBar(): void {
   }
 
   if (sceneToolbarHost) {
-    const editablePreset = getEditableSignalPathPreset(activePreset);
     const activeSceneId = normalizePresetScenes(editablePreset, uiState.activePresetSceneId ?? undefined);
     uiState.activePresetSceneId = activeSceneId;
     const sceneMarkup = buildPresetScenePanelMarkup(editablePreset, activeSceneId ?? "");
@@ -1215,6 +1246,24 @@ function bindNodeClickHandlers(preset: Preset): void {
     return preset.graph?.nodes.find((n) => n.id === nodeId);
   };
 
+  const selectNodeElement = (node: GraphNode, el: HTMLElement, focusElement: boolean): void => {
+    selectedNodeId = node.id;
+    showNodeParamsPanel(node, preset);
+
+    nodeElements.forEach((n) => n.classList.remove("selected"));
+    el.classList.add("selected");
+    if (focusElement) {
+      el.focus();
+    }
+
+    const visualizerButton = document.querySelector(
+      '.icon-bar .icon-btn[data-panel="visualizer"]',
+    ) as HTMLElement | null;
+    if (visualizerButton && !visualizerButton.classList.contains("active")) {
+      visualizerButton.click();
+    }
+  };
+
   // Bind + button click handlers
   bindAddButtonHandlers();
 
@@ -1227,22 +1276,23 @@ function bindNodeClickHandlers(preset: Preset): void {
       if (nodeId && preset.graph) {
         const node = preset.graph.nodes.find((n) => n.id === nodeId);
         if (node) {
-          selectedNodeId = nodeId;
-          showNodeParamsPanel(node, preset);
-          
-          // Highlight selected node
-          nodeElements.forEach((n) => n.classList.remove("selected"));
-          el.classList.add("selected");
-          el.focus();
-
-          const visualizerButton = document.querySelector(
-            '.icon-bar .icon-btn[data-panel="visualizer"]',
-          ) as HTMLElement | null;
-          if (visualizerButton && !visualizerButton.classList.contains("active")) {
-            visualizerButton.click();
-          }
+          selectNodeElement(node, el, true);
         }
       }
+    });
+
+    el.addEventListener("focus", () => {
+      const nodeId = el.dataset.nodeId;
+      if (!nodeId || !preset.graph) {
+        return;
+      }
+
+      const node = preset.graph.nodes.find((n) => n.id === nodeId);
+      if (!node || selectedNodeId === node.id) {
+        return;
+      }
+
+      selectNodeElement(node, el, false);
     });
 
     el.addEventListener("dblclick", () => {
@@ -2837,10 +2887,11 @@ function sendSignalPathNodeParamUpdate(nodeId: string, paramKey: string, value: 
   setPresetDirty(true);
 }
 
-function sendSignalPathNodeBypassUpdate(nodeId: string, bypassed: boolean): void {
+function sendSignalPathNodeBypassUpdate(nodeId: string, presetId: string, bypassed: boolean): void {
   postMessage({
     type: "updateSignalPathNodeBypass",
     nodeId,
+    presetId,
     bypassed,
   });
   setPresetDirty(true);

@@ -852,6 +852,62 @@ bool TestPresetFilePathNormalizationOnDisk()
   return true;
 }
 
+bool TestBoundaryBypassStatePreservedDuringNormalization()
+{
+  std::cout << "Test: BoundaryBypassStatePreservedDuringNormalization... ";
+
+  guitarfx::SignalGraph graph;
+
+  guitarfx::GraphNode input;
+  input.id = "__input__";
+  input.type = guitarfx::kNodeTypeInput;
+  input.enabled = false;
+  graph.nodes.push_back(input);
+
+  guitarfx::GraphNode output;
+  output.id = "__output__";
+  output.type = guitarfx::kNodeTypeOutput;
+  output.enabled = false;
+  graph.nodes.push_back(output);
+
+  guitarfx::EnsurePresetBoundaryGainNodes(graph);
+
+  const auto* normalizedInput = graph.FindNode("__input__");
+  const auto* normalizedOutput = graph.FindNode("__output__");
+  if (!normalizedInput || !normalizedOutput)
+  {
+    std::cout << "FAIL (boundary nodes missing after normalization)" << std::endl;
+    return false;
+  }
+
+  if (normalizedInput->enabled)
+  {
+    std::cout << "FAIL (input bypass state was overwritten)" << std::endl;
+    return false;
+  }
+
+  if (normalizedOutput->enabled)
+  {
+    std::cout << "FAIL (output bypass state was overwritten)" << std::endl;
+    return false;
+  }
+
+  if (normalizedInput->params.find("gainDb") == normalizedInput->params.end())
+  {
+    std::cout << "FAIL (input gainDb default missing)" << std::endl;
+    return false;
+  }
+
+  if (normalizedOutput->params.find("gainDb") == normalizedOutput->params.end())
+  {
+    std::cout << "FAIL (output gainDb default missing)" << std::endl;
+    return false;
+  }
+
+  std::cout << "PASS" << std::endl;
+  return true;
+}
+
 } // anonymous namespace
 
 int main()
@@ -887,6 +943,7 @@ int main()
   runTest(TestNodeParams);
   runTest(TestEmbeddedResources);
   runTest(TestPresetFilePathNormalizationOnDisk);
+  runTest(TestBoundaryBypassStatePreservedDuringNormalization);
 
   std::cout << "========================================" << std::endl;
   std::cout << "Results: " << passed << " passed, " << failed << " failed" << std::endl;
