@@ -24,21 +24,6 @@ void JUCE_CALLTYPE juce_showStandaloneAudioSettingsDialog();
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// Parameter string IDs and labels — keep in sync with enum
-// ════════════════════════════════════════════════════════════════════════
-
-static constexpr const char* kParamLabels[] = {
-    "Input Trim", "Output Trim", "Drive", "Tone",
-    "Noise Gate", "Gate Threshold", "Mix",
-    "Doubler", "Doubler Delay", "Transpose", "IR Quality",
-    "EQ",
-    "EQ Low Gain", "EQ Low Freq",
-    "EQ Low-Mid Gain", "EQ Low-Mid Freq", "EQ Low-Mid Q",
-    "EQ High-Mid Gain", "EQ High-Mid Freq", "EQ High-Mid Q",
-    "EQ High Gain", "EQ High Freq"
-};
-
-// ════════════════════════════════════════════════════════════════════════
 // Construction / Destruction
 // ════════════════════════════════════════════════════════════════════════
 
@@ -51,8 +36,7 @@ PluginProcessorAdapter::PluginProcessorAdapter()
           .withOutput("Output", juce::AudioChannelSet::stereo(), true)
 #endif
       ),
-      mController(*this),
-      mAPVTS(*this, nullptr, "PARAMS", createParameterLayout())
+    mController(*this)
 {
     mAssetRoot = locateAssetsRoot();
     mController.Initialize();
@@ -101,9 +85,6 @@ void PluginProcessorAdapter::processBlock(juce::AudioBuffer<float>& buffer,
     // Clear any output channels that don't have corresponding inputs
     for (auto i = totalInputCh; i < totalOutputCh; ++i)
         buffer.clear(i, 0, numSamples);
-
-    // Push APVTS parameter values into the controller every block
-    applyParametersToController();
 
     // Set up float** for the core ProcessAudio
     float* inputs[2] = {
@@ -155,28 +136,6 @@ void PluginProcessorAdapter::setStateInformation(const void* data, int sizeInByt
     if (controllerState.empty()) return;
 
     mController.DeserializeState(controllerState);
-
-    auto json = nlohmann::json::parse(controllerState, nullptr, false);
-    if (json.is_object() && json.contains("parameters") && json["parameters"].is_array())
-    {
-        int idx = 0;
-        for (const auto& value : json["parameters"])
-        {
-            if (idx >= kParamCount) break;
-            if (value.is_number())
-            {
-                if (auto* param = mAPVTS.getParameter(kParamIds[idx]))
-                {
-                    if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param))
-                    {
-                        const float normalized = ranged->convertTo0to1(static_cast<float>(value.get<double>()));
-                        ranged->setValueNotifyingHost(normalized);
-                    }
-                }
-            }
-            idx++;
-        }
-    }
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -369,10 +328,6 @@ bool PluginProcessorAdapter::IsStandalone() const
     return wrapperType == wrapperType_Standalone;
 }
 
-// ════════════════════════════════════════════════════════════════════════
-// WebView bridge
-// ════════════════════════════════════════════════════════════════════════
-
 void PluginProcessorAdapter::setWebMessageCallback(
     std::function<void(const juce::String&)> callback)
 {
@@ -408,137 +363,6 @@ void PluginProcessorAdapter::sendMessageToUI(const juce::String& message)
         callback = mWebMessageCallback;
     }
     if (callback) callback(message);
-}
-
-// ════════════════════════════════════════════════════════════════════════
-// Private helpers
-// ════════════════════════════════════════════════════════════════════════
-
-juce::AudioProcessorValueTreeState::ParameterLayout
-PluginProcessorAdapter::createParameterLayout()
-{
-    juce::AudioProcessorValueTreeState::ParameterLayout layout;
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kParamIds[kParamInputTrim], 1 }, kParamLabels[kParamInputTrim],
-        juce::NormalisableRange<float>(-24.0f, 12.0f, 0.1f), 0.0f,
-        juce::AudioParameterFloatAttributes{}.withLabel("dB")));
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kParamIds[kParamOutputTrim], 1 }, kParamLabels[kParamOutputTrim],
-        juce::NormalisableRange<float>(-24.0f, 12.0f, 0.1f), 0.0f,
-        juce::AudioParameterFloatAttributes{}.withLabel("dB")));
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kParamIds[kParamDrive], 1 }, kParamLabels[kParamDrive],
-        juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kParamIds[kParamTone], 1 }, kParamLabels[kParamTone],
-        juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
-
-    layout.add(std::make_unique<juce::AudioParameterBool>(
-        juce::ParameterID{ kParamIds[kParamGateEnabled], 1 }, kParamLabels[kParamGateEnabled], false));
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kParamIds[kParamGateThreshold], 1 }, kParamLabels[kParamGateThreshold],
-        juce::NormalisableRange<float>(-80.0f, -20.0f, 0.1f), -60.0f,
-        juce::AudioParameterFloatAttributes{}.withLabel("dB")));
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kParamIds[kParamMix], 1 }, kParamLabels[kParamMix],
-        juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
-
-    layout.add(std::make_unique<juce::AudioParameterBool>(
-        juce::ParameterID{ kParamIds[kParamDoublerEnabled], 1 }, kParamLabels[kParamDoublerEnabled], false));
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kParamIds[kParamDoublerDelay], 1 }, kParamLabels[kParamDoublerDelay],
-        juce::NormalisableRange<float>(0.5f, 50.0f, 0.1f), 6.0f,
-        juce::AudioParameterFloatAttributes{}.withLabel("ms")));
-
-    layout.add(std::make_unique<juce::AudioParameterInt>(
-        juce::ParameterID{ kParamIds[kParamTranspose], 1 }, kParamLabels[kParamTranspose],
-        -12, 12, 0,
-        juce::AudioParameterIntAttributes{}.withLabel("st")));
-
-    layout.add(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID{ kParamIds[kParamIRQuality], 1 }, kParamLabels[kParamIRQuality],
-        juce::StringArray{ "Economy", "Standard", "High", "Full" }, 1));
-
-    layout.add(std::make_unique<juce::AudioParameterBool>(
-        juce::ParameterID{ kParamIds[kParamEQEnabled], 1 }, kParamLabels[kParamEQEnabled], false));
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kParamIds[kParamEQLowGain], 1 }, kParamLabels[kParamEQLowGain],
-        juce::NormalisableRange<float>(-12.0f, 12.0f, 0.1f), 0.0f,
-        juce::AudioParameterFloatAttributes{}.withLabel("dB")));
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kParamIds[kParamEQLowFreq], 1 }, kParamLabels[kParamEQLowFreq],
-        juce::NormalisableRange<float>(20.0f, 500.0f, 1.0f), 100.0f,
-        juce::AudioParameterFloatAttributes{}.withLabel("Hz")));
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kParamIds[kParamEQLowMidGain], 1 }, kParamLabels[kParamEQLowMidGain],
-        juce::NormalisableRange<float>(-12.0f, 12.0f, 0.1f), 0.0f,
-        juce::AudioParameterFloatAttributes{}.withLabel("dB")));
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kParamIds[kParamEQLowMidFreq], 1 }, kParamLabels[kParamEQLowMidFreq],
-        juce::NormalisableRange<float>(100.0f, 2000.0f, 1.0f), 500.0f,
-        juce::AudioParameterFloatAttributes{}.withLabel("Hz")));
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kParamIds[kParamEQLowMidQ], 1 }, kParamLabels[kParamEQLowMidQ],
-        juce::NormalisableRange<float>(0.1f, 10.0f, 0.1f), 1.0f));
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kParamIds[kParamEQHighMidGain], 1 }, kParamLabels[kParamEQHighMidGain],
-        juce::NormalisableRange<float>(-12.0f, 12.0f, 0.1f), 0.0f,
-        juce::AudioParameterFloatAttributes{}.withLabel("dB")));
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kParamIds[kParamEQHighMidFreq], 1 }, kParamLabels[kParamEQHighMidFreq],
-        juce::NormalisableRange<float>(500.0f, 8000.0f, 1.0f), 2000.0f,
-        juce::AudioParameterFloatAttributes{}.withLabel("Hz")));
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kParamIds[kParamEQHighMidQ], 1 }, kParamLabels[kParamEQHighMidQ],
-        juce::NormalisableRange<float>(0.1f, 10.0f, 0.1f), 1.0f));
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kParamIds[kParamEQHighGain], 1 }, kParamLabels[kParamEQHighGain],
-        juce::NormalisableRange<float>(-12.0f, 12.0f, 0.1f), 0.0f,
-        juce::AudioParameterFloatAttributes{}.withLabel("dB")));
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{ kParamIds[kParamEQHighFreq], 1 }, kParamLabels[kParamEQHighFreq],
-        juce::NormalisableRange<float>(2000.0f, 16000.0f, 1.0f), 8000.0f,
-        juce::AudioParameterFloatAttributes{}.withLabel("Hz")));
-
-    return layout;
-}
-
-void PluginProcessorAdapter::applyParametersToController()
-{
-    auto getValue = [this](const char* id, double fallback) -> double
-    {
-        if (auto* param = mAPVTS.getParameter(id))
-            return static_cast<double>(param->convertFrom0to1(param->getValue()));
-        return fallback;
-    };
-
-    // Push only core amp/preset parameters each block.
-    // Global signal-chain controls (gate/transpose/EQ/doubler) are driven by
-    // explicit UI messages (`setGlobalChainParam`) and must not be overwritten
-    // here with APVTS defaults every audio block.
-    mController.OnParamChange(kParamInputTrim,      getValue(kParamIds[kParamInputTrim], 0.0));
-    mController.OnParamChange(kParamOutputTrim,     getValue(kParamIds[kParamOutputTrim], 0.0));
-    mController.OnParamChange(kParamDrive,          getValue(kParamIds[kParamDrive], 0.5));
-    mController.OnParamChange(kParamTone,           getValue(kParamIds[kParamTone], 0.5));
-    mController.OnParamChange(kParamMix,            getValue(kParamIds[kParamMix], 1.0));
-    mController.OnParamChange(kParamIRQuality,      getValue(kParamIds[kParamIRQuality], 1.0));
 }
 
 std::filesystem::path PluginProcessorAdapter::locateAssetsRoot() const

@@ -375,6 +375,8 @@ private:
     bool WriteFile(const std::filesystem::path& target, const std::vector<std::uint8_t>& data) const;
 
     void AppendSessionLog(const std::string& message);
+    void ApplyParamChangeLocked(int paramIdx, double value);
+    void ProcessAudioLocked(float** inputs, float** outputs, int numSamples);
 
     // ── State ──────────────────────────────────────────────────────
     IPluginHost& mHost;

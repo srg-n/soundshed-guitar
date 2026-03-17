@@ -1292,6 +1292,13 @@ bool PluginController::ProcessAudio(float** inputs, float** outputs, int numSamp
     if (!lock.owns_lock())
         return false; // Caller should output silence
 
+    ProcessAudioLocked(inputs, outputs, numSamples);
+    return true;
+}
+
+void PluginController::ProcessAudioLocked(float** inputs, float** outputs, int numSamples)
+{
+
     // ARM mode: click is playing, waiting for input signal to trigger recording
     if (mRiffCapture.armed && !mRiffCapture.active && !mRiffCapture.complete)
     {
@@ -1476,7 +1483,6 @@ bool PluginController::ProcessAudio(float** inputs, float** outputs, int numSamp
         }
     }
 
-    return true;
 }
 
 double PluginController::GetEffectiveTempoBpm() const
@@ -2247,6 +2253,12 @@ void PluginController::OnWebContentLoaded()
 
 void PluginController::OnParamChange(int paramIdx, double value)
 {
+    std::lock_guard<std::mutex> lock(mDSPMutex);
+    ApplyParamChangeLocked(paramIdx, value);
+}
+
+void PluginController::ApplyParamChangeLocked(int paramIdx, double value)
+{
     if (paramIdx < 0 || paramIdx >= kParamCount)
         return;
 
@@ -2535,6 +2547,7 @@ void PluginController::HandleSetGlobalChainParamRequest(const nlohmann::json& pa
 {
     std::string path = payload.value("path", "");
     auto value = payload.value("value", nlohmann::json());
+    std::lock_guard<std::mutex> lock(mDSPMutex);
 
     // Route paramPath strings to the corresponding mixer methods
     if (path == "gate.enabled") mPresetMixer.SetGlobalGateEnabled(value.get<bool>());
