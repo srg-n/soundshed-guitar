@@ -43,6 +43,7 @@ APP_DST="${DIST_DIR}/Applications"
 VST3_DST="${DIST_DIR}/Library/Audio/Plug-Ins/VST3"
 AU_DST="${DIST_DIR}/Library/Audio/Plug-Ins/Components"
 CLAP_DST="${DIST_DIR}/Library/Audio/Plug-Ins/CLAP"
+AAX_DST="${DIST_DIR}/Library/Application Support/Avid/Audio/Plug-Ins"
 
 PRODUCT="Soundshed Guitar"
 
@@ -94,6 +95,10 @@ if [[ "$SKIP_BUILD" == false ]]; then
     cmake --build "$JUCE_BUILDS" --config Release --target SoundshedGuitar_CLAP --parallel
 
     echo ""
+    echo "▶ Building AAX…"
+    cmake --build "$JUCE_BUILDS" --config Release --target SoundshedGuitar_AAX --parallel
+
+    echo ""
     echo "  ✓ All targets built"
 fi
 
@@ -108,12 +113,14 @@ mkdir -p "$APP_DST"
 mkdir -p "$VST3_DST"
 mkdir -p "$AU_DST"
 mkdir -p "$CLAP_DST"
+mkdir -p "$AAX_DST"
 
 # Copy each artifact (use -R to handle .app / .vst3 / .component bundles)
 SRC_APP="${ARTEFACTS}/Standalone/${PRODUCT}.app"
 SRC_VST3="${ARTEFACTS}/VST3/${PRODUCT}.vst3"
 SRC_AU="${ARTEFACTS}/AU/${PRODUCT}.component"
 SRC_CLAP="${ARTEFACTS}/CLAP/${PRODUCT}.clap"
+SRC_AAX="${ARTEFACTS}/AAX/${PRODUCT}.aaxplugin"
 
 copy_artifact() {
     local src="$1"
@@ -130,11 +137,12 @@ copy_artifact "$SRC_APP"  "$APP_DST"
 copy_artifact "$SRC_VST3" "$VST3_DST"
 copy_artifact "$SRC_AU"   "$AU_DST"
 copy_artifact "$SRC_CLAP" "$CLAP_DST"
+copy_artifact "$SRC_AAX"  "$AAX_DST"
 
 echo ""
 echo "═══════════════════════════════════════════════════"
 echo "  Distribution layout:"
-find "$DIST_DIR" -mindepth 2 -maxdepth 4 \( -name "*.app" -o -name "*.vst3" -o -name "*.component" -o -name "*.clap" \) \
+find "$DIST_DIR" -mindepth 2 -maxdepth 8 \( -name "*.app" -o -name "*.vst3" -o -name "*.component" -o -name "*.clap" -o -name "*.aaxplugin" \) \
     | sed "s|${SCRIPT_DIR}/||" | sort | sed 's/^/    /'
 
 # When a universal build was requested, confirm each main binary contains both slices.
@@ -148,7 +156,7 @@ if [[ "$UNIVERSAL" == true ]]; then
             archs=$(lipo -archs "$exe" 2>/dev/null || echo "unknown")
             printf "    %-45s  %s\n" "$(basename "$bundle")" "$archs"
         fi
-    done < <(find "$DIST_DIR" -mindepth 3 -maxdepth 5 \( -name "*.app" -o -name "*.vst3" -o -name "*.component" -o -name "*.clap" \))
+    done < <(find "$DIST_DIR" -mindepth 3 -maxdepth 8 \( -name "*.app" -o -name "*.vst3" -o -name "*.component" -o -name "*.clap" -o -name "*.aaxplugin" \))
 fi
 
 echo "═══════════════════════════════════════════════════"
@@ -181,12 +189,14 @@ if [[ "$BUILD_PKG" == true ]]; then
     ROOT_VST3="${PKG_STAGING}/root-vst3"
     ROOT_AU="${PKG_STAGING}/root-au"
     ROOT_CLAP="${PKG_STAGING}/root-clap"
+    ROOT_AAX="${PKG_STAGING}/root-aax"
     ROOT_SHARED="${PKG_STAGING}/root-shared"
 
     mkdir -p "${ROOT_STANDALONE}/Applications"
     mkdir -p "${ROOT_VST3}/Library/Audio/Plug-Ins/VST3"
     mkdir -p "${ROOT_AU}/Library/Audio/Plug-Ins/Components"
     mkdir -p "${ROOT_CLAP}/Library/Audio/Plug-Ins/CLAP"
+    mkdir -p "${ROOT_AAX}/Library/Application Support/Avid/Audio/Plug-Ins"
     mkdir -p "${ROOT_SHARED}/Library/Application Support/Soundshed/Guitar"
 
     # Copy a bundle into a pkg root, stripping Contents/Resources/ui/ so the
@@ -207,6 +217,7 @@ if [[ "$BUILD_PKG" == true ]]; then
     stage_stripped "${VST3_DST}/${PRODUCT}.vst3"    "${ROOT_VST3}/Library/Audio/Plug-Ins/VST3"
     stage_stripped "${AU_DST}/${PRODUCT}.component" "${ROOT_AU}/Library/Audio/Plug-Ins/Components"
     stage_stripped "${CLAP_DST}/${PRODUCT}.clap"    "${ROOT_CLAP}/Library/Audio/Plug-Ins/CLAP"
+    stage_stripped "${AAX_DST}/${PRODUCT}.aaxplugin" "${ROOT_AAX}/Library/Application Support/Avid/Audio/Plug-Ins"
 
     # Stage the shared UI resources (sourced from the standalone app — all
     # bundles carry identical copies so the source doesn't matter).
@@ -233,6 +244,7 @@ BUNDLE_UI_DIRS=(
     "/Library/Audio/Plug-Ins/VST3/Soundshed Guitar.vst3/Contents/Resources/ui"
     "/Library/Audio/Plug-Ins/Components/Soundshed Guitar.component/Contents/Resources/ui"
     "/Library/Audio/Plug-Ins/CLAP/Soundshed Guitar.clap/Contents/Resources/ui"
+    "/Library/Application Support/Avid/Audio/Plug-Ins/Soundshed Guitar.aaxplugin/Contents/Resources/ui"
 )
 
 for ui_dst in "${BUNDLE_UI_DIRS[@]}"; do
@@ -282,6 +294,14 @@ POSTINSTALL
         "${COMPONENTS_DIR}/clap.pkg"
     echo "  ✓ clap.pkg"
 
+    pkgbuild \
+        --root "$ROOT_AAX" \
+        --identifier "com.soundshed.guitar.aax" \
+        --version "$VERSION" \
+        --install-location "/" \
+        "${COMPONENTS_DIR}/aax.pkg"
+    echo "  ✓ aax.pkg"
+
     # shared.pkg is built LAST so its postinstall runs after all bundles exist.
     pkgbuild \
         --root "$ROOT_SHARED" \
@@ -307,6 +327,7 @@ POSTINSTALL
         <line choice="choice-vst3"/>
         <line choice="choice-au"/>
         <line choice="choice-clap"/>
+        <line choice="choice-aax"/>
         <line choice="choice-shared"/>
     </choices-outline>
 
@@ -331,6 +352,11 @@ POSTINSTALL
             selected="true">
         <pkg-ref id="com.soundshed.guitar.clap"/>
     </choice>
+    <choice id="choice-aax" title="AAX Plugin"
+            description="AAX plugin for Avid Pro Tools."
+            selected="true">
+        <pkg-ref id="com.soundshed.guitar.aax"/>
+    </choice>
 
     <!-- Shared resources: required, greyed-out in the UI.
          Installed last so its postinstall finds all selected bundles. -->
@@ -344,6 +370,7 @@ POSTINSTALL
     <pkg-ref id="com.soundshed.guitar.vst3">#vst3.pkg</pkg-ref>
     <pkg-ref id="com.soundshed.guitar.au">#au.pkg</pkg-ref>
     <pkg-ref id="com.soundshed.guitar.clap">#clap.pkg</pkg-ref>
+    <pkg-ref id="com.soundshed.guitar.aax">#aax.pkg</pkg-ref>
     <pkg-ref id="com.soundshed.guitar.shared">#shared.pkg</pkg-ref>
 </installer-gui-script>
 DISTXML
