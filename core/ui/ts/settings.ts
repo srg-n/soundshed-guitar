@@ -436,6 +436,7 @@ export function refreshSettingsView(): void {
   updateAdvancedTabVisibility();
   updateSessionStatus();
   updateSignalDiagnosticsView();
+  updateCurrentVersionDisplay();
   renderLibraryView();
   refreshSettingsUpdateBanner();
 }
@@ -1604,6 +1605,15 @@ function escapeHtml(value: string): string {
 
 function getSettingValue(key: string): AppSettingValue {
   return uiState.appSettings?.[key] ?? null;
+}
+
+/** Updates the current version display in the Software Updates section. */
+function updateCurrentVersionDisplay(): void {
+  const versionEl = document.getElementById("current-version-display");
+  if (!versionEl) return;
+
+  const version = uiState.environment?.version ?? "Unknown";
+  versionEl.textContent = version;
 }
 
 export function updateSettingsSessionStatus(): void {

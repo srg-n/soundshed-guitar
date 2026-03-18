@@ -6097,7 +6097,7 @@ void PluginController::HandleGetAppInfoRequest()
 {
     nlohmann::json msg;
     msg["type"] = "appInfo";
-    msg["version"] = "1.0.1"; // TODO: Get from build system
+    msg["version"] = GUITARFX_APP_VERSION;
     
 #if defined(_WIN32)
     msg["os"] = "Windows";
@@ -6304,8 +6304,27 @@ void PluginController::BroadcastState()
     metronome["clickTypes"] = std::move(clickTypes);
     state["metronome"] = metronome;
 
-    // Environment
-    state["environment"] = { {"standalone", mHost.IsStandalone()} };
+        // Environment
+        state["environment"] = {
+        {"standalone", mHost.IsStandalone()},
+        {"version", GUITARFX_APP_VERSION},
+    #if defined(_WIN32)
+        {"os", "Windows"},
+    #elif defined(__APPLE__)
+        {"os", "macOS"},
+    #elif defined(__linux__)
+        {"os", "Linux"},
+    #else
+        {"os", "Unknown"},
+    #endif
+    #if defined(__x86_64__) || defined(_M_X64)
+        {"cpu", "x64"},
+    #elif defined(__aarch64__) || defined(_M_ARM64)
+        {"cpu", "arm64"},
+    #else
+        {"cpu", "Unknown"},
+    #endif
+        };
 
     // Blend library
     state["blendLibrary"] = mBlendLibrary;

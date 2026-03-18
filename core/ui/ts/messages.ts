@@ -224,9 +224,9 @@ export function handleIncomingMessage(message: string): void {
       if (environment) {
         applyEnvironmentState({ 
           standalone: Boolean(environment.standalone),
-          version: environment.version,
-          os: environment.os,
-          cpu: environment.cpu
+          version: environment.version ?? uiState.environment?.version,
+          os: environment.os ?? uiState.environment?.os,
+          cpu: environment.cpu ?? uiState.environment?.cpu
         });
         refreshSettingsView();
       }
@@ -755,18 +755,13 @@ export function handleIncomingMessage(message: string): void {
     }
     case "appInfo": {
       const infoPayload = payload as { version?: string; os?: string; cpu?: string };
-      if (uiState.environment) {
-        uiState.environment.version = infoPayload.version;
-        uiState.environment.os = infoPayload.os;
-        uiState.environment.cpu = infoPayload.cpu;
-      } else {
-        uiState.environment = {
-          standalone: false,
-          version: infoPayload.version,
-          os: infoPayload.os,
-          cpu: infoPayload.cpu
-        };
-      }
+      applyEnvironmentState({
+        standalone: uiState.environment?.standalone ?? false,
+        version: infoPayload.version ?? uiState.environment?.version,
+        os: infoPayload.os ?? uiState.environment?.os,
+        cpu: infoPayload.cpu ?? uiState.environment?.cpu,
+      });
+      refreshSettingsView();
       break;
     }
     case "presetData": {

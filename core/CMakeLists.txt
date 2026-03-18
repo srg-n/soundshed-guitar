@@ -342,6 +342,19 @@ set(GUITARFX_CORE_SOURCES
 # ---------------------------------------------------------------------------
 # Library target
 # ---------------------------------------------------------------------------
+
+# Read version from parent directory's VERSION file (shared with JUCE builds)
+if(NOT DEFINED GUITARFX_APP_VERSION)
+    set(_VERSION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../juce/VERSION")
+    if(EXISTS "${_VERSION_FILE}")
+        file(STRINGS "${_VERSION_FILE}" GUITARFX_APP_VERSION)
+        string(STRIP "${GUITARFX_APP_VERSION}" GUITARFX_APP_VERSION)
+    else()
+        set(GUITARFX_APP_VERSION "1.0.0")
+    endif()
+    message(STATUS "Soundshed Guitar version: ${GUITARFX_APP_VERSION}")
+endif()
+
 add_library(SoundshedGuitarCore STATIC ${GUITARFX_CORE_SOURCES})
 
 # Build UI bundle from core/ui with npm when available.
@@ -385,6 +398,7 @@ target_include_directories(SoundshedGuitarCore
 target_compile_definitions(SoundshedGuitarCore
     PUBLIC
         NOMINMAX
+        GUITARFX_APP_VERSION="${GUITARFX_APP_VERSION}"
 )
 
 # Link dependencies
