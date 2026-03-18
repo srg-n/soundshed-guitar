@@ -14,19 +14,19 @@ class MainWindow : public juce::DocumentWindow
 {
 public:
     explicit MainWindow (const juce::String& appName,
-                        std::unique_ptr<PluginProcessorAdapter> processor)
+                         PluginProcessorAdapter& processor)
         : DocumentWindow (appName,
                          juce::Desktop::getInstance().getDefaultLookAndFeel()
                                                      .findColour (juce::ResizableWindow::backgroundColourId),
                          juce::DocumentWindow::allButtons),
-          mProcessor (std::move (processor))
+          mProcessor (processor)
     {
         setUsingNativeTitleBar (true);
         setResizable (true, true);
         setResizeLimits (1024, 768, 8192, 8192);
 
         // Create and embed the editor
-        if (auto* editor = mProcessor->createEditor())
+        if (auto* editor = mProcessor.createEditor())
         {
             setContentOwned (editor, true);
         }
@@ -40,10 +40,8 @@ public:
         juce::JUCEApplication::getInstance()->systemRequestedQuit();
     }
 
-    PluginProcessorAdapter& getProcessor() { return *mProcessor; }
-
 private:
-    std::unique_ptr<PluginProcessorAdapter> mProcessor;
+    PluginProcessorAdapter& mProcessor;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainWindow)
 };
 
@@ -61,14 +59,15 @@ public:
 
     void initialise (const juce::String&) override
     {
-        auto processor = std::make_unique<PluginProcessorAdapter>();
-        processor->setPlayHead (nullptr);
-        mMainWindow = std::make_unique<MainWindow> (getApplicationName(), std::move (processor));
+        mProcessor = std::make_unique<PluginProcessorAdapter>();
+        mProcessor->setPlayHead (nullptr);
+        mMainWindow = std::make_unique<MainWindow> (getApplicationName(), *mProcessor);
     }
 
     void shutdown() override
     {
         mMainWindow = nullptr;
+        mProcessor = nullptr;
     }
 
     void systemRequestedQuit() override
@@ -81,6 +80,7 @@ public:
     }
 
 private:
+    std::unique_ptr<PluginProcessorAdapter> mProcessor;
     std::unique_ptr<MainWindow> mMainWindow;
 };
 
