@@ -178,16 +178,9 @@ function selectNodeForPreset(preset: Preset, presetChanged: boolean): void {
     return;
   }
 
+  // Keep the current node only while rendering the same preset.
   const currentNode = selectedNodeId ? nodes.find((node) => node.id === selectedNodeId) : undefined;
-  if (currentNode) {
-    if (presetChanged) {
-      updateLastSelectedNode(currentNode);
-      if (nodeParamsPanelElement?.classList.contains("visible")) {
-        showNodeParamsPanel(currentNode, preset);
-      } else {
-        updateEffectVisualization(currentNode);
-      }
-    }
+  if (!presetChanged && currentNode) {
     return;
   }
 
@@ -197,7 +190,13 @@ function selectNodeForPreset(preset: Preset, presetChanged: boolean): void {
   };
 
   let replacement: GraphNode | undefined;
-  if (lastSelectedNodeType) {
+
+  // On first render of a newly selected preset, prefer the first optimized NAM amp node.
+  if (presetChanged) {
+    replacement = nodes.find((node) => node.type === EffectGuids.kAmpNamOptimized || node.type === "amp_nam_optimized");
+  }
+
+  if (!replacement && lastSelectedNodeType) {
     replacement = nodes.find((node) => node.type === lastSelectedNodeType && matchesCategory(node));
     if (!replacement) {
       replacement = nodes.find((node) => node.type === lastSelectedNodeType);
@@ -207,7 +206,7 @@ function selectNodeForPreset(preset: Preset, presetChanged: boolean): void {
     replacement = nodes.find((node) => getNodeCategory(node) === lastSelectedNodeCategory);
   }
   if (!replacement) {
-    replacement = nodes[0];
+    replacement = currentNode ?? nodes[0];
   }
 
   selectedNodeId = replacement?.id ?? null;
