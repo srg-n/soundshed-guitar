@@ -258,6 +258,17 @@
 			"problemMatcher": []
 		},
 		{
+			"label": "Build SoundshedGuitar (JUCE Linux) Release",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"${workspaceFolder}/build_linux.sh",
+				"--zip"
+			],
+			"group": "build",
+			"problemMatcher": []
+		},
+		{
 			"label": "Build SoundshedGuitar (iPlug2) Standalone+VST3 Release",
 			"dependsOn": [
 				"Build TypeScript"

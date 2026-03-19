@@ -150,6 +150,8 @@ if(NOT TARGET guitarfx_miniz)
         "${guitarfx_miniz_src_SOURCE_DIR}/miniz_tdef.c"
         "${guitarfx_miniz_src_SOURCE_DIR}/miniz_tinfl.c"
         "${guitarfx_miniz_src_SOURCE_DIR}/miniz_zip.c")
+    set_target_properties(guitarfx_miniz PROPERTIES
+        POSITION_INDEPENDENT_CODE ON)
     target_include_directories(guitarfx_miniz PUBLIC
         "${guitarfx_miniz_src_SOURCE_DIR}")
 endif()
@@ -211,6 +213,8 @@ if(GUITARFX_CORE_FETCH_DEPS AND NOT TARGET NeuralAmpModelerCore AND NOT TARGET n
     if(NOT TARGET NeuralAmpModelerCore AND DEFINED NeuralAmpModelerCore_SOURCE_DIR)
         file(GLOB NAM_SOURCES CONFIGURE_DEPENDS "${NeuralAmpModelerCore_SOURCE_DIR}/NAM/*.cpp")
         add_library(NeuralAmpModelerCore STATIC ${NAM_SOURCES})
+        set_target_properties(NeuralAmpModelerCore PROPERTIES
+            POSITION_INDEPENDENT_CODE ON)
         target_compile_features(NeuralAmpModelerCore PUBLIC cxx_std_17)
         guitarfx_apply_release_optimizations(NeuralAmpModelerCore)
         target_include_directories(NeuralAmpModelerCore PUBLIC
@@ -356,6 +360,8 @@ if(NOT DEFINED GUITARFX_APP_VERSION)
 endif()
 
 add_library(SoundshedGuitarCore STATIC ${GUITARFX_CORE_SOURCES})
+set_target_properties(SoundshedGuitarCore PROPERTIES
+    POSITION_INDEPENDENT_CODE ON)
 
 # Build UI bundle from core/ui with npm when available.
 # Uses a stamp file so the TS build only reruns when sources change.

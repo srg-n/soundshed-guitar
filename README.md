@@ -88,6 +88,23 @@ Edit `src/config/GuitarFXConfig.h` to customize plugin name and manufacturer. Re
 - **Tests**: Enable with `GUITARFX_ENABLE_TESTS=ON`, run via CTest
 - **Debug tools**: Enable with `GUITARFX_ENABLE_TOOLS=ON`
 
+## JUCE Linux Release Build
+
+The JUCE target can be built and staged on Linux with the root helper script:
+
+```bash
+bash ./build_linux.sh --zip
+```
+
+This configures `juce/builds-linux`, builds the JUCE Standalone, VST3, and CLAP targets, stages a Linux distribution layout in `linux-dist/`, and optionally creates a zip archive for distribution.
+
+If you need to match CI dependencies on Ubuntu, install the JUCE Linux packages used by the workflow first:
+
+```bash
+sudo apt-get update
+sudo apt-get install libasound2-dev libx11-dev libxinerama-dev libxext-dev libfreetype6-dev libwebkit2gtk-4.1-dev libglu1-mesa-dev ninja-build
+```
+
 ### Debug Tools
 
 **Offline Processing Test**

@@ -2033,7 +2033,7 @@ class ClapJuceWrapper : public clap::helpers::Plugin<
 
         void createEditor(juce::AudioProcessor &plugin)
         {
-            editor.reset(plugin.createEditorIfNeeded());
+            editor.reset(plugin.createEditorAndMakeActive());
 
             if (editor != nullptr)
             {
