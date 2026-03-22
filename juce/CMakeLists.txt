@@ -228,7 +228,7 @@ juce_add_plugin("${PROJECT_NAME}"
     # Change me!
     # A four-character plugin id
     # First character MUST be uppercase for AU formats
-    PLUGIN_MANUFACTURER_CODE SndG
+    PLUGIN_MANUFACTURER_CODE Shed
 
     # Change me!
     # A unique four-character plugin id

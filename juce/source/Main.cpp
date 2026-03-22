@@ -24,7 +24,7 @@ public:
         if (auto* processor = mPluginHolder != nullptr ? mPluginHolder->processor.get() : nullptr)
         {
             auto* editor = processor->hasEditor()
-                ? processor->createEditorAndMakeActive()
+                ? processor->createEditorIfNeeded()
                 : static_cast<juce::AudioProcessorEditor*> (new juce::GenericAudioProcessorEditor (*processor));
 
             if (editor != nullptr)
