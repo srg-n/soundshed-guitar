@@ -301,6 +301,10 @@ PluginEditor::PluginEditor (PluginProcessorAdapter& p)
         webView.goToURL (startUrl);
     }
 
+    setResizable (true, true);
+    setResizeLimits (800, 600, 8192, 8192);
+    setSize (1200, 900);
+
     // Start periodic idle timer (~60 fps) to match iPlug2's OnIdle() cadence.
     // This drives state broadcasts, DSP performance updates, tuner data, etc.
     startTimerHz (60);
