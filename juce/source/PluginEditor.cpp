@@ -116,6 +116,13 @@ bool SinglePageBrowser::pageAboutToLoad (const juce::String& newURL)
     if (newURL.startsWith ("data:"))
         return true;
 
+    // On macOS, WKWebView escalates iframe popup/new-window requests (e.g. from the
+    // YouTube embed in the Jam view) to main-frame navigations via
+    // createWebViewWithConfiguration, triggering pageAboutToLoad with a youtube.com URL.
+    // Silently cancel these so the embed keeps working without opening an external window.
+    if (newURL.contains ("youtube-nocookie.com") || newURL.contains ("youtube.com"))
+        return false;
+
     if (newURL.startsWith ("https://") || newURL.startsWith ("http://"))
     {
         juce::URL (newURL).launchInDefaultBrowser();
