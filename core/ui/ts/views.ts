@@ -6,6 +6,7 @@ import { updateSignalPathClipIndicators, renderSignalPathBar } from "./signalPat
 import { renderIcon } from "./iconAssets.js";
 import { EffectGuids } from "./effectGuids.js";
 import { EffectTypeRegistry } from "./presetV2.js";
+import { enhanceRangeInput } from "./controls.js";
 import type { GraphEdge, GraphNode, Preset, PresetFolder, SignalGraph, SignalLevelNodeMetrics } from "./types.js";
 
 const presetListElement = document.getElementById("preset-list");
@@ -168,6 +169,7 @@ function buildMixerMarkup(): string {
 function bindMixerControls(container: HTMLElement): void {
   const masterGainSlider = container.querySelector<HTMLInputElement>("#mixer-master-gain");
   if (masterGainSlider) {
+    enhanceRangeInput(masterGainSlider);
     masterGainSlider.addEventListener("input", () => {
       const val = parseFloat(masterGainSlider.value);
       setMasterGain(isFinite(val) ? val : 1.0);
@@ -198,6 +200,13 @@ function bindMixerControls(container: HTMLElement): void {
     const soloEl = row.querySelector<HTMLInputElement>(".mixer-solo");
     const viewBtn = row.querySelector<HTMLButtonElement>(".mixer-view-chain-btn");
     const removeBtn = row.querySelector<HTMLButtonElement>(".mixer-remove-btn");
+
+    if (mixEl) {
+      enhanceRangeInput(mixEl);
+    }
+    if (panEl) {
+      enhanceRangeInput(panEl);
+    }
 
     if (viewBtn) {
       viewBtn.addEventListener("click", () => {

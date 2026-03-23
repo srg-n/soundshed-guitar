@@ -427,7 +427,8 @@ export function refreshSettingsView(): void {
     apiKeyInput.placeholder = stored ? "API key stored" : "Enter your Tone3000 API key";
   }
   if (diagnosticsToggle) {
-    diagnosticsToggle.checked = Boolean(getSettingValue(DIAGNOSTICS_SETTING));
+    const diagnosticsEnabled = getSettingValue(DIAGNOSTICS_SETTING);
+    diagnosticsToggle.checked = diagnosticsEnabled === null ? true : Boolean(diagnosticsEnabled);
   }
   const interfaceEnabledSetting = getSettingValue(INTERFACE_CALIBRATION_ENABLED_SETTING);
   const interfaceEnabled = interfaceEnabledSetting === null ? true : Boolean(interfaceEnabledSetting);

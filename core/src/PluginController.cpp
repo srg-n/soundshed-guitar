@@ -1845,15 +1845,15 @@ void PluginController::RefreshMetronomeClickSamples(double sampleRate)
 
 void PluginController::ApplyDiagnosticsSettingsFromAppSettings()
 {
+    bool enabled = true;
     const auto it = mAppSettings.find(kSignalDiagnosticsSettingKey);
-    if (it == mAppSettings.end())
-        return;
-
-    bool enabled = false;
-    if (it->is_boolean())
-        enabled = it->get<bool>();
-    else if (it->is_number())
-        enabled = it->get<double>() != 0.0;
+    if (it != mAppSettings.end())
+    {
+        if (it->is_boolean())
+            enabled = it->get<bool>();
+        else if (it->is_number())
+            enabled = it->get<double>() != 0.0;
+    }
 
     mSignalDiagnosticsEnabled.store(enabled, std::memory_order_release);
     mPresetMixer.SetSignalDiagnosticsEnabled(enabled);
