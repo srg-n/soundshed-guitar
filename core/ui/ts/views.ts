@@ -1373,11 +1373,10 @@ function updateInputVuMeter(levels: import("./types.js").SignalLevelMetrics | nu
 
 export function updateSignalDiagnosticsView(): void {
   const diagnostics = uiState.signalDiagnostics;
-  const enabled = Boolean(uiState.appSettings?.["diagnostics.signalLevelsEnabled"]);
 
   const statusEl = document.getElementById("signal-diagnostics-status");
   if (statusEl) {
-    statusEl.textContent = enabled ? "Enabled" : "Disabled";
+    statusEl.textContent = "Enabled";
   }
 
   const inputPeak = document.getElementById("signal-input-peak");
@@ -1392,7 +1391,7 @@ export function updateSignalDiagnosticsView(): void {
 
   const listEl = document.getElementById("signal-diagnostics-list");
 
-  if (!enabled || !diagnostics) {
+  if (!diagnostics) {
     if (inputPeak) inputPeak.textContent = "—";
     if (inputRms) inputRms.textContent = "—";
     if (inputHeadroom) inputHeadroom.textContent = "—";

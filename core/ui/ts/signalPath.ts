@@ -719,8 +719,7 @@ function getSelectedNodeDiagnostics(): import("./types.js").SignalLevelMetrics |
   }
 
   const diagnostics = uiState.signalDiagnostics;
-  const enabled = Boolean(uiState.appSettings?.["diagnostics.signalLevelsEnabled"]);
-  if (!enabled || !diagnostics) {
+  if (!diagnostics) {
     return null;
   }
 
@@ -758,9 +757,7 @@ export function updateSelectedNodePeakMeter(): void {
 
   if (!metrics || !Number.isFinite(metrics.peakDbfs)) {
     rail.classList.add("is-inactive");
-    rail.title = Boolean(uiState.appSettings?.["diagnostics.signalLevelsEnabled"])
-      ? "No diagnostics data for this node"
-      : "Diagnostics disabled";
+    rail.title = "No diagnostics data for this node";
     meter.style.setProperty("--meter-fill", "0%");
     return;
   }
@@ -1166,14 +1163,13 @@ export function updateSignalPathClipIndicators(): void {
   }
 
   const diagnostics = uiState.signalDiagnostics;
-  const enabled = Boolean(uiState.appSettings?.["diagnostics.signalLevelsEnabled"]);
 
   // Build a map of nodeId → clipped for all nodes in the diagnostics snapshot.
   // No preset-ID filtering here: effect nodes use unique UUIDs so there is no
   // collision across preset instances, and __input__/__output__ are resolved via
   // dedicated diagnostics.input / diagnostics.output fields below.
   const nodeClipMap = new Map<string, boolean>();
-  if (enabled && diagnostics) {
+  if (diagnostics) {
     diagnostics.nodes.forEach((node) => {
       if (typeof node.nodeId === "string") {
         nodeClipMap.set(node.nodeId, Boolean(node.levels?.clipped));
