@@ -98,6 +98,12 @@ bash ./build_linux.sh --zip
 
 This configures `juce/builds-linux`, builds the JUCE Standalone, VST3, and CLAP targets, stages a Linux distribution layout in `linux-dist/`, and optionally creates a zip archive for distribution.
 
+To include the LV2 bundle in the Linux build and staging layout, enable it explicitly:
+
+```bash
+bash ./build_linux.sh --lv2 --zip
+```
+
 If you need to match CI dependencies on Ubuntu, install the JUCE Linux packages used by the workflow first:
 
 ```bash

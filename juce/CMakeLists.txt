@@ -25,8 +25,15 @@ set(COMPANY_NAME "Soundshed")
 set(BUNDLE_ID "com.soundshed.guitar")
 
 # Change me! Set the plugin formats you want built
-# Valid choices: AAX Unity VST VST3 AU AUv3 Standalone
+# Valid choices: AAX Unity VST VST3 AU AUv3 Standalone LV2
 set(FORMATS Standalone AU AAX VST3)
+option(GUITARFX_ENABLE_LV2 "Build the LV2 plugin target on Linux" OFF)
+
+if(LINUX AND GUITARFX_ENABLE_LV2)
+    list(APPEND FORMATS LV2)
+endif()
+
+set(GUITARFX_LV2_URI "urn:soundshed:guitar" CACHE STRING "Stable LV2 URI for Soundshed Guitar")
 
 set(GUITARFX_VST3_AUTO_MANIFEST TRUE)
 
@@ -234,6 +241,7 @@ juce_add_plugin("${PROJECT_NAME}"
     # A unique four-character plugin id
     # Note: this must have at least one upper-case character
     PLUGIN_CODE SND1
+    LV2URI "${GUITARFX_LV2_URI}"
     FORMATS "${FORMATS}"
     VST3_AUTO_MANIFEST ${GUITARFX_VST3_AUTO_MANIFEST}
     NEEDS_WEB_BROWSER TRUE
@@ -391,6 +399,7 @@ soundshed_copy_ui_resources(${PROJECT_NAME}_Standalone)
 soundshed_copy_ui_resources(${PROJECT_NAME}_VST3)
 soundshed_copy_ui_resources(${PROJECT_NAME}_AU)
 soundshed_copy_ui_resources(${PROJECT_NAME}_CLAP)
+soundshed_copy_ui_resources(${PROJECT_NAME}_LV2)
 
 # Propagate IPP availability to the JUCE shared code and core DSP library.
 if(GUITARFX_IPP_AVAILABLE)

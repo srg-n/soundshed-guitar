@@ -5,6 +5,7 @@
 #   --skip-ts          Skip the TypeScript/UI build step
 #   --skip-configure   Skip the CMake configure step
 #   --skip-build       Skip CMake build step (only re-stage artifacts)
+#   --lv2              Also build and stage the LV2 plugin bundle
 #   --zip              After staging, create a .zip archive of the distribution
 #   --dist-dir <p>     Override the output staging directory (default: linux-dist)
 #   --build-dir <p>    Override the CMake build directory (default: juce/builds-linux)
@@ -22,7 +23,8 @@ fi
 SKIP_TS=false
 SKIP_CONFIGURE=false
 SKIP_BUILD=false
-BUILD_ZIP=false
+BUILD_LV2=true
+BUILD_ZIP=true
 DIST_DIR="${SCRIPT_DIR}/linux-dist"
 BUILD_DIR="${SCRIPT_DIR}/juce/builds-linux"
 PRODUCT="Soundshed Guitar"
@@ -36,6 +38,7 @@ while [[ $# -gt 0 ]]; do
         --skip-ts)        SKIP_TS=true ;;
         --skip-configure) SKIP_CONFIGURE=true ;;
         --skip-build)     SKIP_BUILD=true ;;
+        --lv2)            BUILD_LV2=true ;;
         --zip)            BUILD_ZIP=true ;;
         --dist-dir)       DIST_DIR="$2"; shift ;;
         --build-dir)      BUILD_DIR="$2"; shift ;;
@@ -49,6 +52,7 @@ ARTEFACTS_FALLBACK="${BUILD_DIR}/SoundshedGuitar_artefacts"
 APP_DST="${DIST_DIR}/opt/Soundshed/${PRODUCT}"
 VST3_DST="${DIST_DIR}/usr/lib/vst3"
 CLAP_DST="${DIST_DIR}/usr/lib/clap"
+LV2_DST="${DIST_DIR}/usr/lib/lv2"
 
 choose_generator_args() {
     if [[ -n "${CMAKE_GENERATOR:-}" ]]; then
@@ -73,6 +77,10 @@ copy_artifact() {
 find_first_match() {
     local search_dir="$1"
     local pattern="$2"
+
+    if [[ ! -d "$search_dir" ]]; then
+        return 0
+    fi
 
     find "$search_dir" -mindepth 1 -maxdepth 1 -name "$pattern" | sort | head -n 1
 }
@@ -149,6 +157,7 @@ echo "════════════════════════�
 echo "  Soundshed Guitar — Linux Distribution Build"
 echo "  Build dir: ${BUILD_DIR}"
 echo "  Dist dir: ${DIST_DIR}"
+echo "  LV2 plugin: ${BUILD_LV2}"
 [[ "$BUILD_ZIP" == true ]] && echo "  Zip archive: yes"
 echo "═══════════════════════════════════════════════════"
 
@@ -182,6 +191,7 @@ if [[ "$SKIP_CONFIGURE" == false ]]; then
     mapfile -t generator_args < <(choose_generator_args)
     cmake -Wno-dev -S "${SCRIPT_DIR}/juce" -B "$BUILD_DIR" "${generator_args[@]}" \
         -DCMAKE_BUILD_TYPE=Release \
+        -DGUITARFX_ENABLE_LV2=$([[ "$BUILD_LV2" == true ]] && printf 'ON' || printf 'OFF') \
         -DCMAKE_SUPPRESS_DEVELOPER_WARNINGS=ON
     echo "  ✓ Configure complete"
 fi
@@ -199,8 +209,14 @@ if [[ "$SKIP_BUILD" == false ]]; then
     echo "▶ Building CLAP…"
     cmake --build "$BUILD_DIR" --target SoundshedGuitar_CLAP --parallel
 
+    if [[ "$BUILD_LV2" == true ]]; then
+        echo ""
+        echo "▶ Building LV2…"
+        cmake --build "$BUILD_DIR" --target SoundshedGuitar_LV2 --parallel
+    fi
+
     echo ""
-    echo "  ✓ All Linux targets built"
+    echo "  ✓ All requested Linux targets built"
 fi
 
 echo ""
@@ -214,6 +230,7 @@ fi
 STANDALONE_SRC_DIR="${ARTEFACTS_DIR}/Standalone"
 VST3_SRC="$(find_first_match "${ARTEFACTS_DIR}/VST3" "*.vst3")"
 CLAP_SRC="$(find_first_match "${ARTEFACTS_DIR}/CLAP" "*.clap")"
+LV2_SRC="$(find_first_match "${ARTEFACTS_DIR}/LV2" "*.lv2")"
 
 if [[ ! -d "$STANDALONE_SRC_DIR" ]]; then
     echo "  ✗ Standalone artifacts not found at ${STANDALONE_SRC_DIR#"$SCRIPT_DIR/"}" >&2
@@ -224,18 +241,26 @@ fi
 rm -rf "$DIST_DIR"
 mkdir -p "$APP_DST" "$VST3_DST" "$CLAP_DST"
 
+if [[ "$BUILD_LV2" == true ]]; then
+    mkdir -p "$LV2_DST"
+fi
+
 cp -R "${STANDALONE_SRC_DIR}/." "$APP_DST/"
 echo "  ✓ Standalone payload → ${APP_DST#"$SCRIPT_DIR/"}"
 
 copy_artifact "$VST3_SRC" "$VST3_DST"
 copy_artifact "$CLAP_SRC" "$CLAP_DST"
 
+if [[ "$BUILD_LV2" == true ]]; then
+    copy_artifact "$LV2_SRC" "$LV2_DST"
+fi
+
 prune_staged_ui_payloads
 
 echo ""
 echo "═══════════════════════════════════════════════════"
 echo "  Distribution layout:"
-find "$DIST_DIR" -mindepth 2 -maxdepth 8 \( -name "*.vst3" -o -name "*.clap" -o -type f -name "$PRODUCT" \) \
+find "$DIST_DIR" -mindepth 2 -maxdepth 8 \( -name "*.vst3" -o -name "*.clap" -o -name "*.lv2" -o -type f -name "$PRODUCT" \) \
     | sed "s|${SCRIPT_DIR}/||" | sort | sed 's/^/    /'
 echo "═══════════════════════════════════════════════════"
 
