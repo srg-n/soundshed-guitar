@@ -94,6 +94,13 @@ function(guitarfx_apply_release_optimizations target_name)
     endif()
 endfunction()
 
+function(guitarfx_disable_linux_gnu_unique target_name)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_compile_options(${target_name} PRIVATE
+            $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-gnu-unique>)
+    endif()
+endfunction()
+
 # ---------------------------------------------------------------------------
 # Dependencies
 # ---------------------------------------------------------------------------
@@ -225,6 +232,7 @@ if(GUITARFX_CORE_FETCH_DEPS AND NOT TARGET NeuralAmpModelerCore AND NOT TARGET n
         add_library(NeuralAmpModelerCore STATIC ${NAM_SOURCES})
         set_target_properties(NeuralAmpModelerCore PROPERTIES
             POSITION_INDEPENDENT_CODE ON)
+        guitarfx_disable_linux_gnu_unique(NeuralAmpModelerCore)
         target_compile_features(NeuralAmpModelerCore PUBLIC cxx_std_17)
         guitarfx_apply_release_optimizations(NeuralAmpModelerCore)
         target_include_directories(NeuralAmpModelerCore PUBLIC
@@ -372,6 +380,7 @@ endif()
 add_library(SoundshedGuitarCore STATIC ${GUITARFX_CORE_SOURCES})
 set_target_properties(SoundshedGuitarCore PROPERTIES
     POSITION_INDEPENDENT_CODE ON)
+guitarfx_disable_linux_gnu_unique(SoundshedGuitarCore)
 
 # Build UI bundle from core/ui with npm when available.
 # Uses a stamp file so the TS build only reruns when sources change.
