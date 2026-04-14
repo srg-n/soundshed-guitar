@@ -69,8 +69,6 @@ The UI is a web-based single-page application (SPA) hosted in a native WebView. 
 | `tunerStopped` | `{}` | Tuner deactivated |
 | `modelLoaded` | `{path}` | NAM model loaded |
 | `irLoaded` | `{path}` | IR cab loaded |
-| `namCalibrationStatus` | `{status, ...}` | NAM calibration progress |
-| `namCalibrationApplied` | `{...}` | NAM calibration applied |
 | `resourceImported` | `{...}` | Remote resource imported |
 | `resourceImportFailed` | `{message}` | Remote resource import failed |
 | `globalChain` | `{config}` | Global signal chain configuration |

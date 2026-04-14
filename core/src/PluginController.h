@@ -27,9 +27,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
-#include <deque>
 #include <filesystem>
-#include <future>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -160,30 +158,6 @@ public:
     };
 
     bool StartSignalPathTest(double frequencyHz = 440.0, double durationSeconds = 1.0);
-
-    // ── NAM calibration ────────────────────────────────────────────
-    struct NamCalibrationData
-    {
-        double inputLevelDb = 0.0;
-        double outputLevelDb = 0.0;
-    };
-
-    struct NamCalibrationJob
-    {
-        std::string hash;
-        std::filesystem::path path;
-        std::string resourceType;
-        std::string resourceId;
-    };
-
-    struct NamCalibrationResult
-    {
-        NamCalibrationJob job;
-        bool success = false;
-        std::string error;
-        NamCalibrationData data;
-    };
-
 private:
     friend class MessageDispatcher;
 
@@ -212,7 +186,6 @@ private:
     void HandleUpdateSignalPathNodeBypassRequest(const nlohmann::json& payload);
     void HandleUpdateNodeResourceRequest(const nlohmann::json& payload);
     void HandleBrowseNodeResourceRequest(const nlohmann::json& payload);
-    void HandleRerunNamCalibrationRequest(const nlohmann::json& payload);
     void HandleAddSignalPathNodeRequest(const nlohmann::json& payload);
     void HandleSplitSignalPathEdgeRequest(const nlohmann::json& payload);
     void HandleCollapseSignalPathSplitRequest(const nlohmann::json& payload);
@@ -338,16 +311,9 @@ private:
                                      const std::string& resourceType,
                                      const std::filesystem::path& outputPath);
 
-    // NAM calibration
-    void QueueNamCalibrationForNode(const std::string& nodeId, const ResourceRef& ref, bool force = false);
-    void ProcessNamCalibrationQueue();
-    void ApplyNamCalibrationResult(const NamCalibrationResult& result);
-    [[nodiscard]] std::optional<NamCalibrationData> GetNamCalibrationFromCache(const std::string& hash) const;
-    void StoreNamCalibrationInCache(const std::string& hash, const NamCalibrationData& data);
-    void RemoveNamCalibrationFromCache(const std::string& hash);
-    void ApplyNamCalibrationToNode(const std::string& nodeId, const std::string& hash, const NamCalibrationData& data);
+    // NAM level-state normalization
+    void ResetNamNodeLevelState(const std::string& nodeId);
     void ClearNamCalibrationParams(GraphNode& node) const;
-    void SendNamCalibrationStatus(const std::string& nodeId, const std::string& status);
 
     // Settings persistence
     void SaveAppSettings() const;
@@ -446,14 +412,6 @@ private:
     std::atomic<bool> mSignalTestResultPending{false};
     SignalTestRuntimeState mSignalTestState;
     SignalPathTestResult mSignalTestResult;
-
-    // NAM calibration
-    std::deque<NamCalibrationJob> mNamCalibrationQueue;
-    std::optional<std::future<NamCalibrationResult>> mNamCalibrationFuture;
-    std::optional<NamCalibrationJob> mNamCalibrationActiveJob;
-    std::unordered_map<std::string, std::vector<std::string>> mNamCalibrationWaiters;
-    std::unordered_set<std::string> mNamCalibrationInFlight;
-    mutable std::mutex mNamCalibrationMutex;
 
     // Tuner state
     std::atomic<bool> mTunerActive{false};

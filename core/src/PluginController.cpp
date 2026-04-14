@@ -35,7 +35,6 @@
 #include <deque>
 #include <fstream>
 #include <functional>
-#include <future>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -80,11 +79,6 @@ namespace
     constexpr int kFactoryArchiveStateSchemaVersion = 1;
     constexpr const char* kFactoryArchiveLoadingEnabledSettingKey = "factoryPresets.archiveLoadingEnabled";
 
-    // ── NAM calibration constants ───────────────────────────────────
-
-    constexpr const char* kNamCalibrationFileName = "calibration/models/index.json";
-    constexpr double kNamCalibrationDurationSeconds = 1.0;
-    constexpr double kNamCalibrationFrequencyHz = 1000.0;
     constexpr double kMinLinear = 1e-6;
 
     // ── Metronome constants ─────────────────────────────────────────
@@ -160,72 +154,6 @@ namespace
         oss << std::put_time(&localTime, "%Y-%m-%d %H:%M:%S");
         return oss.str();
         }
-
-    std::optional<guitarfx::PluginController::NamCalibrationData>
-    RunNamCalibration(const std::filesystem::path& modelPath,
-                      double sampleRate, int blockSize, std::string& error)
-    {
-        try
-        {
-            auto model = ::nam::get_dsp(modelPath);
-            if (!model) { error = "Failed to load NAM model"; return std::nullopt; }
-
-            blockSize = std::max(64, blockSize);
-            model->Reset(sampleRate, blockSize);
-
-            constexpr double kTwoPi = 6.28318530717958647692;
-            const int totalSamples = std::max(1, static_cast<int>(sampleRate * kNamCalibrationDurationSeconds));
-            std::vector<NAM_SAMPLE> input(static_cast<size_t>(blockSize));
-            std::vector<NAM_SAMPLE> output(static_cast<size_t>(blockSize));
-
-            double inputSumSquares = 0.0, outputSumSquares = 0.0, phase = 0.0;
-            const double phaseIncrement = (kTwoPi * kNamCalibrationFrequencyHz) / sampleRate;
-
-            int processed = 0;
-            while (processed < totalSamples)
-            {
-                const int frames = std::min(blockSize, totalSamples - processed);
-                for (int i = 0; i < frames; ++i)
-                {
-                    const double sample = std::sin(phase);
-                    phase += phaseIncrement;
-                    if (phase >= kTwoPi) phase -= kTwoPi;
-                    input[static_cast<size_t>(i)] = static_cast<NAM_SAMPLE>(sample);
-                    inputSumSquares += sample * sample;
-                }
-
-                NAM_SAMPLE* inputPtr = input.data();
-                NAM_SAMPLE* outputPtr = output.data();
-                NAM_SAMPLE* inputPtrs[1] = { inputPtr };
-                NAM_SAMPLE* outputPtrs[1] = { outputPtr };
-                model->process(inputPtrs, outputPtrs, frames);
-
-                for (int i = 0; i < frames; ++i)
-                {
-                    const double out = static_cast<double>(output[static_cast<size_t>(i)]);
-                    outputSumSquares += out * out;
-                }
-                processed += frames;
-            }
-
-            if (processed <= 0) { error = "Calibration produced no samples"; return std::nullopt; }
-
-            const double inputRms = std::sqrt(inputSumSquares / static_cast<double>(processed));
-            const double outputRms = std::sqrt(outputSumSquares / static_cast<double>(processed));
-            if (!std::isfinite(inputRms) || !std::isfinite(outputRms) || outputRms <= kMinLinear)
-            {
-                error = "Calibration produced invalid RMS";
-                return std::nullopt;
-            }
-
-            guitarfx::PluginController::NamCalibrationData data;
-            data.inputLevelDb = ToDbFS(inputRms);
-            data.outputLevelDb = ToDbFS(outputRms);
-            return data;
-        }
-        catch (const std::exception& ex) { error = ex.what(); return std::nullopt; }
-        catch (...) { error = "Unknown calibration error"; return std::nullopt; }
-    }
 
     double LinearFromDb(double db)
     {
@@ -2136,18 +2064,6 @@ void PluginController::OnIdle()
         BroadcastState();
     }
 
-    // Process NAM calibration results
-    ProcessNamCalibrationQueue();
-
-    if (mNamCalibrationFuture && mNamCalibrationFuture->wait_for(std::chrono::seconds(0)) == std::future_status::ready)
-    {
-        const auto result = mNamCalibrationFuture->get();
-        mNamCalibrationFuture.reset();
-        mNamCalibrationActiveJob.reset();
-        ApplyNamCalibrationResult(result);
-        ProcessNamCalibrationQueue();
-    }
-
     // Signal test result
     if (mSignalTestResultPending.load(std::memory_order_acquire))
     {
@@ -3237,7 +3153,7 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
             && !target->resources.empty()
             && target->resources.front().IsValid())
         {
-            QueueNamCalibrationForNode(nodeId, target->resources.front());
+            ResetNamNodeLevelState(nodeId);
         }
         return;
     }
@@ -3267,7 +3183,7 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
                 && !node->resources.empty()
                 && node->resources.front().IsValid())
             {
-                QueueNamCalibrationForNode(node->id, node->resources.front());
+                ResetNamNodeLevelState(node->id);
             }
             return;
         }
@@ -3278,10 +3194,10 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
     if (mActivePreset)
     {
         auto* node = mActivePreset->graph.FindNode(nodeId);
-        if (node && (node->type == EffectGuids::kAmpNam || node->type == EffectGuids::kAmpNamOptimized)
+        if (node && IsNamEffectType(node->type)
             && !node->resources.empty() && node->resources.front().IsValid())
         {
-            QueueNamCalibrationForNode(nodeId, node->resources.front());
+            ResetNamNodeLevelState(nodeId);
         }
     }
 }
@@ -3315,17 +3231,6 @@ void PluginController::HandleBrowseNodeResourceRequest(const nlohmann::json& pay
                 HandleSaveLocalLibraryResourceRequest(payload);
             }
         });
-}
-
-void PluginController::HandleRerunNamCalibrationRequest(const nlohmann::json& payload)
-{
-    std::string nodeId = payload.value("nodeId", "");
-    if (nodeId.empty() || !mActivePreset) return;
-
-    auto* node = mActivePreset->graph.FindNode(nodeId);
-    if (!node || node->resources.empty()) return;
-
-    QueueNamCalibrationForNode(nodeId, node->resources[0], true);
 }
 
 void PluginController::HandleAddSignalPathNodeRequest(const nlohmann::json& payload)
@@ -6406,6 +6311,7 @@ void PluginController::ApplyPreset(const Preset& preset)
         if (!IsNamEffectType(node.type))
             continue;
 
+        node.config.erase("modelHash");
         ClearNamCalibrationParams(node);
         if (!node.params.count("autoLevelInput"))
             node.params["autoLevelInput"] = 1.0;
@@ -6469,13 +6375,6 @@ void PluginController::ApplyPreset(const Preset& preset)
             mPendingTunerData.detected = result.detected;
             mTunerDataPending.store(true, std::memory_order_release);
         });
-
-    // Queue NAM calibrations for nodes that need them
-    for (const auto& node : normalizedPreset.graph.nodes)
-    {
-        if (!node.resources.empty() && IsNamEffectType(node.type))
-            QueueNamCalibrationForNode(node.id, node.resources[0]);
-    }
 
     mHost.NotifyStateChanged();
 }
@@ -6807,28 +6706,21 @@ bool PluginController::ExtractFirstResourceFromZip(const std::vector<std::uint8_
     return false;
 }
 
-// ── NAM calibration ────────────────────────────────────────────────
+// ── NAM level-state normalization ─────────────────────────────────
 
-void PluginController::QueueNamCalibrationForNode(const std::string& nodeId,
-                                                  const ResourceRef& ref,
-                                                  bool force)
+void PluginController::ResetNamNodeLevelState(const std::string& nodeId)
 {
-    (void)ref;
-    (void)force;
-    if (nodeId.empty()) return;
+    if (nodeId.empty() || !mActivePreset) return;
 
-    if (mActivePreset)
-    {
-        if (auto* node = mActivePreset->graph.FindNode(nodeId))
-        {
-            node->config.erase("modelHash");
-            ClearNamCalibrationParams(*node);
-            if (!node->params.count("autoLevelInput")) node->params["autoLevelInput"] = 1.0;
-            if (!node->params.count("autoLevelOutput")) node->params["autoLevelOutput"] = 1.0;
-            mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
-            mPendingStateBroadcast = true;
-        }
-    }
+    auto* node = mActivePreset->graph.FindNode(nodeId);
+    if (!node || !IsNamEffectType(node->type)) return;
+
+    node->config.erase("modelHash");
+    ClearNamCalibrationParams(*node);
+    if (!node->params.count("autoLevelInput")) node->params["autoLevelInput"] = 1.0;
+    if (!node->params.count("autoLevelOutput")) node->params["autoLevelOutput"] = 1.0;
+    mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+    mPendingStateBroadcast = true;
 
     if (!mActivePresetId.empty())
     {
@@ -6838,218 +6730,12 @@ void PluginController::QueueNamCalibrationForNode(const std::string& nodeId,
         mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "autoLevelInput", 1.0);
         mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "autoLevelOutput", 1.0);
     }
-
-    SendNamCalibrationStatus(nodeId, "ready");
-}
-
-void PluginController::ProcessNamCalibrationQueue()
-{
-    if (mNamCalibrationFuture && mNamCalibrationFuture->wait_for(std::chrono::seconds(0)) != std::future_status::ready)
-        return;
-
-    NamCalibrationJob job;
-    {
-        std::lock_guard<std::mutex> lock(mNamCalibrationMutex);
-        if (mNamCalibrationFuture || mNamCalibrationQueue.empty()) return;
-
-        job = mNamCalibrationQueue.front();
-        mNamCalibrationQueue.pop_front();
-        mNamCalibrationActiveJob = job;
-    }
-
-    const double sampleRate = std::max(1.0, mHost.GetSampleRate());
-    const int blockSize = std::max(64, mHost.GetBlockSize());
-    mNamCalibrationFuture = std::async(std::launch::async, [job, sampleRate, blockSize]() {
-        NamCalibrationResult result;
-        result.job = job;
-        std::string error;
-        if (auto data = RunNamCalibration(job.path, sampleRate, blockSize, error))
-        {
-            result.success = true;
-            result.data = *data;
-        }
-        else
-        {
-            result.success = false;
-            result.error = error;
-        }
-        return result;
-    });
-}
-
-void PluginController::ApplyNamCalibrationResult(const NamCalibrationResult& result)
-{
-    const std::string& hash = result.job.hash;
-
-    std::vector<std::string> waiters;
-    {
-        std::lock_guard<std::mutex> lock(mNamCalibrationMutex);
-        if (auto it = mNamCalibrationWaiters.find(hash); it != mNamCalibrationWaiters.end())
-        {
-            waiters = std::move(it->second);
-            mNamCalibrationWaiters.erase(it);
-        }
-        mNamCalibrationInFlight.erase(hash);
-    }
-
-    if (!result.success)
-    {
-        AppendSessionLog("NAM calibration failed: " + result.job.hash +
-                         (result.error.empty() ? "" : " (" + result.error + ")"));
-        for (const auto& nodeId : waiters)
-            SendNamCalibrationStatus(nodeId, "failed");
-        return;
-    }
-
-    AppendSessionLog("NAM calibration complete: " + result.job.hash);
-    StoreNamCalibrationInCache(hash, result.data);
-
-    if (!result.job.resourceType.empty() && !result.job.resourceId.empty())
-    {
-        if (auto resource = mResourceLibrary.LookupResource(result.job.resourceType, result.job.resourceId))
-        {
-            auto updated = *resource;
-            updated.metadata["calibration.inputLevelDb"] = std::to_string(result.data.inputLevelDb);
-            updated.metadata["calibration.outputLevelDb"] = std::to_string(result.data.outputLevelDb);
-            mResourceLibrary.UpdateResource(result.job.resourceType, result.job.resourceId, updated);
-        }
-    }
-
-    for (const auto& nodeId : waiters)
-    {
-        ApplyNamCalibrationToNode(nodeId, hash, result.data);
-        SendNamCalibrationStatus(nodeId, "ready");
-    }
-}
-
-std::optional<PluginController::NamCalibrationData> PluginController::GetNamCalibrationFromCache(const std::string& hash) const
-{
-    if (hash.empty()) return std::nullopt;
-
-    const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
-    const auto filePath = settingsDir / kNamCalibrationFileName;
-    if (!std::filesystem::exists(filePath)) return std::nullopt;
-
-    nlohmann::json root;
-    std::ifstream input(filePath);
-    if (!input) return std::nullopt;
-    try { input >> root; } catch (...) { return std::nullopt; }
-
-    if (!root.is_object() || !root.contains("models") || !root["models"].is_object())
-        return std::nullopt;
-
-    const auto& models = root["models"];
-    if (!models.contains(hash) || !models[hash].is_object()) return std::nullopt;
-
-    const auto& entry = models[hash];
-    NamCalibrationData data;
-    data.inputLevelDb = entry.value("inputLevelDb", 0.0);
-    data.outputLevelDb = entry.value("outputLevelDb", 0.0);
-    return data;
-}
-
-void PluginController::StoreNamCalibrationInCache(const std::string& hash, const NamCalibrationData& data)
-{
-    if (hash.empty()) return;
-
-    const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
-    const auto filePath = settingsDir / kNamCalibrationFileName;
-    [[maybe_unused]] const auto ensuredCalibrationDir = mFileSystem.EnsureDirectory(filePath.parent_path());
-
-    nlohmann::json root = nlohmann::json::object();
-    if (std::filesystem::exists(filePath))
-    {
-        std::ifstream input(filePath);
-        if (input) { try { input >> root; } catch (...) { root = nlohmann::json::object(); } }
-    }
-    if (!root.is_object()) root = nlohmann::json::object();
-    if (!root.contains("models") || !root["models"].is_object()) root["models"] = nlohmann::json::object();
-
-    root["models"][hash] = {
-        {"hash", hash},
-        {"inputLevelDb", data.inputLevelDb},
-        {"outputLevelDb", data.outputLevelDb}
-    };
-
-    std::ofstream output(filePath);
-    if (output) output << root.dump(2);
-}
-
-void PluginController::RemoveNamCalibrationFromCache(const std::string& hash)
-{
-    if (hash.empty()) return;
-
-    const auto settingsDir = mFileSystem.ResolveSettingsDirectory();
-    const auto filePath = settingsDir / kNamCalibrationFileName;
-    if (!std::filesystem::exists(filePath)) return;
-
-    nlohmann::json root;
-    std::ifstream input(filePath);
-    if (!input) return;
-    try { input >> root; } catch (...) { return; }
-
-    if (!root.is_object() || !root.contains("models") || !root["models"].is_object()) return;
-
-    auto& models = root["models"];
-    if (models.contains(hash))
-    {
-        models.erase(hash);
-        std::ofstream output(filePath);
-        if (output) output << root.dump(2);
-    }
-}
-
-void PluginController::ApplyNamCalibrationToNode(const std::string& nodeId, const std::string& hash, const NamCalibrationData& data)
-{
-    if (!mActivePreset) return;
-
-    GraphNode* node = mActivePreset->graph.FindNode(nodeId);
-    if (!node) return;
-
-    const auto hashIt = node->config.find("modelHash");
-    if (hashIt != node->config.end() && hashIt->second != hash) return;
-
-    node->params["calibrationInputLevel"] = data.inputLevelDb;
-    node->params["calibrationOutputLevel"] = data.outputLevelDb;
-    if (!node->params.count("autoLevelInput")) node->params["autoLevelInput"] = 1.0;
-    if (!node->params.count("autoLevelOutput")) node->params["autoLevelOutput"] = 1.0;
-
-    mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
-
-    if (!mActivePresetId.empty())
-    {
-        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "calibrationInputLevel", data.inputLevelDb);
-        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "calibrationOutputLevel", data.outputLevelDb);
-        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "autoLevelInput", node->params["autoLevelInput"]);
-        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "autoLevelOutput", node->params["autoLevelOutput"]);
-    }
-
-    nlohmann::json message;
-    message["type"] = "namCalibrationApplied";
-    message["nodeId"] = nodeId;
-    message["params"] = {
-        {"calibrationInputLevel", data.inputLevelDb},
-        {"calibrationOutputLevel", data.outputLevelDb},
-        {"autoLevelInput", node->params["autoLevelInput"]},
-        {"autoLevelOutput", node->params["autoLevelOutput"]}
-    };
-    SendMessageToUI(message.dump());
-    mPendingStateBroadcast = true;
 }
 
 void PluginController::ClearNamCalibrationParams(GraphNode& node) const
 {
     node.params.erase("calibrationInputLevel");
     node.params.erase("calibrationOutputLevel");
-}
-
-void PluginController::SendNamCalibrationStatus(const std::string& nodeId, const std::string& status)
-{
-    nlohmann::json msg;
-    msg["type"] = "namCalibrationStatus";
-    msg["nodeId"] = nodeId;
-    msg["status"] = status;
-    SendMessageToUI(msg.dump());
 }
 
 // ── Settings persistence ───────────────────────────────────────────

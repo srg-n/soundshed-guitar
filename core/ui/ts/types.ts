@@ -501,7 +501,6 @@ export interface UiState {
   metronome?: MetronomeState;
   riffLibrary?: RiffLibrary;
   riffCapture?: RiffCaptureState;
-  namCalibrationStatus?: Record<string, "calibrating" | "ready" | "failed">;
   missingNodeResources?: Array<{ nodeId: string; resourceType?: string; resourceId?: string; filePath?: string }>;
   layoutLibrary?: LayoutLibrary;
   compositeLibrary?: CompositeEffectDefinition[];

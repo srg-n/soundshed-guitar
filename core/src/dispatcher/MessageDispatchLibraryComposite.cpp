@@ -8,11 +8,6 @@ bool MessageDispatcher::DispatchLibraryAndComposite(PluginController& c,
                                                     const nlohmann::json& msg,
                                                     const std::string& type)
 {
-    if (type == "rerunNamCalibration")
-    {
-        c.HandleRerunNamCalibrationRequest(msg);
-        return true;
-    }
     if (type == "importRemoteResource")
     {
         c.HandleImportRemoteResourceRequest(msg);

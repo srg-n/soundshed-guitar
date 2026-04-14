@@ -353,40 +353,6 @@ export function handleIncomingMessage(message: string): void {
       });
       break;
     }
-    case "riffLibraryState": {
-      const riffPayload = payload as {
-        library?: import("./types.js").RiffLibrary;
-        capture?: import("./types.js").RiffCaptureState;
-      };
-      if (riffPayload.library) {
-        applyRiffLibraryState(riffPayload.library);
-        refreshDemoAudioSelectors();
-      }
-      if (riffPayload.capture) {
-        applyRiffCaptureState(riffPayload.capture);
-      }
-      break;
-    }
-    case "riffCaptureArmed": {
-      appendLog(`riff capture armed ← ${(payload as { takeId?: string }).takeId ?? "take"}`);
-      applyRiffCaptureState({
-        active: false,
-        armed: true,
-        complete: false,
-        takeId: (payload as { takeId?: string }).takeId ?? "",
-        bars: uiState.riffCapture?.bars ?? 1,
-        tempoBpm: (payload as { tempoBpm?: number }).tempoBpm ?? uiState.riffCapture?.tempoBpm ?? 120,
-        timeSigNum: (payload as { timeSigNum?: number }).timeSigNum ?? uiState.riffCapture?.timeSigNum ?? 4,
-        timeSigDen: (payload as { timeSigDen?: number }).timeSigDen ?? uiState.riffCapture?.timeSigDen ?? 4,
-        metronomeClickEnabled: typeof (payload as { metronomeClickEnabled?: boolean }).metronomeClickEnabled === "boolean"
-          ? (payload as { metronomeClickEnabled?: boolean }).metronomeClickEnabled
-          : uiState.riffCapture?.metronomeClickEnabled ?? true,
-        hasAudio: false,
-        waveformPeaks: [],
-      });
-      showNotification("Riff armed – waiting for input signal");
-      break;
-    }
     case "riffCaptureProgress": {
       applyRiffCaptureProgress(
         (payload as { capturedSamples?: number }).capturedSamples ?? 0,
@@ -603,41 +569,6 @@ export function handleIncomingMessage(message: string): void {
       appendLog(`model loaded ← ${(payload as { path?: string }).path ?? "unknown"}`);
       renderActivePreset();
       showNotification("Model loaded", (payload as { path?: string }).path ?? "");
-      break;
-    }
-    case "namCalibrationStatus": {
-      const info = payload as { nodeId?: string; status?: string };
-      if (info.nodeId) {
-        uiState.namCalibrationStatus = uiState.namCalibrationStatus ?? {};
-        if (info.status === "calibrating") {
-          uiState.namCalibrationStatus[info.nodeId] = "calibrating";
-        } else {
-          delete uiState.namCalibrationStatus[info.nodeId];
-        }
-        renderActivePreset();
-      }
-      break;
-    }
-    case "namCalibrationApplied": {
-      const info = payload as { nodeId?: string; params?: Record<string, number> };
-      if (!info.nodeId || !info.params) {
-        break;
-      }
-      const activePresetId = uiState.activePresetId ?? "";
-      const preset = getActivePresetForRender();
-      if (preset?.graph) {
-        const node = preset.graph.nodes.find((n) => n.id === info.nodeId);
-        if (node) {
-          Object.entries(info.params).forEach(([key, value]) => {
-            if (typeof value === "number") {
-              node.params[key] = value;
-            }
-          });
-          uiState.presetCache.set(preset.id, preset);
-          renderActivePreset();
-          refreshSelectedNodeParams();
-        }
-      }
       break;
     }
     case "irLoaded": {

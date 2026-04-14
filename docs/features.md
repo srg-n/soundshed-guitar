@@ -134,7 +134,7 @@ All types share `decay`, `mix`, and `preDelay`. Each has tuned internals for its
 - **SIMD-optimized inference**: `simd/OptimizedNAM.h`, `simd/OptimizedLSTM.h`, `simd/OptimizedWaveNet.h`, `simd/OptimizedActivations.h` (~2× speedup over scalar).
 - **NAM level matching**: Reads model metadata (`input_level_dbu`, `output_level_dbu`, `loudness`) and aligns compatible NAM captures to the configured interface reference without a separate user recalibration step.
 - **Auto-level**: NAM nodes apply metadata-based input/output gain internally; the main UI now relies on explicit Input and Output controls for user correction. Interface calibration reference defaults to +12.0 dBu @ 0 dBFS peak (configurable in Settings).
-- **Model hashing**: `ModelHasher` computes SHA-256 for deduplication and calibration cache keys.
+- **Model hashing**: `ModelHasher` computes SHA-256 for deduplication and resource identity tracking.
 
 ---
 
@@ -478,7 +478,7 @@ Bidirectional JSON messages over the WebView bridge:
 { "type": "messageType", "payload": { ... }, "timestamp": 1704801234567 }
 ```
 
-**Key engine→UI messages**: `state`, `presetLoaded`, `presetSaved`, `presetList`, `error`, `tunerUpdate`, `dspPerformance`, `signalLevelDiagnostics`, `globalChain`, `effectCatalog`, `compositeLibrary`, `metronomeState`, `previewStarted`, `previewComplete`, `namCalibrationStatus`, `resourceImported`, `layoutLibraryLoaded`.
+**Key engine→UI messages**: `state`, `presetLoaded`, `presetSaved`, `presetList`, `error`, `tunerUpdate`, `dspPerformance`, `signalLevelDiagnostics`, `globalChain`, `effectCatalog`, `compositeLibrary`, `metronomeState`, `previewStarted`, `previewComplete`, `resourceImported`, `layoutLibraryLoaded`.
 
 **Key UI→engine messages**: `uiReady`, `requestState`, `setParameter`, `loadPreset`, `savePreset`, `addSignalPathNode`, `deleteSignalPathNode`, `replaceSignalPathNode`, `reorderSignalPathNode`, `updateSignalPathNodeParam`, `updateSignalPathNodeBypass`, `updateNodeResource`, `addActivePreset`, `setPresetMix`, `setPresetMute`, `setPresetSolo`, `setMasterGain`, `tuner`, `setMetronome`, `runSignalPathTest`, `previewDemoAudio`, `importRemoteResource`, `saveCompositeDefinition`, `getEffectCatalog`, `getPresetList`, `openAudioPreferences`.
 
@@ -570,8 +570,6 @@ data/v1/
     content/<layoutId>.layout.json
     indexes/effect-layouts.json
     images/
-  calibration/
-    models/index.json             # Legacy NAM calibration cache (metadata-first leveling does not rely on it)
   logs/
     session-log.txt
 ```

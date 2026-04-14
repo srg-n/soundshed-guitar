@@ -1117,7 +1117,6 @@ function renderNodeElement(node: GraphNode): string {
     : (nodeTypeInfo?.displayName && nodeTypeInfo.displayName !== displayName
       ? nodeTypeInfo.displayName
       : "");
-  const isCalibrating = uiState.namCalibrationStatus?.[node.id] === "calibrating";
   const missingTooltip = buildMissingResourceTooltip(missingEntries);
   const missingBadge = missingEntries.length
     ? `<div class="node-missing-badge" title="${escapeHtml(missingTooltip)}" aria-label="Missing resource">⚠</div>`
@@ -1150,7 +1149,6 @@ function renderNodeElement(node: GraphNode): string {
         ${effectTypeName ? `<div class="node-type">${effectTypeName}</div>` : ""}
       </div>
       <span class="node-clip-indicator clip-inactive" aria-hidden="true"></span>
-      ${isCalibrating ? '<div class="node-calibration-badge">CAL</div>' : ""}
       ${isNodeBypassed(node) ? '<div class="node-bypass-badge">OFF</div>' : ""}
       ${missingBadge}
     </div>
@@ -2050,7 +2048,6 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
   const shellStatusLabel = isNodeBypassed(node) ? "BYPASSED" : "ENABLED";
   const shellBypassTitle = isNodeBypassed(node) ? "Enable effect" : "Bypass effect";
   const shellBlendId = getBlendState(node)?.blend?.id || "";
-  const shellCanRecalibrate = false;
   const shellLayoutButton = isFeatureEnabled(Features.EffectLayout) ? `
     <button
       class="effect-visualization-toolbar-btn node-customize-layout-btn"
@@ -2062,17 +2059,6 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
       aria-label="Customize layout"
     >
       ${renderIcon("gear", "effect-visualization-toolbar-icon customize-layout-icon")}
-    </button>
-  ` : "";
-  const shellRecalibrateButton = shellCanRecalibrate ? `
-    <button
-      class="effect-visualization-toolbar-btn node-calibrate-btn"
-      data-node-id="${node.id}"
-      type="button"
-      title="Recalibrate model"
-      aria-label="Recalibrate model"
-    >
-      ${renderIcon("microscope", "effect-visualization-toolbar-icon recalibrate-icon")}
     </button>
   ` : "";
   const shellMainContent = customLayoutHtml ? `
@@ -2140,7 +2126,6 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
               title="${shellBypassTitle}"
               aria-label="${shellBypassTitle}"
             >${shellStatusLabel}</button>
-            ${shellRecalibrateButton}
             ${shellLayoutButton}
           </div>
           <button class="close-params-btn" type="button" aria-label="Close effect panel" title="Close effect panel">×</button>
@@ -2166,7 +2151,6 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
   bindBlendEditorControls(nodeParamsPanelElement, node);
   bindCloseButton();
   bindBypassButton(node, preset);
-  bindCalibrationButton(node);
   bindCustomizeLayoutButton(node);
   bindParamTabs();
   updateSelectedNodePeakMeter();
@@ -2808,23 +2792,6 @@ function bindBypassButton(node: GraphNode, preset: Preset): void {
   bypassButtons.forEach((bypassBtn) => {
     bypassBtn.addEventListener("click", () => {
       toggleSignalPathNodeBypass(node, preset);
-    });
-  });
-}
-
-function bindCalibrationButton(node: GraphNode): void {
-  const calibrateButtons = document.querySelectorAll<HTMLButtonElement>("#node-params-panel .node-calibrate-btn");
-  if (!calibrateButtons.length) {
-    return;
-  }
-
-  calibrateButtons.forEach((calibrateBtn) => {
-    calibrateBtn.addEventListener("click", () => {
-      showNotification("Recalibration started", getNodeDisplayName(node));
-      postMessage({
-        type: "rerunNamCalibration",
-        nodeId: node.id,
-      });
     });
   });
 }

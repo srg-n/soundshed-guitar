@@ -242,7 +242,6 @@ export const uiState: UiState = {
   signalDiagnostics: null,
   signalPeakHold: null,
   environment: { standalone: false },
-  namCalibrationStatus: {},
   missingNodeResources: [],
   layoutLibrary: createEmptyLayoutLibrary(),
   metronome: {
