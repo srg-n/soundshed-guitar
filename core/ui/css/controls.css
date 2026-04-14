@@ -147,7 +147,105 @@ input[type="range"]:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  justify-content: flex-start;
+  gap: var(--control-stack-gap, 8px);
+}
+
+.control-stack > .toggle-control,
+.control-stack-spacer,
+.control-stack-label {
+  min-height: var(--control-stack-header-height, 22px);
+}
+
+.control-stack > .toggle-control,
+.control-stack-spacer,
+.control-stack-label {
+  display: flex;
+  align-items: center;
+}
+
+.control-stack-spacer,
+.control-stack-label {
+  justify-content: center;
+  width: 100%;
+}
+
+.control-stack-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+
+.output-control-stack {
+  align-items: center;
+}
+
+.output-control-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.output-knob-stack {
+  align-items: center;
+}
+
+.output-quick-mute-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-top: calc(var(--control-stack-header-height, 22px) + var(--control-stack-gap, 8px) + 4px);
+  padding: 0;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  background: var(--bg-elevated, rgba(20, 22, 28, 0.94));
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+
+.output-quick-mute-btn:hover {
+  background: var(--overlay-light);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+}
+
+.output-quick-mute-btn:focus-visible {
+  outline: 2px solid var(--accent-primary, #50b878);
+  outline-offset: 2px;
+}
+
+.output-quick-mute-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.output-quick-mute-wave,
+.output-quick-mute-slash {
+  transition: opacity 120ms ease;
+}
+
+.output-quick-mute-slash {
+  opacity: 0;
+}
+
+.output-quick-mute-btn.muted {
+  color: #f08a65;
+  border-color: color-mix(in srgb, #f08a65 70%, var(--border-light));
+  box-shadow: 0 0 0 1px color-mix(in srgb, #f08a65 18%, transparent);
+}
+
+.output-quick-mute-btn.muted .output-quick-mute-wave {
+  opacity: 0.2;
+}
+
+.output-quick-mute-btn.muted .output-quick-mute-slash {
+  opacity: 1;
 }
 
 .mini-toggle-control {
