@@ -1,6 +1,6 @@
 import { appendLog } from "./logging.js";
 import { setAppSetting } from "./bridge.js";
-import { postMessage, setParameter } from "./bridge.js";
+import { postMessage, setMasterGain, setParameter } from "./bridge.js";
 import { sendGlobalChainParam } from "./messages.js";
 import { uiState } from "./state.js";
 import {
@@ -416,6 +416,72 @@ function updateControlDisplay(controlId: string, value: number, format: "percent
 
 // Store knob instances globally for sync
 const knobInstances: Map<string, GenericKnob> = new Map();
+const outputMuteToggle = document.getElementById("output-mute-toggle") as HTMLButtonElement | null;
+let outputMuted = false;
+let lastNonMutedMasterGain = 1.0;
+
+function updateOutputMuteToggleState(): void {
+  if (!outputMuteToggle) {
+    return;
+  }
+
+  outputMuteToggle.classList.toggle("muted", outputMuted);
+  outputMuteToggle.setAttribute("aria-pressed", outputMuted ? "true" : "false");
+  outputMuteToggle.title = outputMuted ? "Unmute output" : "Mute output";
+  outputMuteToggle.setAttribute("aria-label", outputMuted ? "Output muted. Click to unmute" : "Mute output");
+}
+
+function getCurrentMasterGain(): number {
+  const gain = uiState.mixer?.masterGain;
+  return typeof gain === "number" && isFinite(gain) ? gain : 1.0;
+}
+
+function syncOutputMuteFromState(): void {
+  const masterGain = getCurrentMasterGain();
+  outputMuted = masterGain <= 1.0e-4;
+  if (!outputMuted && masterGain > 1.0e-4) {
+    lastNonMutedMasterGain = masterGain;
+  }
+  updateOutputMuteToggleState();
+}
+
+function preserveMuteWhileAdjustingOutput(outputGainDb: number): void {
+  if (!outputMuted) {
+    return;
+  }
+
+  lastNonMutedMasterGain = Math.pow(10.0, outputGainDb / 20.0);
+  setMasterGain(0.0);
+  if (uiState.mixer) {
+    uiState.mixer.masterGain = 0.0;
+  }
+  updateOutputMuteToggleState();
+}
+
+function toggleOutputMute(): void {
+  if (!outputMuted) {
+    const currentMasterGain = getCurrentMasterGain();
+    if (currentMasterGain > 1.0e-4) {
+      lastNonMutedMasterGain = currentMasterGain;
+    }
+    setMasterGain(0.0);
+    if (uiState.mixer) {
+      uiState.mixer.masterGain = 0.0;
+    }
+    outputMuted = true;
+    appendLog("output muted");
+  } else {
+    const restoreGain = lastNonMutedMasterGain > 1.0e-4 ? lastNonMutedMasterGain : 1.0;
+    setMasterGain(restoreGain);
+    if (uiState.mixer) {
+      uiState.mixer.masterGain = restoreGain;
+    }
+    outputMuted = false;
+    appendLog(`output unmuted → ${restoreGain.toFixed(3)}`);
+  }
+
+  updateOutputMuteToggleState();
+}
 
 function setKnobControlDisabled(controlId: string, disabled: boolean): void {
   const control = document.getElementById(controlId);
@@ -520,11 +586,15 @@ function initializeInputOutputKnobs(): void {
         if (uiState.globalSignalChain) {
           uiState.globalSignalChain.outputGain = value;
         }
+        lastNonMutedMasterGain = Math.pow(10.0, value / 20.0);
+        preserveMuteWhileAdjustingOutput(value);
       },
       onValueCommit: (value) => {
         if (uiState.globalSignalChain) {
           uiState.globalSignalChain.outputGain = value;
         }
+        lastNonMutedMasterGain = Math.pow(10.0, value / 20.0);
+        preserveMuteWhileAdjustingOutput(value);
       },
     });
     knobInstances.set("output_trim", outputKnobInstance);
@@ -682,6 +752,11 @@ export function initializeControls(): void {
   initializeAutoLevelControls();
   initializeGateControls();
   initializeEQControls();
+  if (outputMuteToggle && outputMuteToggle.dataset.bound !== "true") {
+    outputMuteToggle.dataset.bound = "true";
+    outputMuteToggle.addEventListener("click", toggleOutputMute);
+  }
+  syncOutputMuteFromState();
 }
 
 export function syncDoublerControlsFromState(): void {
@@ -771,6 +846,7 @@ export function syncControlsFromState(): void {
   syncGateControlsFromState();
   syncAutoLevelControlsFromState();
   syncEQControlsFromState();
+  syncOutputMuteFromState();
 }
 
 // Input mode state

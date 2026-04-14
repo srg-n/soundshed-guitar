@@ -123,9 +123,10 @@ namespace
     constexpr const char* kRiffLibraryDefaultFolder = "riff-library";
     constexpr const char* kRiffLibraryIndexFile = "riff-library-index.json";
     constexpr const char* kSignalDiagnosticsSettingKey = "diagnostics.signalLevelsEnabled";
-    constexpr const char* kInterfaceCalibrationEnabledSettingKey = "audio.interfaceCalibration.enabled";
-    constexpr const char* kInterfaceCalibrationReferenceDbuSettingKey = "audio.interfaceCalibration.referenceDbu";
-    constexpr double kInterfaceCalibrationDefaultReferenceDbu = 12.0;
+    constexpr const char* kUserInputCalibrationProfilesSettingKey = "audio.userInputCalibration.profiles";
+    constexpr const char* kUserInputCalibrationActiveProfileIdSettingKey = "audio.userInputCalibration.activeProfileId";
+    constexpr const char* kLegacyInterfaceCalibrationEnabledSettingKey = "audio.interfaceCalibration.enabled";
+    constexpr const char* kLegacyInterfaceCalibrationReferenceDbuSettingKey = "audio.interfaceCalibration.referenceDbu";
     constexpr const char* kSessionLogFileName = "logs/session-log.txt";
 
     double ToDbFS(double linear)
@@ -1079,7 +1080,7 @@ void PluginController::Initialize()
     LoadAppSettings();
     ApplyMetronomeSettingsFromAppSettings();
     ApplyDiagnosticsSettingsFromAppSettings();
-    ApplyInterfaceCalibrationSettingsFromAppSettings();
+    ApplyUserInputCalibrationSettingsFromAppSettings();
     ApplyUiSettingsFromAppSettings();
     LoadResourceLibraries();
     LoadBlendLibrary();
@@ -1792,25 +1793,82 @@ void PluginController::ApplyDiagnosticsSettingsFromAppSettings()
     mPresetMixer.SetSignalDiagnosticsEnabled(enabled);
 }
 
-void PluginController::ApplyInterfaceCalibrationSettingsFromAppSettings()
+void PluginController::ApplyUserInputCalibrationSettingsFromAppSettings()
 {
-    bool enabled = true;
-    double referenceDbu = kInterfaceCalibrationDefaultReferenceDbu;
+    bool settingsChanged = false;
 
-    const auto enabledIt = mAppSettings.find(kInterfaceCalibrationEnabledSettingKey);
-    if (enabledIt != mAppSettings.end())
+    if (mAppSettings.erase(kLegacyInterfaceCalibrationEnabledSettingKey) > 0)
+        settingsChanged = true;
+    if (mAppSettings.erase(kLegacyInterfaceCalibrationReferenceDbuSettingKey) > 0)
+        settingsChanged = true;
+
+    std::string activeProfileId;
+    const auto activeIt = mAppSettings.find(kUserInputCalibrationActiveProfileIdSettingKey);
+    if (activeIt != mAppSettings.end())
     {
-        if (enabledIt->is_boolean())
-            enabled = enabledIt->get<bool>();
-        else if (enabledIt->is_number())
-            enabled = enabledIt->get<double>() != 0.0;
+        if (activeIt->is_string())
+            activeProfileId = activeIt->get<std::string>();
+        else if (!activeIt->is_null())
+        {
+            mAppSettings[kUserInputCalibrationActiveProfileIdSettingKey] = nullptr;
+            settingsChanged = true;
+        }
     }
 
-    const auto referenceIt = mAppSettings.find(kInterfaceCalibrationReferenceDbuSettingKey);
-    if (referenceIt != mAppSettings.end() && referenceIt->is_number())
-        referenceDbu = referenceIt->get<double>();
+    double gainDb = 0.0;
+    bool foundActiveProfile = activeProfileId.empty();
+    const auto profilesIt = mAppSettings.find(kUserInputCalibrationProfilesSettingKey);
+    if (profilesIt != mAppSettings.end())
+    {
+        if (profilesIt->is_array())
+        {
+            for (const auto& profile : *profilesIt)
+            {
+                if (!profile.is_object())
+                    continue;
 
-    mPresetMixer.SetNamInterfaceCalibration(enabled, referenceDbu);
+                const auto idIt = profile.find("id");
+                if (idIt == profile.end() || !idIt->is_string() || idIt->get<std::string>() != activeProfileId)
+                    continue;
+
+                foundActiveProfile = true;
+
+                const auto gainIt = profile.find("gainDb");
+                if (gainIt != profile.end() && gainIt->is_number())
+                {
+                    gainDb = gainIt->get<double>();
+                }
+                else
+                {
+                    const auto capturedIt = profile.find("capturedPeakDbfs");
+                    const auto targetIt = profile.find("targetPeakDbfs");
+                    if (capturedIt != profile.end() && capturedIt->is_number()
+                        && targetIt != profile.end() && targetIt->is_number())
+                    {
+                        gainDb = targetIt->get<double>() - capturedIt->get<double>();
+                    }
+                }
+                break;
+            }
+        }
+        else if (!profilesIt->is_null())
+        {
+            mAppSettings[kUserInputCalibrationProfilesSettingKey] = nlohmann::json::array();
+            settingsChanged = true;
+        }
+    }
+
+    if (!foundActiveProfile)
+    {
+        mAppSettings[kUserInputCalibrationActiveProfileIdSettingKey] = nullptr;
+        gainDb = 0.0;
+        settingsChanged = true;
+    }
+
+    mPresetMixer.SetUserInputCalibrationGainDb(gainDb);
+
+    if (settingsChanged)
+        SaveAppSettings();
 }
 
 void PluginController::ApplyUiSettingsFromAppSettings()
@@ -6313,8 +6371,7 @@ void PluginController::ApplyPreset(const Preset& preset)
 
         node.config.erase("modelHash");
         ClearNamCalibrationParams(node);
-        if (!node.params.count("autoLevelInput"))
-            node.params["autoLevelInput"] = 1.0;
+        node.params["autoLevelInput"] = 0.0;
         if (!node.params.count("autoLevelOutput"))
             node.params["autoLevelOutput"] = 1.0;
     }
@@ -6717,7 +6774,7 @@ void PluginController::ResetNamNodeLevelState(const std::string& nodeId)
 
     node->config.erase("modelHash");
     ClearNamCalibrationParams(*node);
-    if (!node->params.count("autoLevelInput")) node->params["autoLevelInput"] = 1.0;
+    node->params["autoLevelInput"] = 0.0;
     if (!node->params.count("autoLevelOutput")) node->params["autoLevelOutput"] = 1.0;
     mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
     mPendingStateBroadcast = true;
@@ -6727,7 +6784,7 @@ void PluginController::ResetNamNodeLevelState(const std::string& nodeId)
         const double clearValue = std::numeric_limits<double>::quiet_NaN();
         mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "calibrationInputLevel", clearValue);
         mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "calibrationOutputLevel", clearValue);
-        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "autoLevelInput", 1.0);
+        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "autoLevelInput", 0.0);
         mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "autoLevelOutput", 1.0);
     }
 }

@@ -190,8 +190,8 @@ export const uiState: UiState = {
   blendLibrary: [],
   appSettings: {
     "diagnostics.signalLevelsEnabled": true,
-    "audio.interfaceCalibration.enabled": true,
-    "audio.interfaceCalibration.referenceDbu": 12.0,
+    "audio.userInputCalibration.profiles": [],
+    "audio.userInputCalibration.activeProfileId": null,
     "metronome.clickConfig": [
       {
         id: "drum",

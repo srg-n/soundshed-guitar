@@ -132,6 +132,17 @@ export interface UiViewState {
   };
 }
 
+export interface UserInputCalibrationProfile {
+  id: string;
+  name: string;
+  description: string;
+  capturedPeakDbfs: number;
+  targetPeakDbfs: number;
+  gainDb: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface ResourceRef {
   type?: string;
   id?: string;

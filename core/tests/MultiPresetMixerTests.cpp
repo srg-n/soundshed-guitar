@@ -183,6 +183,55 @@ int main()
     }
   }
 
+  // Global user input calibration should apply a fixed gain before the chain
+  {
+    MultiPresetMixer mixer;
+    ResourceLibrary lib;
+    mixer.SetResourceLibrary(&lib);
+    mixer.Prepare(kTestSampleRate, kTestBlockSize);
+
+    auto preset = MakePassthroughPreset("pCal");
+    if (!mixer.AddActivePreset(preset, "pCal", "CalibrationPreset"))
+    {
+      std::cerr << "Failed to add calibration preset" << std::endl;
+      allPassed = false;
+    }
+
+    mixer.SetUserInputCalibrationGainDb(6.0);
+
+    std::vector<float> inL(static_cast<size_t>(kTestBlockSize), 0.25f);
+    std::vector<float> inR(static_cast<size_t>(kTestBlockSize), 0.25f);
+    std::vector<float> outL(static_cast<size_t>(kTestBlockSize), 0.0f);
+    std::vector<float> outR(static_cast<size_t>(kTestBlockSize), 0.0f);
+
+    float *inputs[2] = {inL.data(), inR.data()};
+    float *outputs[2] = {outL.data(), outR.data()};
+
+    mixer.Process(inputs, outputs, kTestBlockSize);
+
+    const float expected = 0.25f
+      * static_cast<float>(std::pow(10.0, 6.0 / 20.0))
+      * static_cast<float>(std::sqrt(0.5));
+    for (int i = 0; i < kTestBlockSize; ++i)
+    {
+      if (std::fabs(outL[static_cast<size_t>(i)] - expected) > 1e-3f
+          || std::fabs(outR[static_cast<size_t>(i)] - expected) > 1e-3f)
+      {
+        std::cerr << "Global user input calibration mismatch at sample " << i
+                  << ": expected=" << expected
+                  << " got L=" << outL[static_cast<size_t>(i)]
+                  << " R=" << outR[static_cast<size_t>(i)] << std::endl;
+        allPassed = false;
+        break;
+      }
+    }
+
+    if (allPassed)
+    {
+      std::cout << "MultiPresetMixer user input calibration gain test passed" << std::endl;
+    }
+  }
+
   // Loading a preset without embedded global chain settings must keep global transpose usable
   {
     MultiPresetMixer mixer;

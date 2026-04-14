@@ -13,6 +13,7 @@
 #include "dsp/SignalGraphExecutor.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/effects/BuiltinEffects.h"
+#include "dsp/effects/IRCabEffect.h"
 #include "resources/ResourceLibrary.h"
 
 namespace
@@ -383,7 +384,7 @@ int main()
     using namespace guitarfx;
     // Build library entries (use test resources dir)
     ResourceLibrary lib;
-    const std::filesystem::path base = std::filesystem::path(GUITARFX_TEST_RESOURCES_DIR);
+    const std::filesystem::path base = std::filesystem::path(GUITARFX_TEST_RESOURCES_DIR) / "assets";
     LibraryResource namRes;
     namRes.type = "nam";
     namRes.id = "test-nam-jcm800-g6";
@@ -433,7 +434,7 @@ int main()
   {
     using namespace guitarfx;
     ResourceLibrary lib;
-    const std::filesystem::path base = std::filesystem::path(GUITARFX_TEST_RESOURCES_DIR);
+    const std::filesystem::path base = std::filesystem::path(GUITARFX_TEST_RESOURCES_DIR) / "assets";
 
     LibraryResource irRes;
     irRes.type = "ir";
@@ -513,6 +514,71 @@ int main()
       // IR convolver needs investigation; mark diagnostic to keep suite green
       std::cout << "  SKIP (IR init/latency issue)\n";
     }
+  }
+
+  // Case 7b: Resource-owned NAM normalization metadata affects output level
+  {
+    using namespace guitarfx;
+
+    auto runNam = [](const std::string &resourceId, const std::string &normalizationGainDb) {
+      ResourceLibrary lib;
+      const std::filesystem::path base = std::filesystem::path(GUITARFX_TEST_RESOURCES_DIR) / "assets";
+
+      LibraryResource namRes;
+      namRes.type = "nam";
+      namRes.id = resourceId;
+      namRes.name = "Normalized NAM";
+      namRes.filePath = base / "amps" / "Guitar" / "TimR" / "JCM800 2203 1985" / "JCM800 Hi P6 B8 M4 T7 G6.nam";
+      namRes.metadata["normalizationGainDb"] = normalizationGainDb;
+      lib.AddResource(namRes);
+
+      SignalGraph g;
+      g.nodes.push_back({"in", kNodeTypeInput, "", "Input", true});
+      GraphNode nam{"amp", "amp_nam", "amp", "NAM", true};
+      nam.resources = { ResourceRef{ "nam", resourceId, {}, "" } };
+      g.nodes.push_back(nam);
+      g.nodes.push_back({"out", kNodeTypeOutput, "", "Output", true});
+      g.edges.push_back({"in", "amp", 0, 0, 1.0});
+      g.edges.push_back({"amp", "out", 0, 0, 1.0});
+
+      RegisterAllEffects();
+      SignalGraphExecutor exec;
+      exec.SetResourceLibrary(&lib);
+      exec.SetGraph(g);
+      exec.Prepare(kSR, kBlock);
+
+      std::vector<float> inL(static_cast<size_t>(kBlock), 0.0f), inR(static_cast<size_t>(kBlock), 0.0f);
+      std::vector<float> outL(static_cast<size_t>(kBlock), 0.0f), outR(static_cast<size_t>(kBlock), 0.0f);
+      GenerateSine(inL, inR, 440.0, 0.15);
+      float* in[2] = { inL.data(), inR.data() };
+      float* outBuf[2] = { outL.data(), outR.data() };
+      exec.Process(in, outBuf, kBlock);
+      return Analyze(outL, outR);
+    };
+
+    const Analysis unity = runNam("test-nam-jcm800-unity", "0.0");
+    const Analysis boosted = runNam("test-nam-jcm800-boosted", "6.0");
+
+    const bool ok = !unity.hasNaN && !boosted.hasNaN
+      && !unity.hasInf && !boosted.hasInf
+      && unity.rms > 1e-5
+      && boosted.rms > unity.rms * 1.7
+      && boosted.rms < unity.rms * 2.3;
+
+    std::cout << "Resource NAM normalization metadata: unityRms=" << std::fixed << std::setprecision(4) << unity.rms
+              << ", boostedRms=" << boosted.rms
+              << (ok ? "  PASS" : "  FAIL") << "\n";
+    if (ok) ++passed; else ++failed;
+  }
+
+  // Case 7c: IR auto compensation defaults enabled
+  {
+    guitarfx::IRCabEffect effect;
+    const bool ok = std::abs(effect.GetParam("autoGainComp") - 1.0) < 1e-9;
+    std::cout << "IR auto compensation default: "
+              << (ok ? "PASS" : "FAIL")
+              << " (expected enabled)\n";
+    if (ok) ++passed; else ++failed;
   }
 
   // Case 8: Single-path reported latency matches latent node

@@ -7,7 +7,7 @@ import { previewSelectedDemoAudio, onDemoAudioStarted, onDemoAudioStopped, refre
 import { handleTunerUpdate, handleTunerStarted, handleTunerStopped, handleTunerReferenceChanged, handleTunerLiveModeChanged } from "./tuner.js";
 import { applyUiSettings } from "./windowSettings.js";
 import { updateDSPPerformancePlot, updateSignalDiagnosticsView } from "./views.js";
-import { refreshSettingsView } from "./settings.js";
+import { refreshSettingsView, handleUserInputCalibrationDiagnosticsUpdate } from "./settings.js";
 import { applyRiffCaptureProgress, applyRiffCaptureState, applyRiffLibraryState, handleCapturedPreviewComplete, handleRiffPreviewPlayback, handleSavedRiffPreviewComplete, renderRiffLibraryPanel } from "./riffLibrary.js";
 import { getRiffLibrary } from "./bridge.js";
 import { refreshSelectedNodeParams, renderSignalPathBar, updateSelectedNodePeakMeter } from "./signalPath.js";
@@ -860,6 +860,7 @@ export function handleIncomingMessage(message: string): void {
       if (diagnostics && diagnostics.input && diagnostics.output) {
         uiState.signalDiagnostics = diagnostics;
         updateSignalDiagnosticsView();
+        handleUserInputCalibrationDiagnosticsUpdate();
         updateSelectedNodePeakMeter();
         refreshSavePresetModalPeakInfoIfOpen();
       }

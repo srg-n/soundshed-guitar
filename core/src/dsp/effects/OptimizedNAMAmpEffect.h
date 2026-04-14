@@ -336,19 +336,6 @@ public:
       mAutoLevelOutput = ParseBool(value);
       RecalculateAutoGains();
     }
-    else if (key == "interfaceCalibrationEnabled")
-    {
-      mInterfaceCalibrationEnabled = ParseBool(value);
-      RecalculateAutoGains();
-    }
-    else if (key == "interfaceCalibrationReferenceDbu")
-    {
-      if (auto parsed = ParseDouble(value))
-      {
-        mInterfaceReferenceDbu = *parsed;
-        RecalculateAutoGains();
-      }
-    }
     else if (key == "useOptimized")
     {
       mPreferOptimized = ParseBool(value);
@@ -379,7 +366,58 @@ public:
     return 0.0;
   }
 
+  bool LoadResources(const std::vector<ResourceRef> &refs,
+                     const std::vector<std::filesystem::path> &paths) override
+  {
+    if (paths.empty())
+      return false;
+
+    const ResourceRef *ref = refs.empty() ? nullptr : &refs.front();
+    return LoadModelResource(paths.front(), ref);
+  }
+
   bool LoadResource(const std::filesystem::path& resourcePath) override
+  {
+    return LoadModelResource(resourcePath, nullptr);
+  }
+
+  [[nodiscard]] bool HasResource() const override
+  {
+    return mOptimizedModel || mFallbackModel;
+  }
+
+  [[nodiscard]] std::filesystem::path GetResourcePath() const override
+  {
+    return mModelPath;
+  }
+
+  [[nodiscard]] std::string GetType() const override { return "amp_nam_optimized"; }
+  [[nodiscard]] std::string GetCategory() const override { return "amp"; }
+
+  // Query whether using optimized implementation
+  [[nodiscard]] bool IsUsingOptimized() const { return mUsingOptimized; }
+
+private:
+  static std::optional<double> ReadResourceMetadataDouble(const ResourceRef *ref, const std::string &key)
+  {
+    if (!ref)
+      return std::nullopt;
+
+    const auto it = ref->metadata.find(key);
+    if (it == ref->metadata.end())
+      return std::nullopt;
+
+    try
+    {
+      return std::stod(it->second);
+    }
+    catch (...)
+    {
+      return std::nullopt;
+    }
+  }
+
+  bool LoadModelResource(const std::filesystem::path& resourcePath, const ResourceRef *ref)
   {
     try
     {
@@ -419,6 +457,7 @@ public:
         return false;
 
       mModelPath = resourcePath;
+      mResourceNormalizationGainDb = ReadResourceMetadataDouble(ref, "normalizationGainDb");
       CheckSampleRateMismatch();
 
       // Extract metadata
@@ -456,23 +495,6 @@ public:
     }
   }
 
-  [[nodiscard]] bool HasResource() const override
-  {
-    return mOptimizedModel || mFallbackModel;
-  }
-
-  [[nodiscard]] std::filesystem::path GetResourcePath() const override
-  {
-    return mModelPath;
-  }
-
-  [[nodiscard]] std::string GetType() const override { return "amp_nam_optimized"; }
-  [[nodiscard]] std::string GetCategory() const override { return "amp"; }
-
-  // Query whether using optimized implementation
-  [[nodiscard]] bool IsUsingOptimized() const { return mUsingOptimized; }
-
-private:
   // Model storage - one or the other will be used
   std::unique_ptr<nam::OptimizedDSPWrapper> mOptimizedModel;
   std::unique_ptr<::nam::DSP> mFallbackModel;
@@ -495,15 +517,14 @@ private:
   double mAutoOutputGain = 1.0;
   double mInputGain = 1.0;
   double mOutputGain = 1.0;
-  bool mAutoLevelInput = true;
+  bool mAutoLevelInput = false;
   bool mAutoLevelOutput = true;
   std::optional<double> mModelInputLevel;
   std::optional<double> mModelOutputLevel;
   std::optional<double> mModelLoudness;
+  std::optional<double> mResourceNormalizationGainDb;
   std::optional<double> mCalibrationInputLevel;
   std::optional<double> mCalibrationOutputLevel;
-  bool mInterfaceCalibrationEnabled = true;
-  double mInterfaceReferenceDbu = 12.0;
   bool mEnabled = true;
 
   // Tone stack EQ parameters (dB, -10..+10, default 0)
@@ -535,32 +556,16 @@ private:
 
   void RecalculateAutoGains()
   {
-    static constexpr double kTargetInputLeveldBu = -18.0;
     static constexpr double kTargetOutputLeveldB = -18.0;
 
     mAutoInputGain = 1.0;
     mAutoOutputGain = 1.0;
 
-    const bool hasCalibrationInput = mCalibrationInputLevel.has_value();
-    const auto inputLevel = hasCalibrationInput ? mCalibrationInputLevel : mModelInputLevel;
-    const auto outputLevel = mCalibrationOutputLevel.has_value() ? mCalibrationOutputLevel : mModelOutputLevel;
-
-    if (mAutoLevelInput && inputLevel.has_value())
-    {
-      double effectiveInputLevel = *inputLevel;
-      if (!hasCalibrationInput && mInterfaceCalibrationEnabled && mModelInputLevel.has_value())
-      {
-        effectiveInputLevel = *mModelInputLevel - mInterfaceReferenceDbu;
-      }
-      const double deltaDb = std::clamp(kTargetInputLeveldBu - effectiveInputLevel, -24.0, 24.0);
-      mAutoInputGain = std::pow(10.0, deltaDb / 20.0);
-    }
-
     if (mAutoLevelOutput)
     {
-      if (outputLevel.has_value())
+      if (mResourceNormalizationGainDb.has_value())
       {
-        const double deltaDb = std::clamp(kTargetOutputLeveldB - *outputLevel, -24.0, 24.0);
+        const double deltaDb = std::clamp(*mResourceNormalizationGainDb, -24.0, 24.0);
         mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
       }
       else if (mModelLoudness.has_value())
@@ -630,10 +635,7 @@ inline void RegisterOptimizedNAMAmpEffect()
     {"treble",                "Treble",             0.0,   -10.0, 10.0,  "dB",  "Tone"},
     {"presence",              "Presence",           0.0,   -10.0, 10.0,  "dB",  "Tone"},
     {"outputGain",            "Output",             0.0,   -24.0, 24.0,  "dB",  "Level"},
-    {"autoLevelInput",        "Auto Level Input",   1.0,    0.0,   1.0,  "toggle", "Advanced", true},
-    {"autoLevelOutput",       "Auto Level Output",  1.0,    0.0,   1.0,  "toggle", "Advanced", true},
-    {"calibrationInputLevel", "Cal Input",          -18.0, -60.0, 24.0,  "dB",  "Advanced", true},
-    {"calibrationOutputLevel","Cal Output",         -18.0, -60.0, 24.0,  "dB",  "Advanced", true}
+    {"autoLevelOutput",       "Auto Level Output",  1.0,    0.0,   1.0,  "toggle", "Advanced", true}
   };
 
   EffectRegistry::Instance().Register(info.type, info, []()

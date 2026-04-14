@@ -133,7 +133,6 @@ namespace guitarfx
     inst.executor.SetResourceLibrary(mResourceLibrary);
     inst.executor.SetGraph(normalizedPreset.graph);
     inst.executor.SetSignalDiagnosticsEnabled(mSignalDiagnosticsEnabled.load(std::memory_order_acquire));
-    ApplyNamInterfaceCalibration(inst.executor);
 
     if (mPrepared)
     {
@@ -169,8 +168,8 @@ namespace guitarfx
     mLimiterEnabled = other.mLimiterEnabled;
     mAutoLevelInput = other.mAutoLevelInput;
     mAutoLevelOutput = other.mAutoLevelOutput;
-    mNamInterfaceCalibrationEnabled = other.mNamInterfaceCalibrationEnabled;
-    mNamInterfaceReferenceDbu = other.mNamInterfaceReferenceDbu;
+    mUserInputCalibrationGainDb = other.mUserInputCalibrationGainDb;
+    mUserInputCalibrationGainLinear = other.mUserInputCalibrationGainLinear;
     mMonoMode = other.mMonoMode;
     mInputChannel = other.mInputChannel;
     mInputAutoLevelGain = other.mInputAutoLevelGain;
@@ -207,14 +206,11 @@ namespace guitarfx
     return *this;
   }
 
-  void MultiPresetMixer::SetNamInterfaceCalibration(bool enabled, double referenceDbu)
+  void MultiPresetMixer::SetUserInputCalibrationGainDb(double dB)
   {
-    mNamInterfaceCalibrationEnabled = enabled;
-    mNamInterfaceReferenceDbu = referenceDbu;
-    for (auto &inst : mInstances)
-    {
-      ApplyNamInterfaceCalibration(inst.executor);
-    }
+    const double clamped = std::isfinite(dB) ? std::clamp(dB, -24.0, 24.0) : 0.0;
+    mUserInputCalibrationGainDb = clamped;
+    mUserInputCalibrationGainLinear = static_cast<float>(std::pow(10.0, clamped / 20.0));
   }
 
   void MultiPresetMixer::RemoveActivePreset(const std::string &presetId)
@@ -698,33 +694,6 @@ namespace guitarfx
     mPostChainExecutor.SetTempo(bpm);
   }
 
-  void MultiPresetMixer::ApplyNamInterfaceCalibration(SignalGraphExecutor &executor) const
-  {
-    static const std::vector<std::string> kNamTypes = {EffectGuids::kAmpNam, EffectGuids::kAmpNamOptimized, EffectGuids::kAmpNamBlend};
-    const std::string referenceValue = std::to_string(mNamInterfaceReferenceDbu);
-
-    // Disable calibration on every NAM node first — only the first in the
-    // execution order should apply interface calibration. Downstream NAMs
-    // receive a signal that has already been normalised by the first NAM's
-    // auto-output gain, so applying the calibration offset again would
-    // mis-level them.
-    for (const auto &type : kNamTypes)
-    {
-      executor.SetNodeConfigForType(type, "interfaceCalibrationEnabled", "0");
-      executor.SetNodeConfigForType(type, "interfaceCalibrationReferenceDbu", referenceValue);
-    }
-
-    // Re-enable calibration on the first NAM in execution order only.
-    if (mNamInterfaceCalibrationEnabled)
-    {
-      const std::string firstNamId = executor.FindFirstNodeOfTypes(kNamTypes);
-      if (!firstNamId.empty())
-      {
-        executor.SetNodeConfig(firstNamId, "interfaceCalibrationEnabled", "1");
-      }
-    }
-  }
-
   bool MultiPresetMixer::LoadNodeResource(const std::string &presetId, const std::string &nodeId, const ResourceRef &ref)
   {
     if (auto *inst = FindInstance(presetId))
@@ -916,6 +885,23 @@ namespace guitarfx
       }
       processInL = mTempInL.data();
       processInR = mTempInR.data();
+    }
+
+    if (std::abs(mUserInputCalibrationGainLinear - 1.0f) > 1.0e-4f)
+    {
+      if (processInL)
+      {
+        for (int i = 0; i < numSamples; ++i)
+          mTempInL[static_cast<std::size_t>(i)] = processInL[i] * mUserInputCalibrationGainLinear;
+        processInL = mTempInL.data();
+      }
+
+      if (processInR)
+      {
+        for (int i = 0; i < numSamples; ++i)
+          mTempInR[static_cast<std::size_t>(i)] = processInR[i] * mUserInputCalibrationGainLinear;
+        processInR = mTempInR.data();
+      }
     }
 
 

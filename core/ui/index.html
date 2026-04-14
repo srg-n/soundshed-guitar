@@ -105,10 +105,25 @@
             <div class="vu-peak-hold" id="vu-peak-hold"></div>
           </div>
           <span class="vu-db-value" id="vu-db-value">—</span>
+          <button
+            id="user-input-calibration-toolbar-trigger"
+            class="input-vu-meter-dropdown-trigger"
+            type="button"
+            aria-label="Input calibration options"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            aria-controls="user-input-calibration-toolbar-menu"
+            title="Input calibration options"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M3.5 5.75 8 10.25l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <div id="user-input-calibration-toolbar-menu" class="input-calibration-toolbar-menu" role="menu" hidden></div>
         </div>
-        <div class="control-stack">
+        <div class="control-stack control-stack-knob">
+          <div class="control-stack-label">INPUT</div>
           <div class="knob-control" id="input-control" title="Input Level">
-            
             <div class="knob" data-param="input" data-value="0">
               <div class="knob-indicator"></div>
             </div>
@@ -133,7 +148,7 @@
           </div>
         </div>
 
-        <div class="control-stack">
+        <div class="control-stack control-stack-knob">
           <div class="toggle-control mini-toggle-control">
             <span class="toggle-label">GATE</span>
             <label class="toggle-switch">
@@ -149,12 +164,14 @@
           </div>
         </div>
 
-        <div class="knob-control">
-          <span class="knob-label" style="margin-bottom:2px;">TRANSPOSE</span>
-          <div class="knob" data-param="transpose" data-value="0">
-            <div class="knob-indicator"></div>
+        <div class="control-stack control-stack-knob transpose-control-stack">
+          <div class="control-stack-label">TRANSPOSE</div>
+          <div class="knob-control">
+            <div class="knob" data-param="transpose" data-value="0">
+              <div class="knob-indicator"></div>
+            </div>
+            <span class="knob-value" id="transpose-value">0 st</span>
           </div>
-          <span class="knob-value" id="transpose-value">0 st</span>
         </div>
 
         <div class="control-stack eq-control">
@@ -319,7 +336,7 @@
       </div>
 
       <div class="control-bar-group">
-        <div class="control-stack">
+        <div class="control-stack control-stack-knob">
           <div class="toggle-control mini-toggle-control">
             <span class="toggle-label">DOUBLER</span>
             <label class="toggle-switch">
@@ -336,13 +353,32 @@
           </div>
         </div>
 
-        <div class="control-stack">
-          <div class="knob-control" id="output-control">
-            <!--<span class="knob-label">OUTPUT</span>-->
-            <div class="knob" data-param="output" data-value="0">
-              <div class="knob-indicator"></div>
+        <div class="control-stack output-control-stack">
+          <div class="output-control-row">
+            <div class="control-stack control-stack-knob output-knob-stack">
+              <div class="control-stack-label">OUTPUT</div>
+              <div class="knob-control" id="output-control">
+                <!--<span class="knob-label">OUTPUT</span>-->
+                <div class="knob" data-param="output" data-value="0">
+                  <div class="knob-indicator"></div>
+                </div>
+                <span class="knob-value" id="output-value">+0.0 dB</span>
+              </div>
             </div>
-            <span class="knob-value" id="output-value">+0.0 dB</span>
+            <button
+              id="output-mute-toggle"
+              class="output-quick-mute-btn"
+              type="button"
+              aria-label="Mute output"
+              aria-pressed="false"
+              title="Mute output"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 9v6h4l5 4V5L8 9H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                <path class="output-quick-mute-wave" d="M16.5 9.5c1.6 1 2.5 2.6 2.5 4.5s-.9 3.5-2.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                <path class="output-quick-mute-slash" d="M5 5l14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -580,21 +616,19 @@
               </div>
             </div>
             <div class="settings-section">
-              <h3>Interface Calibration</h3>
+              <h3>User Input Calibration</h3>
               <div class="settings-row">
-                <label for="interface-calibration-toggle">Enabled</label>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="interface-calibration-toggle" checked />
-                  <span class="toggle-slider"></span>
-                </label>
+                <label for="user-input-calibration-profile">Active Profile</label>
+                <select id="user-input-calibration-profile">
+                  <option value="__none__" selected>No calibration</option>
+                </select>
               </div>
-              <div class="settings-row">
-                <label for="interface-calibration-reference">Reference Level</label>
-                <input type="number" id="interface-calibration-reference" min="-24" max="24" step="0.1" value="12.0" />
-                <span class="settings-unit">dBu @ 0 dBFS peak</span>
+              <div class="settings-row settings-row-two">
+                <label for="user-input-calibration-train">Training</label>
+                <button id="user-input-calibration-train" type="button">Train Current Level</button>
+                <button id="user-input-calibration-delete" type="button" class="secondary">Delete Active</button>
               </div>
-              <div class="settings-hint">Sets the analog reference level used to align NAM input metadata to digital
-                peak levels, for the first NAM effect/amp in the chain. When Auto Level Input is enabled on a NAM amp and the model has a known training input level, the calibration reference is used to compute an input gain correction to normalize your interface's headroom to what the model expects.</div>
+              <div class="settings-hint" id="user-input-calibration-summary">No global input calibration active. Train one profile for each guitar or interface gain position you want Soundshed to normalize.</div>
             </div>
             <h2 id="settings-tone3000-heading">Tone3000</h2>
             <div class="settings-section" id="settings-tone3000-section">
@@ -989,11 +1023,20 @@
         <input type="range" id="footer-bpm-slider" min="30" max="300" step="1" />
       </div>
       <span class="footer-divider">|</span>
-      <button class="footer-btn metronome-only" id="footer-metronome-btn">
-        <span class="play-icon">▶</span> METRONOME
+      <button
+        class="footer-btn footer-metronome-btn metronome-only"
+        id="footer-metronome-btn"
+        type="button"
+        aria-label="Metronome"
+        title="Metronome"
+      >
+        <svg class="footer-metronome-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M9 3.5h6L19 20.5H5L9 3.5Z" />
+          <path d="M10 7.5h4" />
+          <path d="M12 8.5v7" />
+          <path d="M12 10.5l2.75-1.75" />
+        </svg>
       </button>
-      <span class="footer-divider">|</span>
-      <button class="footer-btn" id="footer-settings-btn">SETTINGS</button>
       <span class="footer-divider">|</span>
       <div class="footer-right">
         <div class="footer-theme-select">
@@ -1279,6 +1322,54 @@
               <span id="metronome-status">Stopped</span>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- User Input Calibration Modal -->
+    <div id="user-input-calibration-modal" class="modal input-calibration-modal" style="display: none;">
+      <div class="modal-content input-calibration-content">
+        <div class="modal-header">
+          <h3>Input Level Training</h3>
+          <button class="modal-close" id="user-input-calibration-close" title="Close">×</button>
+        </div>
+        <div class="modal-body input-calibration-body">
+          <p class="input-calibration-lead">Play the loudest picking or strumming you expect to use with this guitar and interface gain setting. Soundshed will save the captured raw input peak and apply a fixed global trim for this setup.</p>
+
+          <div class="input-calibration-metrics">
+            <div class="input-calibration-metric-card">
+              <span class="input-calibration-metric-label">Live Peak</span>
+              <span class="input-calibration-metric-value" id="user-input-calibration-live-peak">-</span>
+              <span class="input-calibration-metric-note">Raw input before any trim</span>
+            </div>
+            <div class="input-calibration-metric-card accent">
+              <span class="input-calibration-metric-label">Captured Peak</span>
+              <span class="input-calibration-metric-value" id="user-input-calibration-captured-peak">-</span>
+              <span class="input-calibration-metric-note">Peak hold saved into this profile</span>
+            </div>
+            <div class="input-calibration-metric-card">
+              <span class="input-calibration-metric-label">Recommended Trim</span>
+              <span class="input-calibration-metric-value" id="user-input-calibration-recommended-trim">-</span>
+              <span class="input-calibration-metric-note">Applied globally before the chain</span>
+            </div>
+          </div>
+
+          <div class="input-calibration-training-row">
+            <span class="input-calibration-status" id="user-input-calibration-status">Play your loudest picking or strumming to capture a training peak.</span>
+            <button id="user-input-calibration-reset" type="button" class="secondary">Reset Peak Hold</button>
+          </div>
+
+          <div class="input-calibration-form">
+            <label for="user-input-calibration-name">Profile Name</label>
+            <input id="user-input-calibration-name" type="text" maxlength="80" placeholder="Guitar X, Interface Gain at 0" />
+
+            <label for="user-input-calibration-description">Description</label>
+            <textarea id="user-input-calibration-description" rows="3" maxlength="200" placeholder="Single coils, bridge pickup, interface knob at 12 o'clock"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="user-input-calibration-cancel" type="button" class="secondary">Cancel</button>
+          <button id="user-input-calibration-save" type="button">Save Profile</button>
         </div>
       </div>
     </div>

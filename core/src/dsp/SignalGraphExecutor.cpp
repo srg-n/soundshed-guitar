@@ -74,6 +74,47 @@ namespace guitarfx
       return stats;
     }
 
+    ResourceRef HydrateResolvedResourceRef(const ResourceRef &ref, const ResourceLibrary *resourceLibrary)
+    {
+      ResourceRef hydrated = ref;
+      if (!resourceLibrary || !ref.IsLibraryRef())
+      {
+        return hydrated;
+      }
+
+      auto resource = resourceLibrary->LookupResource(ref.resourceType, ref.resourceId);
+      if (!resource)
+      {
+        return hydrated;
+      }
+
+      hydrated.metadata = resource->metadata;
+      if (!resource->hash.empty() && !hydrated.metadata.count("resourceHash"))
+      {
+        hydrated.metadata["resourceHash"] = resource->hash;
+      }
+
+      return hydrated;
+    }
+
+    std::optional<std::filesystem::path> ResolveResourcePath(const ResourceRef &ref, const ResourceLibrary *resourceLibrary)
+    {
+      if (resourceLibrary)
+      {
+        if (auto path = resourceLibrary->ResolveResource(ref))
+        {
+          return path;
+        }
+      }
+
+      if (ref.IsFilePath())
+      {
+        return ref.filePath;
+      }
+
+      return std::nullopt;
+    }
+
   }
 
   SignalGraphExecutor::SignalGraphExecutor() = default;
@@ -314,16 +355,13 @@ namespace guitarfx
           {
             if (!res.IsValid())
               continue;
-            auto path = mResourceLibrary->ResolveResource(res);
+
+            const ResourceRef hydratedRef = HydrateResolvedResourceRef(res, mResourceLibrary);
+            auto path = ResolveResourcePath(hydratedRef, mResourceLibrary);
             if (path)
             {
-              resolvedRefs.push_back(res);
+              resolvedRefs.push_back(hydratedRef);
               resolvedPaths.push_back(*path);
-            }
-            else if (res.IsFilePath())
-            {
-              resolvedRefs.push_back(res);
-              resolvedPaths.push_back(res.filePath);
             }
           }
 
@@ -801,19 +839,10 @@ namespace guitarfx
       return false;
     }
 
-    if (mResourceLibrary)
+    const ResourceRef hydratedRef = HydrateResolvedResourceRef(ref, mResourceLibrary);
+    if (auto path = ResolveResourcePath(hydratedRef, mResourceLibrary))
     {
-      auto path = mResourceLibrary->ResolveResource(ref);
-      if (path)
-      {
-        return state->processor->LoadResource(*path);
-      }
-    }
-
-    // Try direct file path
-    if (ref.IsFilePath())
-    {
-      return state->processor->LoadResource(ref.filePath);
+      return state->processor->LoadResources({hydratedRef}, {*path});
     }
 
     return false;

@@ -525,6 +525,145 @@ bool TestLoadPresetRestoresUnifiedLevelState()
     return true;
 }
 
+bool TestLoadPresetRetiresNamInputAutoLeveling()
+{
+    const fs::path sandbox = fs::temp_directory_path() / "guitarfx-preset-management-tests" / "nam-level-migration";
+    std::error_code ec;
+    fs::remove_all(sandbox, ec);
+    fs::create_directories(sandbox, ec);
+    SetSettingsEnvRoot(sandbox);
+
+    TestHost host(sandbox);
+    guitarfx::PluginController controller(host);
+    controller.Initialize();
+
+    auto preset = BuildPreset("p-nam-level-migration", "NAM Level Migration");
+    auto *ampNode = preset.graph.FindNode("amp");
+    if (!ampNode)
+    {
+        std::cerr << "Failed to build NAM test node\n";
+        return false;
+    }
+
+    ampNode->params["autoLevelInput"] = 1.0;
+    ampNode->params["calibrationInputLevel"] = -12.0;
+    ampNode->params["calibrationOutputLevel"] = -6.0;
+
+    nlohmann::json message;
+    message["type"] = "loadPreset";
+    message["preset"] = nlohmann::json::parse(guitarfx::PresetStorage::SerializeToJson(preset));
+    message["presetId"] = preset.id;
+    controller.HandleUIMessage(message.dump());
+
+    const auto &active = controller.GetActivePreset();
+    if (!active)
+    {
+        std::cerr << "No active preset after NAM migration load\n";
+        return false;
+    }
+
+    const auto *loadedAmp = active->graph.FindNode("amp");
+    if (!loadedAmp)
+    {
+        std::cerr << "Loaded preset missing NAM node\n";
+        return false;
+    }
+
+    const auto autoInputIt = loadedAmp->params.find("autoLevelInput");
+    if (autoInputIt == loadedAmp->params.end() || std::abs(autoInputIt->second) > 1e-9)
+    {
+        std::cerr << "NAM autoLevelInput should be retired to false on preset load\n";
+        return false;
+    }
+
+    const auto autoOutputIt = loadedAmp->params.find("autoLevelOutput");
+    if (autoOutputIt == loadedAmp->params.end() || std::abs(autoOutputIt->second - 1.0) > 1e-9)
+    {
+        std::cerr << "NAM autoLevelOutput should default to enabled on preset load\n";
+        return false;
+    }
+
+    if (loadedAmp->params.count("calibrationInputLevel") || loadedAmp->params.count("calibrationOutputLevel"))
+    {
+        std::cerr << "Legacy NAM calibration params should be removed on preset load\n";
+        return false;
+    }
+
+    return true;
+}
+
+bool TestLoadAppSettingsAppliesUserInputCalibrationProfile()
+{
+    const fs::path sandbox = fs::temp_directory_path() / "guitarfx-preset-management-tests" / "user-input-calibration";
+    std::error_code ec;
+    fs::remove_all(sandbox, ec);
+    fs::create_directories(sandbox, ec);
+    SetSettingsEnvRoot(sandbox);
+
+    const fs::path settingsPath = sandbox / "Soundshed Guitar" / "data" / "v1" / "settings" / "app.json";
+    fs::create_directories(settingsPath.parent_path(), ec);
+    {
+        nlohmann::json settings = nlohmann::json::object();
+        settings["audio.interfaceCalibration.enabled"] = true;
+        settings["audio.interfaceCalibration.referenceDbu"] = 12.0;
+        settings["audio.userInputCalibration.profiles"] = nlohmann::json::array({
+            {
+                {"id", "guitar-x"},
+                {"name", "Guitar X, Interface Gain at 0"},
+                {"description", "Bridge humbucker"},
+                {"capturedPeakDbfs", -18.0},
+                {"targetPeakDbfs", -12.0},
+                {"gainDb", 6.0}
+            }
+        });
+        settings["audio.userInputCalibration.activeProfileId"] = "guitar-x";
+
+        std::ofstream output(settingsPath);
+        output << settings.dump(2);
+    }
+
+    TestHost host(sandbox);
+    guitarfx::PluginController controller(host);
+    controller.Initialize();
+
+    if (std::abs(controller.GetMixer().GetUserInputCalibrationGainDb() - 6.0) > 1e-9)
+    {
+        std::cerr << "Active user input calibration gain was not applied from app settings\n";
+        return false;
+    }
+
+    const auto& appSettings = controller.GetAppSettings();
+    if (appSettings.contains("audio.interfaceCalibration.enabled")
+        || appSettings.contains("audio.interfaceCalibration.referenceDbu"))
+    {
+        std::cerr << "Legacy interface calibration settings should be removed during app settings migration\n";
+        return false;
+    }
+
+    std::ifstream input(settingsPath);
+    const auto persisted = nlohmann::json::parse(input, nullptr, false);
+    if (persisted.is_discarded())
+    {
+        std::cerr << "Failed to reload migrated app settings JSON\n";
+        return false;
+    }
+
+    if (persisted.contains("audio.interfaceCalibration.enabled")
+        || persisted.contains("audio.interfaceCalibration.referenceDbu"))
+    {
+        std::cerr << "Persisted app settings still contain legacy interface calibration keys\n";
+        return false;
+    }
+
+    if (persisted.value("audio.userInputCalibration.activeProfileId", std::string{}) != "guitar-x")
+    {
+        std::cerr << "Persisted active user input calibration profile id mismatch\n";
+        return false;
+    }
+
+    return true;
+}
+
 bool TestSavePresetUsesGlobalChainLevels()
 {
     const fs::path sandbox = fs::temp_directory_path() / "guitarfx-preset-management-tests" / "level-save";
@@ -922,6 +1061,8 @@ int main()
 
     run("Load preset via message", TestLoadPresetViaMessage());
     run("Load preset restores unified level state", TestLoadPresetRestoresUnifiedLevelState());
+    run("Load preset retires NAM input auto-leveling", TestLoadPresetRetiresNamInputAutoLeveling());
+    run("Load app settings applies user input calibration", TestLoadAppSettingsAppliesUserInputCalibrationProfile());
     run("Save preset uses global chain levels", TestSavePresetUsesGlobalChainLevels());
     run("Save/Get/Delete preset workflow", TestSaveGetDeletePresetWorkflow());
     run("Factory preset archive startup import", TestFactoryPresetArchiveStartupImport());

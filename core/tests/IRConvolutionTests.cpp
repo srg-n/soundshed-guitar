@@ -295,6 +295,7 @@ namespace
       cab.category = "cab";
       cab.enabled = true;
       cab.params["mix"] = 1.0;
+      cab.params["autoGainComp"] = 0.0;
       cab.params["irBlend"] = std::clamp(blend, 0.0, 1.0);
       cab.params["outputGain"] = 0.0;
 
@@ -400,6 +401,7 @@ namespace
       cab.category = "cab";
       cab.enabled = true;
       cab.params["mix"] = 1.0;
+      cab.params["autoGainComp"] = 0.0;
       cab.params["outputGain"] = 0.0;
 
       guitarfx::GraphNode output;

@@ -791,11 +791,12 @@ input[type="range"]:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   position: relative;
-  width: 14px;
+  width: 24px;
   flex-shrink: 0;
-  margin-top:8px;
+  margin-top: 8px;
+  overflow: visible;
 }
 
 .vu-segments {
@@ -803,6 +804,7 @@ input[type="range"]:focus-visible {
   flex-direction: column; /* top = loud (red), bottom = quiet (green) */
   gap: 2px;
   width: 14px;
+  margin: 0 auto;
   position: relative;
 }
 
@@ -839,4 +841,167 @@ input[type="range"]:focus-visible {
 /* dB readout below segments */
 .vu-db-value {
   display: none;
+}
+
+.input-vu-meter-dropdown-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  background: var(--bg-elevated, rgba(20, 22, 28, 0.94));
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, transform 120ms ease;
+}
+
+.input-vu-meter-dropdown-trigger:hover {
+  background: var(--overlay-light);
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+.input-vu-meter-dropdown-trigger:focus-visible {
+  outline: 2px solid var(--accent-primary, #50b878);
+  outline-offset: 2px;
+}
+
+.input-vu-meter-dropdown-trigger svg {
+  width: 11px;
+  height: 11px;
+  transition: transform 140ms ease;
+}
+
+.input-vu-meter-dropdown-trigger[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.input-vu-meter-dropdown-trigger.has-active-calibration {
+  border-color: color-mix(in srgb, var(--accent-primary) 70%, var(--border-light));
+  color: var(--accent-primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 26%, transparent);
+}
+
+.input-calibration-toolbar-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  transform: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(280px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border-light);
+  background: var(--bg-elevated, rgba(16, 18, 24, 0.98));
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.42);
+  z-index: 120;
+}
+
+.input-calibration-toolbar-menu[hidden] {
+  display: none;
+}
+
+.input-calibration-toolbar-menu-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 6px 8px;
+}
+
+.input-calibration-toolbar-menu-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.input-calibration-toolbar-menu-subtitle {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.input-calibration-toolbar-menu-divider {
+  height: 1px;
+  margin: 2px 0;
+  background: var(--border-dark);
+}
+
+.input-calibration-toolbar-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+.input-calibration-toolbar-item:hover {
+  background: var(--overlay-light);
+  border-color: var(--border-light);
+}
+
+.input-calibration-toolbar-item:focus-visible {
+  outline: 2px solid var(--accent-primary, #50b878);
+  outline-offset: 2px;
+}
+
+.input-calibration-toolbar-item.active {
+  background: color-mix(in srgb, var(--accent-primary) 14%, var(--overlay-light));
+  border-color: color-mix(in srgb, var(--accent-primary) 44%, var(--border-light));
+}
+
+.input-calibration-toolbar-item-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.input-calibration-toolbar-item-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.input-calibration-toolbar-item-note {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.input-calibration-toolbar-item-meta {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.input-calibration-toolbar-item.active .input-calibration-toolbar-item-meta {
+  color: var(--accent-primary);
+}
+
+.input-calibration-toolbar-item.action .input-calibration-toolbar-item-name {
+  color: var(--accent-primary);
 }

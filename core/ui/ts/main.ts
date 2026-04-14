@@ -17,7 +17,7 @@ import { initFxSelector } from "./fxSelector.js";
 import { themeSwitcher } from "./theme-switcher.js";
 import { startUiSettingsTracking } from "./windowSettings.js";
 import { renderFooterDemoAudioControls, bindFooterDemoAudioControls } from "./demoAudio.js";
-import { initDiagnosticsToggle, initThemeSelect } from "./settings.js";
+import { initDiagnosticsToggle, initThemeSelect, initUserInputCalibrationControls } from "./settings.js";
 import { postMessage } from "./bridge.js";
 import { initializeMetronome } from "./metronome.js";
 import { initializeBlendEditorModal } from "./signalPath.js";
@@ -145,6 +145,7 @@ async function bootstrap(): Promise<void> {
   initFxSelector();
   startUiSettingsTracking();
   initDiagnosticsToggle();
+  initUserInputCalibrationControls();
   document.addEventListener(FEATURE_FLAGS_CHANGED_EVENT, () => {
     renderActivePreset();
   });
@@ -196,13 +197,6 @@ async function bootstrap(): Promise<void> {
   const signalTestButton = document.getElementById("run-signal-test");
   if (signalTestButton) {
     signalTestButton.addEventListener("click", requestSignalPathTest);
-  }
-
-  const footerSettingsButton = document.getElementById("footer-settings-btn");
-  if (footerSettingsButton) {
-    footerSettingsButton.addEventListener("click", () => {
-      switchMainPanel("settings");
-    });
   }
 
   // Hide splash screen now that app is fully initialized

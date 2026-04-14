@@ -8,7 +8,7 @@ import { initTone3000Browser } from "./tone3000Browser.js";
 import { getAudioFxLibrary, getIrLibrary } from "./dataLibraries.js";
 import { buildArchiveFileName, requestResourceData, sanitizeFilename, arrayBufferToBase64 } from "./archiveUtils.js";
 import { sha256HexFromBase64 } from "./utils.js";
-import type { AppSettingValue, Preset, BlendDefinition, ResourceRef, LibraryResource } from "./types.js";
+import type { AppSettingValue, Preset, BlendDefinition, ResourceRef, LibraryResource, UserInputCalibrationProfile } from "./types.js";
 import { buildBlendModelMappingsFromIds } from "./blendUtils.js";
 import { themeSwitcher, type ThemeName } from "./theme-switcher.js";
 import { renderIcon } from "./iconAssets.js";
@@ -32,8 +32,10 @@ import {
 
 const API_KEY_SETTING = "tone3000.apiKey";
 const DIAGNOSTICS_SETTING = "diagnostics.signalLevelsEnabled";
-const INTERFACE_CALIBRATION_ENABLED_SETTING = "audio.interfaceCalibration.enabled";
-const INTERFACE_CALIBRATION_REFERENCE_SETTING = "audio.interfaceCalibration.referenceDbu";
+const USER_INPUT_CALIBRATION_PROFILES_SETTING = "audio.userInputCalibration.profiles";
+const USER_INPUT_CALIBRATION_ACTIVE_PROFILE_SETTING = "audio.userInputCalibration.activeProfileId";
+const USER_INPUT_CALIBRATION_TARGET_PEAK_DBFS = -12.0;
+const USER_INPUT_CALIBRATION_NONE_VALUE = "__none__";
 const FACTORY_ARCHIVE_LOADING_SETTING = "factoryPresets.archiveLoadingEnabled";
 
 const apiKeyInput = document.getElementById("tone3000-api-key-input") as HTMLInputElement | null;
@@ -43,8 +45,23 @@ const sessionStatus = document.getElementById("tone3000-session-status");
 const openAudioPreferencesButton = document.getElementById("open-audio-preferences");
 const openAudioPreferencesRow = document.getElementById("open-audio-preferences-row");
 const openAudioPreferencesHint = document.getElementById("open-audio-preferences-hint");
-const interfaceCalibrationToggle = document.getElementById("interface-calibration-toggle") as HTMLInputElement | null;
-const interfaceCalibrationReferenceInput = document.getElementById("interface-calibration-reference") as HTMLInputElement | null;
+const userInputCalibrationToolbarTrigger = document.getElementById("user-input-calibration-toolbar-trigger") as HTMLButtonElement | null;
+const userInputCalibrationToolbarMenu = document.getElementById("user-input-calibration-toolbar-menu") as HTMLDivElement | null;
+const userInputCalibrationProfileSelect = document.getElementById("user-input-calibration-profile") as HTMLSelectElement | null;
+const userInputCalibrationTrainButton = document.getElementById("user-input-calibration-train") as HTMLButtonElement | null;
+const userInputCalibrationDeleteButton = document.getElementById("user-input-calibration-delete") as HTMLButtonElement | null;
+const userInputCalibrationSummary = document.getElementById("user-input-calibration-summary") as HTMLElement | null;
+const userInputCalibrationModal = document.getElementById("user-input-calibration-modal") as HTMLDivElement | null;
+const userInputCalibrationCloseButton = document.getElementById("user-input-calibration-close") as HTMLButtonElement | null;
+const userInputCalibrationCancelButton = document.getElementById("user-input-calibration-cancel") as HTMLButtonElement | null;
+const userInputCalibrationSaveButton = document.getElementById("user-input-calibration-save") as HTMLButtonElement | null;
+const userInputCalibrationResetButton = document.getElementById("user-input-calibration-reset") as HTMLButtonElement | null;
+const userInputCalibrationNameInput = document.getElementById("user-input-calibration-name") as HTMLInputElement | null;
+const userInputCalibrationDescriptionInput = document.getElementById("user-input-calibration-description") as HTMLTextAreaElement | null;
+const userInputCalibrationLivePeak = document.getElementById("user-input-calibration-live-peak") as HTMLElement | null;
+const userInputCalibrationCapturedPeak = document.getElementById("user-input-calibration-captured-peak") as HTMLElement | null;
+const userInputCalibrationRecommendedTrim = document.getElementById("user-input-calibration-recommended-trim") as HTMLElement | null;
+const userInputCalibrationStatus = document.getElementById("user-input-calibration-status") as HTMLElement | null;
 const equipmentTabButtons = Array.from(document.querySelectorAll(".equipment-tab-btn"));
 const equipmentTabPanels = Array.from(document.querySelectorAll(".equipment-tab-panel"));
 const equipmentLibraryTabButton = document.querySelector('.equipment-tab-btn[data-equipment-tab="library"]') as HTMLElement | null;
@@ -93,8 +110,11 @@ let libraryFiltersInitialized = false;
 let equipmentTabsInitialized = false;
 let themeSelectInitialized = false;
 let libraryTabsInitialized = false;
+let userInputCalibrationControlsInitialized = false;
 let libraryStateRequestedAt = 0;
 let suppressViewStateUpdates = false;
+let userInputCalibrationTrainingPeakDbfs = Number.NEGATIVE_INFINITY;
+let userInputCalibrationLivePeakDbfs = Number.NEGATIVE_INFINITY;
 
 export function initSettingsPanel(): void {
   if (settingsInitialized) {
@@ -108,7 +128,7 @@ export function initSettingsPanel(): void {
     appendLog("openAudioPreferences → requested");
   });
   initDiagnosticsToggle();
-  initInterfaceCalibrationControls();
+  initUserInputCalibrationControls();
   initFeatureToggles();
   initFactoryArchiveLoadingToggle();
   initUpdateCheckToggle();
@@ -690,17 +710,7 @@ export function refreshSettingsView(): void {
     apiKeyInput.placeholder = stored ? "API key stored" : "Enter your Tone3000 API key";
   }
   forceDiagnosticsEnabled();
-  const interfaceEnabledSetting = getSettingValue(INTERFACE_CALIBRATION_ENABLED_SETTING);
-  const interfaceEnabled = interfaceEnabledSetting === null ? true : Boolean(interfaceEnabledSetting);
-  if (interfaceCalibrationToggle) {
-    interfaceCalibrationToggle.checked = interfaceEnabled;
-  }
-  if (interfaceCalibrationReferenceInput) {
-    const referenceValue = Number(getSettingValue(INTERFACE_CALIBRATION_REFERENCE_SETTING));
-    const resolvedValue = Number.isFinite(referenceValue) ? referenceValue : 12.0;
-    interfaceCalibrationReferenceInput.value = resolvedValue.toFixed(1);
-    interfaceCalibrationReferenceInput.disabled = !interfaceEnabled;
-  }
+  refreshUserInputCalibrationView();
   if (themeSelect) {
     themeSelect.value = themeSwitcher.getCurrentTheme();
   }
@@ -750,31 +760,551 @@ async function clearApiKey(): Promise<void> {
   updateSessionStatus();
 }
 
-function initInterfaceCalibrationControls(): void {
-  if (interfaceCalibrationToggle && interfaceCalibrationToggle.dataset.bound !== "true") {
-    interfaceCalibrationToggle.dataset.bound = "true";
-    interfaceCalibrationToggle.addEventListener("change", () => updateInterfaceCalibrationSettings());
+function readUserInputCalibrationProfiles(): UserInputCalibrationProfile[] {
+  const raw = getSettingValue(USER_INPUT_CALIBRATION_PROFILES_SETTING);
+  if (!Array.isArray(raw)) {
+    return [];
   }
-  if (interfaceCalibrationReferenceInput && interfaceCalibrationReferenceInput.dataset.bound !== "true") {
-    interfaceCalibrationReferenceInput.dataset.bound = "true";
-    interfaceCalibrationReferenceInput.addEventListener("change", () => updateInterfaceCalibrationSettings());
+
+  return raw.flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      return [];
+    }
+
+    const candidate = entry as Record<string, unknown>;
+    const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
+    const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
+    if (!id || !name) {
+      return [];
+    }
+
+    const capturedPeakDbfs = Number(candidate.capturedPeakDbfs);
+    const targetPeakDbfsRaw = Number(candidate.targetPeakDbfs);
+    const targetPeakDbfs = Number.isFinite(targetPeakDbfsRaw)
+      ? targetPeakDbfsRaw
+      : USER_INPUT_CALIBRATION_TARGET_PEAK_DBFS;
+    const gainDbRaw = Number(candidate.gainDb);
+    const gainDb = Number.isFinite(gainDbRaw)
+      ? gainDbRaw
+      : (Number.isFinite(capturedPeakDbfs) ? targetPeakDbfs - capturedPeakDbfs : 0.0);
+
+    return [{
+      id,
+      name,
+      description: typeof candidate.description === "string" ? candidate.description : "",
+      capturedPeakDbfs: Number.isFinite(capturedPeakDbfs) ? capturedPeakDbfs : Number.NaN,
+      targetPeakDbfs,
+      gainDb: Math.max(-24.0, Math.min(24.0, gainDb)),
+      createdAt: typeof candidate.createdAt === "string" ? candidate.createdAt : undefined,
+      updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : undefined,
+    } satisfies UserInputCalibrationProfile];
+  });
+}
+
+function readActiveUserInputCalibrationProfileId(): string | null {
+  const raw = getSettingValue(USER_INPUT_CALIBRATION_ACTIVE_PROFILE_SETTING);
+  if (typeof raw !== "string") {
+    return null;
+  }
+  const trimmed = raw.trim();
+  return trimmed ? trimmed : null;
+}
+
+function getActiveUserInputCalibrationProfile(): UserInputCalibrationProfile | null {
+  const profiles = readUserInputCalibrationProfiles();
+  const activeProfileId = readActiveUserInputCalibrationProfileId();
+  if (!activeProfileId) {
+    return null;
+  }
+  return profiles.find((profile) => profile.id === activeProfileId) ?? null;
+}
+
+function serializeUserInputCalibrationProfiles(profiles: UserInputCalibrationProfile[]): AppSettingValue {
+  return profiles.map((profile) => {
+    const payload: Record<string, AppSettingValue> = {
+      id: profile.id,
+      name: profile.name,
+      description: profile.description,
+      capturedPeakDbfs: profile.capturedPeakDbfs,
+      targetPeakDbfs: profile.targetPeakDbfs,
+      gainDb: profile.gainDb,
+    };
+    if (profile.createdAt) {
+      payload.createdAt = profile.createdAt;
+    }
+    if (profile.updatedAt) {
+      payload.updatedAt = profile.updatedAt;
+    }
+    return payload;
+  });
+}
+
+function persistUserInputCalibrationState(profiles: UserInputCalibrationProfile[], activeProfileId: string | null): void {
+  const serializedProfiles = serializeUserInputCalibrationProfiles(profiles);
+  uiState.appSettings[USER_INPUT_CALIBRATION_PROFILES_SETTING] = serializedProfiles;
+  uiState.appSettings[USER_INPUT_CALIBRATION_ACTIVE_PROFILE_SETTING] = activeProfileId;
+  setAppSetting(USER_INPUT_CALIBRATION_PROFILES_SETTING, serializedProfiles);
+  setAppSetting(USER_INPUT_CALIBRATION_ACTIVE_PROFILE_SETTING, activeProfileId);
+  refreshUserInputCalibrationView();
+}
+
+function formatDbfsValue(value: number): string {
+  return Number.isFinite(value) ? `${value.toFixed(1)} dBFS` : "-";
+}
+
+function formatSignedDbValue(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "-";
+  }
+  const sign = value >= 0 ? "+" : "";
+  return `${sign}${value.toFixed(1)} dB`;
+}
+
+function getCurrentRawInputPeakDbfs(): number {
+  return uiState.signalDiagnostics?.rawInput?.peakDbfs
+    ?? uiState.signalDiagnostics?.input?.peakDbfs
+    ?? Number.NEGATIVE_INFINITY;
+}
+
+function isUserInputCalibrationModalOpen(): boolean {
+  return Boolean(userInputCalibrationModal && userInputCalibrationModal.style.display !== "none");
+}
+
+function isUserInputCalibrationToolbarMenuOpen(): boolean {
+  return Boolean(userInputCalibrationToolbarMenu && !userInputCalibrationToolbarMenu.hidden);
+}
+
+function positionUserInputCalibrationToolbarMenu(): void {
+  if (!userInputCalibrationToolbarMenu || !userInputCalibrationToolbarTrigger) {
+    return;
+  }
+
+  const offsetParent = userInputCalibrationToolbarMenu.offsetParent;
+  if (!(offsetParent instanceof HTMLElement)) {
+    return;
+  }
+
+  const viewportMargin = 8;
+  const parentRect = offsetParent.getBoundingClientRect();
+  const triggerRect = userInputCalibrationToolbarTrigger.getBoundingClientRect();
+  const menuWidth = userInputCalibrationToolbarMenu.offsetWidth;
+
+  const centeredLeft = (triggerRect.left + (triggerRect.width / 2)) - parentRect.left - (menuWidth / 2);
+  const minLeft = viewportMargin - parentRect.left;
+  const maxLeft = window.innerWidth - viewportMargin - parentRect.left - menuWidth;
+  const clampedLeft = Math.min(Math.max(centeredLeft, minLeft), Math.max(minLeft, maxLeft));
+
+  userInputCalibrationToolbarMenu.style.left = `${Math.round(clampedLeft)}px`;
+}
+
+function closeUserInputCalibrationToolbarMenu(): void {
+  if (userInputCalibrationToolbarMenu) {
+    userInputCalibrationToolbarMenu.hidden = true;
+  }
+  userInputCalibrationToolbarTrigger?.setAttribute("aria-expanded", "false");
+}
+
+function openUserInputCalibrationToolbarMenu(): void {
+  if (!userInputCalibrationToolbarMenu) {
+    return;
+  }
+
+  userInputCalibrationToolbarMenu.hidden = false;
+  positionUserInputCalibrationToolbarMenu();
+  userInputCalibrationToolbarTrigger?.setAttribute("aria-expanded", "true");
+}
+
+function toggleUserInputCalibrationToolbarMenu(): void {
+  if (isUserInputCalibrationToolbarMenuOpen()) {
+    closeUserInputCalibrationToolbarMenu();
+    return;
+  }
+
+  openUserInputCalibrationToolbarMenu();
+}
+
+function refreshUserInputCalibrationTrainingView(): void {
+  if (userInputCalibrationLivePeak) {
+    userInputCalibrationLivePeak.textContent = formatDbfsValue(userInputCalibrationLivePeakDbfs);
+  }
+  if (userInputCalibrationCapturedPeak) {
+    userInputCalibrationCapturedPeak.textContent = formatDbfsValue(userInputCalibrationTrainingPeakDbfs);
+  }
+
+  const recommendedTrimDb = Number.isFinite(userInputCalibrationTrainingPeakDbfs)
+    ? Math.max(-24.0, Math.min(24.0, USER_INPUT_CALIBRATION_TARGET_PEAK_DBFS - userInputCalibrationTrainingPeakDbfs))
+    : Number.NaN;
+  if (userInputCalibrationRecommendedTrim) {
+    userInputCalibrationRecommendedTrim.textContent = formatSignedDbValue(recommendedTrimDb);
+  }
+
+  const rawInputClipped = Boolean(uiState.signalDiagnostics?.rawInput?.clipped);
+  const trimmedName = userInputCalibrationNameInput?.value.trim() ?? "";
+  const canSave = trimmedName.length > 0 && Number.isFinite(userInputCalibrationTrainingPeakDbfs) && !rawInputClipped;
+
+  if (userInputCalibrationSaveButton) {
+    userInputCalibrationSaveButton.disabled = !canSave;
+  }
+
+  if (!userInputCalibrationStatus) {
+    return;
+  }
+
+  if (rawInputClipped) {
+    userInputCalibrationStatus.textContent = "Input clipped during training. Back the interface gain down and capture again.";
+    return;
+  }
+  if (!Number.isFinite(userInputCalibrationTrainingPeakDbfs)) {
+    userInputCalibrationStatus.textContent = "Play your loudest picking or strumming to capture a training peak.";
+    return;
+  }
+  userInputCalibrationStatus.textContent = `Captured ${formatDbfsValue(userInputCalibrationTrainingPeakDbfs)}. Saving this profile will apply ${formatSignedDbValue(recommendedTrimDb)} toward a ${formatDbfsValue(USER_INPUT_CALIBRATION_TARGET_PEAK_DBFS)} target.`;
+}
+
+function resetUserInputCalibrationTrainingPeak(): void {
+  userInputCalibrationLivePeakDbfs = getCurrentRawInputPeakDbfs();
+  userInputCalibrationTrainingPeakDbfs = Number.isFinite(userInputCalibrationLivePeakDbfs)
+    ? userInputCalibrationLivePeakDbfs
+    : Number.NEGATIVE_INFINITY;
+  refreshUserInputCalibrationTrainingView();
+}
+
+function openUserInputCalibrationTrainingModal(): void {
+  if (!userInputCalibrationModal) {
+    return;
+  }
+
+  closeUserInputCalibrationToolbarMenu();
+  userInputCalibrationNameInput && (userInputCalibrationNameInput.value = "");
+  userInputCalibrationDescriptionInput && (userInputCalibrationDescriptionInput.value = "");
+  resetUserInputCalibrationTrainingPeak();
+  userInputCalibrationModal.style.display = "flex";
+  refreshUserInputCalibrationTrainingView();
+  userInputCalibrationNameInput?.focus();
+}
+
+function closeUserInputCalibrationTrainingModal(): void {
+  if (!userInputCalibrationModal) {
+    return;
+  }
+  userInputCalibrationModal.style.display = "none";
+}
+
+async function deleteActiveUserInputCalibrationProfile(): Promise<void> {
+  const activeProfile = getActiveUserInputCalibrationProfile();
+  if (!activeProfile) {
+    return;
+  }
+
+  const confirmed = await showConfirm(
+    `Delete input calibration profile "${activeProfile.name}"?`,
+    "Delete Input Calibration",
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  const remainingProfiles = readUserInputCalibrationProfiles().filter((profile) => profile.id !== activeProfile.id);
+  persistUserInputCalibrationState(remainingProfiles, null);
+  showNotification("Input calibration deleted", activeProfile.name);
+}
+
+function saveUserInputCalibrationProfile(): void {
+  const name = userInputCalibrationNameInput?.value.trim() ?? "";
+  if (!name) {
+    showNotification("Input calibration name required");
+    return;
+  }
+
+  if (!Number.isFinite(userInputCalibrationTrainingPeakDbfs)) {
+    showNotification("No training level captured", "Play your guitar first.");
+    return;
+  }
+
+  if (uiState.signalDiagnostics?.rawInput?.clipped) {
+    showNotification("Input clipped during training", "Reduce interface gain and capture again.");
+    return;
+  }
+
+  const gainDb = Math.max(-24.0, Math.min(24.0, USER_INPUT_CALIBRATION_TARGET_PEAK_DBFS - userInputCalibrationTrainingPeakDbfs));
+  const timestamp = new Date().toISOString();
+  const profile: UserInputCalibrationProfile = {
+    id: globalThis.crypto?.randomUUID?.() ?? `input-cal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name,
+    description: userInputCalibrationDescriptionInput?.value.trim() ?? "",
+    capturedPeakDbfs: userInputCalibrationTrainingPeakDbfs,
+    targetPeakDbfs: USER_INPUT_CALIBRATION_TARGET_PEAK_DBFS,
+    gainDb,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  const profiles = readUserInputCalibrationProfiles();
+  profiles.push(profile);
+  persistUserInputCalibrationState(profiles, profile.id);
+  closeUserInputCalibrationTrainingModal();
+  showNotification("Input calibration saved", `${profile.name} • ${formatSignedDbValue(profile.gainDb)}`);
+}
+
+function applyUserInputCalibrationProfileSelection(activeProfileId: string | null): void {
+  uiState.appSettings[USER_INPUT_CALIBRATION_ACTIVE_PROFILE_SETTING] = activeProfileId;
+  setAppSetting(USER_INPUT_CALIBRATION_ACTIVE_PROFILE_SETTING, activeProfileId);
+  refreshUserInputCalibrationView();
+}
+
+function handleUserInputCalibrationProfileSelection(): void {
+  const selectedValue = userInputCalibrationProfileSelect?.value ?? USER_INPUT_CALIBRATION_NONE_VALUE;
+  const activeProfileId = selectedValue === USER_INPUT_CALIBRATION_NONE_VALUE ? null : selectedValue;
+  applyUserInputCalibrationProfileSelection(activeProfileId);
+}
+
+function renderUserInputCalibrationToolbarMenu(profiles: UserInputCalibrationProfile[], activeProfile: UserInputCalibrationProfile | null): void {
+  if (!userInputCalibrationToolbarMenu) {
+    return;
+  }
+
+  userInputCalibrationToolbarMenu.innerHTML = "";
+
+  const header = document.createElement("div");
+  header.className = "input-calibration-toolbar-menu-header";
+
+  const title = document.createElement("span");
+  title.className = "input-calibration-toolbar-menu-title";
+  title.textContent = "Input Calibration";
+  header.appendChild(title);
+
+  const subtitle = document.createElement("span");
+  subtitle.className = "input-calibration-toolbar-menu-subtitle";
+  subtitle.textContent = activeProfile ? `${activeProfile.name} active` : "No active calibration";
+  header.appendChild(subtitle);
+
+  userInputCalibrationToolbarMenu.appendChild(header);
+
+  const appendProfileItem = (profile: UserInputCalibrationProfile | null): void => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "input-calibration-toolbar-item";
+    button.dataset.profileId = profile?.id ?? USER_INPUT_CALIBRATION_NONE_VALUE;
+    button.setAttribute("role", "menuitemradio");
+
+    const isActive = profile ? activeProfile?.id === profile.id : !activeProfile;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-checked", isActive ? "true" : "false");
+
+    const copy = document.createElement("span");
+    copy.className = "input-calibration-toolbar-item-copy";
+
+    const name = document.createElement("span");
+    name.className = "input-calibration-toolbar-item-name";
+    name.textContent = profile?.name ?? "No calibration";
+    copy.appendChild(name);
+
+    const note = document.createElement("span");
+    note.className = "input-calibration-toolbar-item-note";
+    note.textContent = profile
+      ? (profile.description || `Captured ${formatDbfsValue(profile.capturedPeakDbfs)}`)
+      : "Use raw input without a global trim";
+    copy.appendChild(note);
+
+    button.appendChild(copy);
+
+    const meta = document.createElement("span");
+    meta.className = "input-calibration-toolbar-item-meta";
+    meta.textContent = isActive ? "ACTIVE" : (profile ? formatSignedDbValue(profile.gainDb) : "OFF");
+    button.appendChild(meta);
+
+    userInputCalibrationToolbarMenu.appendChild(button);
+  };
+
+  appendProfileItem(null);
+  profiles.forEach((profile) => appendProfileItem(profile));
+
+  const divider = document.createElement("div");
+  divider.className = "input-calibration-toolbar-menu-divider";
+  userInputCalibrationToolbarMenu.appendChild(divider);
+
+  const trainButton = document.createElement("button");
+  trainButton.type = "button";
+  trainButton.className = "input-calibration-toolbar-item action";
+  trainButton.dataset.action = "train";
+  trainButton.setAttribute("role", "menuitem");
+
+  const trainCopy = document.createElement("span");
+  trainCopy.className = "input-calibration-toolbar-item-copy";
+
+  const trainName = document.createElement("span");
+  trainName.className = "input-calibration-toolbar-item-name";
+  trainName.textContent = "Train Input Level";
+  trainCopy.appendChild(trainName);
+
+  const trainNote = document.createElement("span");
+  trainNote.className = "input-calibration-toolbar-item-note";
+  trainNote.textContent = "Open the training dialog and save a new profile";
+  trainCopy.appendChild(trainNote);
+
+  trainButton.appendChild(trainCopy);
+
+  const trainMeta = document.createElement("span");
+  trainMeta.className = "input-calibration-toolbar-item-meta";
+  trainMeta.textContent = "TRAIN";
+  trainButton.appendChild(trainMeta);
+
+  userInputCalibrationToolbarMenu.appendChild(trainButton);
+
+  if (userInputCalibrationToolbarTrigger) {
+    userInputCalibrationToolbarTrigger.classList.toggle("has-active-calibration", Boolean(activeProfile));
+    userInputCalibrationToolbarTrigger.title = activeProfile
+      ? `Input calibration options (${activeProfile.name})`
+      : "Input calibration options";
+    userInputCalibrationToolbarTrigger.setAttribute(
+      "aria-label",
+      activeProfile
+        ? `Input calibration options. Active profile ${activeProfile.name}`
+        : "Input calibration options",
+    );
   }
 }
 
-function updateInterfaceCalibrationSettings(): void {
-  const enabled = Boolean(interfaceCalibrationToggle?.checked ?? true);
-  const rawReference = Number(interfaceCalibrationReferenceInput?.value ?? 12);
-  const reference = Number.isFinite(rawReference) ? rawReference : 12.0;
-
-  uiState.appSettings[INTERFACE_CALIBRATION_ENABLED_SETTING] = enabled;
-  uiState.appSettings[INTERFACE_CALIBRATION_REFERENCE_SETTING] = reference;
-  setAppSetting(INTERFACE_CALIBRATION_ENABLED_SETTING, enabled);
-  setAppSetting(INTERFACE_CALIBRATION_REFERENCE_SETTING, reference);
-
-  if (interfaceCalibrationReferenceInput) {
-    interfaceCalibrationReferenceInput.disabled = !enabled;
-    interfaceCalibrationReferenceInput.value = reference.toFixed(1);
+function handleUserInputCalibrationToolbarMenuClick(event: MouseEvent): void {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) {
+    return;
   }
+
+  const item = target.closest(".input-calibration-toolbar-item") as HTMLButtonElement | null;
+  if (!item) {
+    return;
+  }
+
+  if (item.dataset.action === "train") {
+    openUserInputCalibrationTrainingModal();
+    return;
+  }
+
+  const selectedValue = item.dataset.profileId ?? USER_INPUT_CALIBRATION_NONE_VALUE;
+  const activeProfileId = selectedValue === USER_INPUT_CALIBRATION_NONE_VALUE ? null : selectedValue;
+  applyUserInputCalibrationProfileSelection(activeProfileId);
+  closeUserInputCalibrationToolbarMenu();
+}
+
+function refreshUserInputCalibrationView(): void {
+  const profiles = readUserInputCalibrationProfiles();
+  const activeProfileId = readActiveUserInputCalibrationProfileId();
+  const activeProfile = profiles.find((profile) => profile.id === activeProfileId) ?? null;
+
+  if (userInputCalibrationProfileSelect) {
+    userInputCalibrationProfileSelect.innerHTML = "";
+
+    const noneOption = document.createElement("option");
+    noneOption.value = USER_INPUT_CALIBRATION_NONE_VALUE;
+    noneOption.textContent = "No calibration";
+    userInputCalibrationProfileSelect.appendChild(noneOption);
+
+    profiles.forEach((profile) => {
+      const option = document.createElement("option");
+      option.value = profile.id;
+      option.textContent = profile.name;
+      userInputCalibrationProfileSelect.appendChild(option);
+    });
+
+    userInputCalibrationProfileSelect.value = activeProfile ? activeProfile.id : USER_INPUT_CALIBRATION_NONE_VALUE;
+  }
+
+  if (userInputCalibrationDeleteButton) {
+    userInputCalibrationDeleteButton.disabled = !activeProfile;
+  }
+
+  renderUserInputCalibrationToolbarMenu(profiles, activeProfile);
+
+  if (userInputCalibrationSummary) {
+    const currentPeakDbfs = getCurrentRawInputPeakDbfs();
+    if (activeProfile) {
+      const description = activeProfile.description ? `${activeProfile.description}. ` : "";
+      const currentPeak = Number.isFinite(currentPeakDbfs) ? ` Current raw peak: ${formatDbfsValue(currentPeakDbfs)}.` : "";
+      userInputCalibrationSummary.textContent = `${activeProfile.name}. ${description}Applies ${formatSignedDbValue(activeProfile.gainDb)} toward ${formatDbfsValue(activeProfile.targetPeakDbfs)} from a captured ${formatDbfsValue(activeProfile.capturedPeakDbfs)}.${currentPeak}`;
+    } else {
+      userInputCalibrationSummary.textContent = "No global input calibration active. Train one profile for each guitar or interface gain position you want Soundshed to normalize.";
+    }
+  }
+
+  if (isUserInputCalibrationToolbarMenuOpen()) {
+    positionUserInputCalibrationToolbarMenu();
+  }
+
+  if (isUserInputCalibrationModalOpen()) {
+    refreshUserInputCalibrationTrainingView();
+  }
+}
+
+export function initUserInputCalibrationControls(): void {
+  if (userInputCalibrationControlsInitialized) {
+    refreshUserInputCalibrationView();
+    return;
+  }
+
+  userInputCalibrationControlsInitialized = true;
+  userInputCalibrationProfileSelect?.addEventListener("change", handleUserInputCalibrationProfileSelection);
+  userInputCalibrationTrainButton?.addEventListener("click", openUserInputCalibrationTrainingModal);
+  userInputCalibrationDeleteButton?.addEventListener("click", () => void deleteActiveUserInputCalibrationProfile());
+  userInputCalibrationToolbarTrigger?.addEventListener("click", toggleUserInputCalibrationToolbarMenu);
+  userInputCalibrationToolbarMenu?.addEventListener("click", handleUserInputCalibrationToolbarMenuClick);
+  userInputCalibrationCloseButton?.addEventListener("click", closeUserInputCalibrationTrainingModal);
+  userInputCalibrationCancelButton?.addEventListener("click", closeUserInputCalibrationTrainingModal);
+  userInputCalibrationResetButton?.addEventListener("click", resetUserInputCalibrationTrainingPeak);
+  userInputCalibrationSaveButton?.addEventListener("click", saveUserInputCalibrationProfile);
+  userInputCalibrationNameInput?.addEventListener("input", refreshUserInputCalibrationTrainingView);
+  userInputCalibrationDescriptionInput?.addEventListener("input", refreshUserInputCalibrationTrainingView);
+  userInputCalibrationModal?.addEventListener("mousedown", (event) => {
+    if (event.target === userInputCalibrationModal) {
+      closeUserInputCalibrationTrainingModal();
+    }
+  });
+  document.addEventListener("mousedown", (event) => {
+    const target = event.target;
+    if (!(target instanceof Node)) {
+      return;
+    }
+
+    if (userInputCalibrationToolbarMenu?.contains(target) || userInputCalibrationToolbarTrigger?.contains(target)) {
+      return;
+    }
+
+    closeUserInputCalibrationToolbarMenu();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") {
+      return;
+    }
+
+    if (isUserInputCalibrationToolbarMenuOpen()) {
+      closeUserInputCalibrationToolbarMenu();
+    }
+
+    if (isUserInputCalibrationModalOpen()) {
+      closeUserInputCalibrationTrainingModal();
+    }
+  });
+  window.addEventListener("resize", () => {
+    if (isUserInputCalibrationToolbarMenuOpen()) {
+      positionUserInputCalibrationToolbarMenu();
+    }
+  });
+  refreshUserInputCalibrationView();
+}
+
+export function handleUserInputCalibrationDiagnosticsUpdate(): void {
+  userInputCalibrationLivePeakDbfs = getCurrentRawInputPeakDbfs();
+  if (!isUserInputCalibrationModalOpen()) {
+    return;
+  }
+
+  if (Number.isFinite(userInputCalibrationLivePeakDbfs)
+      && (!Number.isFinite(userInputCalibrationTrainingPeakDbfs)
+        || userInputCalibrationLivePeakDbfs > userInputCalibrationTrainingPeakDbfs)) {
+    userInputCalibrationTrainingPeakDbfs = userInputCalibrationLivePeakDbfs;
+  }
+
+  refreshUserInputCalibrationTrainingView();
 }
 
 function updateSessionStatus(): void {

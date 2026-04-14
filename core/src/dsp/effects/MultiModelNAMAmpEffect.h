@@ -154,6 +154,18 @@ public:
     {
       mUserOutputGain = std::pow(10.0, std::clamp(value, -24.0, 24.0) / 20.0);
     }
+    else if (key == "autoLevelInput")
+    {
+      mAutoLevelInput = value > 0.5;
+    }
+    else if (key == "autoLevelOutput")
+    {
+      mAutoLevelOutput = value > 0.5;
+    }
+    else if (key == "calibrationInputLevel" || key == "calibrationOutputLevel")
+    {
+      // Legacy no-op: per-model calibration overrides are retired.
+    }
     else if (key == "blend")
     {
       mBlend = std::clamp(value, 0.0, 1.0);
@@ -167,7 +179,10 @@ public:
       mTargetParams[key] = value;
     }
 
-    UpdateEffectiveGains();
+    if (mModels.empty())
+      UpdateEffectiveGains();
+    else
+      UpdateAutoGains(SelectBlendModels());
   }
 
   void SetConfig(const std::string& key, const std::string& value) override
@@ -179,17 +194,6 @@ public:
     else if (key == "blendMode")
     {
       mSnapBlend = (value == "snap");
-    }
-    else if (key == "interfaceCalibrationEnabled")
-    {
-      mInterfaceCalibrationEnabled = ParseBool(value);
-    }
-    else if (key == "interfaceCalibrationReferenceDbu")
-    {
-      if (auto parsed = ParseDouble(value))
-      {
-        mInterfaceReferenceDbu = *parsed;
-      }
     }
   }
 
@@ -235,6 +239,7 @@ public:
       instance.parameterId = ref.parameterId;
       instance.parameterValue = ref.parameterValue.value_or(static_cast<double>(i));
       instance.parameters = ref.parameters;
+      instance.normalizationGainDb = ReadResourceMetadataDouble(ref, "normalizationGainDb");
       if (instance.parameters.empty() && !ref.parameterId.empty() && ref.parameterValue.has_value())
       {
         instance.parameters[ref.parameterId] = *ref.parameterValue;
@@ -291,6 +296,7 @@ private:
     std::optional<double> inputLevel;
     std::optional<double> outputLevel;
     std::optional<double> loudness;
+    std::optional<double> normalizationGainDb;
   };
 
   struct BlendSelection
@@ -313,10 +319,8 @@ private:
   double mBlend = 0.0;
   std::map<std::string, double> mTargetParams;
   bool mHasModelParameters = false;
-  bool mAutoLevelInput = true;
+  bool mAutoLevelInput = false;
   bool mAutoLevelOutput = true;
-  bool mInterfaceCalibrationEnabled = true;
-  double mInterfaceReferenceDbu = 12.0;
   bool mEnabled = true;
   std::string mParameterId;
 
@@ -341,6 +345,22 @@ private:
     try
     {
       return std::stod(value);
+    }
+    catch (...)
+    {
+      return std::nullopt;
+    }
+  }
+
+  static std::optional<double> ReadResourceMetadataDouble(const ResourceRef &ref, const std::string &key)
+  {
+    const auto it = ref.metadata.find(key);
+    if (it == ref.metadata.end())
+      return std::nullopt;
+
+    try
+    {
+      return std::stod(it->second);
     }
     catch (...)
     {
@@ -642,30 +662,16 @@ private:
       selection.weightLower, selection.weightUpper);
     const auto blendedLoudness = BlendOptional(modelA->loudness, modelB->loudness,
       selection.weightLower, selection.weightUpper);
+    const auto blendedNormalizationGainDb = BlendOptional(modelA->normalizationGainDb, modelB->normalizationGainDb,
+      selection.weightLower, selection.weightUpper);
 
-    static constexpr double kTargetInputLeveldBu = -18.0;
     static constexpr double kTargetOutputLeveldB = -18.0;
-
-    const bool hasCalibrationInput = mCalibrationInputLevel.has_value();
-    const auto inputLevel = hasCalibrationInput ? mCalibrationInputLevel : blendedInputLevel;
-    const auto outputLevel = mCalibrationOutputLevel.has_value() ? mCalibrationOutputLevel : blendedOutputLevel;
-
-    if (mAutoLevelInput && inputLevel.has_value())
-    {
-      double effectiveInputLevel = *inputLevel;
-      if (!hasCalibrationInput && mInterfaceCalibrationEnabled && blendedInputLevel.has_value())
-      {
-        effectiveInputLevel = *blendedInputLevel - mInterfaceReferenceDbu;
-      }
-      const double deltaDb = std::clamp(kTargetInputLeveldBu - effectiveInputLevel, -24.0, 24.0);
-      mAutoInputGain = std::pow(10.0, deltaDb / 20.0);
-    }
 
     if (mAutoLevelOutput)
     {
-      if (outputLevel.has_value())
+      if (blendedNormalizationGainDb.has_value())
       {
-        const double deltaDb = std::clamp(kTargetOutputLeveldB - *outputLevel, -24.0, 24.0);
+        const double deltaDb = std::clamp(*blendedNormalizationGainDb, -24.0, 24.0);
         mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
       }
       else if (blendedLoudness.has_value())

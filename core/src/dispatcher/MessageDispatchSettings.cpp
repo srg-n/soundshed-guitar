@@ -13,6 +13,12 @@ bool MessageDispatcher::DispatchSettings(PluginController& c,
         std::string key = msg.value("key", "");
         if (!key.empty() && msg.contains("value"))
         {
+            const bool affectsUserInputCalibration =
+                key == "audio.userInputCalibration.profiles"
+                || key == "audio.userInputCalibration.activeProfileId"
+                || key == "audio.interfaceCalibration.enabled"
+                || key == "audio.interfaceCalibration.referenceDbu";
+
             if (key == "diagnostics.signalLevelsEnabled")
             {
                 nlohmann::json payload;
@@ -23,15 +29,14 @@ bool MessageDispatcher::DispatchSettings(PluginController& c,
             if (msg["value"].is_null())
             {
                 c.mAppSettings.erase(key);
+                if (affectsUserInputCalibration)
+                    c.ApplyUserInputCalibrationSettingsFromAppSettings();
                 c.SaveAppSettings();
                 return true;
             }
             c.mAppSettings[key] = msg["value"];
-            if (key == "audio.interfaceCalibration.enabled"
-                || key == "audio.interfaceCalibration.referenceDbu")
-            {
-                c.ApplyInterfaceCalibrationSettingsFromAppSettings();
-            }
+            if (affectsUserInputCalibration)
+                c.ApplyUserInputCalibrationSettingsFromAppSettings();
             c.SaveAppSettings();
         }
         return true;

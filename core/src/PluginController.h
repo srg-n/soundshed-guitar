@@ -274,7 +274,7 @@ private:
     void ApplyBlendDefinitions(Preset& preset);
     bool ApplyNodeParameter(const GraphNode& node, const std::string& paramKey, double value);
     void ApplyDiagnosticsSettingsFromAppSettings();
-    void ApplyInterfaceCalibrationSettingsFromAppSettings();
+    void ApplyUserInputCalibrationSettingsFromAppSettings();
     void ApplyUiSettingsFromAppSettings();
     [[nodiscard]] bool IsFactoryPresetArchiveLoadingEnabled() const;
     void SendMessageToUI(const std::string& jsonMessage);

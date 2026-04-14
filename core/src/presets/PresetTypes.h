@@ -26,6 +26,7 @@ namespace guitarfx
     std::string parameterId;  // Mapped parameter identifier (e.g., "gain", "warp")
     std::optional<double> parameterValue; // Captured parameter value for blending
     std::map<std::string, double> parameters; // Multi-parameter mappings for blends
+    std::map<std::string, std::string> metadata; // Transient library metadata, not serialized into presets
 
     [[nodiscard]] bool IsLibraryRef() const { return !resourceType.empty() && !resourceId.empty(); }
     [[nodiscard]] bool IsFilePath() const { return !filePath.empty(); }
