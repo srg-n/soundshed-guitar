@@ -926,8 +926,8 @@ let autoLevelInputEnabled = false;
 let autoLevelOutputEnabled = false;
 
 function updateAutoLevelKnobStates(): void {
-  setKnobControlDisabled("input-control", autoLevelInputEnabled);
-  setKnobControlDisabled("output-control", autoLevelOutputEnabled);
+  setKnobControlDisabled("input-control", false);
+  setKnobControlDisabled("output-control", false);
 }
 
 function readAutoLevelFromPreset(): { input?: boolean; output?: boolean } {
@@ -1566,16 +1566,23 @@ function initializeAutoLevelControls(): void {
   const autoIn = document.getElementById("auto-level-input-toggle") as HTMLInputElement | null;
   const autoOut = document.getElementById("auto-level-output-toggle") as HTMLInputElement | null;
 
+  // Mixer-wide peak auto-leveling is retired. Keep the legacy wiring inert so
+  // old state does not disable the manual input/output controls.
+  autoLevelInputEnabled = false;
+  autoLevelOutputEnabled = false;
+  if (autoIn) autoIn.checked = false;
+  if (autoOut) autoOut.checked = false;
+  updateAutoLevelKnobStates();
+
+  if (!autoIn && !autoOut) {
+    return;
+  }
+
   const syncFromGlobals = (): void => {
-    const globals = readAutoLevelFromPreset();
-    if (typeof globals.input === "boolean") {
-      autoLevelInputEnabled = globals.input;
-    }
-    if (typeof globals.output === "boolean") {
-      autoLevelOutputEnabled = globals.output;
-    }
-    if (autoIn) autoIn.checked = autoLevelInputEnabled;
-    if (autoOut) autoOut.checked = autoLevelOutputEnabled;
+    autoLevelInputEnabled = false;
+    autoLevelOutputEnabled = false;
+    if (autoIn) autoIn.checked = false;
+    if (autoOut) autoOut.checked = false;
     updateAutoLevelKnobStates();
   };
 
@@ -1607,27 +1614,12 @@ function initializeAutoLevelControls(): void {
 }
 
 export function syncAutoLevelControlsFromState(): void {
-  if (typeof uiState.globalSignalChain?.autoLevelInput === "boolean") {
-    autoLevelInputEnabled = uiState.globalSignalChain.autoLevelInput;
-  } else {
-    const globals = readAutoLevelFromPreset();
-    if (typeof globals.input === "boolean") {
-      autoLevelInputEnabled = globals.input;
-    }
-  }
-
-  if (typeof uiState.globalSignalChain?.autoLevelOutput === "boolean") {
-    autoLevelOutputEnabled = uiState.globalSignalChain.autoLevelOutput;
-  } else {
-    const globals = readAutoLevelFromPreset();
-    if (typeof globals.output === "boolean") {
-      autoLevelOutputEnabled = globals.output;
-    }
-  }
+  autoLevelInputEnabled = false;
+  autoLevelOutputEnabled = false;
 
   const autoIn = document.getElementById("auto-level-input-toggle") as HTMLInputElement | null;
   const autoOut = document.getElementById("auto-level-output-toggle") as HTMLInputElement | null;
-  if (autoIn) autoIn.checked = autoLevelInputEnabled;
-  if (autoOut) autoOut.checked = autoLevelOutputEnabled;
+  if (autoIn) autoIn.checked = false;
+  if (autoOut) autoOut.checked = false;
   updateAutoLevelKnobStates();
 }

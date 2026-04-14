@@ -11,6 +11,7 @@
 #include "IPluginHost.h"
 #include "PluginController.h"
 #include "dsp/EffectGuids.h"
+#include "dsp/simd/OptimizedNAM.h"
 #include "presets/PresetStorage.h"
 #include "presets/PresetTypes.h"
 
@@ -119,6 +120,29 @@ guitarfx::Preset BuildPreset(const std::string& id, const std::string& name)
         {"amp", "out", 0, 0, 1.0},
     };
 
+    return preset;
+}
+
+guitarfx::Preset BuildPassthroughPreset(const std::string& id, const std::string& name)
+{
+    using namespace guitarfx;
+
+    Preset preset;
+    preset.id = id;
+    preset.name = name;
+    preset.version = 2;
+    preset.category = "Test";
+
+    GraphNode in;
+    in.id = "in";
+    in.type = kNodeTypeInput;
+
+    GraphNode out;
+    out.id = "out";
+    out.type = kNodeTypeOutput;
+
+    preset.graph.nodes = {in, out};
+    preset.graph.edges = {{"in", "out", 0, 0, 1.0}};
     return preset;
 }
 
@@ -440,6 +464,177 @@ bool TestLoadPresetViaMessage()
     return true;
 }
 
+bool TestLoadPresetRestoresUnifiedLevelState()
+{
+    const fs::path sandbox = fs::temp_directory_path() / "guitarfx-preset-management-tests" / "level-load";
+    std::error_code ec;
+    fs::remove_all(sandbox, ec);
+    fs::create_directories(sandbox, ec);
+    SetSettingsEnvRoot(sandbox);
+
+    TestHost host(sandbox);
+    guitarfx::PluginController controller(host);
+    controller.Initialize();
+
+    auto preset = BuildPassthroughPreset("p-level-load", "Level Load");
+    preset.global.inputTrim = -9.5;
+    preset.global.outputTrim = -4.0;
+    preset.global.autoLevelInput = true;
+    preset.global.autoLevelOutput = true;
+
+    nlohmann::json message;
+    message["type"] = "loadPreset";
+    message["preset"] = nlohmann::json::parse(guitarfx::PresetStorage::SerializeToJson(preset));
+    message["presetId"] = preset.id;
+    controller.HandleUIMessage(message.dump());
+
+    const auto& active = controller.GetActivePreset();
+    if (!active)
+    {
+        std::cerr << "No active preset after level-state load\n";
+        return false;
+    }
+
+    const auto chain = controller.GetMixer().GetGlobalChainConfig();
+    if (std::abs(chain.inputGain - preset.global.inputTrim) > 1e-9
+        || std::abs(chain.outputGain - preset.global.outputTrim) > 1e-9)
+    {
+        std::cerr << "Unified level state did not migrate preset trims into global chain\n";
+        return false;
+    }
+
+    if (chain.autoLevelInput || chain.autoLevelOutput)
+    {
+        std::cerr << "Legacy mixer auto-level should be retired on preset load\n";
+        return false;
+    }
+
+    if (std::abs(controller.GetParamValue(guitarfx::PluginController::kParamInputTrim) - preset.global.inputTrim) > 1e-9
+        || std::abs(controller.GetParamValue(guitarfx::PluginController::kParamOutputTrim) - preset.global.outputTrim) > 1e-9)
+    {
+        std::cerr << "Controller parameter values were not synced to unified level state\n";
+        return false;
+    }
+
+    if (active->global.autoLevelInput || active->global.autoLevelOutput)
+    {
+        std::cerr << "Active preset still carries retired mixer auto-level flags\n";
+        return false;
+    }
+
+    return true;
+}
+
+bool TestSavePresetUsesGlobalChainLevels()
+{
+    const fs::path sandbox = fs::temp_directory_path() / "guitarfx-preset-management-tests" / "level-save";
+    std::error_code ec;
+    fs::remove_all(sandbox, ec);
+    fs::create_directories(sandbox, ec);
+    SetSettingsEnvRoot(sandbox);
+
+    TestHost host(sandbox);
+    guitarfx::PluginController controller(host);
+    controller.Initialize();
+
+    auto preset = BuildPassthroughPreset("p-level-save", "Level Save");
+    nlohmann::json loadMessage;
+    loadMessage["type"] = "loadPreset";
+    loadMessage["preset"] = nlohmann::json::parse(guitarfx::PresetStorage::SerializeToJson(preset));
+    loadMessage["presetId"] = preset.id;
+    controller.HandleUIMessage(loadMessage.dump());
+
+    controller.HandleUIMessage(nlohmann::json{{"type", "setGlobalChainParam"}, {"path", "input.gain"}, {"value", -7.0}}.dump());
+    controller.HandleUIMessage(nlohmann::json{{"type", "setGlobalChainParam"}, {"path", "output.gain"}, {"value", -2.5}}.dump());
+    controller.HandleUIMessage(nlohmann::json{{"type", "setAutoLevel"}, {"autoInput", true}, {"autoOutput", true}}.dump());
+
+    const std::string saveId = "unit-test-level-save";
+    controller.HandleUIMessage(nlohmann::json{
+        {"type", "savePreset"},
+        {"name", "Level Save"},
+        {"category", "Unit"},
+        {"description", "Unified level save test"},
+        {"includeGlobalSignalChain", true},
+        {"presetId", saveId}
+    }.dump());
+
+    const fs::path savedPath = sandbox / "Soundshed Guitar" / "data" / "v1" / "presets" / "user" / (saveId + ".json");
+    const auto fromFile = guitarfx::PresetStorage::LoadFromFile(savedPath);
+    if (!fromFile)
+    {
+        std::cerr << "Failed to load saved preset for unified level test\n";
+        return false;
+    }
+
+    if (std::abs(fromFile->global.inputTrim - 7.0) < 1e-9)
+    {
+        std::cerr << "Unexpected sign inversion while saving input trim\n";
+        return false;
+    }
+
+    if (std::abs(fromFile->global.inputTrim - (-7.0)) > 1e-9
+        || std::abs(fromFile->global.outputTrim - (-2.5)) > 1e-9)
+    {
+        std::cerr << "Saved preset did not persist current global chain gain values\n";
+        return false;
+    }
+
+    if (fromFile->global.autoLevelInput || fromFile->global.autoLevelOutput)
+    {
+        std::cerr << "Saved preset should not persist retired mixer auto-level flags\n";
+        return false;
+    }
+
+    if (!fromFile->globalSignalChain.has_value())
+    {
+        std::cerr << "Saved preset missing global signal chain after unified level save\n";
+        return false;
+    }
+
+    if (std::abs(fromFile->globalSignalChain->inputGain - (-7.0)) > 1e-9
+        || std::abs(fromFile->globalSignalChain->outputGain - (-2.5)) > 1e-9
+        || fromFile->globalSignalChain->autoLevelInput
+        || fromFile->globalSignalChain->autoLevelOutput)
+    {
+        std::cerr << "Saved global signal chain level state mismatch\n";
+        return false;
+    }
+
+    return true;
+}
+
+bool TestOptimizedNamMetadataAliasParsing()
+{
+    nlohmann::json metadata = {
+        {"input_level_dbu", 22.903},
+        {"output_level_dbu", 13.303},
+        {"loudness", -17.2881},
+        {"modeled_by", "unit-test-author"}
+    };
+
+    const auto inputLevel = guitarfx::nam::ReadMetadataDouble(metadata, "input_level_dbu", "input_level");
+    const auto outputLevel = guitarfx::nam::ReadMetadataDouble(metadata, "output_level_dbu", "output_level");
+    const auto loudness = guitarfx::nam::ReadMetadataDouble(metadata, "loudness");
+    const auto author = guitarfx::nam::ReadMetadataString(metadata, "author", "modeled_by");
+
+    if (!inputLevel || !outputLevel || !loudness || !author)
+    {
+        std::cerr << "Optimized NAM metadata alias parsing returned empty values\n";
+        return false;
+    }
+
+    if (std::abs(*inputLevel - 22.903) > 1e-9
+        || std::abs(*outputLevel - 13.303) > 1e-9
+        || std::abs(*loudness - (-17.2881)) > 1e-9
+        || *author != "unit-test-author")
+    {
+        std::cerr << "Optimized NAM metadata alias parsing returned wrong values\n";
+        return false;
+    }
+
+    return true;
+}
+
 bool TestSaveGetDeletePresetWorkflow()
 {
     const fs::path sandbox = fs::temp_directory_path() / "guitarfx-preset-management-tests" / "save-delete";
@@ -726,9 +921,12 @@ int main()
     };
 
     run("Load preset via message", TestLoadPresetViaMessage());
+    run("Load preset restores unified level state", TestLoadPresetRestoresUnifiedLevelState());
+    run("Save preset uses global chain levels", TestSavePresetUsesGlobalChainLevels());
     run("Save/Get/Delete preset workflow", TestSaveGetDeletePresetWorkflow());
     run("Factory preset archive startup import", TestFactoryPresetArchiveStartupImport());
     run("Riff library path normalization", TestRiffLibraryPathNormalization());
+    run("Optimized NAM metadata alias parsing", TestOptimizedNamMetadataAliasParsing());
 
     std::cout << "\nPreset management workflow tests: " << passed << " passed, " << failed << " failed\n";
     return failed == 0 ? 0 : 1;

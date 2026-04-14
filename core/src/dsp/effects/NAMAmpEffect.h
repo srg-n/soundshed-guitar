@@ -138,12 +138,18 @@ namespace guitarfx
       }
       else if (key == "calibrationInputLevel")
       {
-        mCalibrationInputLevel = value;
+        if (std::isfinite(value))
+          mCalibrationInputLevel = value;
+        else
+          mCalibrationInputLevel.reset();
         RecalculateAutoGains();
       }
       else if (key == "calibrationOutputLevel")
       {
-        mCalibrationOutputLevel = value;
+        if (std::isfinite(value))
+          mCalibrationOutputLevel = value;
+        else
+          mCalibrationOutputLevel.reset();
         RecalculateAutoGains();
       }
       else if (key == "enabled")

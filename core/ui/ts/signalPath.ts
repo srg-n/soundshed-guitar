@@ -2050,7 +2050,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
   const shellStatusLabel = isNodeBypassed(node) ? "BYPASSED" : "ENABLED";
   const shellBypassTitle = isNodeBypassed(node) ? "Enable effect" : "Bypass effect";
   const shellBlendId = getBlendState(node)?.blend?.id || "";
-  const shellCanRecalibrate = node.type === EffectGuids.kFxNam || node.type === EffectGuids.kAmpNam || node.type === EffectGuids.kAmpNamOptimized;
+  const shellCanRecalibrate = false;
   const shellLayoutButton = isFeatureEnabled(Features.EffectLayout) ? `
     <button
       class="effect-visualization-toolbar-btn node-customize-layout-btn"

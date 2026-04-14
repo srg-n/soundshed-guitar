@@ -23,6 +23,7 @@
 #include <string>
 #include <optional>
 #include <variant>
+#include <cstdlib>
 
 // Include nlohmann JSON for parsing NAM files
 #include "json.hpp"
@@ -45,6 +46,64 @@ struct ModelMetadata
   std::optional<double> loudness;       // dB
   double expectedSampleRate = -1.0;
 };
+
+inline std::optional<double> ReadMetadataDouble(const nlohmann::json& meta,
+                                                const char* primaryKey,
+                                                const char* fallbackKey = nullptr)
+{
+  const auto readValue = [&](const char* key) -> std::optional<double>
+  {
+    if (!key || !meta.contains(key))
+      return std::nullopt;
+
+    const auto& value = meta[key];
+    if (value.is_number())
+      return value.get<double>();
+
+    if (value.is_string())
+    {
+      try
+      {
+        std::size_t parsedLength = 0;
+        const std::string text = value.get<std::string>();
+        const double parsed = std::stod(text, &parsedLength);
+        if (parsedLength == text.size())
+          return parsed;
+      }
+      catch (...)
+      {
+      }
+    }
+
+    return std::nullopt;
+  };
+
+  if (auto parsed = readValue(primaryKey))
+    return parsed;
+
+  return readValue(fallbackKey);
+}
+
+inline std::optional<std::string> ReadMetadataString(const nlohmann::json& meta,
+                                                     const char* primaryKey,
+                                                     const char* fallbackKey = nullptr)
+{
+  const auto readValue = [&](const char* key) -> std::optional<std::string>
+  {
+    if (!key || !meta.contains(key) || !meta[key].is_string())
+      return std::nullopt;
+
+    const std::string value = meta[key].get<std::string>();
+    if (value.empty())
+      return std::nullopt;
+    return value;
+  };
+
+  if (auto parsed = readValue(primaryKey))
+    return parsed;
+
+  return readValue(fallbackKey);
+}
 
 // ============================================================================
 // Architecture Type
@@ -287,16 +346,16 @@ inline std::unique_ptr<OptimizedDSP> LoadOptimizedModel(const std::filesystem::p
       auto& meta = j["metadata"];
       ModelMetadata& dspMeta = const_cast<ModelMetadata&>(dsp->GetMetadata());
 
-      if (meta.contains("name"))
-        dspMeta.name = meta["name"].get<std::string>();
-      if (meta.contains("author"))
-        dspMeta.author = meta["author"].get<std::string>();
-      if (meta.contains("input_level"))
-        dspMeta.inputLevel = meta["input_level"].get<double>();
-      if (meta.contains("output_level"))
-        dspMeta.outputLevel = meta["output_level"].get<double>();
-      if (meta.contains("loudness"))
-        dspMeta.loudness = meta["loudness"].get<double>();
+      if (auto name = ReadMetadataString(meta, "name"))
+        dspMeta.name = *name;
+      if (auto author = ReadMetadataString(meta, "author", "modeled_by"))
+        dspMeta.author = *author;
+      if (auto inputLevel = ReadMetadataDouble(meta, "input_level_dbu", "input_level"))
+        dspMeta.inputLevel = *inputLevel;
+      if (auto outputLevel = ReadMetadataDouble(meta, "output_level_dbu", "output_level"))
+        dspMeta.outputLevel = *outputLevel;
+      if (auto loudness = ReadMetadataDouble(meta, "loudness"))
+        dspMeta.loudness = *loudness;
     }
 
     return dsp;

@@ -132,8 +132,8 @@ All types share `decay`, `mix`, and `preDelay`. Each has tuned internals for its
 
 - Loads `.nam` model files (NAM community format).
 - **SIMD-optimized inference**: `simd/OptimizedNAM.h`, `simd/OptimizedLSTM.h`, `simd/OptimizedWaveNet.h`, `simd/OptimizedActivations.h` (~2× speedup over scalar).
-- **NAM Calibration**: Offline job (`NAMCalibrationJob`) computes input/output gain calibration per model. Results cached by model SHA-256 hash (`calibration/models/index.json`). Calibration aligns NAM's dBu reference to DAW dBFS peak reference.
-- **Auto-level**: Per-preset flags `autoLevelInput`/`autoLevelOutput` apply model calibration gains automatically. Interface calibration reference defaults to +12.0 dBu @ 0 dBFS peak (configurable in Settings).
+- **NAM level matching**: Reads model metadata (`input_level_dbu`, `output_level_dbu`, `loudness`) and aligns compatible NAM captures to the configured interface reference without a separate user recalibration step.
+- **Auto-level**: NAM nodes apply metadata-based input/output gain internally; the main UI now relies on explicit Input and Output controls for user correction. Interface calibration reference defaults to +12.0 dBu @ 0 dBFS peak (configurable in Settings).
 - **Model hashing**: `ModelHasher` computes SHA-256 for deduplication and calibration cache keys.
 
 ---
@@ -571,7 +571,7 @@ data/v1/
     indexes/effect-layouts.json
     images/
   calibration/
-    models/index.json             # Per-model NAM calibration cache
+    models/index.json             # Legacy NAM calibration cache (metadata-first leveling does not rely on it)
   logs/
     session-log.txt
 ```

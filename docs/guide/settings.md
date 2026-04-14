@@ -34,16 +34,16 @@ Soundshed Guitar searches these folders when building the library of models and 
 
 ---
 
-## NAM Calibration
+## NAM Level Matching
 
-Neural Amp Models carry metadata indicating what input level they were trained at. The calibration setting aligns this to your setup so the amp behaves as intended.
+Compatible Neural Amp Models carry metadata describing their intended input and output level. Soundshed Guitar uses that metadata automatically and applies the interface reference setting globally.
 
 | Setting | What it does |
 |---------|--------------|
-| **Auto-Level** | When enabled, input gain is adjusted automatically based on the model's calibration data. Leave this on unless you have a specific reason to disable it |
+| **Enabled** | Interprets compatible NAM input metadata against your interface reference. Leave this on unless you have a specific reason to compare raw metadata directly |
 | **Reference Level** | The dBu level that corresponds to 0 dBFS at your interface's input. Default is +12.0 dBu. Change this if your interface has a different headroom specification |
 
-If amps sound too compressed or too quiet, try adjusting the Reference Level up or down a few dB.
+There is no separate per-model recalibration step in normal use. If a model still feels too hot or too quiet, use the main **Input** and **Output** controls first.
 
 ---
 

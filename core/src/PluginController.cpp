@@ -38,6 +38,7 @@
 #include <future>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <numeric>
 #include <sstream>
 #include <cctype>
@@ -250,6 +251,18 @@ namespace
         }
 
         return false;
+    }
+
+    bool IsNamEffectType(const std::string& type)
+    {
+        return type == guitarfx::EffectGuids::kAmpNam
+            || type == "amp_nam"
+            || type == guitarfx::EffectGuids::kAmpNamOptimized
+            || type == "amp_nam_optimized"
+            || type == guitarfx::EffectGuids::kAmpNamBlend
+            || type == "amp_nam_blend"
+            || type == guitarfx::EffectGuids::kFxNam
+            || type == "fx_nam";
     }
 
     std::filesystem::path ResolveRiffTakePathForRuntime(const std::filesystem::path& storedPath,
@@ -2236,8 +2249,8 @@ void PluginController::ApplyParamChangeLocked(int paramIdx, double value)
     // Route to mixer
     switch (paramIdx)
     {
-    case kParamInputTrim:    mPresetMixer.SetInputTrim(value); break;
-    case kParamOutputTrim:   mPresetMixer.SetOutputTrim(value); break;
+    case kParamInputTrim:    mPresetMixer.SetGlobalInputGain(value); break;
+    case kParamOutputTrim:   mPresetMixer.SetGlobalOutputGain(value); break;
     case kParamDrive:        mPresetMixer.SetAmpDrive(value); break;
     case kParamTone:         mPresetMixer.SetAmpTone(value); break;
     case kParamGateEnabled:  mPresetMixer.SetGateEnabled(value > 0.5); break;
@@ -2461,8 +2474,6 @@ void PluginController::HandlePresetLoadRequest(const nlohmann::json& payload)
         mActivePresetId = payload.value("presetId", preset.id);
         ApplyPreset(preset); // SetGlobalChainConfig is called inside ApplyPreset under mDSPMutex
 
-        mActivePreset = preset;
-        mActivePresetJson = PresetStorage::SerializeToJson(preset);
         mPendingStateBroadcast = true;
 
         // Send explicit "presetLoaded" confirmation to the UI
@@ -2544,8 +2555,18 @@ void PluginController::HandleSetGlobalChainParamRequest(const nlohmann::json& pa
     else if (path == "doubler.delay") mPresetMixer.SetGlobalDoublerDelay(value.get<double>());
     else if (path == "doubler.mix") mPresetMixer.SetGlobalDoublerMix(value.get<double>());
     else if (path == "doubler.detune") mPresetMixer.SetGlobalDoublerDetune(value.get<double>());
-    else if (path == "input.gain") mPresetMixer.SetGlobalInputGain(value.get<double>());
-    else if (path == "output.gain") mPresetMixer.SetGlobalOutputGain(value.get<double>());
+    else if (path == "input.gain")
+    {
+        const double gainDb = value.get<double>();
+        mPresetMixer.SetGlobalInputGain(gainDb);
+        mParamValues[kParamInputTrim] = gainDb;
+    }
+    else if (path == "output.gain")
+    {
+        const double gainDb = value.get<double>();
+        mPresetMixer.SetGlobalOutputGain(gainDb);
+        mParamValues[kParamOutputTrim] = gainDb;
+    }
     else if (path == "limiter.enabled") mPresetMixer.SetLimiterEnabled(value.get<bool>());
     else if (path == "eq.lowGain") mPresetMixer.SetGlobalEQBandGain(0, value.get<double>());
     else if (path == "eq.lowFreq") mPresetMixer.SetGlobalEQBandFrequency(0, value.get<double>());
@@ -2710,24 +2731,21 @@ void PluginController::HandleSetAmpCabStateRequest(const nlohmann::json& payload
 
 void PluginController::HandleSetAutoLevelRequest(const nlohmann::json& payload)
 {
-    if (payload.contains("autoInput"))
-        mPresetMixer.SetAutoLevelInput(payload["autoInput"].get<bool>());
-    else if (payload.contains("input"))
-        mPresetMixer.SetAutoLevelInput(payload["input"].get<bool>());
+    (void)payload;
 
-    if (payload.contains("autoOutput"))
-        mPresetMixer.SetAutoLevelOutput(payload["autoOutput"].get<bool>());
-    else if (payload.contains("output"))
-        mPresetMixer.SetAutoLevelOutput(payload["output"].get<bool>());
-
-    mAppSettings["autoLevelInput"] = mPresetMixer.GetAutoLevelInput();
-    mAppSettings["autoLevelOutput"] = mPresetMixer.GetAutoLevelOutput();
+    // Mixer-wide peak auto-leveling is retired in favor of model metadata plus
+    // explicit input/output controls. Keep the message for compatibility but
+    // force the legacy path off.
+    mPresetMixer.SetAutoLevelInput(false);
+    mPresetMixer.SetAutoLevelOutput(false);
+    mAppSettings["autoLevelInput"] = false;
+    mAppSettings["autoLevelOutput"] = false;
     SaveAppSettings();
 
     nlohmann::json message;
     message["type"] = "autoLevelChanged";
-    message["autoInput"] = mPresetMixer.GetAutoLevelInput();
-    message["autoOutput"] = mPresetMixer.GetAutoLevelOutput();
+    message["autoInput"] = false;
+    message["autoOutput"] = false;
     SendMessageToUI(message.dump());
 }
 
@@ -2922,11 +2940,15 @@ void PluginController::HandleSavePresetRequest(const nlohmann::json& payload)
         newPreset.description = presetDescription;
         newPreset.version = 2;
 
-        newPreset.global.inputTrim = mParamValues[kParamInputTrim];
-        newPreset.global.outputTrim = mParamValues[kParamOutputTrim];
+        auto currentChain = mPresetMixer.GetGlobalChainConfig();
+        currentChain.autoLevelInput = false;
+        currentChain.autoLevelOutput = false;
+
+        newPreset.global.inputTrim = currentChain.inputGain;
+        newPreset.global.outputTrim = currentChain.outputGain;
         newPreset.global.transpose = static_cast<int>(mParamValues[kParamTranspose]);
-        newPreset.global.autoLevelInput = mPresetMixer.GetAutoLevelInput();
-        newPreset.global.autoLevelOutput = mPresetMixer.GetAutoLevelOutput();
+        newPreset.global.autoLevelInput = false;
+        newPreset.global.autoLevelOutput = false;
 
         if (includeGlobalSignalChain)
         {
@@ -2940,7 +2962,15 @@ void PluginController::HandleSavePresetRequest(const nlohmann::json& payload)
             }
             else
             {
-                newPreset.globalSignalChain = mPresetMixer.GetGlobalChainConfig();
+                newPreset.globalSignalChain = currentChain;
+            }
+
+            if (newPreset.globalSignalChain.has_value())
+            {
+                newPreset.globalSignalChain->inputGain = currentChain.inputGain;
+                newPreset.globalSignalChain->outputGain = currentChain.outputGain;
+                newPreset.globalSignalChain->autoLevelInput = false;
+                newPreset.globalSignalChain->autoLevelOutput = false;
             }
         }
         else
@@ -6370,15 +6400,47 @@ void PluginController::ApplyPreset(const Preset& preset)
     if (!SetPresetActiveScene(normalizedPreset, resolvedSceneId, &resolvedSceneId))
         resolvedSceneId = GetDefaultPresetSceneId(normalizedPreset);
     mActiveSceneId = resolvedSceneId;
+
+    for (auto& node : normalizedPreset.graph.nodes)
+    {
+        if (!IsNamEffectType(node.type))
+            continue;
+
+        ClearNamCalibrationParams(node);
+        if (!node.params.count("autoLevelInput"))
+            node.params["autoLevelInput"] = 1.0;
+        if (!node.params.count("autoLevelOutput"))
+            node.params["autoLevelOutput"] = 1.0;
+    }
+
     EnsurePresetBoundaryGainNodes(normalizedPreset);
 
     // Apply global signal chain config under the DSP lock so the audio thread
     // cannot be inside mPreChainExecutor/mPostChainExecutor.Process() while
     // RebuildGlobalChains() tears down and recreates those executors' node states.
-    if (normalizedPreset.globalSignalChain.has_value())
-        mPresetMixer.SetGlobalChainConfig(*normalizedPreset.globalSignalChain);
-    else
-        mPresetMixer.SetGlobalChainConfig(mPresetMixer.GetGlobalChainConfig());
+    auto chainConfig = normalizedPreset.globalSignalChain.value_or(mPresetMixer.GetGlobalChainConfig());
+    const double inputGainDb = normalizedPreset.globalSignalChain.has_value()
+        ? chainConfig.inputGain
+        : normalizedPreset.global.inputTrim;
+    const double outputGainDb = normalizedPreset.globalSignalChain.has_value()
+        ? chainConfig.outputGain
+        : normalizedPreset.global.outputTrim;
+
+    chainConfig.inputGain = inputGainDb;
+    chainConfig.outputGain = outputGainDb;
+    chainConfig.autoLevelInput = false;
+    chainConfig.autoLevelOutput = false;
+    mPresetMixer.SetGlobalChainConfig(chainConfig);
+    mPresetMixer.SetAutoLevelInput(false);
+    mPresetMixer.SetAutoLevelOutput(false);
+
+    normalizedPreset.global.inputTrim = inputGainDb;
+    normalizedPreset.global.outputTrim = outputGainDb;
+    normalizedPreset.global.autoLevelInput = false;
+    normalizedPreset.global.autoLevelOutput = false;
+    normalizedPreset.globalSignalChain = chainConfig;
+    mParamValues[kParamInputTrim] = inputGainDb;
+    mParamValues[kParamOutputTrim] = outputGainDb;
 
     mActivePreset = normalizedPreset;
     mActivePresetJson = PresetStorage::SerializeToJson(normalizedPreset);
@@ -6411,7 +6473,7 @@ void PluginController::ApplyPreset(const Preset& preset)
     // Queue NAM calibrations for nodes that need them
     for (const auto& node : normalizedPreset.graph.nodes)
     {
-        if (!node.resources.empty() && (node.type == EffectGuids::kAmpNam || node.type == EffectGuids::kAmpNamOptimized))
+        if (!node.resources.empty() && IsNamEffectType(node.type))
             QueueNamCalibrationForNode(node.id, node.resources[0]);
     }
 
@@ -6751,19 +6813,15 @@ void PluginController::QueueNamCalibrationForNode(const std::string& nodeId,
                                                   const ResourceRef& ref,
                                                   bool force)
 {
+    (void)ref;
+    (void)force;
     if (nodeId.empty()) return;
-
-    const auto resolvedPath = ResolveResourceRef(ref);
-    if (!resolvedPath) return;
-
-    const std::string hash = mHasher.HashFile(*resolvedPath);
-    if (hash.empty()) return;
 
     if (mActivePreset)
     {
         if (auto* node = mActivePreset->graph.FindNode(nodeId))
         {
-            node->config["modelHash"] = hash;
+            node->config.erase("modelHash");
             ClearNamCalibrationParams(*node);
             if (!node->params.count("autoLevelInput")) node->params["autoLevelInput"] = 1.0;
             if (!node->params.count("autoLevelOutput")) node->params["autoLevelOutput"] = 1.0;
@@ -6772,34 +6830,16 @@ void PluginController::QueueNamCalibrationForNode(const std::string& nodeId,
         }
     }
 
-    if (force) RemoveNamCalibrationFromCache(hash);
-
-    if (!force)
+    if (!mActivePresetId.empty())
     {
-        if (auto cached = GetNamCalibrationFromCache(hash))
-        {
-            ApplyNamCalibrationToNode(nodeId, hash, *cached);
-            SendNamCalibrationStatus(nodeId, "ready");
-            return;
-        }
+        const double clearValue = std::numeric_limits<double>::quiet_NaN();
+        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "calibrationInputLevel", clearValue);
+        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "calibrationOutputLevel", clearValue);
+        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "autoLevelInput", 1.0);
+        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "autoLevelOutput", 1.0);
     }
 
-    {
-        std::lock_guard<std::mutex> lock(mNamCalibrationMutex);
-        auto& waiters = mNamCalibrationWaiters[hash];
-        if (std::find(waiters.begin(), waiters.end(), nodeId) == waiters.end())
-            waiters.push_back(nodeId);
-
-        if (!mNamCalibrationInFlight.count(hash))
-        {
-            mNamCalibrationQueue.push_back({hash, *resolvedPath, ref.resourceType, ref.resourceId});
-            mNamCalibrationInFlight.insert(hash);
-        }
-    }
-
-    SendNamCalibrationStatus(nodeId, "calibrating");
-    AppendSessionLog("NAM calibration started: " + hash);
-    ProcessNamCalibrationQueue();
+    SendNamCalibrationStatus(nodeId, "ready");
 }
 
 void PluginController::ProcessNamCalibrationQueue()
