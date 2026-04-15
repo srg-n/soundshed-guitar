@@ -664,6 +664,84 @@ bool TestLoadAppSettingsAppliesUserInputCalibrationProfile()
     return true;
 }
 
+bool TestUserInputCalibrationTrainingBypassesActiveProfileWithoutPersistingSelection()
+{
+    const fs::path sandbox = fs::temp_directory_path() / "guitarfx-preset-management-tests" / "user-input-calibration-training";
+    std::error_code ec;
+    fs::remove_all(sandbox, ec);
+    fs::create_directories(sandbox, ec);
+    SetSettingsEnvRoot(sandbox);
+
+    const fs::path settingsPath = sandbox / "Soundshed Guitar" / "data" / "v1" / "settings" / "app.json";
+    fs::create_directories(settingsPath.parent_path(), ec);
+    {
+        nlohmann::json settings = nlohmann::json::object();
+        settings["audio.userInputCalibration.profiles"] = nlohmann::json::array({
+            {
+                {"id", "guitar-x"},
+                {"name", "Guitar X, Interface Gain at 0"},
+                {"description", "Bridge humbucker"},
+                {"capturedPeakDbfs", -18.0},
+                {"targetPeakDbfs", -12.0},
+                {"gainDb", 6.0}
+            }
+        });
+        settings["audio.userInputCalibration.activeProfileId"] = "guitar-x";
+
+        std::ofstream output(settingsPath);
+        output << settings.dump(2);
+    }
+
+    TestHost host(sandbox);
+    guitarfx::PluginController controller(host);
+    controller.Initialize();
+
+    if (std::abs(controller.GetMixer().GetUserInputCalibrationGainDb() - 6.0) > 1e-9)
+    {
+        std::cerr << "Initial user input calibration gain was not applied\n";
+        return false;
+    }
+
+    controller.HandleUIMessage(nlohmann::json{{"type", "setUserInputCalibrationTrainingActive"}, {"active", true}}.dump());
+
+    if (std::abs(controller.GetMixer().GetUserInputCalibrationGainDb()) > 1e-9)
+    {
+        std::cerr << "Training mode should bypass the active user input calibration gain\n";
+        return false;
+    }
+
+    const auto& appSettings = controller.GetAppSettings();
+    if (appSettings.value("audio.userInputCalibration.activeProfileId", std::string{}) != "guitar-x")
+    {
+        std::cerr << "Training mode should not clear the persisted active calibration id\n";
+        return false;
+    }
+
+    std::ifstream duringTrainingInput(settingsPath);
+    const auto duringTrainingPersisted = nlohmann::json::parse(duringTrainingInput, nullptr, false);
+    if (duringTrainingPersisted.is_discarded())
+    {
+        std::cerr << "Failed to reload app settings during training bypass test\n";
+        return false;
+    }
+
+    if (duringTrainingPersisted.value("audio.userInputCalibration.activeProfileId", std::string{}) != "guitar-x")
+    {
+        std::cerr << "Training mode should not rewrite the saved active calibration id\n";
+        return false;
+    }
+
+    controller.HandleUIMessage(nlohmann::json{{"type", "setUserInputCalibrationTrainingActive"}, {"active", false}}.dump());
+
+    if (std::abs(controller.GetMixer().GetUserInputCalibrationGainDb() - 6.0) > 1e-9)
+    {
+        std::cerr << "Active user input calibration gain was not restored after training mode\n";
+        return false;
+    }
+
+    return true;
+}
+
 bool TestSavePresetUsesGlobalChainLevels()
 {
     const fs::path sandbox = fs::temp_directory_path() / "guitarfx-preset-management-tests" / "level-save";
@@ -1063,6 +1141,7 @@ int main()
     run("Load preset restores unified level state", TestLoadPresetRestoresUnifiedLevelState());
     run("Load preset retires NAM input auto-leveling", TestLoadPresetRetiresNamInputAutoLeveling());
     run("Load app settings applies user input calibration", TestLoadAppSettingsAppliesUserInputCalibrationProfile());
+    run("User input calibration training bypasses active profile", TestUserInputCalibrationTrainingBypassesActiveProfileWithoutPersistingSelection());
     run("Save preset uses global chain levels", TestSavePresetUsesGlobalChainLevels());
     run("Save/Get/Delete preset workflow", TestSaveGetDeletePresetWorkflow());
     run("Factory preset archive startup import", TestFactoryPresetArchiveStartupImport());

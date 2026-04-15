@@ -1865,6 +1865,9 @@ void PluginController::ApplyUserInputCalibrationSettingsFromAppSettings()
         settingsChanged = true;
     }
 
+    if (mUserInputCalibrationTrainingActive)
+        gainDb = 0.0;
+
     mPresetMixer.SetUserInputCalibrationGainDb(gainDb);
 
     if (settingsChanged)

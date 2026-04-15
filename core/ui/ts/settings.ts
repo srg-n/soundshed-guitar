@@ -115,6 +115,7 @@ let libraryStateRequestedAt = 0;
 let suppressViewStateUpdates = false;
 let userInputCalibrationTrainingPeakDbfs = Number.NEGATIVE_INFINITY;
 let userInputCalibrationLivePeakDbfs = Number.NEGATIVE_INFINITY;
+let userInputCalibrationTrainingBypassActive = false;
 
 export function initSettingsPanel(): void {
   if (settingsInitialized) {
@@ -848,6 +849,24 @@ function persistUserInputCalibrationState(profiles: UserInputCalibrationProfile[
   refreshUserInputCalibrationView();
 }
 
+function setUserInputCalibrationTrainingBypassActive(active: boolean): void {
+  if (userInputCalibrationTrainingBypassActive === active) {
+    return;
+  }
+
+  userInputCalibrationTrainingBypassActive = active;
+  postMessage({ type: "setUserInputCalibrationTrainingActive", active });
+  refreshUserInputCalibrationView();
+}
+
+function readDisplayedUserInputCalibrationProfileId(): string | null {
+  if (userInputCalibrationTrainingBypassActive) {
+    return null;
+  }
+
+  return readActiveUserInputCalibrationProfileId();
+}
+
 function formatDbfsValue(value: number): string {
   return Number.isFinite(value) ? `${value.toFixed(1)} dBFS` : "-";
 }
@@ -970,14 +989,16 @@ function resetUserInputCalibrationTrainingPeak(): void {
 }
 
 function openUserInputCalibrationTrainingModal(): void {
-  if (!userInputCalibrationModal) {
+  if (!userInputCalibrationModal || isUserInputCalibrationModalOpen()) {
     return;
   }
 
   closeUserInputCalibrationToolbarMenu();
+  setUserInputCalibrationTrainingBypassActive(true);
   userInputCalibrationNameInput && (userInputCalibrationNameInput.value = "");
   userInputCalibrationDescriptionInput && (userInputCalibrationDescriptionInput.value = "");
-  resetUserInputCalibrationTrainingPeak();
+  userInputCalibrationLivePeakDbfs = Number.NEGATIVE_INFINITY;
+  userInputCalibrationTrainingPeakDbfs = Number.NEGATIVE_INFINITY;
   userInputCalibrationModal.style.display = "flex";
   refreshUserInputCalibrationTrainingView();
   userInputCalibrationNameInput?.focus();
@@ -988,6 +1009,9 @@ function closeUserInputCalibrationTrainingModal(): void {
     return;
   }
   userInputCalibrationModal.style.display = "none";
+  userInputCalibrationLivePeakDbfs = Number.NEGATIVE_INFINITY;
+  userInputCalibrationTrainingPeakDbfs = Number.NEGATIVE_INFINITY;
+  setUserInputCalibrationTrainingBypassActive(false);
 }
 
 async function deleteActiveUserInputCalibrationProfile(): Promise<void> {
@@ -996,17 +1020,28 @@ async function deleteActiveUserInputCalibrationProfile(): Promise<void> {
     return;
   }
 
+  await deleteUserInputCalibrationProfile(activeProfile.id);
+}
+
+async function deleteUserInputCalibrationProfile(profileId: string): Promise<void> {
+  const profiles = readUserInputCalibrationProfiles();
+  const profile = profiles.find((entry) => entry.id === profileId) ?? null;
+  if (!profile) {
+    return;
+  }
+
   const confirmed = await showConfirm(
-    `Delete input calibration profile "${activeProfile.name}"?`,
+    `Delete input calibration profile "${profile.name}"?`,
     "Delete Input Calibration",
   );
   if (!confirmed) {
     return;
   }
 
-  const remainingProfiles = readUserInputCalibrationProfiles().filter((profile) => profile.id !== activeProfile.id);
-  persistUserInputCalibrationState(remainingProfiles, null);
-  showNotification("Input calibration deleted", activeProfile.name);
+  const activeProfileId = readActiveUserInputCalibrationProfileId();
+  const remainingProfiles = profiles.filter((entry) => entry.id !== profile.id);
+  persistUserInputCalibrationState(remainingProfiles, activeProfileId === profile.id ? null : activeProfileId);
+  showNotification("Input calibration deleted", profile.name);
 }
 
 function saveUserInputCalibrationProfile(): void {
@@ -1075,12 +1110,17 @@ function renderUserInputCalibrationToolbarMenu(profiles: UserInputCalibrationPro
 
   const subtitle = document.createElement("span");
   subtitle.className = "input-calibration-toolbar-menu-subtitle";
-  subtitle.textContent = activeProfile ? `${activeProfile.name} active` : "No active calibration";
+  subtitle.textContent = userInputCalibrationTrainingBypassActive
+    ? "Training bypass active"
+    : (activeProfile ? `${activeProfile.name} active` : "No active calibration");
   header.appendChild(subtitle);
 
   userInputCalibrationToolbarMenu.appendChild(header);
 
   const appendProfileItem = (profile: UserInputCalibrationProfile | null): void => {
+    const itemRow = document.createElement("div");
+    itemRow.className = "input-calibration-toolbar-row";
+
     const button = document.createElement("button");
     button.type = "button";
     button.className = "input-calibration-toolbar-item";
@@ -1113,7 +1153,22 @@ function renderUserInputCalibrationToolbarMenu(profiles: UserInputCalibrationPro
     meta.textContent = isActive ? "ACTIVE" : (profile ? formatSignedDbValue(profile.gainDb) : "OFF");
     button.appendChild(meta);
 
-    userInputCalibrationToolbarMenu.appendChild(button);
+    itemRow.appendChild(button);
+
+    if (profile) {
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "input-calibration-toolbar-item-delete";
+      deleteButton.dataset.action = "delete";
+      deleteButton.dataset.profileId = profile.id;
+      deleteButton.setAttribute("role", "menuitem");
+      deleteButton.setAttribute("aria-label", `Delete ${profile.name}`);
+      deleteButton.title = `Delete ${profile.name}`;
+      deleteButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+      itemRow.appendChild(deleteButton);
+    }
+
+    userInputCalibrationToolbarMenu.appendChild(itemRow);
   };
 
   appendProfileItem(null);
@@ -1165,9 +1220,20 @@ function renderUserInputCalibrationToolbarMenu(profiles: UserInputCalibrationPro
   }
 }
 
-function handleUserInputCalibrationToolbarMenuClick(event: MouseEvent): void {
+async function handleUserInputCalibrationToolbarMenuClick(event: MouseEvent): Promise<void> {
   const target = event.target;
   if (!(target instanceof HTMLElement)) {
+    return;
+  }
+
+  const deleteButton = target.closest(".input-calibration-toolbar-item-delete") as HTMLButtonElement | null;
+  if (deleteButton) {
+    const profileId = deleteButton.dataset.profileId?.trim();
+    if (!profileId) {
+      return;
+    }
+
+    await deleteUserInputCalibrationProfile(profileId);
     return;
   }
 
@@ -1189,8 +1255,10 @@ function handleUserInputCalibrationToolbarMenuClick(event: MouseEvent): void {
 
 function refreshUserInputCalibrationView(): void {
   const profiles = readUserInputCalibrationProfiles();
-  const activeProfileId = readActiveUserInputCalibrationProfileId();
+  const persistedActiveProfileId = readActiveUserInputCalibrationProfileId();
+  const activeProfileId = readDisplayedUserInputCalibrationProfileId();
   const activeProfile = profiles.find((profile) => profile.id === activeProfileId) ?? null;
+  const persistedActiveProfile = profiles.find((profile) => profile.id === persistedActiveProfileId) ?? null;
 
   if (userInputCalibrationProfileSelect) {
     userInputCalibrationProfileSelect.innerHTML = "";
@@ -1218,7 +1286,11 @@ function refreshUserInputCalibrationView(): void {
 
   if (userInputCalibrationSummary) {
     const currentPeakDbfs = getCurrentRawInputPeakDbfs();
-    if (activeProfile) {
+    if (userInputCalibrationTrainingBypassActive) {
+      userInputCalibrationSummary.textContent = persistedActiveProfile
+        ? `${persistedActiveProfile.name} temporarily bypassed while training a new input level profile.`
+        : "Input calibration temporarily bypassed while training a new profile.";
+    } else if (activeProfile) {
       const description = activeProfile.description ? `${activeProfile.description}. ` : "";
       const currentPeak = Number.isFinite(currentPeakDbfs) ? ` Current raw peak: ${formatDbfsValue(currentPeakDbfs)}.` : "";
       userInputCalibrationSummary.textContent = `${activeProfile.name}. ${description}Applies ${formatSignedDbValue(activeProfile.gainDb)} toward ${formatDbfsValue(activeProfile.targetPeakDbfs)} from a captured ${formatDbfsValue(activeProfile.capturedPeakDbfs)}.${currentPeak}`;
@@ -1247,7 +1319,7 @@ export function initUserInputCalibrationControls(): void {
   userInputCalibrationTrainButton?.addEventListener("click", openUserInputCalibrationTrainingModal);
   userInputCalibrationDeleteButton?.addEventListener("click", () => void deleteActiveUserInputCalibrationProfile());
   userInputCalibrationToolbarTrigger?.addEventListener("click", toggleUserInputCalibrationToolbarMenu);
-  userInputCalibrationToolbarMenu?.addEventListener("click", handleUserInputCalibrationToolbarMenuClick);
+  userInputCalibrationToolbarMenu?.addEventListener("click", (event) => void handleUserInputCalibrationToolbarMenuClick(event));
   userInputCalibrationCloseButton?.addEventListener("click", closeUserInputCalibrationTrainingModal);
   userInputCalibrationCancelButton?.addEventListener("click", closeUserInputCalibrationTrainingModal);
   userInputCalibrationResetButton?.addEventListener("click", resetUserInputCalibrationTrainingPeak);

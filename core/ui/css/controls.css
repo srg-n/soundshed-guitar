@@ -1048,6 +1048,18 @@ input[type="range"]:focus-visible {
   transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
 }
 
+.input-calibration-toolbar-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.input-calibration-toolbar-row .input-calibration-toolbar-item {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
 .input-calibration-toolbar-item:hover {
   background: var(--overlay-light);
   border-color: var(--border-light);
@@ -1099,6 +1111,37 @@ input[type="range"]:focus-visible {
 
 .input-calibration-toolbar-item.active .input-calibration-toolbar-item-meta {
   color: var(--accent-primary);
+}
+
+.input-calibration-toolbar-item-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+  width: 36px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.input-calibration-toolbar-item-delete:hover {
+  background: color-mix(in srgb, var(--overlay-light) 72%, var(--status-error-text) 28%);
+  border-color: var(--status-error-border);
+  color: var(--status-error-text);
+}
+
+.input-calibration-toolbar-item-delete:focus-visible {
+  outline: 2px solid var(--accent-primary, #50b878);
+  outline-offset: 2px;
+}
+
+.input-calibration-toolbar-item-delete svg {
+  display: block;
+  pointer-events: none;
 }
 
 .input-calibration-toolbar-item.action .input-calibration-toolbar-item-name {

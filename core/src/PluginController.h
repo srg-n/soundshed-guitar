@@ -391,6 +391,7 @@ private:
     nlohmann::json mAppSettings = nlohmann::json::object();
     nlohmann::json mUiSettings = nlohmann::json::object();
     nlohmann::json mUiViewState = nlohmann::json::object();
+    bool mUserInputCalibrationTrainingActive = false;
 
     // Parameter values (shadow of host parameters)
     std::array<double, kParamCount> mParamValues{};

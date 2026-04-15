@@ -8,6 +8,12 @@ bool MessageDispatcher::DispatchSettings(PluginController& c,
                                          const nlohmann::json& msg,
                                          const std::string& type)
 {
+    if (type == "setUserInputCalibrationTrainingActive")
+    {
+        c.mUserInputCalibrationTrainingActive = msg.value("active", false);
+        c.ApplyUserInputCalibrationSettingsFromAppSettings();
+        return true;
+    }
     if (type == "setSetting")
     {
         std::string key = msg.value("key", "");
