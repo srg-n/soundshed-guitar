@@ -189,10 +189,7 @@ ROUTING_NODE_EFFECTS.forEach(effect => EffectTypeRegistry.register(effect.type, 
 // Keep a reference to routing nodes for callers that need them.
 export const BUILTIN_EFFECTS: EffectTypeInfo[] = ROUTING_NODE_EFFECTS;
 
-/**
- * Create a new empty preset V2 structure
- */
-function generateUserPresetId(): string {
+export function generateUserPresetId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return `user-${crypto.randomUUID()}`;
   }
@@ -200,6 +197,9 @@ function generateUserPresetId(): string {
   return `user-${Date.now()}-${rand}`;
 }
 
+/**
+ * Create a new empty preset V2 structure
+ */
 export function createEmptyPresetV2(): Preset {
   return {
     id: generateUserPresetId(),

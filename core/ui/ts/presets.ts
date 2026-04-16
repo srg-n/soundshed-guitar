@@ -6,7 +6,7 @@ import { buildAttachments, buildAttachmentsFromPreset, getDefaultPresets, initia
 import { arrayBufferToBase64, isRemoteUrl, resolveAttachmentUrl, sha256HexFromBase64 } from "./utils.js";
 import { buildArchiveFileNameWithHash, generateResourceId, requestResourceData, sanitizeFilename } from "./archiveUtils.js";
 import type { Preset, Attachment, BlendDefinition, ResourceRef, LibraryResource, PresetFolder, Setlist, GraphNode, SignalGraph, ToneSharingOriginMetadata } from "./types.js";
-import { createEmptyPresetV2, migratePresetNodeTypes } from "./presetV2.js";
+import { createEmptyPresetV2, generateUserPresetId, migratePresetNodeTypes } from "./presetV2.js";
 import { bindDemoAudioControls } from "./demoAudio.js";
 import { postMessage, setAppSetting } from "./bridge.js";
 import { renderSignalPathBar } from "./signalPath.js";
@@ -2087,6 +2087,12 @@ function openCreatePresetModal(mode: Extract<SavePresetModalMode, "save-as" | "s
   if (!modal) return;
 
   delete modal.dataset.editingPresetId;
+  modal.dataset.saveMode = mode;
+  if (mode === "save-as" && sourcePreset?.id) {
+    modal.dataset.sourcePresetId = sourcePreset.id;
+  } else {
+    delete modal.dataset.sourcePresetId;
+  }
   configureSavePresetModalLabels(mode);
 
   const folderSelect = document.getElementById("preset-folder-select") as HTMLSelectElement | null;
@@ -2119,6 +2125,9 @@ export function closeSavePresetModal(): void {
     // Clear editing state
     delete modal.dataset.editingPresetId;
     delete modal.dataset.cleanedPreset;
+    delete modal.dataset.saveMode;
+    delete modal.dataset.sourcePresetId;
+    delete modal.dataset.stagedDesignedPeak;
   }
 }
 
@@ -2169,6 +2178,8 @@ export function saveCurrentPreset(): void {
 
   // Check if we're editing an existing preset
   const editingPresetId = modal?.dataset.editingPresetId;
+  const saveMode = (modal?.dataset.saveMode as SavePresetModalMode | undefined) ?? (editingPresetId ? "overwrite" : "save-as");
+  const sourcePresetId = modal?.dataset.sourcePresetId?.trim() || "";
 
   const selectedFolderId = folderSelect?.value || PRESET_FOLDER_ALL_ID;
   const activePreset = getActivePresetForRender();
@@ -2209,6 +2220,7 @@ export function saveCurrentPreset(): void {
       // Also persist to disk via the C++ backend
       const savePayload: Record<string, unknown> = {
         type: "savePreset",
+        saveMode,
         presetId: updatedPreset.id,
         name: updatedPreset.name,
         category: updatedPreset.category,
@@ -2240,8 +2252,7 @@ export function saveCurrentPreset(): void {
 
   // Creating new preset
   const basePreset = stripLegacyGlobals(cleanedPreset ?? clonePreset(activePreset ?? ({} as Preset)));
-  const fallbackId = `user-${Date.now()}`;
-  const newPresetId = fallbackId;
+  const newPresetId = generateUserPresetId();
   const newPreset: Preset = {
     ...basePreset,
     id: newPresetId,
@@ -2263,10 +2274,12 @@ export function saveCurrentPreset(): void {
   // Also persist to disk via the C++ backend
   const savePayload: Record<string, unknown> = {
     type: "savePreset",
+    saveMode,
     presetId: newPreset.id,
     name: newPreset.name,
     category: newPreset.category,
     description: newPreset.description,
+    ...(saveMode === "save-as" ? { sourcePresetId, requireNewPresetId: true } : {}),
     ...(sceneId ? { sceneId } : {}),
     includeGlobalSignalChain: includeGlobalFx,
     preset: stripGlobalSignalChainForSave(newPreset),
@@ -3822,6 +3835,7 @@ export function saveOverwriteCurrentPreset(): void {
   // Persist to disk via the C++ backend
   const savePayload: Record<string, unknown> = {
     type: "savePreset",
+    saveMode: "overwrite",
     presetId: updatedPreset.id,
     name: updatedPreset.name,
     category: updatedPreset.category,
@@ -3868,6 +3882,8 @@ export function openEditPresetModal(): void {
   if (!modal) return;
   const isNewPresetDraft = isActivePresetNewDraft();
   configureSavePresetModalLabels(isNewPresetDraft ? "save-new" : "overwrite");
+  modal.dataset.saveMode = isNewPresetDraft ? "save-new" : "overwrite";
+  delete modal.dataset.sourcePresetId;
 
   const folderSelect = document.getElementById("preset-folder-select") as HTMLSelectElement | null;
   populatePresetFolderSelect(folderSelect, resolvePresetModalFolderId(activePresetId));

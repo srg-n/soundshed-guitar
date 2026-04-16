@@ -923,6 +923,92 @@ bool TestSaveGetDeletePresetWorkflow()
     return true;
 }
 
+bool TestSaveAsCreatesNewPresetId()
+{
+    const fs::path sandbox = fs::temp_directory_path() / "guitarfx-preset-management-tests" / "save-as";
+    std::error_code ec;
+    fs::remove_all(sandbox, ec);
+    fs::create_directories(sandbox, ec);
+    SetSettingsEnvRoot(sandbox);
+
+    TestHost host(sandbox);
+    guitarfx::PluginController controller(host);
+    controller.Initialize();
+
+    const std::string sourceId = "unit-test-source-preset";
+    const auto sourcePreset = BuildPreset(sourceId, "Source Preset");
+
+    nlohmann::json saveSource;
+    saveSource["type"] = "savePreset";
+    saveSource["name"] = "Source Preset";
+    saveSource["category"] = "Unit";
+    saveSource["description"] = "Original preset";
+    saveSource["presetId"] = sourceId;
+    saveSource["preset"] = nlohmann::json::parse(guitarfx::PresetStorage::SerializeToJson(sourcePreset));
+    controller.HandleUIMessage(saveSource.dump());
+
+    const fs::path presetDir = sandbox / "Soundshed Guitar" / "data" / "v1" / "presets" / "user";
+    const fs::path sourcePath = presetDir / (sourceId + ".json");
+    if (!fs::exists(sourcePath))
+    {
+        std::cerr << "Source preset file missing before save as: " << sourcePath.string() << "\n";
+        return false;
+    }
+
+    auto saveAsPreset = sourcePreset;
+    saveAsPreset.name = "Copied Preset";
+
+    nlohmann::json saveAs;
+    saveAs["type"] = "savePreset";
+    saveAs["name"] = "Copied Preset";
+    saveAs["category"] = "Unit";
+    saveAs["description"] = "Save as copy";
+    saveAs["presetId"] = sourceId;
+    saveAs["saveMode"] = "save-as";
+    saveAs["sourcePresetId"] = sourceId;
+    saveAs["requireNewPresetId"] = true;
+    saveAs["preset"] = nlohmann::json::parse(guitarfx::PresetStorage::SerializeToJson(saveAsPreset));
+    controller.HandleUIMessage(saveAs.dump());
+
+    const auto savedMsg = FindLatestMessageOfType(host.sentMessages, "presetSaved");
+    if (!savedMsg || !savedMsg->contains("preset"))
+    {
+        std::cerr << "presetSaved response missing after save as\n";
+        return false;
+    }
+
+    const auto savedPresetJson = (*savedMsg)["preset"];
+    const std::string savedId = savedPresetJson.value("id", "");
+    if (savedId.empty() || savedId == sourceId)
+    {
+        std::cerr << "Save As reused the source preset id\n";
+        return false;
+    }
+
+    const fs::path savedPath = presetDir / (savedId + ".json");
+    if (!fs::exists(savedPath))
+    {
+        std::cerr << "Save As preset file missing: " << savedPath.string() << "\n";
+        return false;
+    }
+
+    const auto reloadedSource = guitarfx::PresetStorage::LoadFromFile(sourcePath);
+    if (!reloadedSource || reloadedSource->id != sourceId || reloadedSource->name != "Source Preset")
+    {
+        std::cerr << "Source preset was modified by save as\n";
+        return false;
+    }
+
+    const auto reloadedCopy = guitarfx::PresetStorage::LoadFromFile(savedPath);
+    if (!reloadedCopy || reloadedCopy->id != savedId || reloadedCopy->name != "Copied Preset")
+    {
+        std::cerr << "Saved copy contents mismatch after save as\n";
+        return false;
+    }
+
+    return true;
+}
+
 bool TestFactoryPresetArchiveStartupImport()
 {
     const fs::path sandbox = fs::temp_directory_path() / "guitarfx-preset-management-tests" / "factory-archive";
@@ -1144,6 +1230,7 @@ int main()
     run("User input calibration training bypasses active profile", TestUserInputCalibrationTrainingBypassesActiveProfileWithoutPersistingSelection());
     run("Save preset uses global chain levels", TestSavePresetUsesGlobalChainLevels());
     run("Save/Get/Delete preset workflow", TestSaveGetDeletePresetWorkflow());
+    run("Save As creates new preset id", TestSaveAsCreatesNewPresetId());
     run("Factory preset archive startup import", TestFactoryPresetArchiveStartupImport());
     run("Riff library path normalization", TestRiffLibraryPathNormalization());
     run("Optimized NAM metadata alias parsing", TestOptimizedNamMetadataAliasParsing());

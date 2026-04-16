@@ -991,6 +991,11 @@ static std::string GenerateGuidV4String()
     return part1 + "-" + part2 + "-" + part3 + "-" + part4 + "-" + part5;
 }
 
+static std::string GenerateUserPresetId()
+{
+    return "user-" + GenerateGuidV4String();
+}
+
 static std::filesystem::path ResolveEffectLayoutsSettingsPath(const FileSystem& fileSystem)
 {
     return fileSystem.ResolveSettingsDirectory() / "layouts" / "indexes" / "effect-layouts.json";
@@ -2942,6 +2947,9 @@ void PluginController::HandleSavePresetRequest(const nlohmann::json& payload)
     const std::string presetCategory = payload.value("category", "User");
     const std::string presetDescription = payload.value("description", "");
     const std::string presetIdOverride = payload.value("presetId", "");
+    const std::string saveMode = payload.value("saveMode", "");
+    std::string sourcePresetId = payload.value("sourcePresetId", "");
+    const bool requireNewPresetId = payload.value("requireNewPresetId", saveMode == "save-as");
     const bool includeGlobalSignalChain = payload.value("includeGlobalSignalChain", payload.contains("globalSignalChain"));
 
     std::optional<Preset> payloadPreset;
@@ -2971,9 +2979,16 @@ void PluginController::HandleSavePresetRequest(const nlohmann::json& payload)
         Preset newPreset = payloadPreset ? *payloadPreset : *mActivePreset;
         NormalizePresetScenes(newPreset);
         EnsurePresetBoundaryGainNodes(newPreset);
-        newPreset.id = presetIdOverride.empty()
-            ? "user-" + std::to_string(std::time(nullptr))
+        if (sourcePresetId.empty())
+            sourcePresetId = mActivePresetId;
+
+        std::string resolvedPresetId = presetIdOverride.empty()
+            ? GenerateUserPresetId()
             : presetIdOverride;
+        if (requireNewPresetId && !sourcePresetId.empty() && resolvedPresetId == sourcePresetId)
+            resolvedPresetId = GenerateUserPresetId();
+
+        newPreset.id = std::move(resolvedPresetId);
         newPreset.name = presetName;
         newPreset.category = presetCategory;
         newPreset.description = presetDescription;
