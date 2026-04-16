@@ -168,6 +168,7 @@ export const uiState: UiState = {
   presets: [],
   filteredPresets: [],
   activePresetId: null,
+  activePresetIsNew: false,
   presetCache: new Map<string, Preset>(),
   activePresetSnapshot: null,
   activePresetDraft: null,
@@ -361,6 +362,10 @@ export function setActivePresetDraft(preset: Preset | null): void {
   const draft = clonePreset(preset);
   uiState.activePresetSceneId = normalizePresetScenes(draft, uiState.activePresetSceneId ?? undefined);
   uiState.activePresetDraft = draft;
+}
+
+export function setActivePresetIsNew(isNew: boolean): void {
+  uiState.activePresetIsNew = isNew;
 }
 
 export function setPresetDirty(isDirty: boolean): void {

@@ -185,7 +185,7 @@ export function importRiffWav(payload: {
   tempoBpm: number;
   timeSigNum: number;
   timeSigDen: number;
-  bars: number;
+  bars?: number;
   patternType: "click" | "drum";
   patternId?: string;
 }): void {

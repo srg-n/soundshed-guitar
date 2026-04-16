@@ -86,6 +86,10 @@ export interface WavMetadata {
   numFrames: number;
 }
 
+const WAV_FORMAT_PCM = 0x0001;
+const WAV_FORMAT_IEEE_FLOAT = 0x0003;
+const WAV_FORMAT_EXTENSIBLE = 0xFFFE;
+
 export function parseWavMetadata(arrayBuffer: ArrayBuffer): WavMetadata | null {
   const view = new DataView(arrayBuffer);
   if (view.byteLength < 44) {
@@ -112,7 +116,7 @@ export function parseWavMetadata(arrayBuffer: ArrayBuffer): WavMetadata | null {
   let channels = 0;
   let sampleRate = 0;
   let bitsPerSample = 0;
-  let numFrames = 0;
+  let dataSize: number | null = null;
 
   while (offset + 8 <= view.byteLength) {
     const id = String.fromCharCode(
@@ -124,23 +128,36 @@ export function parseWavMetadata(arrayBuffer: ArrayBuffer): WavMetadata | null {
     const size = view.getUint32(offset + 4, true);
     const chunkStart = offset + 8;
     if (id === "fmt ") {
-      const audioFormat = view.getUint16(chunkStart, true);
-      if (audioFormat !== 1 && audioFormat !== 3) {
+      if (size < 16 || chunkStart + size > view.byteLength) {
+        return null;
+      }
+
+      let audioFormat = view.getUint16(chunkStart, true);
+      if (audioFormat === WAV_FORMAT_EXTENSIBLE) {
+        if (size < 40) {
+          return null;
+        }
+        audioFormat = view.getUint16(chunkStart + 24, true);
+      }
+
+      if (audioFormat !== WAV_FORMAT_PCM && audioFormat !== WAV_FORMAT_IEEE_FLOAT) {
         return null;
       }
       channels = view.getUint16(chunkStart + 2, true);
       sampleRate = view.getUint32(chunkStart + 4, true);
       bitsPerSample = view.getUint16(chunkStart + 14, true);
     } else if (id === "data") {
-      const bytesPerFrame = Math.max(1, channels) * Math.max(1, Math.ceil(bitsPerSample / 8));
-      numFrames = bytesPerFrame > 0 ? Math.floor(size / bytesPerFrame) : 0;
+      dataSize = size;
     }
     offset = chunkStart + size + (size % 2);
   }
 
-  if (!channels || !sampleRate || !bitsPerSample) {
+  if (!channels || !sampleRate || !bitsPerSample || dataSize === null) {
     return null;
   }
+
+  const bytesPerFrame = channels * Math.max(1, Math.ceil(bitsPerSample / 8));
+  const numFrames = Math.floor(dataSize / Math.max(1, bytesPerFrame));
 
   return { channels, sampleRate, bitsPerSample, numFrames };
 }

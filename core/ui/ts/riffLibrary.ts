@@ -19,6 +19,8 @@ let activeTrimHandle: "start" | "end" | null = null;
 let selectedTrimHandle: "start" | "end" = "start";
 let editingRiffId = "";
 let savingFromCapture = false;
+let pendingImportedRiffTitle = "";
+let pendingImportedRiffSavePrompt = false;
 // ARM state: true when armed (click playing, waiting for input signal)
 let isArmed = false;
 // Live waveform during active recording (populated by riffCaptureProgress messages)
@@ -132,6 +134,20 @@ function splitCsv(value: string): string[] {
     .filter((entry) => entry.length > 0);
 }
 
+function buildDefaultRiffTitle(defaultTitle?: string): string {
+  const normalizedTitle = defaultTitle?.trim();
+  if (normalizedTitle) {
+    return normalizedTitle;
+  }
+
+  const riffs = uiState.riffLibrary?.riffs ?? [];
+  return `riff-${riffs.length + 1}`;
+}
+
+function deriveImportedRiffTitle(fileName: string): string {
+  return fileName.replace(/\.[^./\\]+$/, "").trim();
+}
+
 function formatDuration(seconds: number): string {
   if (!isFinite(seconds) || seconds <= 0) {
     return "0.0s";
@@ -154,7 +170,7 @@ function getPreferredTakeId(riff: RiffLibrary["riffs"][number]): string | null {
   return riff.takes[0].id;
 }
 
-function populateSaveModalFields(riff?: RiffLibrary["riffs"][number]): void {
+function populateSaveModalFields(riff?: RiffLibrary["riffs"][number], defaultTitle?: string): void {
   const titleInput = document.getElementById("riff-save-title") as HTMLInputElement | null;
   const categoriesInput = document.getElementById("riff-save-categories") as HTMLInputElement | null;
   const tagsInput = document.getElementById("riff-save-tags") as HTMLInputElement | null;
@@ -163,8 +179,7 @@ function populateSaveModalFields(riff?: RiffLibrary["riffs"][number]): void {
 
   if (!riff) {
     const riffs = uiState.riffLibrary?.riffs ?? [];
-    const nextNumber = riffs.length + 1;
-    if (titleInput) titleInput.value = `riff-${nextNumber}`;
+    if (titleInput) titleInput.value = buildDefaultRiffTitle(defaultTitle);
     const mostRecent = riffs.length > 0 ? riffs[riffs.length - 1] : null;
     if (categoriesInput) categoriesInput.value = mostRecent?.categories?.join(", ") ?? "";
     if (tagsInput) tagsInput.value = mostRecent?.tags?.join(", ") ?? "";
@@ -188,6 +203,45 @@ function populateSaveModalFields(riff?: RiffLibrary["riffs"][number]): void {
   if (favoriteInput) {
     favoriteInput.checked = Boolean(riff.favorite);
   }
+}
+
+function openSaveModal(editing = false): void {
+  const saveModal = document.getElementById("riff-save-modal") as HTMLDivElement | null;
+  const saveModalTitle = document.getElementById("riff-save-modal-title") as HTMLHeadingElement | null;
+  const titleInput = document.getElementById("riff-save-title") as HTMLInputElement | null;
+  if (!saveModal) {
+    return;
+  }
+  if (saveModalTitle) {
+    saveModalTitle.textContent = editing ? "Edit Riff Take" : "Save Take";
+  }
+  saveModal.style.display = "flex";
+  titleInput?.focus();
+  titleInput?.select();
+}
+
+function closeSaveModal(): void {
+  const saveModal = document.getElementById("riff-save-modal") as HTMLDivElement | null;
+  if (!saveModal) {
+    return;
+  }
+  saveModal.style.display = "none";
+  editingRiffId = "";
+}
+
+export function promptImportedRiffSave(): void {
+  const captureModal = document.getElementById("riff-capture-modal") as HTMLDivElement | null;
+  const titleOverride = pendingImportedRiffTitle;
+
+  pendingImportedRiffTitle = "";
+  pendingImportedRiffSavePrompt = false;
+  editingRiffId = "";
+  savingFromCapture = false;
+  populateSaveModalFields(undefined, titleOverride);
+  if (captureModal) {
+    captureModal.style.display = "none";
+  }
+  openSaveModal(false);
 }
 
 export function applyRiffLibraryState(library: Partial<RiffLibrary>): void {
@@ -237,6 +291,13 @@ export function applyRiffCaptureState(capture: Partial<RiffCaptureState>): void 
       ? capture.barAlignOffsetSamples
       : uiState.riffCapture?.barAlignOffsetSamples ?? 0,
   };
+
+  if (pendingImportedRiffSavePrompt
+    && uiState.riffCapture.complete
+    && uiState.riffCapture.hasAudio
+    && !uiState.riffCapture.active) {
+    promptImportedRiffSave();
+  }
 
   if (!isArmed && wasArmed) {
     // renderRiffCaptureStatus called below handles the button state update
@@ -656,10 +717,6 @@ async function importDroppedRiffWav(file: File): Promise<void> {
 
   const dataBuffer = await file.arrayBuffer();
   const wavInfo = parseWavMetadata(dataBuffer);
-  if (!wavInfo) {
-    showNotification("Invalid WAV file", "Could not parse WAV metadata");
-    return;
-  }
 
   const tempoInput = document.getElementById("riff-capture-tempo") as HTMLInputElement | null;
   const numInput = document.getElementById("riff-capture-timesig-num") as HTMLInputElement | null;
@@ -670,23 +727,44 @@ async function importDroppedRiffWav(file: File): Promise<void> {
   const tempoBpm = Math.max(30, Math.min(300, Number(tempoInput?.value ?? 120)));
   const timeSigNum = Math.max(1, Number(numInput?.value ?? 4));
   const timeSigDen = Math.max(1, Number(denInput?.value ?? 4));
-  // Compute bars from WAV duration and tempo rather than relying on user input
-  const bars = computeBarsFromSamples(wavInfo.numFrames, wavInfo.sampleRate, tempoBpm, timeSigNum, timeSigDen);
+  const bars = wavInfo
+    ? computeBarsFromSamples(wavInfo.numFrames, wavInfo.sampleRate, tempoBpm, timeSigNum, timeSigDen)
+    : undefined;
   const patternType = (patternTypeSelect?.value === "drum" ? "drum" : "click") as "click" | "drum";
   const patternId = patternIdInput?.value.trim() || undefined;
 
-  importRiffWav({
+  pendingImportedRiffTitle = deriveImportedRiffTitle(file.name);
+  pendingImportedRiffSavePrompt = true;
+
+  const importPayload: {
+    data: string;
+    fileName?: string;
+    tempoBpm: number;
+    timeSigNum: number;
+    timeSigDen: number;
+    bars?: number;
+    patternType: "click" | "drum";
+    patternId?: string;
+  } = {
     data: arrayBufferToBase64(dataBuffer),
     fileName: file.name,
     tempoBpm,
     timeSigNum,
     timeSigDen,
-    bars,
     patternType,
     patternId,
-  });
+  };
+  if (typeof bars === "number") {
+    importPayload.bars = bars;
+  }
 
-  appendLog(`riff wav import requested → ${file.name} (${wavInfo.sampleRate} Hz, ${wavInfo.channels} ch, ${bars} bars)`);
+  importRiffWav(importPayload);
+
+  if (wavInfo) {
+    appendLog(`riff wav import requested → ${file.name} (${wavInfo.sampleRate} Hz, ${wavInfo.channels} ch, ${bars} bars)`);
+  } else {
+    appendLog(`riff wav import requested → ${file.name} (UI metadata unavailable, backend decode pending)`);
+  }
   showNotification("Importing WAV into current take", file.name);
 }
 
@@ -820,7 +898,6 @@ function bindRiffLibraryActions(): void {
   const saveModalCloseBtn = document.getElementById("riff-save-modal-close") as HTMLButtonElement | null;
   const saveModalCancelBtn = document.getElementById("riff-save-modal-cancel") as HTMLButtonElement | null;
   const saveModalConfirmBtn = document.getElementById("riff-save-modal-confirm") as HTMLButtonElement | null;
-  const saveModalTitle = document.getElementById("riff-save-modal-title") as HTMLHeadingElement | null;
 
   if (pathSaveBtn && pathSaveBtn.dataset.bound !== "true") {
     pathSaveBtn.dataset.bound = "true";
@@ -895,24 +972,6 @@ function bindRiffLibraryActions(): void {
     // Intentionally no backdrop-click dismiss: dragging waveform trim markers outside the
     // dialog would otherwise close it. Only the Cancel button or a completed save closes this modal.
   }
-
-  const openSaveModal = (editing = false) => {
-    if (!saveModal) {
-      return;
-    }
-    if (saveModalTitle) {
-      saveModalTitle.textContent = editing ? "Edit Riff Take" : "Save Take";
-    }
-    saveModal.style.display = "flex";
-  };
-
-  const closeSaveModal = () => {
-    if (!saveModal) {
-      return;
-    }
-    saveModal.style.display = "none";
-    editingRiffId = "";
-  };
 
   if (openSaveModalBtn && openSaveModalBtn.dataset.bound !== "true") {
     openSaveModalBtn.dataset.bound = "true";
@@ -1130,7 +1189,6 @@ function bindRiffLibraryActions(): void {
         return;
       }
 
-      openRiffCaptureModal();
       await importDroppedRiffWav(wavFile);
     });
   }

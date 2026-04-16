@@ -1,4 +1,4 @@
-import { uiState, clonePreset, getActivePresetForRender, setActivePresetDraft, setActivePresetSnapshot, setPresetDirty } from "./state.js";
+import { uiState, clonePreset, getActivePresetForRender, setActivePresetDraft, setActivePresetIsNew, setActivePresetSnapshot, setPresetDirty } from "./state.js";
 import { renderActivePreset, applyPresetFromLibrary, populatePresetDropdown, updatePresetDropdownSelection, cachePresetInMemory, updatePresetActionButtons, applyPresetFoldersFromBackend, applyPresetFavoritesFromBackend, applyPresetRecentsFromAppSettings, applyPresetRatingsFromBackend, applySetlistsFromBackend, handlePresetDataMessage, recordRecentPreset, refreshSavePresetModalPeakInfoIfOpen } from "./presets.js";
 import { syncControlsFromState, handleInputModeChanged, handleAmpCabStateChanged, syncAutoLevelControlsFromState, applyStoredInputChannel } from "./controls.js";
 import { showNotification } from "./notifications.js";
@@ -308,6 +308,8 @@ export function handleIncomingMessage(message: string): void {
       if (preset) {
         normalizePresetResources(preset);
         uiState.activePresetSceneId = normalizePresetScenes(preset, uiState.activePresetSceneId ?? undefined);
+        const preserveNewDraft = Boolean(uiState.activePresetIsNew && uiState.activePresetId === preset.id);
+        setActivePresetIsNew(preserveNewDraft);
         const snapshot = uiState.activePresetSnapshot;
         const isNewPreset = !snapshot || snapshot.id !== preset.id;
         if (isNewPreset) {
@@ -465,9 +467,11 @@ export function handleIncomingMessage(message: string): void {
       if (preset) {
         migratePresetNodeTypes(preset);
         normalizePresetResources(preset);
+        const preserveNewDraft = Boolean(uiState.activePresetIsNew && uiState.activePresetId === preset.id);
         uiState.activePresetSceneId = normalizePresetScenes(preset, (payload as { sceneId?: string }).sceneId ?? uiState.activePresetSceneId ?? undefined);
         recordRecentPreset(preset.id);
         uiState.activePresetId = preset.id;
+        setActivePresetIsNew(preserveNewDraft);
         uiState.presetCache.set(preset.id, clonePreset(preset));
         setActivePresetSnapshot(preset);
         setActivePresetDraft(preset);
@@ -650,6 +654,7 @@ export function handleIncomingMessage(message: string): void {
         uiState.activePresetSceneId = normalizePresetScenes(savedPreset, (payload as { sceneId?: string }).sceneId ?? uiState.activePresetSceneId ?? undefined);
         cachePresetInMemory(savedPreset);
         uiState.activePresetId = savedPreset.id;
+        setActivePresetIsNew(false);
         uiState.presetCache.set(savedPreset.id, clonePreset(savedPreset));
         setActivePresetSnapshot(savedPreset);
         setActivePresetDraft(savedPreset);

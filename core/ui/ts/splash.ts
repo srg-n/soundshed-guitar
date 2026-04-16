@@ -6,8 +6,8 @@
  */
 
 const MIN_SPLASH_MS = 50;
-const THEME_TRANSITION_MS = 260;
-const FADE_OUT_MS = 300;
+const THEME_TRANSITION_MS = 50;
+const FADE_OUT_MS = 50;
 
 let splashShownAt = 0;
 

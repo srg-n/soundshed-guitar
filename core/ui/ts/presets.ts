@@ -1,7 +1,7 @@
 import { appendLog } from "./logging.js";
 import { clearNotification, showNotification } from "./notifications.js";
 import { renderPresetDetails, renderPresetList, renderMixerPanel } from "./views.js";
-import { clonePreset, uiState, DEFAULT_GLOBAL_SIGNAL_CHAIN, getActivePresetForRender, setActivePresetDraft, setActivePresetSnapshot, setPresetDirty } from "./state.js";
+import { clonePreset, uiState, DEFAULT_GLOBAL_SIGNAL_CHAIN, getActivePresetForRender, setActivePresetDraft, setActivePresetIsNew, setActivePresetSnapshot, setPresetDirty } from "./state.js";
 import { buildAttachments, buildAttachmentsFromPreset, getDefaultPresets, initializeDataLibraries, REMOTE_BASE_URL } from "./dataLibraries.js";
 import { arrayBufferToBase64, isRemoteUrl, resolveAttachmentUrl, sha256HexFromBase64 } from "./utils.js";
 import { buildArchiveFileNameWithHash, generateResourceId, requestResourceData, sanitizeFilename } from "./archiveUtils.js";
@@ -1719,6 +1719,7 @@ export async function applyPresetFromLibrary(presetId: string): Promise<void> {
     }
     uiState.presetCache.set(presetPayload.id, clonePreset(presetPayload));
     uiState.activePresetId = presetPayload.id;
+    setActivePresetIsNew(false);
     setActivePresetSnapshot(presetPayload);
     setActivePresetDraft(presetPayload);
     setPresetDirty(false);
@@ -1834,7 +1835,7 @@ function openPublishPresetFlow(): void {
 
   const toneSharingOrigin = getToneSharingOriginMetadata(activePreset);
   if (toneSharingOrigin?.republishBlocked) {
-    showNotification("Save Copy first", "Imported Tone Sharing presets need a local copy before they can be published again.");
+    showNotification("Save As first", "Imported Tone Sharing presets need a local copy before they can be published again.");
     return;
   }
 
@@ -2023,52 +2024,92 @@ export function initializePresetControls(): void {
 }
 
 // Save preset modal helpers
-function configureSavePresetModalLabels(isOverwrite: boolean): void {
+type SavePresetModalMode = "overwrite" | "save-as" | "save-new";
+
+function configureSavePresetModalLabels(mode: SavePresetModalMode): void {
   const title = document.getElementById("save-preset-modal-title");
   const confirmBtn = document.getElementById("save-preset-confirm");
+  const titleText = mode === "overwrite"
+    ? "Overwrite Preset"
+    : mode === "save-new"
+      ? "Save Preset"
+      : "Save Preset As";
+  const confirmText = mode === "overwrite"
+    ? "Overwrite Preset"
+    : mode === "save-new"
+      ? "Save Preset"
+      : "Save New Preset";
 
   if (title) {
-    title.textContent = isOverwrite ? "Overwrite Preset" : "Save Preset As";
+    title.textContent = titleText;
   }
 
   if (confirmBtn) {
-    confirmBtn.textContent = isOverwrite ? "Overwrite Preset" : "Save New Preset";
+    confirmBtn.textContent = confirmText;
   }
 }
 
-export function openSavePresetModal(): void {
-  const modal = document.getElementById("save-preset-modal");
-  if (!modal) return;
+function isActivePresetNewDraft(): boolean {
+  return Boolean(uiState.activePresetIsNew && uiState.activePresetId);
+}
 
-  // Save As must always create a new preset, never reuse edit state.
-  delete modal.dataset.editingPresetId;
-  configureSavePresetModalLabels(false);
-
-  const folderSelect = document.getElementById("preset-folder-select") as HTMLSelectElement | null;
+function populateSavePresetModalFields(preset: Preset | null): void {
   const nameInput = document.getElementById("preset-name-input") as HTMLInputElement | null;
   const categoryInput = document.getElementById("preset-category-input") as HTMLInputElement | null;
   const descriptionInput = document.getElementById("preset-description-input") as HTMLTextAreaElement | null;
 
-  const activeFolderId = uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID;
-  const defaultFolderId = isVirtualPresetFolderId(activeFolderId) ? PRESET_FOLDER_ALL_ID : activeFolderId;
-  populatePresetFolderSelect(folderSelect, defaultFolderId);
+  if (nameInput) {
+    nameInput.value = preset?.name ?? "";
+  }
+  if (categoryInput) {
+    categoryInput.value = preset?.category || "User";
+  }
+  if (descriptionInput) {
+    descriptionInput.value = preset?.description || "";
+  }
+  setPresetTagsPickerValue(preset?.tags ?? []);
+}
 
-  if (nameInput) nameInput.value = "";
-  if (categoryInput) categoryInput.value = "User";
-  if (descriptionInput) descriptionInput.value = "";
-  setPresetTagsPickerValue([]);
+function resolvePresetModalFolderId(presetId?: string | null): string {
+  if (presetId) {
+    const presetFolder = findFolderForPreset(uiState.presetFolders ?? [], presetId);
+    if (presetFolder?.id) {
+      return presetFolder.id;
+    }
+  }
+
+  const activeFolderId = uiState.activePresetFolderId ?? PRESET_FOLDER_ALL_ID;
+  return isVirtualPresetFolderId(activeFolderId) ? PRESET_FOLDER_ALL_ID : activeFolderId;
+}
+
+function openCreatePresetModal(mode: Extract<SavePresetModalMode, "save-as" | "save-new">, sourcePreset: Preset | null): void {
+  const modal = document.getElementById("save-preset-modal");
+  if (!modal) return;
+
+  delete modal.dataset.editingPresetId;
+  configureSavePresetModalLabels(mode);
+
+  const folderSelect = document.getElementById("preset-folder-select") as HTMLSelectElement | null;
+  populatePresetFolderSelect(folderSelect, resolvePresetModalFolderId(sourcePreset?.id ?? null));
+  populateSavePresetModalFields(sourcePreset);
 
   initPresetModalTabs(modal);
   initPresetModalAdvancedActions(modal);
   setPresetModalActiveTab(modal, "details");
-  const activePreset = uiState.presetCache.get(uiState.activePresetId ?? "") ?? null;
-  updatePresetModalJson(activePreset);
+  updatePresetModalJson(sourcePreset);
   updatePresetModalReport([]);
   delete modal.dataset.cleanedPreset;
   delete modal.dataset.stagedDesignedPeak;
   updateSavePresetModalPeakInfo(modal);
 
   modal.style.display = "flex";
+  const nameInput = document.getElementById("preset-name-input") as HTMLInputElement | null;
+  nameInput?.focus();
+  nameInput?.select();
+}
+
+export function openSavePresetModal(): void {
+  openCreatePresetModal("save-as", getActivePresetForRender());
 }
 
 export function closeSavePresetModal(): void {
@@ -2094,6 +2135,7 @@ export function createDefaultPreset(): void {
     movePresetToFolder(newPreset.id, selectedFolderId);
   }
   uiState.activePresetId = newPreset.id;
+  setActivePresetIsNew(true);
   setActivePresetSnapshot(newPreset);
   setActivePresetDraft(newPreset);
   setPresetDirty(false);
@@ -2187,6 +2229,7 @@ export function saveCurrentPreset(): void {
       movePresetToFolder(editingPresetId, selectedFolderId);
       closeSavePresetModal();
       showNotification("Preset updated", name);
+      setActivePresetIsNew(false);
       setActivePresetSnapshot(updatedPreset);
       setActivePresetDraft(updatedPreset);
       setPresetDirty(false);
@@ -2239,6 +2282,7 @@ export function saveCurrentPreset(): void {
   renderPresetUI(clonePreset(newPreset));
   closeSavePresetModal();
   showNotification("Preset saved", newPreset.name);
+  setActivePresetIsNew(false);
   setActivePresetSnapshot(newPreset);
   setActivePresetDraft(newPreset);
   setPresetDirty(false);
@@ -3748,6 +3792,11 @@ export function saveOverwriteCurrentPreset(): void {
     return;
   }
 
+  if (isActivePresetNewDraft()) {
+    openEditPresetModal();
+    return;
+  }
+
   if (!isUserPreset(activePresetId)) {
     showNotification("Error", "Cannot overwrite factory presets. Use 'Save As' instead.");
     return;
@@ -3789,6 +3838,7 @@ export function saveOverwriteCurrentPreset(): void {
     uiState.presets[index] = updatedPreset;
   }
 
+  setActivePresetIsNew(false);
   setActivePresetSnapshot(updatedPreset);
   setActivePresetDraft(updatedPreset);
   setPresetDirty(false);
@@ -3816,22 +3866,12 @@ export function openEditPresetModal(): void {
 
   const modal = document.getElementById("save-preset-modal");
   if (!modal) return;
-  configureSavePresetModalLabels(true);
+  const isNewPresetDraft = isActivePresetNewDraft();
+  configureSavePresetModalLabels(isNewPresetDraft ? "save-new" : "overwrite");
 
   const folderSelect = document.getElementById("preset-folder-select") as HTMLSelectElement | null;
-  const presetFolder = findFolderForPreset(uiState.presetFolders ?? [], activePresetId);
-  const selectedFolderId = presetFolder?.id ?? PRESET_FOLDER_ALL_ID;
-  populatePresetFolderSelect(folderSelect, selectedFolderId);
-
-  // Pre-fill with existing preset data
-  const nameInput = document.getElementById("preset-name-input") as HTMLInputElement | null;
-  const categoryInput = document.getElementById("preset-category-input") as HTMLInputElement | null;
-  const descriptionInput = document.getElementById("preset-description-input") as HTMLTextAreaElement | null;
-
-  if (nameInput) nameInput.value = preset.name;
-  if (categoryInput) categoryInput.value = preset.category || "User";
-  if (descriptionInput) descriptionInput.value = preset.description || "";
-  setPresetTagsPickerValue(preset.tags ?? []);
+  populatePresetFolderSelect(folderSelect, resolvePresetModalFolderId(activePresetId));
+  populateSavePresetModalFields(preset);
 
   initPresetModalTabs(modal);
   initPresetModalAdvancedActions(modal);
@@ -3846,6 +3886,9 @@ export function openEditPresetModal(): void {
   modal.dataset.editingPresetId = activePresetId;
 
   modal.style.display = "flex";
+  const nameInput = document.getElementById("preset-name-input") as HTMLInputElement | null;
+  nameInput?.focus();
+  nameInput?.select();
 }
 
 // Update preset action button states
@@ -3862,19 +3905,26 @@ export function updatePresetActionButtons(): void {
   const canModify = isUserPreset(uiState.activePresetId);
   const toneSharingOrigin = getToneSharingOriginMetadata(activePreset);
   const hasActivePreset = Boolean(activePreset);
+  const isNewPresetDraft = Boolean(hasActivePreset && isActivePresetNewDraft());
 
   if (editBtn) {
     editBtn.disabled = !canModify;
-    editBtn.title = canModify ? "Edit preset details" : "Save Copy to edit factory presets";
+    editBtn.title = canModify
+      ? (isNewPresetDraft ? "Set preset details before saving" : "Edit preset details")
+      : "Save As to edit factory presets";
   }
   if (saveBtn) {
     saveBtn.disabled = !canModify;
-    saveBtn.title = canModify ? "Save Preset" : "Cannot overwrite factory presets";
+    saveBtn.title = canModify
+      ? (isNewPresetDraft ? "Save preset details first" : "Save Preset")
+      : "Cannot overwrite factory presets";
     saveBtn.classList.toggle("preset-action-btn-unsaved", Boolean(uiState.presetDirty));
   }
   if (saveAsBtn) {
-    saveAsBtn.disabled = false;
-    saveAsBtn.title = hasActivePreset ? "Save a new copy of this preset" : "Create a new preset from current state";
+    const showSaveAs = hasActivePreset && !isNewPresetDraft;
+    saveAsBtn.hidden = !showSaveAs;
+    saveAsBtn.disabled = !showSaveAs;
+    saveAsBtn.title = "Save this preset as a new copy";
   }
   if (deleteBtn) {
     deleteBtn.disabled = !canModify;
@@ -3893,7 +3943,7 @@ export function updatePresetActionButtons(): void {
     publishBtn.title = !hasActivePreset
       ? "No preset to publish"
       : toneSharingOrigin?.republishBlocked
-        ? "Save Copy before publishing this imported preset"
+        ? "Save As before publishing this imported preset"
         : !isToneSharingSignedIn()
           ? "Sign in to Tone Sharing to publish"
           : "Publish to Tone Sharing";
@@ -3910,14 +3960,17 @@ export function updatePresetActionButtons(): void {
     if (activePreset) {
       if (toneSharingOrigin?.republishBlocked) {
         status = "Imported";
-        statusTitle = "Imported from Tone Sharing. Use Save Copy to publish.";
+        statusTitle = "Imported from Tone Sharing. Use Save As to publish.";
         presetSelectorStatus.classList.add("is-warning");
+      } else if (isNewPresetDraft) {
+        status = "New";
+        statusTitle = "New preset draft. Save to set the title and store it.";
       } else if (canModify) {
         status = "User";
         statusTitle = "User preset";
       } else {
         status = "Factory";
-        statusTitle = "Factory preset. Use Save Copy to edit.";
+        statusTitle = "Factory preset. Use Save As to edit.";
       }
 
       if (uiState.presetDirty) {

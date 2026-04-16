@@ -479,6 +479,7 @@ export interface UiState {
   presets: Preset[];
   filteredPresets: Preset[];
   activePresetId: string | null;
+  activePresetIsNew?: boolean;
   presetCache: Map<string, Preset>;
   activePresetSnapshot?: Preset | null;
   activePresetDraft?: Preset | null;

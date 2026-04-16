@@ -40,7 +40,9 @@ Click a preset name to load it. The signal chain and all parameters update immed
 
 ## Saving a preset
 
-**Save (overwrite current):** Click **Save** in the top bar. The current preset is updated with your changes.
+**Save (overwrite current):** Click **Save** in the top bar. Existing user presets are updated with your changes.
+
+For a brand-new preset draft, **Save** opens the preset details dialog first so you can set the name and other metadata before it is stored.
 
 **Save as new:** Click **Save As**, enter a name, choose or create a folder, and click **Save**. A new preset is created and selected.
 
