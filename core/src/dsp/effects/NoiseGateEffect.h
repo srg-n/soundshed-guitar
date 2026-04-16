@@ -20,13 +20,18 @@ namespace guitarfx
         return;
       mSampleRate = sampleRate;
       mMaxBlockSize = maxBlockSize;
-      mEnvelope = 0.0f;
+      mEnvelope[0] = 0.0f;
+      mEnvelope[1] = 0.0f;
+      mHoldSamplesRemaining[0] = 0;
+      mHoldSamplesRemaining[1] = 0;
     }
 
     void Reset() override
     {
-      mEnvelope = 0.0f;
-      mHoldSamplesRemaining = 0;
+      mEnvelope[0] = 0.0f;
+      mEnvelope[1] = 0.0f;
+      mHoldSamplesRemaining[0] = 0;
+      mHoldSamplesRemaining[1] = 0;
     }
 
     void Process(float **inputs, float **outputs, int numSamples) override
@@ -47,43 +52,34 @@ namespace guitarfx
 
       for (int i = 0; i < numSamples; ++i)
       {
-        // Get peak of both channels
-        float peak = 0.0f;
-        if (inputs[0])
-          peak = std::max(peak, std::abs(inputs[0][i]));
-        if (inputs[1])
-          peak = std::max(peak, std::abs(inputs[1][i]));
-
-        // Envelope follower
-        if (peak > mEnvelope)
-          mEnvelope = attackCoef * mEnvelope + (1.0f - attackCoef) * peak;
-        else
-          mEnvelope = releaseCoef * mEnvelope + (1.0f - releaseCoef) * peak;
-
-        // Hold: when signal is above threshold, reset hold counter and keep gate open
-        float gain;
-        if (mEnvelope > threshold)
-        {
-          mHoldSamplesRemaining = holdSamples;
-          gain = 1.0f;
-        }
-        else if (mHoldSamplesRemaining > 0)
-        {
-          --mHoldSamplesRemaining;
-          gain = 1.0f;
-        }
-        else
-        {
-          gain = 0.0f;
-        }
-
-        // Apply gain
         for (int ch = 0; ch < 2; ++ch)
         {
-          if (inputs[ch] && outputs[ch])
+          if (!outputs[ch])
+            continue;
+
+          const float inputSample = inputs[ch]
+            ? inputs[ch][i]
+            : ((ch == 1 && inputs[0]) ? inputs[0][i] : 0.0f);
+          const float peak = std::abs(inputSample);
+
+          if (peak > mEnvelope[ch])
+            mEnvelope[ch] = attackCoef * mEnvelope[ch] + (1.0f - attackCoef) * peak;
+          else
+            mEnvelope[ch] = releaseCoef * mEnvelope[ch] + (1.0f - releaseCoef) * peak;
+
+          float gain = 0.0f;
+          if (mEnvelope[ch] > threshold)
           {
-            outputs[ch][i] = inputs[ch][i] * gain;
+            mHoldSamplesRemaining[ch] = holdSamples;
+            gain = 1.0f;
           }
+          else if (mHoldSamplesRemaining[ch] > 0)
+          {
+            --mHoldSamplesRemaining[ch];
+            gain = 1.0f;
+          }
+
+          outputs[ch][i] = inputSample * gain;
         }
       }
     }
@@ -123,8 +119,8 @@ namespace guitarfx
     double mAttackMs = 1.0;
     double mHoldMs = 50.0;
     double mReleaseMs = 50.0;
-    float mEnvelope = 0.0f;
-    int mHoldSamplesRemaining = 0;
+    float mEnvelope[2] = {0.0f, 0.0f};
+    int mHoldSamplesRemaining[2] = {0, 0};
   };
 
   inline void RegisterNoiseGateEffect()

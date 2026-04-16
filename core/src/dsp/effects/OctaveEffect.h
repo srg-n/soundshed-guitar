@@ -22,12 +22,14 @@ namespace guitarfx
       mMaxBlockSize = maxBlockSize;
 
       const size_t bufferSize = static_cast<size_t>(std::max(1, maxBlockSize));
-      mMonoIn.assign(bufferSize, 0.0f);
-      mWetUp.assign(bufferSize, 0.0f);
-      mWetDown.assign(bufferSize, 0.0f);
+      mWetUpL.assign(bufferSize, 0.0f);
+      mWetUpR.assign(bufferSize, 0.0f);
+      mWetDownL.assign(bufferSize, 0.0f);
+      mWetDownR.assign(bufferSize, 0.0f);
+      mZero.assign(bufferSize, 0.0f);
 
-      mUpStretch.presetCheaper(1, static_cast<float>(sampleRate), false);
-      mDownStretch.presetCheaper(1, static_cast<float>(sampleRate), false);
+      mUpStretch.presetCheaper(2, static_cast<float>(sampleRate), false);
+      mDownStretch.presetCheaper(2, static_cast<float>(sampleRate), false);
       mConfigured = true;
       ApplyStretchSettings();
       UpdateToneCoefficient();
@@ -42,7 +44,8 @@ namespace guitarfx
         mDownStretch.reset();
       }
 
-      mToneState = 0.0f;
+      mToneStateL = 0.0f;
+      mToneStateR = 0.0f;
     }
 
     void Process(float **inputs, float **outputs, int numSamples) override
@@ -66,16 +69,20 @@ namespace guitarfx
         return;
       }
 
-      for (int i = 0; i < numSamples; ++i)
+      if (static_cast<size_t>(numSamples) > mWetUpL.size())
       {
-        const float inL = inputs[0] ? inputs[0][i] : 0.0f;
-        const float inR = inputs[1] ? inputs[1][i] : 0.0f;
-        mMonoIn[static_cast<size_t>(i)] = 0.5f * (inL + inR);
+        mWetUpL.resize(static_cast<size_t>(numSamples), 0.0f);
+        mWetUpR.resize(static_cast<size_t>(numSamples), 0.0f);
+        mWetDownL.resize(static_cast<size_t>(numSamples), 0.0f);
+        mWetDownR.resize(static_cast<size_t>(numSamples), 0.0f);
+        mZero.resize(static_cast<size_t>(numSamples), 0.0f);
       }
 
-      float *inputPtrs[1] = {mMonoIn.data()};
-      float *upPtrs[1] = {mWetUp.data()};
-      float *downPtrs[1] = {mWetDown.data()};
+      float *leftInput = inputs[0] ? inputs[0] : mZero.data();
+      float *rightInput = inputs[1] ? inputs[1] : leftInput;
+      float *inputPtrs[2] = {leftInput, rightInput};
+      float *upPtrs[2] = {mWetUpL.data(), mWetUpR.data()};
+      float *downPtrs[2] = {mWetDownL.data(), mWetDownR.data()};
 
       mUpStretch.process(inputPtrs, numSamples, upPtrs, numSamples);
       mDownStretch.process(inputPtrs, numSamples, downPtrs, numSamples);
@@ -85,16 +92,19 @@ namespace guitarfx
 
       for (int i = 0; i < numSamples; ++i)
       {
-        const float dryL = inputs[0] ? inputs[0][i] : 0.0f;
-        const float dryR = inputs[1] ? inputs[1][i] : 0.0f;
-        float wet = mWetUp[static_cast<size_t>(i)] * mOctaveUp +
-                    mWetDown[static_cast<size_t>(i)] * mOctaveDown;
-        wet = ApplyTone(wet);
+        const float dryL = leftInput[i];
+        const float dryR = rightInput[i];
+        float wetL = mWetUpL[static_cast<size_t>(i)] * mOctaveUp
+          + mWetDownL[static_cast<size_t>(i)] * mOctaveDown;
+        float wetR = mWetUpR[static_cast<size_t>(i)] * mOctaveUp
+          + mWetDownR[static_cast<size_t>(i)] * mOctaveDown;
+        wetL = ApplyTone(wetL, mToneStateL);
+        wetR = ApplyTone(wetR, mToneStateR);
 
         if (outputs[0])
-          outputs[0][i] = dryL * dryMix + wet * wetMix;
+          outputs[0][i] = dryL * dryMix + wetL * wetMix;
         if (outputs[1])
-          outputs[1][i] = dryR * dryMix + wet * wetMix;
+          outputs[1][i] = dryR * dryMix + wetR * wetMix;
       }
     }
 
@@ -160,6 +170,10 @@ namespace guitarfx
         {
           std::copy(inputs[ch], inputs[ch] + numSamples, outputs[ch]);
         }
+        else if (ch == 1 && inputs[0])
+        {
+          std::copy(inputs[0], inputs[0] + numSamples, outputs[ch]);
+        }
         else
         {
           std::fill(outputs[ch], outputs[ch] + numSamples, 0.0f);
@@ -186,10 +200,10 @@ namespace guitarfx
       mToneCoef = 1.0f - std::exp(-x);
     }
 
-    float ApplyTone(float input)
+    float ApplyTone(float input, float &state)
     {
-      mToneState += mToneCoef * (input - mToneState);
-      return mToneState;
+      state += mToneCoef * (input - state);
+      return state;
     }
 
     double mSampleRate = 48000.0;
@@ -202,13 +216,16 @@ namespace guitarfx
     float mMix = 1.0f;
 
     float mToneCoef = 0.0f;
-    float mToneState = 0.0f;
+    float mToneStateL = 0.0f;
+    float mToneStateR = 0.0f;
 
     signalsmith::stretch::SignalsmithStretch<float> mUpStretch;
     signalsmith::stretch::SignalsmithStretch<float> mDownStretch;
-    std::vector<float> mMonoIn;
-    std::vector<float> mWetUp;
-    std::vector<float> mWetDown;
+    std::vector<float> mWetUpL;
+    std::vector<float> mWetUpR;
+    std::vector<float> mWetDownL;
+    std::vector<float> mWetDownR;
+    std::vector<float> mZero;
   };
 
   inline void RegisterOctaveEffect()

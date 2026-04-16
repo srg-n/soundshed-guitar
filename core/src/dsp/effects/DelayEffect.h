@@ -38,7 +38,8 @@ namespace guitarfx
       std::fill(mBufferR.begin(), mBufferR.end(), 0.0f);
       mWritePos   = 0;
       mLfoPhase   = 0.0f;
-      mEnvelope   = 0.0f;
+      mEnvelopeL  = 0.0f;
+      mEnvelopeR  = 0.0f;
       mLpStateL   = mLpStateR   = 0.0f;
       mHpStateL   = mHpStateR   = 0.0f;
       mHpPrevInL  = mHpPrevInR  = 0.0f;
@@ -74,14 +75,18 @@ namespace guitarfx
         const float inL = inputs[0] ? inputs[0][i] : 0.0f;
         const float inR = inputs[1] ? inputs[1][i] : inL;
 
-        // Envelope follower for ducking
-        const float inputPeak = std::max(std::abs(inL), std::abs(inR));
-        if (inputPeak > mEnvelope)
-          mEnvelope += 0.001f  * (inputPeak - mEnvelope);
+        if (std::abs(inL) > mEnvelopeL)
+          mEnvelopeL += 0.001f  * (std::abs(inL) - mEnvelopeL);
         else
-          mEnvelope += 0.0001f * (inputPeak - mEnvelope);
+          mEnvelopeL += 0.0001f * (std::abs(inL) - mEnvelopeL);
 
-        const float duckGain = 1.0f - ducking * std::min(mEnvelope * 4.0f, 1.0f);
+        if (std::abs(inR) > mEnvelopeR)
+          mEnvelopeR += 0.001f  * (std::abs(inR) - mEnvelopeR);
+        else
+          mEnvelopeR += 0.0001f * (std::abs(inR) - mEnvelopeR);
+
+        const float duckGainL = 1.0f - ducking * std::min(mEnvelopeL * 4.0f, 1.0f);
+        const float duckGainR = 1.0f - ducking * std::min(mEnvelopeR * 4.0f, 1.0f);
 
         // Read with linear interpolation
         float delayedL = ReadInterp(mBufferL, bufSize, delayL);
@@ -109,9 +114,9 @@ namespace guitarfx
         mBufferR[mWritePos] = inR + fbR;
 
         if (outputs[0])
-          outputs[0][i] = inL * dry + delayedL * wet * duckGain;
+          outputs[0][i] = inL * dry + delayedL * wet * duckGainL;
         if (outputs[1])
-          outputs[1][i] = inR * dry + delayedR * wet * duckGain;
+          outputs[1][i] = inR * dry + delayedR * wet * duckGainR;
 
         mWritePos = (mWritePos + 1) % bufSize;
       }
@@ -287,7 +292,8 @@ namespace guitarfx
 
     // LFO & envelope
     float mLfoPhase = 0.0f;
-    float mEnvelope = 0.0f;
+    float mEnvelopeL = 0.0f;
+    float mEnvelopeR = 0.0f;
   };
 
   inline void RegisterDelayEffect()

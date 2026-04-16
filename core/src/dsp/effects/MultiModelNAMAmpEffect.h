@@ -46,7 +46,8 @@ public:
     mSampleRate = sampleRate;
     mMaxBlockSize = maxBlockSize;
 
-    mInputBuffer.resize(static_cast<size_t>(maxBlockSize));
+    mInputBufferL.resize(static_cast<size_t>(maxBlockSize));
+    mInputBufferR.resize(static_cast<size_t>(maxBlockSize));
 
     for (auto& model : mModels)
     {
@@ -63,7 +64,8 @@ public:
       ResetModel(model, mSampleRate, mMaxBlockSize);
     }
 
-    std::fill(mInputBuffer.begin(), mInputBuffer.end(), 0.0f);
+    std::fill(mInputBufferL.begin(), mInputBufferL.end(), 0.0f);
+    std::fill(mInputBufferR.begin(), mInputBufferR.end(), 0.0f);
     mCachedAutoInputGain = 1.0;
     mCachedAutoOutputGain = 1.0;
   }
@@ -82,24 +84,24 @@ public:
       return;
     }
 
-    // Sum to mono input
     for (int i = 0; i < numSamples; ++i)
     {
       float inL = inputs[0] ? inputs[0][i] : 0.0f;
       float inR = inputs[1] ? inputs[1][i] : inL;
-      mInputBuffer[i] = (inL + inR) * 0.5f;
+      mInputBufferL[i] = inL;
+      mInputBufferR[i] = inR;
     }
 
     if (mModels.empty() || !mEnabled)
     {
-      // Passthrough
       for (int i = 0; i < numSamples; ++i)
       {
-        float out = mInputBuffer[i];
+        const float outL = mInputBufferL[i];
+        const float outR = mInputBufferR[i];
         if (outputs[0])
-          outputs[0][i] = out;
+          outputs[0][i] = outL;
         if (outputs[1])
-          outputs[1][i] = out;
+          outputs[1][i] = outR;
       }
       return;
     }
@@ -110,37 +112,42 @@ public:
     const float inputGain = static_cast<float>(mInputGain);
     const float outputGain = static_cast<float>(mOutputGain);
 
-    // Apply input gain
     for (int i = 0; i < numSamples; ++i)
     {
-      mInputBuffer[i] *= inputGain;
+      mInputBufferL[i] *= inputGain;
+      mInputBufferR[i] *= inputGain;
     }
 
     if (selection.upperIndex == selection.lowerIndex)
     {
       auto& model = mModels[selection.lowerIndex];
-      ProcessModel(model, mInputBuffer.data(), model.outputBuffer.data(), numSamples);
-      WriteOutputs(model.outputBuffer.data(), outputs, numSamples, outputGain);
+      ProcessModel(model, mInputBufferL.data(), model.outputBufferL.data(), numSamples, 0);
+      ProcessModel(model, mInputBufferR.data(), model.outputBufferR.data(), numSamples, 1);
+      WriteOutputs(model.outputBufferL.data(), model.outputBufferR.data(), outputs, numSamples, outputGain);
       return;
     }
 
     auto& modelA = mModels[selection.lowerIndex];
     auto& modelB = mModels[selection.upperIndex];
 
-    ProcessModel(modelA, mInputBuffer.data(), modelA.outputBuffer.data(), numSamples);
-    ProcessModel(modelB, mInputBuffer.data(), modelB.outputBuffer.data(), numSamples);
+    ProcessModel(modelA, mInputBufferL.data(), modelA.outputBufferL.data(), numSamples, 0);
+    ProcessModel(modelA, mInputBufferR.data(), modelA.outputBufferR.data(), numSamples, 1);
+    ProcessModel(modelB, mInputBufferL.data(), modelB.outputBufferL.data(), numSamples, 0);
+    ProcessModel(modelB, mInputBufferR.data(), modelB.outputBufferR.data(), numSamples, 1);
 
     const float weightA = static_cast<float>(selection.weightLower);
     const float weightB = static_cast<float>(selection.weightUpper);
 
     for (int i = 0; i < numSamples; ++i)
     {
-      float mixed = modelA.outputBuffer[i] * weightA + modelB.outputBuffer[i] * weightB;
-      mixed *= outputGain;
+      float mixedL = modelA.outputBufferL[i] * weightA + modelB.outputBufferL[i] * weightB;
+      float mixedR = modelA.outputBufferR[i] * weightA + modelB.outputBufferR[i] * weightB;
+      mixedL *= outputGain;
+      mixedR *= outputGain;
       if (outputs[0])
-        outputs[0][i] = mixed;
+        outputs[0][i] = mixedL;
       if (outputs[1])
-        outputs[1][i] = mixed;
+        outputs[1][i] = mixedR;
     }
   }
 
@@ -285,13 +292,18 @@ private:
     double parameterValue = 0.0;
     std::map<std::string, double> parameters;
 
-    std::unique_ptr<nam::OptimizedDSPWrapper> optimized;
-    std::unique_ptr<::nam::DSP> fallback;
+    std::unique_ptr<nam::OptimizedDSPWrapper> optimizedLeft;
+    std::unique_ptr<nam::OptimizedDSPWrapper> optimizedRight;
+    std::unique_ptr<::nam::DSP> fallbackLeft;
+    std::unique_ptr<::nam::DSP> fallbackRight;
     bool usingOptimized = false;
 
-    std::vector<float> outputBuffer;
-    std::vector<NAM_SAMPLE> fallbackInput;
-    std::vector<NAM_SAMPLE> fallbackOutput;
+    std::vector<float> outputBufferL;
+    std::vector<float> outputBufferR;
+    std::vector<NAM_SAMPLE> fallbackInputL;
+    std::vector<NAM_SAMPLE> fallbackInputR;
+    std::vector<NAM_SAMPLE> fallbackOutputL;
+    std::vector<NAM_SAMPLE> fallbackOutputR;
 
     std::optional<double> inputLevel;
     std::optional<double> outputLevel;
@@ -308,7 +320,8 @@ private:
   };
 
   std::vector<ModelInstance> mModels;
-  std::vector<float> mInputBuffer;
+  std::vector<float> mInputBufferL;
+  std::vector<float> mInputBufferR;
 
   double mUserInputGain = 1.0;
   double mUserOutputGain = 1.0;
@@ -372,29 +385,32 @@ private:
   {
     try
     {
-      instance.optimized = guitarfx::nam::LoadOptimizedModelWrapper(instance.path);
-      if (instance.optimized && instance.optimized->IsValid())
+      instance.optimizedLeft = guitarfx::nam::LoadOptimizedModelWrapper(instance.path);
+      instance.optimizedRight = guitarfx::nam::LoadOptimizedModelWrapper(instance.path);
+      if (instance.optimizedLeft && instance.optimizedRight
+        && instance.optimizedLeft->IsValid() && instance.optimizedRight->IsValid())
       {
         instance.usingOptimized = true;
-        instance.inputLevel = instance.optimized->HasInputLevel()
-          ? std::optional<double>(instance.optimized->GetInputLevel()) : std::nullopt;
-        instance.outputLevel = instance.optimized->HasOutputLevel()
-          ? std::optional<double>(instance.optimized->GetOutputLevel()) : std::nullopt;
-        instance.loudness = instance.optimized->HasLoudness()
-          ? std::optional<double>(instance.optimized->GetLoudness()) : std::nullopt;
+        instance.inputLevel = instance.optimizedLeft->HasInputLevel()
+          ? std::optional<double>(instance.optimizedLeft->GetInputLevel()) : std::nullopt;
+        instance.outputLevel = instance.optimizedLeft->HasOutputLevel()
+          ? std::optional<double>(instance.optimizedLeft->GetOutputLevel()) : std::nullopt;
+        instance.loudness = instance.optimizedLeft->HasLoudness()
+          ? std::optional<double>(instance.optimizedLeft->GetLoudness()) : std::nullopt;
         return true;
       }
 
-      instance.fallback = ::nam::get_dsp(instance.path);
-      if (instance.fallback)
+      instance.fallbackLeft = ::nam::get_dsp(instance.path);
+      instance.fallbackRight = ::nam::get_dsp(instance.path);
+      if (instance.fallbackLeft && instance.fallbackRight)
       {
         instance.usingOptimized = false;
-        instance.inputLevel = instance.fallback->HasInputLevel()
-          ? std::optional<double>(instance.fallback->GetInputLevel()) : std::nullopt;
-        instance.outputLevel = instance.fallback->HasOutputLevel()
-          ? std::optional<double>(instance.fallback->GetOutputLevel()) : std::nullopt;
-        instance.loudness = instance.fallback->HasLoudness()
-          ? std::optional<double>(instance.fallback->GetLoudness()) : std::nullopt;
+        instance.inputLevel = instance.fallbackLeft->HasInputLevel()
+          ? std::optional<double>(instance.fallbackLeft->GetInputLevel()) : std::nullopt;
+        instance.outputLevel = instance.fallbackLeft->HasOutputLevel()
+          ? std::optional<double>(instance.fallbackLeft->GetOutputLevel()) : std::nullopt;
+        instance.loudness = instance.fallbackLeft->HasLoudness()
+          ? std::optional<double>(instance.fallbackLeft->GetLoudness()) : std::nullopt;
         return true;
       }
 
@@ -408,45 +424,54 @@ private:
 
   void ResizeModelBuffers(ModelInstance& instance, int maxBlockSize)
   {
-    instance.outputBuffer.resize(static_cast<size_t>(maxBlockSize));
-    instance.fallbackInput.resize(static_cast<size_t>(maxBlockSize));
-    instance.fallbackOutput.resize(static_cast<size_t>(maxBlockSize));
+    instance.outputBufferL.resize(static_cast<size_t>(maxBlockSize));
+    instance.outputBufferR.resize(static_cast<size_t>(maxBlockSize));
+    instance.fallbackInputL.resize(static_cast<size_t>(maxBlockSize));
+    instance.fallbackInputR.resize(static_cast<size_t>(maxBlockSize));
+    instance.fallbackOutputL.resize(static_cast<size_t>(maxBlockSize));
+    instance.fallbackOutputR.resize(static_cast<size_t>(maxBlockSize));
   }
 
   void ResetModel(ModelInstance& instance, double sampleRate, int maxBlockSize)
   {
-    if (instance.usingOptimized && instance.optimized)
+    if (instance.usingOptimized && instance.optimizedLeft && instance.optimizedRight)
     {
-      instance.optimized->Reset(sampleRate, maxBlockSize);
+      instance.optimizedLeft->Reset(sampleRate, maxBlockSize);
+      instance.optimizedRight->Reset(sampleRate, maxBlockSize);
     }
-    else if (instance.fallback)
+    else if (instance.fallbackLeft && instance.fallbackRight)
     {
-      instance.fallback->Reset(sampleRate, maxBlockSize);
+      instance.fallbackLeft->Reset(sampleRate, maxBlockSize);
+      instance.fallbackRight->Reset(sampleRate, maxBlockSize);
     }
   }
 
-  void ProcessModel(ModelInstance& instance, float* input, float* output, int numSamples)
+  void ProcessModel(ModelInstance& instance, float* input, float* output, int numSamples, int channel)
   {
-    if (instance.usingOptimized && instance.optimized)
+    if (instance.usingOptimized && instance.optimizedLeft && instance.optimizedRight)
     {
-      instance.optimized->process(input, output, numSamples);
+      auto* optimized = channel == 0 ? instance.optimizedLeft.get() : instance.optimizedRight.get();
+      optimized->process(input, output, numSamples);
       return;
     }
 
-    if (instance.fallback)
+    if (instance.fallbackLeft && instance.fallbackRight)
     {
+      auto& fallbackInput = channel == 0 ? instance.fallbackInputL : instance.fallbackInputR;
+      auto& fallbackOutput = channel == 0 ? instance.fallbackOutputL : instance.fallbackOutputR;
+      auto* fallback = channel == 0 ? instance.fallbackLeft.get() : instance.fallbackRight.get();
       for (int i = 0; i < numSamples; ++i)
       {
-        instance.fallbackInput[i] = static_cast<NAM_SAMPLE>(input[i]);
+        fallbackInput[i] = static_cast<NAM_SAMPLE>(input[i]);
       }
-      NAM_SAMPLE* inputPtr = instance.fallbackInput.data();
-      NAM_SAMPLE* outputPtr = instance.fallbackOutput.data();
+      NAM_SAMPLE* inputPtr = fallbackInput.data();
+      NAM_SAMPLE* outputPtr = fallbackOutput.data();
       NAM_SAMPLE* inputPtrs[1] = { inputPtr };
       NAM_SAMPLE* outputPtrs[1] = { outputPtr };
-      instance.fallback->process(inputPtrs, outputPtrs, numSamples);
+      fallback->process(inputPtrs, outputPtrs, numSamples);
       for (int i = 0; i < numSamples; ++i)
       {
-        output[i] = static_cast<float>(instance.fallbackOutput[i]);
+        output[i] = static_cast<float>(fallbackOutput[i]);
       }
       return;
     }
@@ -454,15 +479,16 @@ private:
     std::fill_n(output, numSamples, 0.0f);
   }
 
-  void WriteOutputs(const float* mono, float** outputs, int numSamples, float gain)
+  void WriteOutputs(const float* left, const float* right, float** outputs, int numSamples, float gain)
   {
     for (int i = 0; i < numSamples; ++i)
     {
-      float out = mono[i] * gain;
+      const float outL = left[i] * gain;
+      const float outR = right[i] * gain;
       if (outputs[0])
-        outputs[0][i] = out;
+        outputs[0][i] = outL;
       if (outputs[1])
-        outputs[1][i] = out;
+        outputs[1][i] = outR;
     }
   }
 
@@ -687,10 +713,10 @@ private:
 
   static double GetInstanceExpectedSampleRate(const ModelInstance& instance)
   {
-    if (instance.usingOptimized && instance.optimized)
-      return instance.optimized->GetExpectedSampleRate();
-    if (instance.fallback)
-      return instance.fallback->GetExpectedSampleRate();
+    if (instance.usingOptimized && instance.optimizedLeft)
+      return instance.optimizedLeft->GetExpectedSampleRate();
+    if (instance.fallbackLeft)
+      return instance.fallbackLeft->GetExpectedSampleRate();
     return -1.0;
   }
 

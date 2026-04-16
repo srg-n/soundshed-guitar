@@ -23,7 +23,8 @@ namespace guitarfx
 
       // Allocate for max ~100ms delay
       const size_t maxSamples = static_cast<size_t>(sampleRate * 0.1);
-      mBuffer.resize(maxSamples, 0.0f);
+      mBufferL.resize(maxSamples, 0.0f);
+      mBufferR.resize(maxSamples, 0.0f);
 
       UpdateDelaySamples();
       Reset();
@@ -31,7 +32,8 @@ namespace guitarfx
 
     void Reset() override
     {
-      std::fill(mBuffer.begin(), mBuffer.end(), 0.0f);
+      std::fill(mBufferL.begin(), mBufferL.end(), 0.0f);
+      std::fill(mBufferR.begin(), mBufferR.end(), 0.0f);
       mWriteIndex = 0;
     }
 
@@ -50,34 +52,31 @@ namespace guitarfx
         return;
       }
 
-      const std::size_t bufSize = mBuffer.size();
+      const std::size_t bufSize = mBufferL.size();
       if (bufSize == 0)
         return;
 
       for (int i = 0; i < numSamples; ++i)
       {
-        // Sum to mono for the delayed signal
         const float inL = inputs[0] ? inputs[0][i] : 0.0f;
-        const float inR = inputs[1] ? inputs[1][i] : 0.0f;
-        const float monoIn = (inL + inR) * 0.5f;
+        const float inR = inputs[1] ? inputs[1][i] : inL;
 
-        // Write to delay buffer
-        mBuffer[mWriteIndex] = monoIn;
+        // Preserve channel separation for stereo sources.
+        mBufferL[mWriteIndex] = inL;
+        mBufferR[mWriteIndex] = inR;
 
-        // Read delayed sample
         const int readIdx = static_cast<int>(mWriteIndex) - mDelaySamples;
         const std::size_t safeReadIdx = static_cast<std::size_t>(
             (readIdx + static_cast<int>(bufSize)) % static_cast<int>(bufSize));
-        const float delayed = mBuffer[safeReadIdx];
+        const float delayedL = mBufferL[safeReadIdx];
+        const float delayedR = mBufferR[safeReadIdx];
 
-        // Mix: original + inverted delay on opposite channel for stereo width
         const float mixAmount = static_cast<float>(mMix);
         if (outputs[0])
-          outputs[0][i] = inL + delayed * mixAmount;
+          outputs[0][i] = inL + delayedL * mixAmount;
         if (outputs[1])
-          outputs[1][i] = inR - delayed * mixAmount; // Inverted for stereo width
+          outputs[1][i] = inR - delayedR * mixAmount;
 
-        // Advance write index
         mWriteIndex = (mWriteIndex + 1) % bufSize;
       }
     }
@@ -119,7 +118,8 @@ namespace guitarfx
     double mMix = 0.3;          // Default mix level
     int mDelaySamples = 0;
 
-    std::vector<float> mBuffer;
+    std::vector<float> mBufferL;
+    std::vector<float> mBufferR;
     std::size_t mWriteIndex = 0;
   };
 

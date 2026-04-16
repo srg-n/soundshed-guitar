@@ -24,7 +24,8 @@ namespace guitarfx
 
     void Reset() override
     {
-      mGain = 1.0f;
+      mGain[0] = 1.0f;
+      mGain[1] = 1.0f;
     }
 
     void Process(float **inputs, float **outputs, int numSamples) override
@@ -37,26 +38,33 @@ namespace guitarfx
       for (int i = 0; i < numSamples; ++i)
       {
         const float inL = inputs[0] ? inputs[0][i] : 0.0f;
-        const float inR = inputs[1] ? inputs[1][i] : 0.0f;
+        const float inR = inputs[1] ? inputs[1][i] : inL;
+        const float inputByChannel[2] = {inL, inR};
+        float outputByChannel[2] = {0.0f, 0.0f};
 
-        const float peak = std::max(std::abs(inL), std::abs(inR));
-        float targetGain = 1.0f;
-        if (peak > ceiling && peak > 1e-12f)
+        for (int ch = 0; ch < 2; ++ch)
         {
-          targetGain = ceiling / peak;
+          const float peak = std::abs(inputByChannel[ch]);
+          float targetGain = 1.0f;
+          if (peak > ceiling && peak > 1e-12f)
+          {
+            targetGain = ceiling / peak;
+          }
+
+          if (targetGain < mGain[ch])
+          {
+            mGain[ch] = targetGain;
+          }
+          else
+          {
+            mGain[ch] += mReleaseCoef * (1.0f - mGain[ch]);
+          }
+
+          outputByChannel[ch] = inputByChannel[ch] * mGain[ch];
         }
 
-        if (targetGain < mGain)
-        {
-          mGain = targetGain;
-        }
-        else
-        {
-          mGain += mReleaseCoef * (1.0f - mGain);
-        }
-
-        float outL = inL * mGain;
-        float outR = inR * mGain;
+        float outL = outputByChannel[0];
+        float outR = outputByChannel[1];
 
         if (softClip > 0.0f)
         {
@@ -127,7 +135,7 @@ namespace guitarfx
     float mReleaseMs = 50.0f;
     float mSoftClip = 0.0f;
     float mReleaseCoef = 0.0f;
-    float mGain = 1.0f;
+    float mGain[2] = {1.0f, 1.0f};
   };
 
   inline void RegisterLimiterEffect()

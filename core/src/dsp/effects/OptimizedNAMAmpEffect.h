@@ -128,18 +128,30 @@ public:
     mMaxBlockSize = maxBlockSize;
     mPrepared = true;
 
-    mInputBuffer.resize(static_cast<size_t>(maxBlockSize));
-    mOutputBuffer.resize(static_cast<size_t>(maxBlockSize));
-    mFallbackInputBuffer.resize(static_cast<size_t>(maxBlockSize));
-    mFallbackOutputBuffer.resize(static_cast<size_t>(maxBlockSize));
+    mInputBufferL.resize(static_cast<size_t>(maxBlockSize));
+    mInputBufferR.resize(static_cast<size_t>(maxBlockSize));
+    mOutputBufferL.resize(static_cast<size_t>(maxBlockSize));
+    mOutputBufferR.resize(static_cast<size_t>(maxBlockSize));
+    mFallbackInputBufferL.resize(static_cast<size_t>(maxBlockSize));
+    mFallbackInputBufferR.resize(static_cast<size_t>(maxBlockSize));
+    mFallbackOutputBufferL.resize(static_cast<size_t>(maxBlockSize));
+    mFallbackOutputBufferR.resize(static_cast<size_t>(maxBlockSize));
 
-    if (mOptimizedModel)
+    if (mOptimizedModelLeft)
     {
-      mOptimizedModel->Reset(sampleRate, maxBlockSize);
+      mOptimizedModelLeft->Reset(sampleRate, maxBlockSize);
     }
-    else if (mFallbackModel)
+    if (mOptimizedModelRight)
     {
-      mFallbackModel->Reset(sampleRate, maxBlockSize);
+      mOptimizedModelRight->Reset(sampleRate, maxBlockSize);
+    }
+    if (mFallbackModelLeft)
+    {
+      mFallbackModelLeft->Reset(sampleRate, maxBlockSize);
+    }
+    if (mFallbackModelRight)
+    {
+      mFallbackModelRight->Reset(sampleRate, maxBlockSize);
     }
     CheckSampleRateMismatch();
     UpdateToneStack();
@@ -147,24 +159,39 @@ public:
 
   void Reset() override
   {
-    if (mOptimizedModel)
+    if (mOptimizedModelLeft)
     {
-      mOptimizedModel->Reset(mSampleRate, mMaxBlockSize);
+      mOptimizedModelLeft->Reset(mSampleRate, mMaxBlockSize);
     }
-    else if (mFallbackModel)
+    if (mOptimizedModelRight)
     {
-      mFallbackModel->Reset(mSampleRate, mMaxBlockSize);
+      mOptimizedModelRight->Reset(mSampleRate, mMaxBlockSize);
+    }
+    if (mFallbackModelLeft)
+    {
+      mFallbackModelLeft->Reset(mSampleRate, mMaxBlockSize);
+    }
+    if (mFallbackModelRight)
+    {
+      mFallbackModelRight->Reset(mSampleRate, mMaxBlockSize);
     }
 
-    std::fill(mInputBuffer.begin(), mInputBuffer.end(), 0.0f);
-    std::fill(mOutputBuffer.begin(), mOutputBuffer.end(), 0.0f);
-    std::fill(mFallbackInputBuffer.begin(), mFallbackInputBuffer.end(), static_cast<NAM_SAMPLE>(0.0));
-    std::fill(mFallbackOutputBuffer.begin(), mFallbackOutputBuffer.end(), static_cast<NAM_SAMPLE>(0.0));
+    std::fill(mInputBufferL.begin(), mInputBufferL.end(), 0.0f);
+    std::fill(mInputBufferR.begin(), mInputBufferR.end(), 0.0f);
+    std::fill(mOutputBufferL.begin(), mOutputBufferL.end(), 0.0f);
+    std::fill(mOutputBufferR.begin(), mOutputBufferR.end(), 0.0f);
+    std::fill(mFallbackInputBufferL.begin(), mFallbackInputBufferL.end(), static_cast<NAM_SAMPLE>(0.0));
+    std::fill(mFallbackInputBufferR.begin(), mFallbackInputBufferR.end(), static_cast<NAM_SAMPLE>(0.0));
+    std::fill(mFallbackOutputBufferL.begin(), mFallbackOutputBufferL.end(), static_cast<NAM_SAMPLE>(0.0));
+    std::fill(mFallbackOutputBufferR.begin(), mFallbackOutputBufferR.end(), static_cast<NAM_SAMPLE>(0.0));
 
-    mBassFilter.Reset();
-    mMidFilter.Reset();
-    mTrebleFilter.Reset();
-    mPresenceFilter.Reset();
+    for (int ch = 0; ch < 2; ++ch)
+    {
+      mBassFilter[ch].Reset();
+      mMidFilter[ch].Reset();
+      mTrebleFilter[ch].Reset();
+      mPresenceFilter[ch].Reset();
+    }
   }
 
   void Process(float** inputs, float** outputs, int numSamples) override
@@ -181,81 +208,102 @@ public:
       return;
     }
 
-    // Sum to mono for NAM processing (NAM models are mono)
     const float inputGainF = static_cast<float>(mInputGain);
     for (int i = 0; i < numSamples; ++i)
     {
       float inL = inputs[0] ? inputs[0][i] : 0.0f;
       float inR = inputs[1] ? inputs[1][i] : inL;
-      mInputBuffer[i] = (inL + inR) * 0.5f * inputGainF;
+      mInputBufferL[i] = inL * inputGainF;
+      mInputBufferR[i] = inR * inputGainF;
     }
 
-    bool hasModel = mOptimizedModel || mFallbackModel;
+    const bool hasOptimized = mOptimizedModelLeft && mOptimizedModelRight;
+    const bool hasFallback = mFallbackModelLeft && mFallbackModelRight;
 
-    if (hasModel && mEnabled)
+    if ((hasOptimized || hasFallback) && mEnabled)
     {
-      // Use optimized path if available, otherwise fallback
-      if (mOptimizedModel)
+      if (hasOptimized)
       {
-        mOptimizedModel->process(mInputBuffer.data(), mOutputBuffer.data(), numSamples);
+        mOptimizedModelLeft->process(mInputBufferL.data(), mOutputBufferL.data(), numSamples);
+        mOptimizedModelRight->process(mInputBufferR.data(), mOutputBufferR.data(), numSamples);
 
-        // Apply tone stack EQ, then output to both channels
         const float outputGainF = static_cast<float>(mOutputGain);
         for (int i = 0; i < numSamples; ++i)
         {
-          float out = mOutputBuffer[i];
-          out = mBassFilter.Process(out);
-          out = mMidFilter.Process(out);
-          out = mTrebleFilter.Process(out);
-          out = mPresenceFilter.Process(out);
-          out *= outputGainF;
+          float outL = mOutputBufferL[i];
+          outL = mBassFilter[0].Process(outL);
+          outL = mMidFilter[0].Process(outL);
+          outL = mTrebleFilter[0].Process(outL);
+          outL = mPresenceFilter[0].Process(outL);
+          outL *= outputGainF;
+
+          float outR = mOutputBufferR[i];
+          outR = mBassFilter[1].Process(outR);
+          outR = mMidFilter[1].Process(outR);
+          outR = mTrebleFilter[1].Process(outR);
+          outR = mPresenceFilter[1].Process(outR);
+          outR *= outputGainF;
+
           if (outputs[0])
-            outputs[0][i] = out;
+            outputs[0][i] = outL;
           if (outputs[1])
-            outputs[1][i] = out;
+            outputs[1][i] = outR;
         }
       }
       else
       {
-        // Fallback uses NAM_SAMPLE (double) buffers
         for (int i = 0; i < numSamples; ++i)
         {
-          mFallbackInputBuffer[i] = static_cast<NAM_SAMPLE>(mInputBuffer[i]);
+          mFallbackInputBufferL[i] = static_cast<NAM_SAMPLE>(mInputBufferL[i]);
+          mFallbackInputBufferR[i] = static_cast<NAM_SAMPLE>(mInputBufferR[i]);
         }
 
-        NAM_SAMPLE* inputPtr = mFallbackInputBuffer.data();
-        NAM_SAMPLE* outputPtr = mFallbackOutputBuffer.data();
-        NAM_SAMPLE* inputPtrs[1] = { inputPtr };
-        NAM_SAMPLE* outputPtrs[1] = { outputPtr };
-        mFallbackModel->process(inputPtrs, outputPtrs, numSamples);
+        NAM_SAMPLE* inputPtrL = mFallbackInputBufferL.data();
+        NAM_SAMPLE* outputPtrL = mFallbackOutputBufferL.data();
+        NAM_SAMPLE* inputPtrsL[1] = { inputPtrL };
+        NAM_SAMPLE* outputPtrsL[1] = { outputPtrL };
+        mFallbackModelLeft->process(inputPtrsL, outputPtrsL, numSamples);
 
-        // Apply tone stack EQ, then output to both channels
+        NAM_SAMPLE* inputPtrR = mFallbackInputBufferR.data();
+        NAM_SAMPLE* outputPtrR = mFallbackOutputBufferR.data();
+        NAM_SAMPLE* inputPtrsR[1] = { inputPtrR };
+        NAM_SAMPLE* outputPtrsR[1] = { outputPtrR };
+        mFallbackModelRight->process(inputPtrsR, outputPtrsR, numSamples);
+
         const float outputGainF = static_cast<float>(mOutputGain);
         for (int i = 0; i < numSamples; ++i)
         {
-          float out = static_cast<float>(mFallbackOutputBuffer[i]);
-          out = mBassFilter.Process(out);
-          out = mMidFilter.Process(out);
-          out = mTrebleFilter.Process(out);
-          out = mPresenceFilter.Process(out);
-          out *= outputGainF;
+          float outL = static_cast<float>(mFallbackOutputBufferL[i]);
+          outL = mBassFilter[0].Process(outL);
+          outL = mMidFilter[0].Process(outL);
+          outL = mTrebleFilter[0].Process(outL);
+          outL = mPresenceFilter[0].Process(outL);
+          outL *= outputGainF;
+
+          float outR = static_cast<float>(mFallbackOutputBufferR[i]);
+          outR = mBassFilter[1].Process(outR);
+          outR = mMidFilter[1].Process(outR);
+          outR = mTrebleFilter[1].Process(outR);
+          outR = mPresenceFilter[1].Process(outR);
+          outR *= outputGainF;
+
           if (outputs[0])
-            outputs[0][i] = out;
+            outputs[0][i] = outL;
           if (outputs[1])
-            outputs[1][i] = out;
+            outputs[1][i] = outR;
         }
       }
     }
     else
     {
-      // Bypass - pass through mono signal
       for (int i = 0; i < numSamples; ++i)
       {
-        float out = mInputBuffer[i];
+        const float outL = mInputBufferL[i];
+        const float outR = mInputBufferR[i];
         if (outputs[0])
-          outputs[0][i] = out;
+          outputs[0][i] = outL;
         if (outputs[1])
-          outputs[1][i] = out;
+          outputs[1][i] = outR;
       }
     }
   }
@@ -383,7 +431,8 @@ public:
 
   [[nodiscard]] bool HasResource() const override
   {
-    return mOptimizedModel || mFallbackModel;
+    return (mOptimizedModelLeft && mOptimizedModelRight)
+      || (mFallbackModelLeft && mFallbackModelRight);
   }
 
   [[nodiscard]] std::filesystem::path GetResourcePath() const override
@@ -421,34 +470,39 @@ private:
   {
     try
     {
-      // Reset existing models
-      mOptimizedModel.reset();
-      mFallbackModel.reset();
+      mOptimizedModelLeft.reset();
+      mOptimizedModelRight.reset();
+      mFallbackModelLeft.reset();
+      mFallbackModelRight.reset();
 
       bool loaded = false;
 
-      // Try optimized path first if preferred
       if (mPreferOptimized)
       {
-        auto optimized = nam::LoadOptimizedModelWrapper(resourcePath);
-        if (optimized && optimized->IsValid())
+        auto optimizedLeft = nam::LoadOptimizedModelWrapper(resourcePath);
+        auto optimizedRight = nam::LoadOptimizedModelWrapper(resourcePath);
+        if (optimizedLeft && optimizedRight && optimizedLeft->IsValid() && optimizedRight->IsValid())
         {
-          mOptimizedModel = std::move(optimized);
-          mOptimizedModel->Reset(mSampleRate, mMaxBlockSize);
+          mOptimizedModelLeft = std::move(optimizedLeft);
+          mOptimizedModelRight = std::move(optimizedRight);
+          mOptimizedModelLeft->Reset(mSampleRate, mMaxBlockSize);
+          mOptimizedModelRight->Reset(mSampleRate, mMaxBlockSize);
           loaded = true;
           mUsingOptimized = true;
         }
       }
 
-      // Fall back to original NAM library
       if (!loaded)
       {
-        auto model = ::nam::get_dsp(resourcePath);
-        if (!model)
+        auto modelLeft = ::nam::get_dsp(resourcePath);
+        auto modelRight = ::nam::get_dsp(resourcePath);
+        if (!modelLeft || !modelRight)
           return false;
 
-        model->Reset(mSampleRate, mMaxBlockSize);
-        mFallbackModel = std::move(model);
+        modelLeft->Reset(mSampleRate, mMaxBlockSize);
+        modelRight->Reset(mSampleRate, mMaxBlockSize);
+        mFallbackModelLeft = std::move(modelLeft);
+        mFallbackModelRight = std::move(modelRight);
         loaded = true;
         mUsingOptimized = false;
       }
@@ -461,28 +515,28 @@ private:
       CheckSampleRateMismatch();
 
       // Extract metadata
-      if (mOptimizedModel)
+      if (mOptimizedModelLeft)
       {
-        mModelInputLevel = mOptimizedModel->HasInputLevel()
-          ? std::optional<double>(mOptimizedModel->GetInputLevel())
+        mModelInputLevel = mOptimizedModelLeft->HasInputLevel()
+          ? std::optional<double>(mOptimizedModelLeft->GetInputLevel())
           : std::nullopt;
-        mModelOutputLevel = mOptimizedModel->HasOutputLevel()
-          ? std::optional<double>(mOptimizedModel->GetOutputLevel())
+        mModelOutputLevel = mOptimizedModelLeft->HasOutputLevel()
+          ? std::optional<double>(mOptimizedModelLeft->GetOutputLevel())
           : std::nullopt;
-        mModelLoudness = mOptimizedModel->HasLoudness()
-          ? std::optional<double>(mOptimizedModel->GetLoudness())
+        mModelLoudness = mOptimizedModelLeft->HasLoudness()
+          ? std::optional<double>(mOptimizedModelLeft->GetLoudness())
           : std::nullopt;
       }
-      else if (mFallbackModel)
+      else if (mFallbackModelLeft)
       {
-        mModelInputLevel = mFallbackModel->HasInputLevel()
-          ? std::optional<double>(mFallbackModel->GetInputLevel())
+        mModelInputLevel = mFallbackModelLeft->HasInputLevel()
+          ? std::optional<double>(mFallbackModelLeft->GetInputLevel())
           : std::nullopt;
-        mModelOutputLevel = mFallbackModel->HasOutputLevel()
-          ? std::optional<double>(mFallbackModel->GetOutputLevel())
+        mModelOutputLevel = mFallbackModelLeft->HasOutputLevel()
+          ? std::optional<double>(mFallbackModelLeft->GetOutputLevel())
           : std::nullopt;
-        mModelLoudness = mFallbackModel->HasLoudness()
-          ? std::optional<double>(mFallbackModel->GetLoudness())
+        mModelLoudness = mFallbackModelLeft->HasLoudness()
+          ? std::optional<double>(mFallbackModelLeft->GetLoudness())
           : std::nullopt;
       }
 
@@ -496,8 +550,10 @@ private:
   }
 
   // Model storage - one or the other will be used
-  std::unique_ptr<nam::OptimizedDSPWrapper> mOptimizedModel;
-  std::unique_ptr<::nam::DSP> mFallbackModel;
+  std::unique_ptr<nam::OptimizedDSPWrapper> mOptimizedModelLeft;
+  std::unique_ptr<nam::OptimizedDSPWrapper> mOptimizedModelRight;
+  std::unique_ptr<::nam::DSP> mFallbackModelLeft;
+  std::unique_ptr<::nam::DSP> mFallbackModelRight;
 
   std::filesystem::path mModelPath;
   bool mUsingOptimized = false;
@@ -505,11 +561,14 @@ private:
   bool mSampleRateMismatch = false;  // Default to preferring optimized
   bool mPrepared = false;
 
-  std::vector<float> mInputBuffer;
-  std::vector<float> mOutputBuffer;
-  // Separate buffers for fallback model (uses NAM_SAMPLE which is double by default)
-  std::vector<NAM_SAMPLE> mFallbackInputBuffer;
-  std::vector<NAM_SAMPLE> mFallbackOutputBuffer;
+  std::vector<float> mInputBufferL;
+  std::vector<float> mInputBufferR;
+  std::vector<float> mOutputBufferL;
+  std::vector<float> mOutputBufferR;
+  std::vector<NAM_SAMPLE> mFallbackInputBufferL;
+  std::vector<NAM_SAMPLE> mFallbackInputBufferR;
+  std::vector<NAM_SAMPLE> mFallbackOutputBufferL;
+  std::vector<NAM_SAMPLE> mFallbackOutputBufferR;
 
   double mUserInputGain = 1.0;
   double mUserOutputGain = 1.0;
@@ -533,19 +592,22 @@ private:
   double mTrebleDb   = 0.0; // High shelf ~3200 Hz
   double mPresenceDb = 0.0; // Peak EQ    ~6300 Hz
 
-  AmpToneBiquad mBassFilter;
-  AmpToneBiquad mMidFilter;
-  AmpToneBiquad mTrebleFilter;
-  AmpToneBiquad mPresenceFilter;
+  AmpToneBiquad mBassFilter[2];
+  AmpToneBiquad mMidFilter[2];
+  AmpToneBiquad mTrebleFilter[2];
+  AmpToneBiquad mPresenceFilter[2];
 
   void UpdateToneStack()
   {
     if (mSampleRate <= 0.0)
       return;
-    mBassFilter.SetLowShelf(100.0,  mBassDb,     mSampleRate);
-    mMidFilter.SetPeaking  (500.0,  mMidDb, 1.0, mSampleRate);
-    mTrebleFilter.SetHighShelf(3200.0, mTrebleDb, mSampleRate);
-    mPresenceFilter.SetPeaking(6300.0, mPresenceDb, 1.5, mSampleRate);
+    for (int ch = 0; ch < 2; ++ch)
+    {
+      mBassFilter[ch].SetLowShelf(100.0,  mBassDb,     mSampleRate);
+      mMidFilter[ch].SetPeaking(500.0,  mMidDb, 1.0, mSampleRate);
+      mTrebleFilter[ch].SetHighShelf(3200.0, mTrebleDb, mSampleRate);
+      mPresenceFilter[ch].SetPeaking(6300.0, mPresenceDb, 1.5, mSampleRate);
+    }
   }
 
   void UpdateEffectiveGains()
@@ -581,10 +643,10 @@ private:
   void CheckSampleRateMismatch()
   {
     double expectedSR = -1.0;
-    if (mOptimizedModel)
-      expectedSR = mOptimizedModel->GetExpectedSampleRate();
-    else if (mFallbackModel)
-      expectedSR = mFallbackModel->GetExpectedSampleRate();
+    if (mOptimizedModelLeft)
+      expectedSR = mOptimizedModelLeft->GetExpectedSampleRate();
+    else if (mFallbackModelLeft)
+      expectedSR = mFallbackModelLeft->GetExpectedSampleRate();
 
     const bool mismatch = (expectedSR > 0.0 && std::abs(expectedSR - mSampleRate) > 1.0);
     if (mismatch && !mSampleRateMismatch && mPrepared)

@@ -26,7 +26,8 @@ namespace guitarfx
 
     void Reset() override
     {
-      mEnvelope = 0.0f;
+      mEnvelope[0] = 0.0f;
+      mEnvelope[1] = 0.0f;
       mGainReduction = 0.0f;
     }
 
@@ -41,58 +42,58 @@ namespace guitarfx
       const float attackCoef = mAttackCoef.load(std::memory_order_relaxed);
       const float releaseCoef = mReleaseCoef.load(std::memory_order_relaxed);
       const float clipKnee = 0.995f - 0.075f * std::clamp(softClip, 0.0f, 1.0f);
-
-      for (int i = 0; i < numSamples; ++i)
+      const auto computeTargetGainDb = [thresholdDb, ratio, knee](float detectorDb)
       {
-        float inL = inputs[0] ? inputs[0][i] : 0.0f;
-        float inR = inputs[1] ? inputs[1][i] : 0.0f;
-
-        // Peak detection
-        float peak = std::max(std::abs(inL), std::abs(inR));
-
-        // Convert to dB
-        float peakDb = (peak > 1e-10f) ? 20.0f * std::log10(peak) : -200.0f;
-
-        // Compute gain reduction
         float targetGainDb = 0.0f;
-        if (peakDb > thresholdDb)
+        if (detectorDb > thresholdDb)
         {
-          float overDb = peakDb - thresholdDb;
-          float compressedDb = overDb / ratio;
-          targetGainDb = compressedDb - overDb; // This is negative
+          const float overDb = detectorDb - thresholdDb;
+          const float compressedDb = overDb / ratio;
+          targetGainDb = compressedDb - overDb;
         }
 
-        // Apply knee softening
         if (knee > 0.0f)
         {
-          float halfKnee = knee * 0.5f;
-          if (peakDb > thresholdDb - halfKnee && peakDb < thresholdDb + halfKnee)
+          const float halfKnee = knee * 0.5f;
+          if (detectorDb > thresholdDb - halfKnee && detectorDb < thresholdDb + halfKnee)
           {
-            float x = peakDb - thresholdDb + halfKnee;
-            float t = x / knee;
-            float overDb = t * t * knee * 0.5f;
-            float compressedDb = overDb / ratio;
+            const float x = detectorDb - thresholdDb + halfKnee;
+            const float t = x / knee;
+            const float overDb = t * t * knee * 0.5f;
+            const float compressedDb = overDb / ratio;
             targetGainDb = compressedDb - overDb;
           }
         }
 
-        // Envelope follower with attack/release
-        float targetEnv = -targetGainDb; // Make positive for easier math
-        if (targetEnv > mEnvelope)
-          mEnvelope += attackCoef * (targetEnv - mEnvelope);
-        else
-          mEnvelope += releaseCoef * (targetEnv - mEnvelope);
+        return targetGainDb;
+      };
 
-        // Apply gain
-        float gainDb = -mEnvelope + makeupDb;
-        float gain = std::pow(10.0f, gainDb * 0.05f);
+      for (int i = 0; i < numSamples; ++i)
+      {
+        float inL = inputs[0] ? inputs[0][i] : 0.0f;
+        float inR = inputs[1] ? inputs[1][i] : inL;
+        const float inputByChannel[2] = {inL, inR};
+        float mixedByChannel[2] = {0.0f, 0.0f};
 
-        // Mix
-        float outL = inL * gain;
-        float outR = inR * gain;
+        for (int ch = 0; ch < 2; ++ch)
+        {
+          const float peak = std::abs(inputByChannel[ch]);
+          const float peakDb = (peak > 1e-10f) ? 20.0f * std::log10(peak) : -200.0f;
+          const float targetGainDb = computeTargetGainDb(peakDb);
+          const float targetEnv = -targetGainDb;
+          if (targetEnv > mEnvelope[ch])
+            mEnvelope[ch] += attackCoef * (targetEnv - mEnvelope[ch]);
+          else
+            mEnvelope[ch] += releaseCoef * (targetEnv - mEnvelope[ch]);
 
-        float mixedL = inL * (1.0f - mix) + outL * mix;
-        float mixedR = inR * (1.0f - mix) + outR * mix;
+          const float gainDb = -mEnvelope[ch] + makeupDb;
+          const float gain = std::pow(10.0f, gainDb * 0.05f);
+          const float wetOut = inputByChannel[ch] * gain;
+          mixedByChannel[ch] = inputByChannel[ch] * (1.0f - mix) + wetOut * mix;
+        }
+
+        float mixedL = mixedByChannel[0];
+        float mixedR = mixedByChannel[1];
 
         if (softClip > 0.0f)
         {
@@ -105,7 +106,7 @@ namespace guitarfx
         if (outputs[1])
           outputs[1][i] = mixedR;
 
-        mGainReduction = mEnvelope;
+        mGainReduction = std::max(mEnvelope[0], mEnvelope[1]);
       }
     }
 
@@ -199,7 +200,7 @@ namespace guitarfx
     std::atomic<float> mReleaseCoef{0.0f};
 
     // State (audio thread only, no synchronization needed)
-    float mEnvelope = 0.0f;
+    float mEnvelope[2] = {0.0f, 0.0f};
     float mGainReduction = 0.0f;
   };
 
@@ -219,8 +220,10 @@ namespace guitarfx
 
     void Reset() override
     {
-      mEnvelope = 0.0f;
-      mOptoCellState = 0.0f;
+      mEnvelope[0] = 0.0f;
+      mEnvelope[1] = 0.0f;
+      mOptoCellState[0] = 0.0f;
+      mOptoCellState[1] = 0.0f;
     }
 
     void Process(float **inputs, float **outputs, int numSamples) override
@@ -238,38 +241,37 @@ namespace guitarfx
       for (int i = 0; i < numSamples; ++i)
       {
         float inL = inputs[0] ? inputs[0][i] : 0.0f;
-        float inR = inputs[1] ? inputs[1][i] : 0.0f;
+        float inR = inputs[1] ? inputs[1][i] : inL;
+        const float inputByChannel[2] = {inL, inR};
+        float outputByChannel[2] = {0.0f, 0.0f};
 
-        // RMS detection for smoother opto response
-        float inputPower = (inL * inL + inR * inR) * 0.5f;
-        mEnvelope += detectCoef * (inputPower - mEnvelope);
-        float rms = std::sqrt(mEnvelope);
-
-        // Convert to dB
-        float rmsDb = (rms > 1e-10f) ? 20.0f * std::log10(rms) : -200.0f;
-
-        // Opto cell simulation - slow, program-dependent response
-        float targetReduction = 0.0f;
-        if (rmsDb > thresholdDb)
+        for (int ch = 0; ch < 2; ++ch)
         {
-          float overDb = rmsDb - thresholdDb;
-          targetReduction = overDb * (1.0f - 1.0f / ratio);
+          const float inputPower = inputByChannel[ch] * inputByChannel[ch];
+          mEnvelope[ch] += detectCoef * (inputPower - mEnvelope[ch]);
+          const float rms = std::sqrt(mEnvelope[ch]);
+          const float rmsDb = (rms > 1e-10f) ? 20.0f * std::log10(rms) : -200.0f;
+
+          float targetReduction = 0.0f;
+          if (rmsDb > thresholdDb)
+          {
+            const float overDb = rmsDb - thresholdDb;
+            targetReduction = overDb * (1.0f - 1.0f / ratio);
+          }
+
+          float optoSpeed = (targetReduction > mOptoCellState[ch]) ? attackCoef : releaseCoef;
+          if (targetReduction < mOptoCellState[ch])
+            optoSpeed *= std::max(0.2f, 1.0f - mOptoCellState[ch] * 0.02f);
+
+          mOptoCellState[ch] += optoSpeed * (targetReduction - mOptoCellState[ch]);
+
+          const float gainDb = -mOptoCellState[ch] + makeupDb;
+          const float gain = std::pow(10.0f, gainDb * 0.05f);
+          outputByChannel[ch] = inputByChannel[ch] * gain * mix + inputByChannel[ch] * (1.0f - mix);
         }
 
-        // Opto cell timing is program-dependent
-        float optoSpeed = (targetReduction > mOptoCellState) ? attackCoef : releaseCoef;
-        // Slower release when more compression
-        if (targetReduction < mOptoCellState)
-          optoSpeed *= std::max(0.2f, 1.0f - mOptoCellState * 0.02f);
-
-        mOptoCellState += optoSpeed * (targetReduction - mOptoCellState);
-
-        // Apply gain
-        float gainDb = -mOptoCellState + makeupDb;
-        float gain = std::pow(10.0f, gainDb * 0.05f);
-
-        float outL = inL * gain * mix + inL * (1.0f - mix);
-        float outR = inR * gain * mix + inR * (1.0f - mix);
+        float outL = outputByChannel[0];
+        float outR = outputByChannel[1];
 
         if (softClip > 0.0f)
         {
@@ -355,8 +357,8 @@ namespace guitarfx
     std::atomic<float> mReleaseCoef{0.0f};
     std::atomic<float> mDetectCoef{0.0f};
 
-    float mEnvelope = 0.0f;
-    float mOptoCellState = 0.0f;
+    float mEnvelope[2] = {0.0f, 0.0f};
+    float mOptoCellState[2] = {0.0f, 0.0f};
   };
 
   inline void RegisterCompressorEffects()

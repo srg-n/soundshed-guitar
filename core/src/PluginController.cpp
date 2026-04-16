@@ -168,6 +168,23 @@ namespace
         return std::min(maximum, std::max(minimum, value));
     }
 
+    int ComputeBarsFromFrames(std::size_t frameCount,
+                              double sampleRate,
+                              double tempoBpm,
+                              int timeSigNum,
+                              int timeSigDen)
+    {
+        if (frameCount == 0)
+            return 1;
+
+        const double samplesPerBeat = sampleRate
+            * (60.0 / std::max(1.0, tempoBpm))
+            * (4.0 / static_cast<double>(std::max(1, timeSigDen)));
+        const double samplesPerBar = samplesPerBeat * static_cast<double>(std::max(1, timeSigNum));
+        return std::max(1, static_cast<int>(
+            std::round(static_cast<double>(frameCount) / std::max(1.0, samplesPerBar))));
+    }
+
     bool HasUnsafeRelativeSegments(const std::filesystem::path& path)
     {
         if (path.empty() || path.is_absolute())
@@ -5329,7 +5346,6 @@ void PluginController::HandleImportRiffWavRequest(const nlohmann::json& payload)
     imported.config.tempoBpm = ClampValue(payload.value("tempoBpm", GetEffectiveTempoBpm()), kMetronomeMinBpm, kMetronomeMaxBpm);
     imported.config.timeSigNum = std::max(1, payload.value("timeSigNum", 4));
     imported.config.timeSigDen = std::max(1, payload.value("timeSigDen", 4));
-    imported.config.bars = std::max(1, payload.value("bars", 1));
     imported.config.countInBars = 0;
     imported.config.patternType = payload.value("patternType", std::string("click"));
     imported.config.patternId = payload.value("patternId", std::string{});
@@ -5337,6 +5353,13 @@ void PluginController::HandleImportRiffWavRequest(const nlohmann::json& payload)
     imported.config.presetName = mActivePreset ? mActivePreset->name : std::string{};
     imported.sampleRate = decoded.sampleRate > 0.0 ? decoded.sampleRate : mHost.GetSampleRate();
     imported.bitsPerSample = decoded.bitsPerSample > 0 ? decoded.bitsPerSample : 16;
+    imported.config.bars = payload.contains("bars")
+        ? std::max(1, payload.value("bars", 1))
+        : ComputeBarsFromFrames(frameCount,
+                                imported.sampleRate,
+                                imported.config.tempoBpm,
+                                imported.config.timeSigNum,
+                                imported.config.timeSigDen);
     imported.left.resize(frameCount, 0.0f);
     imported.right.resize(frameCount, 0.0f);
 

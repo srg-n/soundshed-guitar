@@ -1,12 +1,17 @@
 #include "Wav.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <string>
 
 namespace
 {
+    constexpr std::uint16_t kWavFormatPcm = 0x0001;
+    constexpr std::uint16_t kWavFormatIeeeFloat = 0x0003;
+    constexpr std::uint16_t kWavFormatExtensible = 0xFFFE;
+
     std::uint32_t ReadUint32LE(const std::uint8_t* data)
     {
         return static_cast<std::uint32_t>(data[0])
@@ -19,6 +24,17 @@ namespace
     {
         return static_cast<std::uint16_t>(data[0])
              | (static_cast<std::uint16_t>(data[1]) << 8u);
+    }
+
+    bool HasStandardExtensibleGuidTail(const std::uint8_t* data)
+    {
+        static constexpr std::array<std::uint8_t, 12> kGuidTail = {
+            0x00, 0x00, 0x10, 0x00,
+            0x80, 0x00, 0x00, 0xAA,
+            0x00, 0x38, 0x9B, 0x71,
+        };
+
+        return std::memcmp(data + 4, kGuidTail.data(), kGuidTail.size()) == 0;
     }
 }
 
@@ -51,6 +67,21 @@ std::optional<DecodedWav> DecodePcmWav(const std::vector<std::uint8_t>& bytes)
             sampleRate = ReadUint32LE(bytes.data() + chunkDataStart + 4);
             blockAlign = ReadUint16LE(bytes.data() + chunkDataStart + 12);
             bitsPerSample = ReadUint16LE(bytes.data() + chunkDataStart + 14);
+
+            if (audioFormat == kWavFormatExtensible)
+            {
+                if (chunkSize < 40)
+                    return std::nullopt;
+
+                const auto* subFormat = bytes.data() + chunkDataStart + 24;
+                if (!HasStandardExtensibleGuidTail(subFormat))
+                    return std::nullopt;
+
+                audioFormat = ReadUint16LE(subFormat);
+            }
+
+            if (audioFormat != kWavFormatPcm && audioFormat != kWavFormatIeeeFloat)
+                return std::nullopt;
         }
         else if (chunkId == "data")
         {
@@ -76,7 +107,7 @@ std::optional<DecodedWav> DecodePcmWav(const std::vector<std::uint8_t>& bytes)
     wav.bitsPerSample = static_cast<int>(bitsPerSample);
     wav.channelSamples.assign(static_cast<std::size_t>(channels), std::vector<double>(frameCount, 0.0));
 
-    const bool isFloat = (audioFormat == 3);
+    const bool isFloat = (audioFormat == kWavFormatIeeeFloat);
     for (std::size_t frame = 0; frame < frameCount; ++frame)
     {
         const std::size_t frameOffset = dataOffset + frame * blockAlign;

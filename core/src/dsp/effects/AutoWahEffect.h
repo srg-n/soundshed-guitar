@@ -24,7 +24,8 @@ namespace guitarfx
 
     void Reset() override
     {
-      mEnvelope = 0.0f;
+      mEnvelope[0] = 0.0f;
+      mEnvelope[1] = 0.0f;
       mBandL = 0.0f;
       mLowL = 0.0f;
       mBandR = 0.0f;
@@ -36,25 +37,29 @@ namespace guitarfx
       for (int i = 0; i < numSamples; ++i)
       {
         const float inL = inputs[0] ? inputs[0][i] : 0.0f;
-        const float inR = inputs[1] ? inputs[1][i] : 0.0f;
+        const float inR = inputs[1] ? inputs[1][i] : inL;
 
-        const float mono = 0.5f * (std::abs(inL) + std::abs(inR));
-        UpdateEnvelope(mono);
+        UpdateEnvelope(std::abs(inL), mEnvelope[0]);
+        UpdateEnvelope(std::abs(inR), mEnvelope[1]);
 
-        const float envNorm = std::clamp(mEnvelope * (1.0f + mSensitivity * 9.0f), 0.0f, 1.0f);
-        const float targetFreq = mMinFreq + (mMaxFreq - mMinFreq) * envNorm;
+        const float envNormL = std::clamp(mEnvelope[0] * (1.0f + mSensitivity * 9.0f), 0.0f, 1.0f);
+        const float envNormR = std::clamp(mEnvelope[1] * (1.0f + mSensitivity * 9.0f), 0.0f, 1.0f);
+        const float targetFreqL = mMinFreq + (mMaxFreq - mMinFreq) * envNormL;
+        const float targetFreqR = mMinFreq + (mMaxFreq - mMinFreq) * envNormR;
 
-        const float g = std::tan(static_cast<float>(kPi) * targetFreq / static_cast<float>(mSampleRate));
+        const float gL = std::tan(static_cast<float>(kPi) * targetFreqL / static_cast<float>(mSampleRate));
+        const float gR = std::tan(static_cast<float>(kPi) * targetFreqR / static_cast<float>(mSampleRate));
         const float R = 1.0f / std::max(0.1f, mResonance);
-        const float h = 1.0f / (1.0f + g * (g + R));
+        const float hL = 1.0f / (1.0f + gL * (gL + R));
+        const float hR = 1.0f / (1.0f + gR * (gR + R));
 
-        const float v1L = (g * (inL - mLowL) + mBandL) * h;
-        const float v2L = mLowL + g * v1L;
+        const float v1L = (gL * (inL - mLowL) + mBandL) * hL;
+        const float v2L = mLowL + gL * v1L;
         mBandL = v1L;
         mLowL = v2L;
 
-        const float v1R = (g * (inR - mLowR) + mBandR) * h;
-        const float v2R = mLowR + g * v1R;
+        const float v1R = (gR * (inR - mLowR) + mBandR) * hR;
+        const float v2R = mLowR + gR * v1R;
         mBandR = v1R;
         mLowR = v2R;
 
@@ -126,12 +131,12 @@ namespace guitarfx
       mReleaseCoef = 1.0f - std::exp(-1.0f / (releaseMs * 0.001f * static_cast<float>(mSampleRate)));
     }
 
-    void UpdateEnvelope(float input)
+    void UpdateEnvelope(float input, float &envelope)
     {
-      if (input > mEnvelope)
-        mEnvelope += mAttackCoef * (input - mEnvelope);
+      if (input > envelope)
+        envelope += mAttackCoef * (input - envelope);
       else
-        mEnvelope += mReleaseCoef * (input - mEnvelope);
+        envelope += mReleaseCoef * (input - envelope);
     }
 
     float mSensitivity = 0.6f;
@@ -140,7 +145,7 @@ namespace guitarfx
     float mResonance = 2.5f;
     float mMix = 1.0f;
 
-    float mEnvelope = 0.0f;
+    float mEnvelope[2] = {0.0f, 0.0f};
     float mAttackCoef = 0.0f;
     float mReleaseCoef = 0.0f;
 

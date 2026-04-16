@@ -39,25 +39,37 @@ namespace guitarfx
       mMaxBlockSize = maxBlockSize;
       mPrepared = true;
 
-      mInputBuffer.resize(static_cast<size_t>(maxBlockSize));
-      mOutputBuffer.resize(static_cast<size_t>(maxBlockSize));
+      mInputBufferL.resize(static_cast<size_t>(maxBlockSize));
+      mInputBufferR.resize(static_cast<size_t>(maxBlockSize));
+      mOutputBufferL.resize(static_cast<size_t>(maxBlockSize));
+      mOutputBufferR.resize(static_cast<size_t>(maxBlockSize));
 
-      if (mModel)
+      if (mModelLeft)
       {
-        mModel->Reset(sampleRate, maxBlockSize);
+        mModelLeft->Reset(sampleRate, maxBlockSize);
+      }
+      if (mModelRight)
+      {
+        mModelRight->Reset(sampleRate, maxBlockSize);
         CheckSampleRateMismatch();
       }
     }
 
     void Reset() override
     {
-      if (mModel)
+      if (mModelLeft)
       {
-        mModel->Reset(mSampleRate, mMaxBlockSize);
+        mModelLeft->Reset(mSampleRate, mMaxBlockSize);
+      }
+      if (mModelRight)
+      {
+        mModelRight->Reset(mSampleRate, mMaxBlockSize);
       }
 
-      std::fill(mInputBuffer.begin(), mInputBuffer.end(), 0.0f);
-      std::fill(mOutputBuffer.begin(), mOutputBuffer.end(), 0.0f);
+      std::fill(mInputBufferL.begin(), mInputBufferL.end(), static_cast<NAM_SAMPLE>(0.0));
+      std::fill(mInputBufferR.begin(), mInputBufferR.end(), static_cast<NAM_SAMPLE>(0.0));
+      std::fill(mOutputBufferL.begin(), mOutputBufferL.end(), static_cast<NAM_SAMPLE>(0.0));
+      std::fill(mOutputBufferR.begin(), mOutputBufferR.end(), static_cast<NAM_SAMPLE>(0.0));
     }
 
     void Process(float **inputs, float **outputs, int numSamples) override
@@ -74,42 +86,48 @@ namespace guitarfx
         return;
       }
 
-      // Sum to mono for NAM processing (NAM models are mono)
       for (int i = 0; i < numSamples; ++i)
       {
         float inL = inputs[0] ? inputs[0][i] : 0.0f;
         float inR = inputs[1] ? inputs[1][i] : inL;
-        mInputBuffer[i] = (inL + inR) * 0.5f * static_cast<float>(mInputGain);
+        mInputBufferL[i] = static_cast<NAM_SAMPLE>(inL * static_cast<float>(mInputGain));
+        mInputBufferR[i] = static_cast<NAM_SAMPLE>(inR * static_cast<float>(mInputGain));
       }
 
-      if (mModel && mEnabled)
+      if (mModelLeft && mModelRight && mEnabled)
       {
-        NAM_SAMPLE* inputPtr = mInputBuffer.data();
-        NAM_SAMPLE* outputPtr = mOutputBuffer.data();
-        NAM_SAMPLE* inputPtrs[1] = { inputPtr };
-        NAM_SAMPLE* outputPtrs[1] = { outputPtr };
-        mModel->process(inputPtrs, outputPtrs, numSamples);
+        NAM_SAMPLE* inputPtrL = mInputBufferL.data();
+        NAM_SAMPLE* outputPtrL = mOutputBufferL.data();
+        NAM_SAMPLE* inputPtrsL[1] = { inputPtrL };
+        NAM_SAMPLE* outputPtrsL[1] = { outputPtrL };
+        mModelLeft->process(inputPtrsL, outputPtrsL, numSamples);
 
-        // Output to both channels
+        NAM_SAMPLE* inputPtrR = mInputBufferR.data();
+        NAM_SAMPLE* outputPtrR = mOutputBufferR.data();
+        NAM_SAMPLE* inputPtrsR[1] = { inputPtrR };
+        NAM_SAMPLE* outputPtrsR[1] = { outputPtrR };
+        mModelRight->process(inputPtrsR, outputPtrsR, numSamples);
+
         for (int i = 0; i < numSamples; ++i)
         {
-          float out = mOutputBuffer[i] * static_cast<float>(mOutputGain);
+          const float outL = static_cast<float>(mOutputBufferL[i]) * static_cast<float>(mOutputGain);
+          const float outR = static_cast<float>(mOutputBufferR[i]) * static_cast<float>(mOutputGain);
           if (outputs[0])
-            outputs[0][i] = out;
+            outputs[0][i] = outL;
           if (outputs[1])
-            outputs[1][i] = out;
+            outputs[1][i] = outR;
         }
       }
       else
       {
-        // Bypass - pass through mono signal
         for (int i = 0; i < numSamples; ++i)
         {
-          float out = mInputBuffer[i];
+          const float outL = static_cast<float>(mInputBufferL[i]);
+          const float outR = static_cast<float>(mInputBufferR[i]);
           if (outputs[0])
-            outputs[0][i] = out;
+            outputs[0][i] = outL;
           if (outputs[1])
-            outputs[1][i] = out;
+            outputs[1][i] = outR;
         }
       }
     }
@@ -198,7 +216,7 @@ namespace guitarfx
       return LoadModelResource(resourcePath, nullptr);
     }
 
-    [[nodiscard]] bool HasResource() const override { return mModel != nullptr; }
+    [[nodiscard]] bool HasResource() const override { return mModelLeft != nullptr && mModelRight != nullptr; }
     [[nodiscard]] std::filesystem::path GetResourcePath() const override { return mModelPath; }
 
     [[nodiscard]] std::string GetType() const override { return "amp_nam"; }
@@ -234,24 +252,27 @@ namespace guitarfx
           return false;
         }
 
-        auto model = nam::get_dsp(resourcePath);
-        if (!model)
+        auto modelLeft = nam::get_dsp(resourcePath);
+        auto modelRight = nam::get_dsp(resourcePath);
+        if (!modelLeft || !modelRight)
         {
           std::cerr << "[NAMAmpEffect] ERROR: Failed to parse NAM model file: " << resourcePath << "\n";
           return false;
         }
 
-        model->Reset(mSampleRate, mMaxBlockSize);
-        mModel = std::move(model);
+        modelLeft->Reset(mSampleRate, mMaxBlockSize);
+        modelRight->Reset(mSampleRate, mMaxBlockSize);
+        mModelLeft = std::move(modelLeft);
+        mModelRight = std::move(modelRight);
         mModelPath = resourcePath;
         mResourceNormalizationGainDb = ReadResourceMetadataDouble(ref, "normalizationGainDb");
 
-        if (mModel)
+        if (mModelLeft)
         {
           CheckSampleRateMismatch();
-          mModelInputLevel = mModel->HasInputLevel() ? std::optional<double>(mModel->GetInputLevel()) : std::nullopt;
-          mModelOutputLevel = mModel->HasOutputLevel() ? std::optional<double>(mModel->GetOutputLevel()) : std::nullopt;
-          mModelLoudness = mModel->HasLoudness() ? std::optional<double>(mModel->GetLoudness()) : std::nullopt;
+          mModelInputLevel = mModelLeft->HasInputLevel() ? std::optional<double>(mModelLeft->GetInputLevel()) : std::nullopt;
+          mModelOutputLevel = mModelLeft->HasOutputLevel() ? std::optional<double>(mModelLeft->GetOutputLevel()) : std::nullopt;
+          mModelLoudness = mModelLeft->HasLoudness() ? std::optional<double>(mModelLeft->GetLoudness()) : std::nullopt;
           RecalculateAutoGains();
         }
         return true;
@@ -268,13 +289,16 @@ namespace guitarfx
       }
     }
 
-    std::unique_ptr<nam::DSP> mModel;
+    std::unique_ptr<nam::DSP> mModelLeft;
+    std::unique_ptr<nam::DSP> mModelRight;
     std::filesystem::path mModelPath;
     bool mSampleRateMismatch = false;
     bool mPrepared = false;
 
-    std::vector<NAM_SAMPLE> mInputBuffer;
-    std::vector<NAM_SAMPLE> mOutputBuffer;
+    std::vector<NAM_SAMPLE> mInputBufferL;
+    std::vector<NAM_SAMPLE> mInputBufferR;
+    std::vector<NAM_SAMPLE> mOutputBufferL;
+    std::vector<NAM_SAMPLE> mOutputBufferR;
 
     double mUserInputGain = 1.0;
     double mUserOutputGain = 1.0;
@@ -324,9 +348,9 @@ namespace guitarfx
 
     void CheckSampleRateMismatch()
     {
-      if (!mModel)
+      if (!mModelLeft)
         return;
-      const double expectedSR = mModel->GetExpectedSampleRate();
+      const double expectedSR = mModelLeft->GetExpectedSampleRate();
       const bool mismatch = (expectedSR > 0.0 && std::abs(expectedSR - mSampleRate) > 1.0);
       if (mismatch && !mSampleRateMismatch && mPrepared)
       {
