@@ -24,6 +24,9 @@ bool MessageDispatcher::DispatchSettings(PluginController& c,
                 || key == "audio.userInputCalibration.activeProfileId"
                 || key == "audio.interfaceCalibration.enabled"
                 || key == "audio.interfaceCalibration.referenceDbu";
+            const bool affectsDspLevelTargets =
+                key == "audio.dsp.nominalOperatingLevelDbfs"
+                || key == "audio.dsp.outputProtectionCeilingDbfs";
 
             if (key == "diagnostics.signalLevelsEnabled")
             {
@@ -37,12 +40,22 @@ bool MessageDispatcher::DispatchSettings(PluginController& c,
                 c.mAppSettings.erase(key);
                 if (affectsUserInputCalibration)
                     c.ApplyUserInputCalibrationSettingsFromAppSettings();
+                if (affectsDspLevelTargets)
+                {
+                    c.ApplyDspLevelTargetSettingsFromAppSettings();
+                    c.mPendingStateBroadcast = true;
+                }
                 c.SaveAppSettings();
                 return true;
             }
             c.mAppSettings[key] = msg["value"];
             if (affectsUserInputCalibration)
                 c.ApplyUserInputCalibrationSettingsFromAppSettings();
+            if (affectsDspLevelTargets)
+            {
+                c.ApplyDspLevelTargetSettingsFromAppSettings();
+                c.mPendingStateBroadcast = true;
+            }
             c.SaveAppSettings();
         }
         return true;

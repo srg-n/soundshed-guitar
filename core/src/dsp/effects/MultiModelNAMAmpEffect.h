@@ -10,6 +10,7 @@
  */
 
 #include "dsp/EffectProcessor.h"
+#include "dsp/LevelTargets.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/EffectGuids.h"
 #include "dsp/simd/OptimizedNAM.h"
@@ -72,6 +73,8 @@ public:
 
   void Process(float** inputs, float** outputs, int numSamples) override
   {
+    EnsureLevelTargetsCurrent();
+
     // Clamp to allocated buffer size to prevent out-of-bounds writes
     numSamples = std::min(numSamples, mMaxBlockSize);
 
@@ -336,6 +339,7 @@ private:
   bool mAutoLevelOutput = true;
   bool mEnabled = true;
   std::string mParameterId;
+  std::uint64_t mLevelTargetsRevision = 0;
 
   double mCachedAutoInputGain = 1.0;
   double mCachedAutoOutputGain = 1.0;
@@ -691,8 +695,6 @@ private:
     const auto blendedNormalizationGainDb = BlendOptional(modelA->normalizationGainDb, modelB->normalizationGainDb,
       selection.weightLower, selection.weightUpper);
 
-    static constexpr double kTargetOutputLeveldB = -18.0;
-
     if (mAutoLevelOutput)
     {
       if (blendedNormalizationGainDb.has_value())
@@ -702,13 +704,29 @@ private:
       }
       else if (blendedLoudness.has_value())
       {
-        const double deltaDb = std::clamp(kTargetOutputLeveldB - *blendedLoudness, -24.0, 24.0);
+        const double deltaDb = std::clamp(GetNominalOperatingLevelDbfs() - *blendedLoudness, -24.0, 24.0);
         mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
       }
     }
 
+    mLevelTargetsRevision = GetLevelTargetsRevision();
     UpdateEffectiveGains();
   }
+
+  void EnsureLevelTargetsCurrent()
+  {
+    const auto revision = GetLevelTargetsRevision();
+    if (revision == mLevelTargetsRevision)
+      return;
+
+    if (mModels.empty())
+      UpdateEffectiveGains();
+    else
+      UpdateAutoGains(SelectBlendModels());
+
+    mLevelTargetsRevision = revision;
+  }
+
   bool mSnapBlend = false;
 
   static double GetInstanceExpectedSampleRate(const ModelInstance& instance)

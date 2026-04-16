@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dsp/EffectProcessor.h"
+#include "dsp/LevelTargets.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/EffectGuids.h"
 #include "dsp/simd/SimdMath.h"
@@ -74,6 +75,8 @@ namespace guitarfx
 
     void Process(float **inputs, float **outputs, int numSamples) override
     {
+      EnsureLevelTargetsCurrent();
+
       // Clamp to allocated buffer size to prevent out-of-bounds writes
       numSamples = std::min(numSamples, mMaxBlockSize);
 
@@ -315,6 +318,7 @@ namespace guitarfx
     std::optional<double> mCalibrationInputLevel;
     std::optional<double> mCalibrationOutputLevel;
     bool mEnabled = true;
+    std::uint64_t mLevelTargetsRevision = 0;
 
     void UpdateEffectiveGains()
     {
@@ -324,8 +328,6 @@ namespace guitarfx
 
     void RecalculateAutoGains()
     {
-      static constexpr double kTargetOutputLeveldB = -18.0;
-
       mAutoInputGain = 1.0;
       mAutoOutputGain = 1.0;
 
@@ -338,12 +340,20 @@ namespace guitarfx
         }
         else if (mModelLoudness.has_value())
         {
-          const double deltaDb = std::clamp(kTargetOutputLeveldB - *mModelLoudness, -24.0, 24.0);
+          const double deltaDb = std::clamp(GetNominalOperatingLevelDbfs() - *mModelLoudness, -24.0, 24.0);
           mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
         }
       }
 
+      mLevelTargetsRevision = GetLevelTargetsRevision();
       UpdateEffectiveGains();
+    }
+
+    void EnsureLevelTargetsCurrent()
+    {
+      const auto revision = GetLevelTargetsRevision();
+      if (revision != mLevelTargetsRevision)
+        RecalculateAutoGains();
     }
 
     void CheckSampleRateMismatch()

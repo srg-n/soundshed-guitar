@@ -9,6 +9,7 @@
 #include <chrono>
 #include <thread>
 
+#include "dsp/LevelTargets.h"
 #include "dsp/SignalGraphExecutor.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/effects/BuiltinEffects.h"
@@ -25,6 +26,41 @@ struct TestResult
   bool passed = false;
   std::string message;
 };
+
+struct OutputProtectionCeilingScope
+{
+  double originalDbfs = guitarfx::GetOutputProtectionCeilingDbfs();
+
+  ~OutputProtectionCeilingScope()
+  {
+    guitarfx::SetOutputProtectionCeilingDbfs(originalDbfs);
+  }
+};
+
+double PeakAbs(const std::vector<float>& buffer)
+{
+  double peak = 0.0;
+  for (float sample : buffer)
+    peak = std::max(peak, std::abs(static_cast<double>(sample)));
+  return peak;
+}
+
+guitarfx::Preset CreateUnityGainPreset()
+{
+  guitarfx::SignalGraph graph;
+  graph.nodes.push_back({"in", guitarfx::kNodeTypeInput, "", "Input", true});
+  graph.nodes.push_back({"gain", "gain", "utility", "Gain", true});
+  graph.nodes.back().params["gainDb"] = 0.0;
+  graph.nodes.push_back({"out", guitarfx::kNodeTypeOutput, "", "Output", true});
+  graph.edges.push_back({"in", "gain", 0, 0, 1.0});
+  graph.edges.push_back({"gain", "out", 0, 0, 1.0});
+
+  guitarfx::Preset preset;
+  preset.id = "test_preset";
+  preset.name = "Test Preset";
+  preset.graph = graph;
+  return preset;
+}
 
 TestResult TestDSPPerformanceStatsPopulation()
 {
@@ -276,20 +312,7 @@ TestResult TestMultiPresetMixerPerformanceStats()
     // Register effects
     guitarfx::RegisterAllEffects();
 
-    // Create a simple signal graph
-    guitarfx::SignalGraph graph;
-    graph.nodes.push_back({"in", guitarfx::kNodeTypeInput, "", "Input", true});
-    graph.nodes.push_back({"gain", "gain", "utility", "Gain", true});
-    graph.nodes.back().params["gainDb"] = 0.0; // Unity gain
-    graph.nodes.push_back({"out", guitarfx::kNodeTypeOutput, "", "Output", true});
-    graph.edges.push_back({"in", "gain", 0, 0, 1.0});
-    graph.edges.push_back({"gain", "out", 0, 0, 1.0});
-
-    // Create preset
-    guitarfx::Preset preset;
-    preset.id = "test_preset";
-    preset.name = "Test Preset";
-    preset.graph = graph;
+    const guitarfx::Preset preset = CreateUnityGainPreset();
 
     // Create MultiPresetMixer
     guitarfx::MultiPresetMixer mixer;
@@ -363,6 +386,168 @@ TestResult TestMultiPresetMixerPerformanceStats()
   return result;
 }
 
+TestResult TestMultiPresetMixerLimiterUsesProtectionCeiling()
+{
+  TestResult result;
+
+  try
+  {
+    guitarfx::RegisterAllEffects();
+
+    guitarfx::MultiPresetMixer mixer;
+    mixer.Prepare(kSR, kBlock);
+    mixer.SetMasterGain(2.0);
+    mixer.SetLimiterEnabled(true);
+
+    const guitarfx::Preset preset = CreateUnityGainPreset();
+    if (!mixer.AddActivePreset(preset, "preset1", "Test Preset"))
+    {
+      result.message = "Failed to add preset to mixer";
+      return result;
+    }
+
+    std::vector<float> inputL(kBlock, 1.0f);
+    std::vector<float> inputR(kBlock, 1.0f);
+    std::vector<float> outputL(kBlock, 0.0f);
+    std::vector<float> outputR(kBlock, 0.0f);
+    float* inputs[2] = { inputL.data(), inputR.data() };
+    float* outputs[2] = { outputL.data(), outputR.data() };
+
+    mixer.Process(inputs, outputs, kBlock);
+
+    const double peak = std::max(PeakAbs(outputL), PeakAbs(outputR));
+    const double expectedCeiling = guitarfx::GetOutputProtectionCeilingLinear();
+    if (peak > expectedCeiling + 1.0e-4)
+    {
+      result.message = "Limiter peak exceeds protection ceiling: peak=" + std::to_string(peak)
+        + ", ceiling=" + std::to_string(expectedCeiling);
+      return result;
+    }
+
+    result.passed = true;
+    result.message = "MultiPresetMixer limiter respects the protection ceiling";
+  }
+  catch (const std::exception& e)
+  {
+    result.message = "Exception thrown: " + std::string(e.what());
+  }
+  catch (...)
+  {
+    result.message = "Unknown exception thrown";
+  }
+
+  return result;
+}
+
+TestResult TestMultiPresetMixerAutoLevelOutputTargetsProtectionCeiling()
+{
+  TestResult result;
+
+  try
+  {
+    guitarfx::RegisterAllEffects();
+
+    guitarfx::MultiPresetMixer mixer;
+    mixer.Prepare(kSR, kBlock);
+    mixer.SetMasterGain(2.0);
+    mixer.SetAutoLevelOutput(true);
+
+    const guitarfx::Preset preset = CreateUnityGainPreset();
+    if (!mixer.AddActivePreset(preset, "preset1", "Test Preset"))
+    {
+      result.message = "Failed to add preset to mixer";
+      return result;
+    }
+
+    std::vector<float> inputL(kBlock, 1.0f);
+    std::vector<float> inputR(kBlock, 1.0f);
+    std::vector<float> outputL(kBlock, 0.0f);
+    std::vector<float> outputR(kBlock, 0.0f);
+    float* inputs[2] = { inputL.data(), inputR.data() };
+    float* outputs[2] = { outputL.data(), outputR.data() };
+
+    for (int i = 0; i < 512; ++i)
+      mixer.Process(inputs, outputs, kBlock);
+
+    const double peak = std::max(PeakAbs(outputL), PeakAbs(outputR));
+    const double expectedCeiling = guitarfx::GetOutputProtectionCeilingLinear();
+    if (peak > expectedCeiling + 0.02)
+    {
+      result.message = "Auto-level output did not converge to the protection ceiling: peak="
+        + std::to_string(peak) + ", ceiling=" + std::to_string(expectedCeiling);
+      return result;
+    }
+
+    result.passed = true;
+    result.message = "MultiPresetMixer auto-level output targets the protection ceiling";
+  }
+  catch (const std::exception& e)
+  {
+    result.message = "Exception thrown: " + std::string(e.what());
+  }
+  catch (...)
+  {
+    result.message = "Unknown exception thrown";
+  }
+
+  return result;
+}
+
+TestResult TestMultiPresetMixerLimiterAppliesUpdatedProtectionCeilingImmediately()
+{
+  TestResult result;
+
+  try
+  {
+    guitarfx::RegisterAllEffects();
+    OutputProtectionCeilingScope scope;
+    guitarfx::SetOutputProtectionCeilingDbfs(-3.0);
+
+    guitarfx::MultiPresetMixer mixer;
+    mixer.Prepare(kSR, kBlock);
+    mixer.SetMasterGain(2.0);
+    mixer.SetLimiterEnabled(true);
+
+    const guitarfx::Preset preset = CreateUnityGainPreset();
+    if (!mixer.AddActivePreset(preset, "preset1", "Test Preset"))
+    {
+      result.message = "Failed to add preset to mixer";
+      return result;
+    }
+
+    std::vector<float> inputL(kBlock, 1.0f);
+    std::vector<float> inputR(kBlock, 1.0f);
+    std::vector<float> outputL(kBlock, 0.0f);
+    std::vector<float> outputR(kBlock, 0.0f);
+    float* inputs[2] = { inputL.data(), inputR.data() };
+    float* outputs[2] = { outputL.data(), outputR.data() };
+
+    mixer.Process(inputs, outputs, kBlock);
+
+    const double peak = std::max(PeakAbs(outputL), PeakAbs(outputR));
+    const double expectedCeiling = guitarfx::GetOutputProtectionCeilingLinear();
+    if (peak > expectedCeiling + 1.0e-4)
+    {
+      result.message = "Updated protection ceiling was not applied immediately: peak="
+        + std::to_string(peak) + ", ceiling=" + std::to_string(expectedCeiling);
+      return result;
+    }
+
+    result.passed = true;
+    result.message = "MultiPresetMixer limiter picks up updated protection ceiling immediately";
+  }
+  catch (const std::exception& e)
+  {
+    result.message = "Exception thrown: " + std::string(e.what());
+  }
+  catch (...)
+  {
+    result.message = "Unknown exception thrown";
+  }
+
+  return result;
+}
+
 } // namespace
 
 int main()
@@ -402,6 +587,42 @@ int main()
   {
     std::cout << "Testing MultiPresetMixer performance stats... ";
     auto result = TestMultiPresetMixerPerformanceStats();
+    std::cout << (result.passed ? "PASS" : "FAIL") << "\n";
+    if (!result.passed)
+    {
+      std::cout << "  " << result.message << "\n";
+    }
+    if (result.passed) ++passed; else ++failed;
+  }
+
+  // Test 4: MultiPresetMixer limiter ceiling
+  {
+    std::cout << "Testing MultiPresetMixer limiter ceiling... ";
+    auto result = TestMultiPresetMixerLimiterUsesProtectionCeiling();
+    std::cout << (result.passed ? "PASS" : "FAIL") << "\n";
+    if (!result.passed)
+    {
+      std::cout << "  " << result.message << "\n";
+    }
+    if (result.passed) ++passed; else ++failed;
+  }
+
+  // Test 5: MultiPresetMixer auto-level output ceiling
+  {
+    std::cout << "Testing MultiPresetMixer auto-level output ceiling... ";
+    auto result = TestMultiPresetMixerAutoLevelOutputTargetsProtectionCeiling();
+    std::cout << (result.passed ? "PASS" : "FAIL") << "\n";
+    if (!result.passed)
+    {
+      std::cout << "  " << result.message << "\n";
+    }
+    if (result.passed) ++passed; else ++failed;
+  }
+
+  // Test 6: MultiPresetMixer runtime ceiling updates
+  {
+    std::cout << "Testing MultiPresetMixer runtime ceiling updates... ";
+    auto result = TestMultiPresetMixerLimiterAppliesUpdatedProtectionCeilingImmediately();
     std::cout << (result.passed ? "PASS" : "FAIL") << "\n";
     if (!result.passed)
     {

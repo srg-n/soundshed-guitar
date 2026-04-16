@@ -16,6 +16,7 @@
 #include "controller/DemoPreviewService.h"
 #include "dsp/EffectGuids.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/LevelTargets.h"
 #include "dsp/effects/BuiltinEffects.h"
 #include "presets/CompositePresetStorage.h"
 #include "presets/CompositePresetTypes.h"
@@ -123,6 +124,8 @@ namespace
     constexpr const char* kRiffLibraryDefaultFolder = "riff-library";
     constexpr const char* kRiffLibraryIndexFile = "riff-library-index.json";
     constexpr const char* kSignalDiagnosticsSettingKey = "diagnostics.signalLevelsEnabled";
+    constexpr const char* kNominalOperatingLevelSettingKey = "audio.dsp.nominalOperatingLevelDbfs";
+    constexpr const char* kOutputProtectionCeilingSettingKey = "audio.dsp.outputProtectionCeilingDbfs";
     constexpr const char* kUserInputCalibrationProfilesSettingKey = "audio.userInputCalibration.profiles";
     constexpr const char* kUserInputCalibrationActiveProfileIdSettingKey = "audio.userInputCalibration.activeProfileId";
     constexpr const char* kLegacyInterfaceCalibrationEnabledSettingKey = "audio.interfaceCalibration.enabled";
@@ -1097,6 +1100,7 @@ void PluginController::Initialize()
     LoadAppSettings();
     ApplyMetronomeSettingsFromAppSettings();
     ApplyDiagnosticsSettingsFromAppSettings();
+    ApplyDspLevelTargetSettingsFromAppSettings();
     ApplyUserInputCalibrationSettingsFromAppSettings();
     ApplyUiSettingsFromAppSettings();
     LoadResourceLibraries();
@@ -1808,6 +1812,47 @@ void PluginController::ApplyDiagnosticsSettingsFromAppSettings()
     mAppSettings[kSignalDiagnosticsSettingKey] = enabled;
     mSignalDiagnosticsEnabled.store(enabled, std::memory_order_release);
     mPresetMixer.SetSignalDiagnosticsEnabled(enabled);
+}
+
+void PluginController::ApplyDspLevelTargetSettingsFromAppSettings()
+{
+    bool settingsChanged = false;
+
+    const auto readNumericSetting = [this, &settingsChanged](const char* key, double defaultValue) -> double
+    {
+        const auto it = mAppSettings.find(key);
+        if (it == mAppSettings.end())
+            return defaultValue;
+        if (it->is_number())
+            return it->get<double>();
+        if (!it->is_null())
+            settingsChanged = true;
+        return defaultValue;
+    };
+
+    const double nominalLevelDbfs = SanitizeNominalOperatingLevelDbfs(
+        readNumericSetting(kNominalOperatingLevelSettingKey, kDefaultNominalOperatingLevelDbfs));
+    const double protectionCeilingDbfs = SanitizeOutputProtectionCeilingDbfs(
+        readNumericSetting(kOutputProtectionCeilingSettingKey, kDefaultOutputProtectionCeilingDbfs));
+
+    SetNominalOperatingLevelDbfs(nominalLevelDbfs);
+    SetOutputProtectionCeilingDbfs(protectionCeilingDbfs);
+
+    const auto updateStoredSetting = [this, &settingsChanged](const char* key, double value)
+    {
+        const auto it = mAppSettings.find(key);
+        if (it == mAppSettings.end() || !it->is_number() || it->get<double>() != value)
+        {
+            mAppSettings[key] = value;
+            settingsChanged = true;
+        }
+    };
+
+    updateStoredSetting(kNominalOperatingLevelSettingKey, nominalLevelDbfs);
+    updateStoredSetting(kOutputProtectionCeilingSettingKey, protectionCeilingDbfs);
+
+    if (settingsChanged)
+        SaveAppSettings();
 }
 
 void PluginController::ApplyUserInputCalibrationSettingsFromAppSettings()

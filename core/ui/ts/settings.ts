@@ -37,6 +37,14 @@ const USER_INPUT_CALIBRATION_ACTIVE_PROFILE_SETTING = "audio.userInputCalibratio
 const USER_INPUT_CALIBRATION_TARGET_PEAK_DBFS = -12.0;
 const USER_INPUT_CALIBRATION_NONE_VALUE = "__none__";
 const FACTORY_ARCHIVE_LOADING_SETTING = "factoryPresets.archiveLoadingEnabled";
+const DSP_NOMINAL_LEVEL_SETTING = "audio.dsp.nominalOperatingLevelDbfs";
+const DSP_PROTECTION_CEILING_SETTING = "audio.dsp.outputProtectionCeilingDbfs";
+const DSP_NOMINAL_LEVEL_DEFAULT = -18.0;
+const DSP_NOMINAL_LEVEL_MIN = -30.0;
+const DSP_NOMINAL_LEVEL_MAX = -6.0;
+const DSP_PROTECTION_CEILING_DEFAULT = -1.0;
+const DSP_PROTECTION_CEILING_MIN = -6.0;
+const DSP_PROTECTION_CEILING_MAX = 0.0;
 
 const apiKeyInput = document.getElementById("tone3000-api-key-input") as HTMLInputElement | null;
 const saveButton = document.getElementById("tone3000-api-key-save");
@@ -82,6 +90,8 @@ const libraryExportButton = document.getElementById("library-export-btn");
 const libraryExportResourcesSelect = document.getElementById("library-export-resources") as HTMLSelectElement | null;
 const featureGroupsContainer = document.getElementById("settings-feature-groups") as HTMLElement | null;
 const factoryArchiveLoadingToggle = document.getElementById("factory-archive-loading-toggle") as HTMLInputElement | null;
+const dspNominalLevelInput = document.getElementById("dsp-nominal-level-input") as HTMLInputElement | null;
+const dspProtectionCeilingInput = document.getElementById("dsp-protection-ceiling-input") as HTMLInputElement | null;
 const factoryArchiveLoadingRow = document.getElementById("factory-archive-loading-row") as HTMLElement | null;
 const factoryArchiveSettingsSection = document.getElementById("factory-archive-settings-section") as HTMLElement | null;
 const updateCheckToggle = document.getElementById("update-check-toggle") as HTMLInputElement | null;
@@ -111,6 +121,7 @@ let equipmentTabsInitialized = false;
 let themeSelectInitialized = false;
 let libraryTabsInitialized = false;
 let userInputCalibrationControlsInitialized = false;
+let dspLevelTargetsInitialized = false;
 let libraryStateRequestedAt = 0;
 let suppressViewStateUpdates = false;
 let userInputCalibrationTrainingPeakDbfs = Number.NEGATIVE_INFINITY;
@@ -131,6 +142,7 @@ export function initSettingsPanel(): void {
   initDiagnosticsToggle();
   initUserInputCalibrationControls();
   initFeatureToggles();
+  initDspLevelTargetControls();
   initFactoryArchiveLoadingToggle();
   initUpdateCheckToggle();
   initEquipmentTabs();
@@ -653,6 +665,70 @@ function initFactoryArchiveLoadingToggle(): void {
   });
 }
 
+function sanitizeNumericSetting(value: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, value));
+}
+
+function bindImmediateNumericSetting(
+  input: HTMLInputElement | null,
+  key: string,
+  min: number,
+  max: number,
+  fallback: number,
+): void {
+  if (!input || input.dataset.bound === "true") return;
+  input.dataset.bound = "true";
+
+  const applyValue = (normalizeText: boolean) => {
+    const parsed = Number.parseFloat(input.value);
+    if (!Number.isFinite(parsed)) {
+      if (normalizeText) {
+        const stored = Number(getSettingValue(key));
+        input.value = sanitizeNumericSetting(stored, min, max, fallback).toFixed(1);
+      }
+      return;
+    }
+
+    const sanitized = sanitizeNumericSetting(parsed, min, max, fallback);
+    uiState.appSettings[key] = sanitized;
+    setAppSetting(key, sanitized);
+
+    if (normalizeText) {
+      input.value = sanitized.toFixed(1);
+    }
+  };
+
+  input.addEventListener("input", () => applyValue(false));
+  input.addEventListener("change", () => applyValue(true));
+  input.addEventListener("blur", () => applyValue(true));
+}
+
+function initDspLevelTargetControls(): void {
+  if (dspLevelTargetsInitialized) {
+    return;
+  }
+  dspLevelTargetsInitialized = true;
+
+  bindImmediateNumericSetting(
+    dspNominalLevelInput,
+    DSP_NOMINAL_LEVEL_SETTING,
+    DSP_NOMINAL_LEVEL_MIN,
+    DSP_NOMINAL_LEVEL_MAX,
+    DSP_NOMINAL_LEVEL_DEFAULT,
+  );
+
+  bindImmediateNumericSetting(
+    dspProtectionCeilingInput,
+    DSP_PROTECTION_CEILING_SETTING,
+    DSP_PROTECTION_CEILING_MIN,
+    DSP_PROTECTION_CEILING_MAX,
+    DSP_PROTECTION_CEILING_DEFAULT,
+  );
+}
+
 function updateResourceCleanupVisibility(enabled: boolean): void {
   if (libraryCleanupRow) {
     libraryCleanupRow.toggleAttribute("hidden", !enabled);
@@ -719,6 +795,24 @@ export function refreshSettingsView(): void {
   if (factoryArchiveLoadingToggle) {
     const factoryArchiveLoadingEnabled = getSettingValue(FACTORY_ARCHIVE_LOADING_SETTING);
     factoryArchiveLoadingToggle.checked = factoryArchiveLoadingEnabled === null ? true : Boolean(factoryArchiveLoadingEnabled);
+  }
+  if (dspNominalLevelInput) {
+    const nominalLevel = sanitizeNumericSetting(
+      Number(getSettingValue(DSP_NOMINAL_LEVEL_SETTING)),
+      DSP_NOMINAL_LEVEL_MIN,
+      DSP_NOMINAL_LEVEL_MAX,
+      DSP_NOMINAL_LEVEL_DEFAULT,
+    );
+    dspNominalLevelInput.value = nominalLevel.toFixed(1);
+  }
+  if (dspProtectionCeilingInput) {
+    const protectionCeiling = sanitizeNumericSetting(
+      Number(getSettingValue(DSP_PROTECTION_CEILING_SETTING)),
+      DSP_PROTECTION_CEILING_MIN,
+      DSP_PROTECTION_CEILING_MAX,
+      DSP_PROTECTION_CEILING_DEFAULT,
+    );
+    dspProtectionCeilingInput.value = protectionCeiling.toFixed(1);
   }
   if (updateCheckToggle) {
     const updateCheckEnabled = getSettingValue(UPDATE_CHECK_ENABLED_SETTING);

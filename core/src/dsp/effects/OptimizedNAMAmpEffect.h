@@ -14,6 +14,7 @@
  */
 
 #include "dsp/EffectProcessor.h"
+#include "dsp/LevelTargets.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/EffectGuids.h"
 #include "dsp/simd/OptimizedNAM.h"
@@ -196,6 +197,8 @@ public:
 
   void Process(float** inputs, float** outputs, int numSamples) override
   {
+    EnsureLevelTargetsCurrent();
+
     // Clamp to allocated buffer size to prevent out-of-bounds writes
     numSamples = std::min(numSamples, mMaxBlockSize);
 
@@ -585,6 +588,7 @@ private:
   std::optional<double> mCalibrationInputLevel;
   std::optional<double> mCalibrationOutputLevel;
   bool mEnabled = true;
+  std::uint64_t mLevelTargetsRevision = 0;
 
   // Tone stack EQ parameters (dB, -10..+10, default 0)
   double mBassDb     = 0.0; // Low shelf  ~100 Hz
@@ -618,8 +622,6 @@ private:
 
   void RecalculateAutoGains()
   {
-    static constexpr double kTargetOutputLeveldB = -18.0;
-
     mAutoInputGain = 1.0;
     mAutoOutputGain = 1.0;
 
@@ -632,12 +634,20 @@ private:
       }
       else if (mModelLoudness.has_value())
       {
-        const double deltaDb = std::clamp(kTargetOutputLeveldB - *mModelLoudness, -24.0, 24.0);
+        const double deltaDb = std::clamp(GetNominalOperatingLevelDbfs() - *mModelLoudness, -24.0, 24.0);
         mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
       }
     }
 
+    mLevelTargetsRevision = GetLevelTargetsRevision();
     UpdateEffectiveGains();
+  }
+
+  void EnsureLevelTargetsCurrent()
+  {
+    const auto revision = GetLevelTargetsRevision();
+    if (revision != mLevelTargetsRevision)
+      RecalculateAutoGains();
   }
 
   void CheckSampleRateMismatch()

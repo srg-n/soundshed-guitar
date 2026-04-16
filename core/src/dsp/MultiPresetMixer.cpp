@@ -1,4 +1,5 @@
 #include "dsp/MultiPresetMixer.h"
+#include "dsp/LevelTargets.h"
 #include "dsp/EffectGuids.h"
 #include "resources/ResourceLibrary.h"
 
@@ -12,6 +13,11 @@ namespace guitarfx
 {
   namespace
   {
+    constexpr float kInputAutoLevelTargetPeak = 0.7f;
+    constexpr float kInputAutoLevelMaxGain = 4.0f;
+    constexpr float kAutoLevelAttackMix = 0.01f;
+    constexpr float kAutoLevelReleaseMultiplier = 1.0001f;
+
     bool GraphHasNodeType(const SignalGraph& graph, const std::string& type)
     {
       for (const auto& node : graph.nodes)
@@ -919,9 +925,9 @@ namespace guitarfx
       // Apply auto-level with smoothing
       if (peak > 0.001f)
       {
-        const float targetGain = 0.7f / peak;
-        const float limitedGain = std::min(targetGain, 4.0f); // Max 4x gain
-        mInputAutoLevelGain = mInputAutoLevelGain * 0.99f + limitedGain * 0.01f;
+        const float targetGain = kInputAutoLevelTargetPeak / peak;
+        const float limitedGain = std::min(targetGain, kInputAutoLevelMaxGain);
+        mInputAutoLevelGain = mInputAutoLevelGain * (1.0f - kAutoLevelAttackMix) + limitedGain * kAutoLevelAttackMix;
 
         for (int i = 0; i < numSamples; ++i)
         {
@@ -1126,6 +1132,7 @@ namespace guitarfx
     // Apply auto-level output (simple peak limiting)
     if (mAutoLevelOutput)
     {
+      const float outputProtectionCeilingLinear = static_cast<float>(GetOutputProtectionCeilingLinear());
       float peak = 0.0f;
       for (int i = 0; i < numSamples; ++i)
       {
@@ -1135,10 +1142,10 @@ namespace guitarfx
           peak = std::max(peak, std::abs(outputs[1][i]));
       }
 
-      if (peak > 0.95f)
+      if (peak > outputProtectionCeilingLinear)
       {
-        const float attenuation = 0.95f / peak;
-        mOutputAutoLevelGain = mOutputAutoLevelGain * 0.99f + attenuation * 0.01f;
+        const float attenuation = outputProtectionCeilingLinear / peak;
+        mOutputAutoLevelGain = mOutputAutoLevelGain * (1.0f - kAutoLevelAttackMix) + attenuation * kAutoLevelAttackMix;
 
         if (outputs[0])
         {
@@ -1154,7 +1161,7 @@ namespace guitarfx
       else
       {
         // Slowly release gain reduction
-        mOutputAutoLevelGain = std::min(1.0f, mOutputAutoLevelGain * 1.0001f);
+        mOutputAutoLevelGain = std::min(1.0f, mOutputAutoLevelGain * kAutoLevelReleaseMultiplier);
       }
     }
 
@@ -1169,15 +1176,16 @@ namespace guitarfx
     // Optional simple limiter (clip)
     if (mLimiterEnabled)
     {
+      const float outputProtectionCeilingLinear = static_cast<float>(GetOutputProtectionCeilingLinear());
       if (outputs[0])
       {
         for (int i = 0; i < numSamples; ++i)
-          outputs[0][i] = std::clamp(outputs[0][i], -1.0f, 1.0f);
+          outputs[0][i] = std::clamp(outputs[0][i], -outputProtectionCeilingLinear, outputProtectionCeilingLinear);
       }
       if (outputs[1])
       {
         for (int i = 0; i < numSamples; ++i)
-          outputs[1][i] = std::clamp(outputs[1][i], -1.0f, 1.0f);
+          outputs[1][i] = std::clamp(outputs[1][i], -outputProtectionCeilingLinear, outputProtectionCeilingLinear);
       }
     }
   }
