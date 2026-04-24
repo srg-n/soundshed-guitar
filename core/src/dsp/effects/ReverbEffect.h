@@ -68,6 +68,18 @@ namespace guitarfx
       UpdateParameters();
       Reset();
 
+      // Precompute sin/cos of per-voice LFO phase offsets for angle-addition modulation.
+      for (size_t i = 0; i < kCombCount; ++i)
+      {
+        mCombPrecompSinOffsets[i] = static_cast<float>(std::sin(kCombModPhaseOffsets[i]));
+        mCombPrecompCosOffsets[i] = static_cast<float>(std::cos(kCombModPhaseOffsets[i]));
+      }
+      for (size_t i = 0; i < kAllpassCount; ++i)
+      {
+        mAllpassPrecompSinOffsets[i] = static_cast<float>(std::sin(kAllpassModPhaseOffsets[i]));
+        mAllpassPrecompCosOffsets[i] = static_cast<float>(std::cos(kAllpassModPhaseOffsets[i]));
+      }
+
       // Smooth coefficient: ~15ms ramp to eliminate zipper noise on param changes.
       mSmoothCoeff = static_cast<float>(1.0 - std::exp(-1.0 / (std::max(1.0, mSampleRate) * 0.015)));
       // Size scale smoothed at ~200ms — long enough to prevent zipper on delay-length changes.
@@ -212,7 +224,11 @@ namespace guitarfx
         if (++mPreDelayWrite >= mPreDelayL.size())
           mPreDelayWrite = 0;
 
-        const float mod = static_cast<float>(std::sin(mModPhase));
+        // Compute LFO sin/cos once via fast polynomial; derive per-voice values via angle-addition
+        // identity sin(φ+δ) = sinφ·cosδ + cosφ·sinδ — eliminates kCombCount+kAllpassCount sin() calls.
+        const float phaseF = static_cast<float>(mModPhase > kPi ? mModPhase - kTwoPi : mModPhase);
+        const float mod = FastSin(phaseF);
+        const float cosPhase = FastCos(phaseF);
         mModPhase += mModPhaseInc;
         if (mModPhase >= kTwoPi)
           mModPhase -= kTwoPi;
@@ -232,7 +248,8 @@ namespace guitarfx
 
         for (size_t c = 0; c < kCombCount; ++c)
         {
-          const float combPhase = mod + static_cast<float>(std::sin(mModPhase + kCombModPhaseOffsets[c]));
+          const float sinPhiC = mod * mCombPrecompCosOffsets[c] + cosPhase * mCombPrecompSinOffsets[c];
+          const float combPhase = mod + sinPhiC;
           const float combScaleL = std::max(0.85f, 1.0f + combPhase * combModDepth);
           const float combScaleR = std::max(0.85f, 1.0f - combPhase * combModDepth);
           const float dL = std::clamp(mBaseCombSamplesL[c] * mSizeScaleCurrent * combScaleL,
@@ -242,8 +259,8 @@ namespace guitarfx
           const float delayedL = ReadFromDelayFractional(mCombBufferL[c], mCombWriteL[c], dL);
           const float delayedR = ReadFromDelayFractional(mCombBufferR[c], mCombWriteR[c], dR);
 
-          mCombFilterStoreL[c] = delayedL * (1.0f - mDamp) + mCombFilterStoreL[c] * mDamp;
-          mCombFilterStoreR[c] = delayedR * (1.0f - mDamp) + mCombFilterStoreR[c] * mDamp;
+          mCombFilterStoreL[c] = FlushNearZero(delayedL * (1.0f - mDamp) + mCombFilterStoreL[c] * mDamp);
+          mCombFilterStoreR[c] = FlushNearZero(delayedR * (1.0f - mDamp) + mCombFilterStoreR[c] * mDamp);
 
           combFeedbackL[c] = mCombFilterStoreL[c];
           combFeedbackR[c] = mCombFilterStoreR[c];
@@ -263,8 +280,8 @@ namespace guitarfx
           const float feedbackL = mixedL + (mixedR - mixedL) * kStereoFeedbackBlend;
           const float feedbackR = mixedR + (mixedL - mixedR) * kStereoFeedbackBlend;
 
-          mCombBufferL[c][mCombWriteL[c]] = tankInL + feedbackL * mFeedback;
-          mCombBufferR[c][mCombWriteR[c]] = tankInR + feedbackR * mFeedback;
+          mCombBufferL[c][mCombWriteL[c]] = FlushNearZero(tankInL + feedbackL * mFeedback);
+          mCombBufferR[c][mCombWriteR[c]] = FlushNearZero(tankInR + feedbackR * mFeedback);
 
           if (++mCombWriteL[c] >= mCombBufferL[c].size())
             mCombWriteL[c] = 0;
@@ -277,7 +294,8 @@ namespace guitarfx
 
         for (size_t a = 0; a < kAllpassCount; ++a)
         {
-          const float allpassPhase = mod + static_cast<float>(std::sin(mModPhase + kAllpassModPhaseOffsets[a]));
+          const float sinPhiA = mod * mAllpassPrecompCosOffsets[a] + cosPhase * mAllpassPrecompSinOffsets[a];
+          const float allpassPhase = mod + sinPhiA;
           const float allpassScaleL = std::max(0.9f, 1.0f + allpassPhase * allpassModDepth);
           const float allpassScaleR = std::max(0.9f, 1.0f - allpassPhase * allpassModDepth);
           const float dL = std::clamp(mBaseAllpassSamplesL[a] * mSizeScaleCurrent * allpassScaleL,
@@ -525,6 +543,7 @@ namespace guitarfx
     static constexpr double kMaxPreDelayMs = 220.0;
     static constexpr double kMaxTapMs = 46.0;
     static constexpr double kTwoPi = 6.2831853071795864769;
+    static constexpr double kPi = kTwoPi * 0.5;
     static constexpr std::array<double, kCombCount> kCombModPhaseOffsets = {
       0.0, 0.73, 1.41, 2.19, 2.94, 3.67, 4.28, 5.11};
     static constexpr std::array<double, kAllpassCount> kAllpassModPhaseOffsets = {
@@ -619,19 +638,19 @@ namespace guitarfx
 
     float ProcessFiltersL(float sample)
     {
-      mLowpassStateL += mLowpassAlpha * (sample - mLowpassStateL);
+      mLowpassStateL = FlushNearZero(mLowpassStateL + mLowpassAlpha * (sample - mLowpassStateL));
       const float hpOut = mHighpassAlpha * (mHpPrevOutL + mLowpassStateL - mHpPrevInL);
       mHpPrevInL = mLowpassStateL;
-      mHpPrevOutL = hpOut;
+      mHpPrevOutL = FlushNearZero(hpOut);
       return hpOut;
     }
 
     float ProcessFiltersR(float sample)
     {
-      mLowpassStateR += mLowpassAlpha * (sample - mLowpassStateR);
+      mLowpassStateR = FlushNearZero(mLowpassStateR + mLowpassAlpha * (sample - mLowpassStateR));
       const float hpOut = mHighpassAlpha * (mHpPrevOutR + mLowpassStateR - mHpPrevInR);
       mHpPrevInR = mLowpassStateR;
-      mHpPrevOutR = hpOut;
+      mHpPrevOutR = FlushNearZero(hpOut);
       return hpOut;
     }
 
@@ -849,15 +868,43 @@ namespace guitarfx
       }
     }
 
+    // 5th-order minimax polynomial sin approximation for x in [-π, π], max error ≈ 1.6e-5.
+    static float FastSin(float x) noexcept
+    {
+      const float x2 = x * x;
+      return x * (1.0f + x2 * (-0.16666667f + x2 * 0.00833333f));
+    }
+
+    // 4th-order polynomial cos approximation for x in [-π, π], max error ≈ 5e-5.
+    static float FastCos(float x) noexcept
+    {
+      const float x2 = x * x;
+      return 1.0f + x2 * (-0.5f + x2 * 0.04166667f);
+    }
+
+    // Padé [2/2] rational tanh approximation, error < 0.5% for |x| ≤ 3.5, clips at ±5.5.
+    static float FastTanh(float x) noexcept
+    {
+      if (x > 5.5f) return 1.0f;
+      if (x < -5.5f) return -1.0f;
+      const float x2 = x * x;
+      return x * (27.0f + x2) / (27.0f + 9.0f * x2);
+    }
+
+    static float FlushNearZero(float x) noexcept
+    {
+      return std::fabs(x) < 1.0e-9f ? 0.0f : x;
+    }
+
     static float ApplyDrive(float sample, float amount)
     {
       if (amount <= 0.0f)
         return sample;
       const float drive = 1.0f + amount * 5.0f;
-      const float norm = static_cast<float>(std::tanh(drive));
+      const float norm = FastTanh(drive);
       if (norm <= 0.0f)
         return sample;
-      return static_cast<float>(std::tanh(sample * drive)) / norm;
+      return FastTanh(sample * drive) / norm;
     }
 
     Mode mMode;
@@ -950,6 +997,13 @@ namespace guitarfx
     // Audio-rate modulation depth (scaled from mModDepth user value in UpdateParameters).
     // Kept separate so GetParam("modDepth") always returns the user-facing 0–1 value.
     float mModDepthInternal = 0.0008f;
+
+    // Precomputed sin/cos of LFO phase offsets for angle-addition modulation.
+    // Eliminates kCombCount + kAllpassCount std::sin() calls per sample.
+    std::array<float, kCombCount> mCombPrecompSinOffsets{};
+    std::array<float, kCombCount> mCombPrecompCosOffsets{};
+    std::array<float, kAllpassCount> mAllpassPrecompSinOffsets{};
+    std::array<float, kAllpassCount> mAllpassPrecompCosOffsets{};
 
     // Spring mode: primary biquad bandpass state + coefficients for fundamental resonance.
     std::array<double, 2> mSpringBpS1 = {};

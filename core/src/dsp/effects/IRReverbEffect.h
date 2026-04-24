@@ -59,7 +59,8 @@ namespace guitarfx
       // Clamp to allocated buffer size to prevent out-of-bounds writes
       numSamples = std::min(numSamples, mMaxBlockSize);
 
-      if (!mEnabled || !mConvolverLL.IsInitialized() || !mConvolverRR.IsInitialized())
+      if (!mEnabled || !mConvolverLL.IsInitialized() || !mConvolverRR.IsInitialized()
+          || mRebuilding.load(std::memory_order_acquire))
       {
         // Bypass: copy input to output, falling back L→R if R is null
         if (outputs[0])
@@ -363,6 +364,9 @@ namespace guitarfx
       if (mImpulseLL.empty() || mImpulseRR.empty() || mMaxBlockSize == 0)
         return false;
 
+      // Signal the audio thread to bypass (dry copy) while convolvers are being rebuilt.
+      mRebuilding.store(true, std::memory_order_release);
+
       const std::size_t truncLength = GetTruncationLength();
       if (truncLength == 0)
         return false;
@@ -380,12 +384,12 @@ namespace guitarfx
 
       if (std::abs(mIRSampleRate - mSampleRate) > 1.0)
       {
-        irwav::ResampleLinear(processedLL, mIRSampleRate, mSampleRate);
-        irwav::ResampleLinear(processedRR, mIRSampleRate, mSampleRate);
+        irwav::ResampleSinc(processedLL, mIRSampleRate, mSampleRate);
+        irwav::ResampleSinc(processedRR, mIRSampleRate, mSampleRate);
         if (mHasTrueStereo)
         {
-          irwav::ResampleLinear(processedLR, mIRSampleRate, mSampleRate);
-          irwav::ResampleLinear(processedRL, mIRSampleRate, mSampleRate);
+          irwav::ResampleSinc(processedLR, mIRSampleRate, mSampleRate);
+          irwav::ResampleSinc(processedRL, mIRSampleRate, mSampleRate);
         }
       }
 
@@ -412,18 +416,31 @@ namespace guitarfx
       }
 
       if (!mConvolverLL.SetImpulse(processedLL, mMaxBlockSize))
+      {
+        mRebuilding.store(false, std::memory_order_release);
         return false;
+      }
       if (!mConvolverRR.SetImpulse(processedRR, mMaxBlockSize))
+      {
+        mRebuilding.store(false, std::memory_order_release);
         return false;
+      }
 
       if (mHasTrueStereo)
       {
         if (!mConvolverLR.SetImpulse(processedLR, mMaxBlockSize))
+        {
+          mRebuilding.store(false, std::memory_order_release);
           return false;
+        }
         if (!mConvolverRL.SetImpulse(processedRL, mMaxBlockSize))
+        {
+          mRebuilding.store(false, std::memory_order_release);
           return false;
+        }
       }
 
+      mRebuilding.store(false, std::memory_order_release);
       return true;
     }
 
@@ -479,6 +496,8 @@ namespace guitarfx
     std::atomic<int> mPendingQuality{-1};
     std::atomic<float> mTone{1.0f};
     std::atomic<float> mToneCoef{1.0f};
+    // Set true during convolver rebuild to let the audio thread bypass safely.
+    std::atomic<bool> mRebuilding{false};
     float mToneStateL = 0.0f;
     float mToneStateR = 0.0f;
   };

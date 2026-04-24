@@ -275,14 +275,16 @@ namespace guitarfx
 
   private:
     static constexpr size_t kTankCount = 3;
-    static constexpr size_t kDispersionCount = 3;
+    static constexpr size_t kDispersionCount = 6;
     static constexpr double kMaxInputDelayMs = 12.0;
     static constexpr double kMaxTensionScale = 1.35;
     static constexpr double kTwoPi = 6.2831853071795864769;
     static constexpr std::array<double, kTankCount> kTankDelayMsL = {26.8, 38.7, 52.1};
     static constexpr std::array<double, kTankCount> kTankDelayMsR = {28.3, 40.4, 54.2};
-    static constexpr std::array<double, kDispersionCount> kDispersionDelayMsL = {2.1, 3.4, 5.2};
-    static constexpr std::array<double, kDispersionCount> kDispersionDelayMsR = {2.4, 3.7, 5.6};
+    // 6-stage allpass dispersion chain — real spring tanks typically use 6–8 stages;
+    // 3 stages produced audible isolated echoes on staccato input.
+    static constexpr std::array<double, kDispersionCount> kDispersionDelayMsL = {1.3, 2.1, 3.1, 3.4, 4.6, 5.2};
+    static constexpr std::array<double, kDispersionCount> kDispersionDelayMsR = {1.5, 2.4, 3.4, 3.7, 4.9, 5.6};
 
     size_t DelayMsToSamples(double ms) const
     {
@@ -325,15 +327,24 @@ namespace guitarfx
       return output;
     }
 
+    // Padé [2/2] rational tanh approximation, error < 0.5% for |x| ≤ 3.5, clips at ±5.5.
+    static float FastTanh(float x) noexcept
+    {
+      if (x > 5.5f) return 1.0f;
+      if (x < -5.5f) return -1.0f;
+      const float x2 = x * x;
+      return x * (27.0f + x2) / (27.0f + 9.0f * x2);
+    }
+
     static float ApplyDrive(float sample, float amount)
     {
       if (amount <= 0.0f)
         return sample;
       const float drive = 1.0f + amount * 6.0f;
-      const float norm = static_cast<float>(std::tanh(drive));
+      const float norm = FastTanh(drive);
       if (norm <= 0.0f)
         return sample;
-      return static_cast<float>(std::tanh(sample * drive)) / norm;
+      return FastTanh(sample * drive) / norm;
     }
 
     static void CopyInputToOutput(float **inputs, float **outputs, int numSamples)

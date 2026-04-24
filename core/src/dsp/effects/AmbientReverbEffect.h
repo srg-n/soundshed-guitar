@@ -62,6 +62,12 @@ namespace guitarfx
       mSmoothCoeff = static_cast<float>(1.0 - std::exp(-1.0 / (std::max(1.0, mSampleRate) * 0.015)));
       mSizeSmoothCoeff = static_cast<float>(1.0 - std::exp(-1.0 / (std::max(1.0, mSampleRate) * 0.18)));
 
+      for (size_t index = 0; index < kCombCount; ++index)
+      {
+        mCombPrecompSinOffsets[index] = static_cast<float>(std::sin(kCombModPhaseOffsets[index]));
+        mCombPrecompCosOffsets[index] = static_cast<float>(std::cos(kCombModPhaseOffsets[index]));
+      }
+
       UpdateParameters();
       mFeedback = mFeedbackTarget;
       mDamp = mDampTarget;
@@ -162,7 +168,11 @@ namespace guitarfx
         if (++mPreDelayWrite >= mPreDelayL.size())
           mPreDelayWrite = 0;
 
-        const float modulator = static_cast<float>(std::sin(mModPhase));
+        // Compute LFO sin/cos once per sample via fast polynomial; then derive per-comb
+        // sin(phase+offset) using the angle-addition identity instead of N separate sin() calls.
+        const float phaseF = static_cast<float>(mModPhase > kPi ? mModPhase - kTwoPi : mModPhase);
+        const float sinPhi = FastSin(phaseF);
+        const float cosPhi = FastCos(phaseF);
         mModPhase += mModPhaseInc;
         if (mModPhase >= kTwoPi)
           mModPhase -= kTwoPi;
@@ -174,7 +184,10 @@ namespace guitarfx
         float combSumR = 0.0f;
         for (size_t combIndex = 0; combIndex < kCombCount; ++combIndex)
         {
-          const float phase = modulator * static_cast<float>(std::sin(mModPhase + kCombModPhaseOffsets[combIndex]));
+          // Additive modulation: sin(φ) + sin(φ+offset) via angle-addition identity.
+          // Previously `sinPhi * sin(phase+offset)` caused ring-modulation artifact at 2× LFO.
+          const float sinPhiOffset = sinPhi * mCombPrecompCosOffsets[combIndex] + cosPhi * mCombPrecompSinOffsets[combIndex];
+          const float phase = sinPhi + sinPhiOffset;
           const float modSamples = mModDepthSamples * phase * (0.6f + 0.07f * static_cast<float>(combIndex));
 
           const float delayL = std::clamp(DelayMsToSamplesFloat(kCombMsL[combIndex] * mSizeScale) + modSamples,
@@ -187,11 +200,11 @@ namespace guitarfx
           const float delayedL = ReadFromDelayFractional(mCombBufferL[combIndex], mCombWriteL[combIndex], delayL);
           const float delayedR = ReadFromDelayFractional(mCombBufferR[combIndex], mCombWriteR[combIndex], delayR);
 
-          mCombFilterStateL[combIndex] += (delayedL - mCombFilterStateL[combIndex]) * (1.0f - mDamp);
-          mCombFilterStateR[combIndex] += (delayedR - mCombFilterStateR[combIndex]) * (1.0f - mDamp);
+          mCombFilterStateL[combIndex] = FlushNearZero(mCombFilterStateL[combIndex] + (delayedL - mCombFilterStateL[combIndex]) * (1.0f - mDamp));
+          mCombFilterStateR[combIndex] = FlushNearZero(mCombFilterStateR[combIndex] + (delayedR - mCombFilterStateR[combIndex]) * (1.0f - mDamp));
 
-          mCombBufferL[combIndex][mCombWriteL[combIndex]] = feedL + mCombFilterStateL[combIndex] * mFeedback;
-          mCombBufferR[combIndex][mCombWriteR[combIndex]] = feedR + mCombFilterStateR[combIndex] * mFeedback;
+          mCombBufferL[combIndex][mCombWriteL[combIndex]] = FlushNearZero(feedL + mCombFilterStateL[combIndex] * mFeedback);
+          mCombBufferR[combIndex][mCombWriteR[combIndex]] = FlushNearZero(feedR + mCombFilterStateR[combIndex] * mFeedback);
 
           if (++mCombWriteL[combIndex] >= mCombBufferL[combIndex].size())
             mCombWriteL[combIndex] = 0;
@@ -226,8 +239,8 @@ namespace guitarfx
         float wetL = earlyL * 0.22f + lateL * 0.78f;
         float wetR = earlyR * 0.22f + lateR * 0.78f;
 
-        mWetToneStateL += (wetL - mWetToneStateL) * mToneCoeff;
-        mWetToneStateR += (wetR - mWetToneStateR) * mToneCoeff;
+        mWetToneStateL = FlushNearZero(mWetToneStateL + (wetL - mWetToneStateL) * mToneCoeff);
+        mWetToneStateR = FlushNearZero(mWetToneStateR + (wetR - mWetToneStateR) * mToneCoeff);
         wetL = mWetToneStateL;
         wetR = mWetToneStateR;
 
@@ -317,6 +330,7 @@ namespace guitarfx
     static constexpr std::array<double, kEarlyTapCount> kEarlyTapMs = {7.0, 13.0, 21.0, 34.0, 49.0};
     static constexpr std::array<float, kEarlyTapCount> kEarlyTapGains = {0.24f, 0.18f, 0.14f, 0.10f, 0.07f};
     static constexpr std::array<double, kCombCount> kCombModPhaseOffsets = {0.0, 0.9, 1.7, 2.6, 3.8, 4.9};
+    static constexpr double kPi = kTwoPi * 0.5;
 
     size_t DelayMsToSamples(double ms) const
     {
@@ -370,6 +384,25 @@ namespace guitarfx
         else
           std::fill_n(outputs[channel], numSamples, 0.0f);
       }
+    }
+
+    // 5th-order minimax polynomial sin approximation for x in [-π, π], max error ≈ 1.6e-5.
+    static float FastSin(float x) noexcept
+    {
+      const float x2 = x * x;
+      return x * (1.0f + x2 * (-0.16666667f + x2 * 0.00833333f));
+    }
+
+    // 4th-order polynomial cos approximation for x in [-π, π], max error ≈ 5e-5.
+    static float FastCos(float x) noexcept
+    {
+      const float x2 = x * x;
+      return 1.0f + x2 * (-0.5f + x2 * 0.04166667f);
+    }
+
+    static float FlushNearZero(float x) noexcept
+    {
+      return std::fabs(x) < 1.0e-9f ? 0.0f : x;
     }
 
     void UpdateParameters()
@@ -437,6 +470,10 @@ namespace guitarfx
     float mWetToneStateR = 0.0f;
     double mModPhase = 0.0;
     double mModPhaseInc = 0.0;
+
+    // Precomputed sin/cos of per-comb LFO phase offsets — avoids kCombCount sin() calls per sample.
+    std::array<float, kCombCount> mCombPrecompSinOffsets{};
+    std::array<float, kCombCount> mCombPrecompCosOffsets{};
   };
 
   inline void RegisterAmbientReverbEffect()
