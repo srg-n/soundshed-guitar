@@ -360,6 +360,17 @@ High-quality transpose effect optimized for integer semitone steps using Signals
 | `semitones` | -36..+12 | 0.0 | st |
 | `mix` | 0.0–1.0 | 1.0 | — |
 
+### Transpose (Hybrid) (`transpose_hybrid`)
+Low-latency hybrid transpose path for down-tuning. Uses the low-latency STFT transpose core for the shifted sustain, then blends in a latency-aligned dry transient assist to keep pick attacks tighter.
+
+| Parameter | Range | Default | Unit |
+|-----------|-------|---------|------|
+| `semitones` | -15..0 | -5.0 | st |
+| `mix` | 0.0–1.0 | 1.0 | — |
+| `transientAssist` | 0.0–1.0 | 0.65 | — |
+| `transientHoldMs` | 2.0–40.0 | 12.0 | ms |
+| `brightness` | 0.0–1.0 | 0.35 | — |
+
 ### Transpose (STFT) (`transpose_stft`)
 STFT phase-vocoder transpose intended for direct comparison with the default Signalsmith-based transpose, tuned for low-latency down-tuning to -12 semitones.
 

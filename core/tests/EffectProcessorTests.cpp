@@ -1348,6 +1348,87 @@ bool TestTransposeLatencySpecific()
   return lowShiftReportsLatency && slightDownTuneKeepsLatencyProfile && deepShiftKeepsLatencyProfile;
 }
 
+bool TestHybridTransposeSpecific()
+{
+  std::cout << "\n--- HybridTransposeEffect Tests ---\n";
+
+  auto& registry = guitarfx::EffectRegistry::Instance();
+  auto effect = registry.Create(guitarfx::EffectGuids::kTransposeHybrid);
+  if (!effect)
+  {
+    std::cout << "  FAIL: Could not create hybrid transpose effect\n";
+    return false;
+  }
+
+  effect->Prepare(kTestSampleRate, kTestBlockSize);
+  effect->SetParam("mix", 1.0);
+
+  const int bypassLatency = effect->GetLatencySamples();
+
+  effect->SetParam("semitones", -3.0);
+  const int lightLatency = effect->GetLatencySamples();
+
+  effect->SetParam("semitones", -12.0);
+  const int deepLatency = effect->GetLatencySamples();
+
+  const int latencyBlocks = std::max(0, (deepLatency + kTestBlockSize - 1) / kTestBlockSize);
+  const int blocksToProcess = latencyBlocks + 12;
+  const int totalSamples = blocksToProcess * kTestBlockSize;
+
+  std::vector<float> inputL(static_cast<size_t>(totalSamples), 0.0f);
+  std::vector<float> inputR(static_cast<size_t>(totalSamples), 0.0f);
+  std::vector<float> outputL(static_cast<size_t>(totalSamples), 0.0f);
+  std::vector<float> outputR(static_cast<size_t>(totalSamples), 0.0f);
+  std::vector<float> blockOutL(kTestBlockSize, 0.0f);
+  std::vector<float> blockOutR(kTestBlockSize, 0.0f);
+
+  GenerateSineWave(inputL, 440.0, 0.5);
+  GenerateSineWave(inputR, 440.0, 0.5);
+
+  float* outputs[2] = {blockOutL.data(), blockOutR.data()};
+  for (int block = 0; block < blocksToProcess; ++block)
+  {
+    std::fill(blockOutL.begin(), blockOutL.end(), 0.0f);
+    std::fill(blockOutR.begin(), blockOutR.end(), 0.0f);
+    float* inputs[2] = {
+      inputL.data() + block * kTestBlockSize,
+      inputR.data() + block * kTestBlockSize
+    };
+    effect->Process(inputs, outputs, kTestBlockSize);
+    std::copy(blockOutL.begin(), blockOutL.end(), outputL.begin() + static_cast<size_t>(block * kTestBlockSize));
+    std::copy(blockOutR.begin(), blockOutR.end(), outputR.begin() + static_cast<size_t>(block * kTestBlockSize));
+  }
+
+  const size_t warmupStart = static_cast<size_t>(std::min(totalSamples - 1,
+    deepLatency + kTestBlockSize * 2));
+  std::vector<float> steadyState(outputL.begin() + static_cast<std::ptrdiff_t>(warmupStart), outputL.end());
+  const auto analysis = AnalyzeSignal(steadyState);
+  const double detectedFrequency = EstimateFrequencyFromPositiveZeroCrossings(steadyState, kTestSampleRate);
+
+  const bool bypassLatencyClears = bypassLatency == 0;
+  const bool deepShiftIncreasesLatency = lightLatency > 0 && deepLatency >= lightLatency;
+  const bool latencyStaysBelowTwoBlocks = deepLatency > 0 && deepLatency <= kTestBlockSize * 2;
+  const bool outputHealthy = !analysis.hasNaN && !analysis.hasInf && !analysis.isAllZeros && analysis.peakValue > 0.05;
+  const bool octaveDownDetected = detectedFrequency >= 200.0 && detectedFrequency <= 240.0;
+
+  std::cout << "  " << std::left << std::setw(44) << "0 st bypass clears reported latency:" << (bypassLatencyClears ? "PASS" : "FAIL")
+            << " (latency=" << bypassLatency << ")\n";
+  std::cout << "  " << std::left << std::setw(44) << "Deeper shifts keep or raise latency:" << (deepShiftIncreasesLatency ? "PASS" : "FAIL")
+            << " (-3=" << lightLatency << ", -12=" << deepLatency << ")\n";
+  std::cout << "  " << std::left << std::setw(44) << "Hybrid latency stays within two blocks:" << (latencyStaysBelowTwoBlocks ? "PASS" : "FAIL")
+            << " (latency=" << deepLatency << ")\n";
+  std::cout << "  " << std::left << std::setw(44) << "Steady-state output remains valid:" << (outputHealthy ? "PASS" : "FAIL")
+            << " (peak=" << std::fixed << std::setprecision(3) << analysis.peakValue << ")\n";
+  std::cout << "  " << std::left << std::setw(44) << "-12 st lands near one octave down:" << (octaveDownDetected ? "PASS" : "FAIL")
+            << " (freq=" << std::fixed << std::setprecision(1) << detectedFrequency << " Hz)\n";
+
+  return bypassLatencyClears
+    && deepShiftIncreasesLatency
+    && latencyStaysBelowTwoBlocks
+    && outputHealthy
+    && octaveDownDetected;
+}
+
 bool TestStftTransposeSpecific()
 {
   std::cout << "\n--- StftTransposeEffect Tests ---\n";
@@ -1663,6 +1744,9 @@ int main()
     return 1;
 
   if (!TestTransposeLatencySpecific())
+    return 1;
+
+  if (!TestHybridTransposeSpecific())
     return 1;
 
   if (!TestPitchShiftLatencySpecific())

@@ -160,3 +160,29 @@ We target a 256-sample buffer at 48kHz (**5.3ms** round-trip), which is standard
 2. **The -15 Semitone "Glitch" (Excessive Repeating):** Shifting down -15 semitones means $P \approx 0.44$. The read pointer is moving less than half the speed of the write pointer. This means the algorithm has to **repeat** over 50% of the audio to fill the time gap. Repeating large grains sounds like a stuck CD. 
    * *Solution:* For shifts beyond -12 semitones, the algorithm dynamically shrinks the grain size $G$ from 15ms down to 8ms, and lengthens the crossfade overlap $O$ to 6ms. This turns the "stutter" into a smooth, modulated micro-chorus, which sounds far more natural on a clean electric guitar.
 3. **Avoiding "Chipmunk" / "Monster" Artifacts at Extremes:** For the extreme -15 semitone range, the Sub-band architecture secretly performs a **Formant Swap**. It calculates the pitch shift per band. For the lowest band, it shifts by -15 semitones. But for the highest band, it intentionally *limits* the shift to -5 semitones, and bridges the gap using the Dynamic EQ in Step 4. This prevents the highest harmonics from becoming a muddy, formant-shifted mess, preserving the "shimmer" of the clean guitar.
+
+---
+
+### Repo Implementation Update
+
+The repo should not implement the section above verbatim. The first production slice needs to fit the existing `EffectProcessor` latency contract, run inside the current graph executor, and stay small enough to validate against the existing transpose paths.
+
+#### Implementation decision
+
+1. Add a new `transpose_hybrid` effect alongside `transpose` and `transpose_stft` instead of replacing the global transpose default immediately.
+2. Use a **fixed-latency wideband hybrid core** for phase 1: dual moving read heads over a single circular delay line, complementary Hann crossfades, delayed dry alignment, short transient-assist blending, and lightweight brightness compensation.
+3. Treat the effect as **downshift-only** for now (`-15..0 st`). The phase 1 path should report the maximum wet delay as effect latency and return zero latency when `semitones == 0`.
+4. Defer sub-band splitting, similarity search, and upper-band shift cheats until measurements show that the simpler core is not good enough.
+
+#### Phase 1 scope
+
+- Effect type: `Transpose (Hybrid)` / `transpose_hybrid`
+- Parameters: `semitones`, `mix`, `transientAssist`, `transientHoldMs`, `brightness`
+- Dry/wet rule: mix against an explicitly delayed dry path inside the effect, not an average allpass estimate
+- Validation: reported latency, finite output under live parameter changes, octave-down sanity on single notes, and graph-level latency propagation
+
+#### Later phases
+
+- Add 2-band or 3-band splitting if wideband beating is still too obvious on sustained dyads and triads
+- Compare onset retention and cents error against the current Signalsmith and STFT implementations
+- Only consider switching the global transpose default after CPU, latency, and artifact measurements are captured at `48 kHz / 64` and `48 kHz / 256`

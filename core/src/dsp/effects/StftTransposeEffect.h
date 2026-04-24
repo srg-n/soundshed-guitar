@@ -44,7 +44,7 @@ namespace guitarfx
     public:
       [[nodiscard]] static int GetExpectedLatencySamples(int semitones, int mode)
       {
-        const int clamped = std::clamp(semitones, -12, 12);
+        const int clamped = std::clamp(semitones, -15, 12);
         if (clamped == 0)
           return 0;
 
@@ -79,7 +79,7 @@ namespace guitarfx
 
       void Configure(int semitones, const StftTransposeOptions& options)
       {
-        const int clamped = std::clamp(semitones, -12, 12);
+        const int clamped = std::clamp(semitones, -15, 12);
         const StftTransposeOptions sanitizedOptions = SanitizeOptions(options);
         const double factor = std::pow(2.0, static_cast<double>(clamped) / 12.0);
         if (clamped == mSemitones

@@ -8,6 +8,7 @@
 #include "dsp/effects/ParametricEQEffect.h"
 #include "dsp/effects/DelayEffect.h"
 #include "dsp/effects/DoublerEffect.h"
+#include "dsp/effects/HybridTransposeEffect.h"
 #include "dsp/effects/PitchShiftEffect.h"
 #include "dsp/effects/StftTransposeEffect.h"
 #include "dsp/effects/TransposeEffect.h"
@@ -114,6 +115,7 @@ namespace guitarfx
     RegisterPitchShiftEffect();
     RegisterTransposeEffect();
     RegisterStftTransposeEffect();
+    RegisterHybridTransposeEffect();
     RegisterChorusEffect();
     RegisterFlangerEffect();
     RegisterPhaserEffect();
