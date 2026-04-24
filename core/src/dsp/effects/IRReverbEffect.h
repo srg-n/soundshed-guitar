@@ -507,7 +507,7 @@ namespace guitarfx
     EffectTypeInfo info;
     info.type = EffectGuids::kReverbIr;
     info.aliases = {"reverb_ir"};
-    info.displayName = "IR Reverb";
+    info.displayName = "Convolution Reverb";
     info.category = "reverb";
     info.description = "Impulse response reverb";
     info.requiresResource = true;
