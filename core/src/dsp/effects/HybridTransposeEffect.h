@@ -17,6 +17,7 @@ namespace guitarfx
     {
       int semitones = 0;
       int latencySamples = 0;
+      int pitchMode = 0;
       int transientHoldSamples = 0;
       double shiftDepth = 0.0;
     };
@@ -35,7 +36,8 @@ namespace guitarfx
         mMaxBlockSize = maxBlockSize;
         mAttackCoeff = ComputeEnvelopeCoeff(0.5);
         mReleaseCoeff = ComputeEnvelopeCoeff(20.0);
-        mToneAlpha = ComputeToneAlpha(1800.0);
+        mToneAlpha = ComputeToneAlpha(2200.0);
+        mSplitAlpha = ComputeToneAlpha(kSplitCutoffHz);
         Configure(semitones, transientHoldMs, transientAssist, brightness);
         Reset();
       }
@@ -49,15 +51,18 @@ namespace guitarfx
         mBrightness = std::clamp(brightness, 0.0, 1.0);
         mConfig = BuildConfig(mSampleRate, mMaxBlockSize, semitones, transientHoldMs);
 
-        const StftTransposeOptions options = BuildPitchOptions();
+        const StftTransposeOptions lowOptions = BuildPitchOptions(false);
+        const StftTransposeOptions highOptions = BuildPitchOptions(true);
         if (!mPitchPrepared)
         {
-          mPitch.Prepare(mSampleRate, mMaxBlockSize, mConfig.semitones, options);
+          mLowPitch.Prepare(mSampleRate, mMaxBlockSize, mConfig.semitones, lowOptions);
+          mHighPitch.Prepare(mSampleRate, mMaxBlockSize, mConfig.semitones, highOptions);
           mPitchPrepared = true;
         }
         else
         {
-          mPitch.Configure(mConfig.semitones, options);
+          mLowPitch.Configure(mConfig.semitones, lowOptions);
+          mHighPitch.Configure(mConfig.semitones, highOptions);
         }
 
         EnsureBuffers();
@@ -66,13 +71,22 @@ namespace guitarfx
       void Reset()
       {
         std::fill(mDelayBuffer.begin(), mDelayBuffer.end(), 0.0f);
+        std::fill(mLowInputBuffer.begin(), mLowInputBuffer.end(), 0.0f);
+        std::fill(mHighInputBuffer.begin(), mHighInputBuffer.end(), 0.0f);
+        std::fill(mLowPitchBuffer.begin(), mLowPitchBuffer.end(), 0.0f);
+        std::fill(mHighPitchBuffer.begin(), mHighPitchBuffer.end(), 0.0f);
         mWritePos = 0;
         mEnvelope = 0.0f;
         mTransientBlend = 0.0f;
         mTransientCountdown = 0;
         mToneLowpass = 0.0f;
+        mInputLowState = 0.0f;
+        mDryLowState = 0.0f;
         if (mPitchPrepared)
-          mPitch.Reset();
+        {
+          mLowPitch.Reset();
+          mHighPitch.Reset();
+        }
       }
 
       void Process(const float *input, float *wet, float *dryAligned, int numSamples)
@@ -80,11 +94,21 @@ namespace guitarfx
         if (!input || !wet || !dryAligned || mDelayBuffer.empty() || numSamples <= 0)
           return;
 
-        if (static_cast<size_t>(numSamples) > mPitchBuffer.size())
-          mPitchBuffer.resize(static_cast<size_t>(numSamples), 0.0f);
+        EnsureBlockBuffers(numSamples);
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+          const float in = input[i];
+          const float low = SplitLow(in, mInputLowState);
+          mLowInputBuffer[static_cast<size_t>(i)] = low;
+          mHighInputBuffer[static_cast<size_t>(i)] = in - low;
+        }
 
         if (mConfig.semitones != 0 && mPitchPrepared)
-          mPitch.Process(input, mPitchBuffer.data(), numSamples);
+        {
+          mLowPitch.Process(mLowInputBuffer.data(), mLowPitchBuffer.data(), numSamples);
+          mHighPitch.Process(mHighInputBuffer.data(), mHighPitchBuffer.data(), numSamples);
+        }
 
         for (int i = 0; i < numSamples; ++i)
         {
@@ -101,15 +125,22 @@ namespace guitarfx
             continue;
           }
 
-          const float pitched = mPitchBuffer[static_cast<size_t>(i)];
-          UpdateTransientState(std::abs(in));
+          const float dryLow = SplitLow(alignedDry, mDryLowState);
+          const float dryHigh = alignedDry - dryLow;
+          const float lowPitched = mLowPitchBuffer[static_cast<size_t>(i)];
+          const float highPitched = mHighPitchBuffer[static_cast<size_t>(i)];
+          UpdateTransientState(std::max(std::abs(alignedDry), std::abs(dryHigh) * 1.5f));
 
-          mToneLowpass += mToneAlpha * (pitched - mToneLowpass);
-          const float compensated = pitched + (pitched - mToneLowpass)
-            * static_cast<float>(mBrightness * 0.45 * mConfig.shiftDepth);
+          mToneLowpass += mToneAlpha * (highPitched - mToneLowpass);
+          const float compensatedHigh = highPitched + (highPitched - mToneLowpass)
+            * static_cast<float>(mBrightness * 0.38 * mConfig.shiftDepth);
 
           const float assist = static_cast<float>(mTransientAssist * mTransientBlend);
-          wet[i] = compensated * (1.0f - assist) + alignedDry * assist;
+          const float lowAssist = assist * static_cast<float>(0.18 + 0.10 * mConfig.shiftDepth);
+          wet[i] = lowPitched * (1.0f - lowAssist)
+            + compensatedHigh * (1.0f - assist)
+            + dryHigh * assist
+            + dryLow * lowAssist;
 
           AdvanceWrite();
         }
@@ -132,18 +163,19 @@ namespace guitarfx
           return config;
 
         config.shiftDepth = std::clamp(-static_cast<double>(config.semitones) / 15.0, 0.0, 1.0);
-        config.latencySamples = StftTransposeChannel::GetExpectedLatencySamples(config.semitones, 0);
+        config.pitchMode = std::abs(config.semitones) >= 7 ? 1 : 0;
+        config.latencySamples = StftTransposeChannel::GetExpectedLatencySamples(config.semitones, config.pitchMode);
         config.transientHoldSamples = std::max(1,
                                                static_cast<int>(std::lround(sampleRate * std::clamp(transientHoldMs, 2.0, 40.0) * 0.001)));
         return config;
       }
 
-      [[nodiscard]] StftTransposeOptions BuildPitchOptions() const
+      [[nodiscard]] StftTransposeOptions BuildPitchOptions(bool highBand) const
       {
         StftTransposeOptions options;
-        options.mode = 0;
-        options.quefrencySeconds = 0.0;
-        options.timbre = 1.0;
+        options.mode = mConfig.pitchMode;
+        options.quefrencySeconds = highBand ? 0.0 : 0.0005;
+        options.timbre = highBand ? 1.08 : 0.96;
         options.normalization = true;
         return options;
       }
@@ -152,7 +184,23 @@ namespace guitarfx
       {
         const size_t bufferSize = static_cast<size_t>(std::max(mConfig.latencySamples + mMaxBlockSize + 8, 4096));
         mDelayBuffer.assign(bufferSize, 0.0f);
-        mPitchBuffer.assign(static_cast<size_t>(std::max(1, mMaxBlockSize)), 0.0f);
+        const size_t blockSize = static_cast<size_t>(std::max(1, mMaxBlockSize));
+        mLowInputBuffer.assign(blockSize, 0.0f);
+        mHighInputBuffer.assign(blockSize, 0.0f);
+        mLowPitchBuffer.assign(blockSize, 0.0f);
+        mHighPitchBuffer.assign(blockSize, 0.0f);
+      }
+
+      void EnsureBlockBuffers(int numSamples)
+      {
+        const size_t blockSize = static_cast<size_t>(std::max(1, numSamples));
+        if (blockSize <= mLowInputBuffer.size())
+          return;
+
+        mLowInputBuffer.resize(blockSize, 0.0f);
+        mHighInputBuffer.resize(blockSize, 0.0f);
+        mLowPitchBuffer.resize(blockSize, 0.0f);
+        mHighPitchBuffer.resize(blockSize, 0.0f);
       }
 
       [[nodiscard]] float ReadDelay(double delaySamples) const
@@ -166,7 +214,6 @@ namespace guitarfx
           return 0.0f;
 
         const double wrapped = WrapBufferPosition(readPos);
-
         const size_t index0 = static_cast<size_t>(wrapped);
         const size_t index1 = (index0 + 1) % mDelayBuffer.size();
         const float frac = static_cast<float>(wrapped - static_cast<double>(index0));
@@ -224,6 +271,13 @@ namespace guitarfx
         return static_cast<float>(1.0 - std::exp(-2.0 * 3.14159265358979323846 * clampedCutoff / std::max(1.0, mSampleRate)));
       }
 
+      [[nodiscard]] float SplitLow(float sample, float &state) const
+      {
+        state += mSplitAlpha * (sample - state);
+        return state;
+      }
+
+      static constexpr double kSplitCutoffHz = 900.0;
       static constexpr float kTransientFloor = 0.01f;
       static constexpr float kTransientTriggerRatio = 1.6f;
 
@@ -233,19 +287,26 @@ namespace guitarfx
       double mBrightness = 0.35;
       HybridTransposeConfig mConfig;
 
-      StftTransposeChannel mPitch;
+      StftTransposeChannel mLowPitch;
+      StftTransposeChannel mHighPitch;
       bool mPitchPrepared = false;
       std::vector<float> mDelayBuffer;
-      std::vector<float> mPitchBuffer;
+      std::vector<float> mLowInputBuffer;
+      std::vector<float> mHighInputBuffer;
+      std::vector<float> mLowPitchBuffer;
+      std::vector<float> mHighPitchBuffer;
       size_t mWritePos = 0;
       float mEnvelope = 0.0f;
       float mTransientBlend = 0.0f;
       int mTransientCountdown = 0;
       float mToneLowpass = 0.0f;
+      float mInputLowState = 0.0f;
+      float mDryLowState = 0.0f;
 
       float mAttackCoeff = 0.0f;
       float mReleaseCoeff = 0.0f;
       float mToneAlpha = 0.0f;
+      float mSplitAlpha = 0.0f;
     };
   } // namespace detail
 
@@ -417,7 +478,7 @@ namespace guitarfx
     info.aliases = {"transpose_hybrid"};
     info.displayName = "Transpose (Hybrid)";
     info.category = "pitch";
-    info.description = "Low-latency downshift transpose with transient-assisted dry alignment";
+    info.description = "Dual-band downshift transpose with adaptive polyphonic sustain shifting and transient-stable attack assist";
     info.requiresResource = false;
     info.parameters = {
       {"semitones", "Semitones", -5.0, -15.0, 0.0, "st", "", false, 1.0},

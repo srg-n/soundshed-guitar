@@ -170,19 +170,20 @@ The repo should not implement the section above verbatim. The first production s
 #### Implementation decision
 
 1. Add a new `transpose_hybrid` effect alongside `transpose` and `transpose_stft` instead of replacing the global transpose default immediately.
-2. Use a **fixed-latency wideband hybrid core** for phase 1: dual moving read heads over a single circular delay line, complementary Hann crossfades, delayed dry alignment, short transient-assist blending, and lightweight brightness compensation.
+2. Use a **fixed-latency dual-band hybrid core** for phase 1: split the signal into low and high bands, shift both bands with the existing low-latency STFT engine, switch deep downshifts to the higher-quality STFT mode automatically, and blend a latency-aligned dry transient assist mainly back into the high band.
 3. Treat the effect as **downshift-only** for now (`-15..0 st`). The phase 1 path should report the maximum wet delay as effect latency and return zero latency when `semitones == 0`.
-4. Defer sub-band splitting, similarity search, and upper-band shift cheats until measurements show that the simpler core is not good enough.
+4. Defer finer sub-band splitting, similarity search, and upper-band shift cheats until measurements show that the dual-band core is not good enough.
 
 #### Phase 1 scope
 
 - Effect type: `Transpose (Hybrid)` / `transpose_hybrid`
 - Parameters: `semitones`, `mix`, `transientAssist`, `transientHoldMs`, `brightness`
 - Dry/wet rule: mix against an explicitly delayed dry path inside the effect, not an average allpass estimate
-- Validation: reported latency, finite output under live parameter changes, octave-down sanity on single notes, and graph-level latency propagation
+- Quality rule: keep low fundamentals fully shifted while using the dry transient assist mainly to stabilize pick attack brightness and onset feel
+- Validation: reported latency, finite output under live parameter changes, octave-down sanity on single notes, polyphonic chord stability, and transient stability on bright pluck-like onsets
 
 #### Later phases
 
-- Add 2-band or 3-band splitting if wideband beating is still too obvious on sustained dyads and triads
+- Add 3-band splitting if dual-band beating is still too obvious on sustained dyads and triads
 - Compare onset retention and cents error against the current Signalsmith and STFT implementations
 - Only consider switching the global transpose default after CPU, latency, and artifact measurements are captured at `48 kHz / 64` and `48 kHz / 256`

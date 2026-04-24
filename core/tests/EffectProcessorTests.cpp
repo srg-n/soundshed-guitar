@@ -1353,80 +1353,155 @@ bool TestHybridTransposeSpecific()
   std::cout << "\n--- HybridTransposeEffect Tests ---\n";
 
   auto& registry = guitarfx::EffectRegistry::Instance();
-  auto effect = registry.Create(guitarfx::EffectGuids::kTransposeHybrid);
+  auto createHybrid = [&](double transientAssist = 0.65)
+  {
+    auto effect = registry.Create(guitarfx::EffectGuids::kTransposeHybrid);
+    if (!effect)
+      return effect;
+    effect->Prepare(kTestSampleRate, kTestBlockSize);
+    effect->SetParam("mix", 1.0);
+    effect->SetParam("transientAssist", transientAssist);
+    return effect;
+  };
+
+  auto renderEffect = [&](guitarfx::EffectProcessor &effect,
+                          const std::vector<float> &input,
+                          std::vector<float> &output)
+  {
+    const int totalSamples = static_cast<int>(input.size());
+    std::vector<float> blockOutL(kTestBlockSize, 0.0f);
+    std::vector<float> blockOutR(kTestBlockSize, 0.0f);
+    float* outputs[2] = {blockOutL.data(), blockOutR.data()};
+
+    for (int block = 0; block < totalSamples / kTestBlockSize; ++block)
+    {
+      std::fill(blockOutL.begin(), blockOutL.end(), 0.0f);
+      std::fill(blockOutR.begin(), blockOutR.end(), 0.0f);
+      float* inputs[2] = {
+        const_cast<float*>(input.data()) + block * kTestBlockSize,
+        const_cast<float*>(input.data()) + block * kTestBlockSize
+      };
+      effect.Process(inputs, outputs, kTestBlockSize);
+      std::copy(blockOutL.begin(), blockOutL.end(), output.begin() + static_cast<size_t>(block * kTestBlockSize));
+    }
+  };
+
+  auto effect = createHybrid();
   if (!effect)
   {
     std::cout << "  FAIL: Could not create hybrid transpose effect\n";
     return false;
   }
 
-  effect->Prepare(kTestSampleRate, kTestBlockSize);
-  effect->SetParam("mix", 1.0);
-
   const int bypassLatency = effect->GetLatencySamples();
-
   effect->SetParam("semitones", -3.0);
   const int lightLatency = effect->GetLatencySamples();
-
   effect->SetParam("semitones", -12.0);
   const int deepLatency = effect->GetLatencySamples();
 
+  const int expectedDeepLatency = guitarfx::detail::StftTransposeChannel::GetExpectedLatencySamples(-12, 1);
   const int latencyBlocks = std::max(0, (deepLatency + kTestBlockSize - 1) / kTestBlockSize);
   const int blocksToProcess = latencyBlocks + 12;
   const int totalSamples = blocksToProcess * kTestBlockSize;
 
-  std::vector<float> inputL(static_cast<size_t>(totalSamples), 0.0f);
-  std::vector<float> inputR(static_cast<size_t>(totalSamples), 0.0f);
-  std::vector<float> outputL(static_cast<size_t>(totalSamples), 0.0f);
-  std::vector<float> outputR(static_cast<size_t>(totalSamples), 0.0f);
-  std::vector<float> blockOutL(kTestBlockSize, 0.0f);
-  std::vector<float> blockOutR(kTestBlockSize, 0.0f);
-
-  GenerateSineWave(inputL, 440.0, 0.5);
-  GenerateSineWave(inputR, 440.0, 0.5);
-
-  float* outputs[2] = {blockOutL.data(), blockOutR.data()};
-  for (int block = 0; block < blocksToProcess; ++block)
-  {
-    std::fill(blockOutL.begin(), blockOutL.end(), 0.0f);
-    std::fill(blockOutR.begin(), blockOutR.end(), 0.0f);
-    float* inputs[2] = {
-      inputL.data() + block * kTestBlockSize,
-      inputR.data() + block * kTestBlockSize
-    };
-    effect->Process(inputs, outputs, kTestBlockSize);
-    std::copy(blockOutL.begin(), blockOutL.end(), outputL.begin() + static_cast<size_t>(block * kTestBlockSize));
-    std::copy(blockOutR.begin(), blockOutR.end(), outputR.begin() + static_cast<size_t>(block * kTestBlockSize));
-  }
+  std::vector<float> sineInput(static_cast<size_t>(totalSamples), 0.0f);
+  std::vector<float> sineOutput(static_cast<size_t>(totalSamples), 0.0f);
+  GenerateSineWave(sineInput, 440.0, 0.5);
+  renderEffect(*effect, sineInput, sineOutput);
 
   const size_t warmupStart = static_cast<size_t>(std::min(totalSamples - 1,
     deepLatency + kTestBlockSize * 2));
-  std::vector<float> steadyState(outputL.begin() + static_cast<std::ptrdiff_t>(warmupStart), outputL.end());
-  const auto analysis = AnalyzeSignal(steadyState);
+  std::vector<float> steadyState(sineOutput.begin() + static_cast<std::ptrdiff_t>(warmupStart), sineOutput.end());
+  const auto sineAnalysis = AnalyzeSignal(steadyState);
   const double detectedFrequency = EstimateFrequencyFromPositiveZeroCrossings(steadyState, kTestSampleRate);
 
+  auto chordEffect = createHybrid();
+  chordEffect->SetParam("semitones", -12.0);
+  std::vector<float> chordInput(static_cast<size_t>(totalSamples), 0.0f);
+  std::vector<float> chordOutput(static_cast<size_t>(totalSamples), 0.0f);
+  for (size_t i = 0; i < chordInput.size(); ++i)
+  {
+    const double time = static_cast<double>(i) / kTestSampleRate;
+    chordInput[i] = static_cast<float>(0.24 * std::sin(2.0 * kPi * 440.0 * time)
+      + 0.18 * std::sin(2.0 * kPi * 554.3652619537 * time)
+      + 0.14 * std::sin(2.0 * kPi * 659.2551138257 * time));
+  }
+  renderEffect(*chordEffect, chordInput, chordOutput);
+  std::vector<float> chordSteady(chordOutput.begin() + static_cast<std::ptrdiff_t>(warmupStart), chordOutput.end());
+  const auto chordAnalysis = AnalyzeSignal(chordSteady);
+
+  auto assistedEffect = createHybrid(0.85);
+  assistedEffect->SetParam("semitones", -12.0);
+
+  const int transientBlocks = latencyBlocks + 8;
+  const int transientSamples = transientBlocks * kTestBlockSize;
+  std::vector<float> transientInput(static_cast<size_t>(transientSamples), 0.0f);
+  for (int block = latencyBlocks + 2; block < transientBlocks; ++block)
+  {
+    const bool gateOn = (block % 3) == 0 || (block % 3) == 1;
+    if (!gateOn)
+      continue;
+    for (int i = 0; i < kTestBlockSize; ++i)
+    {
+      const size_t index = static_cast<size_t>(block * kTestBlockSize + i);
+      const double time = static_cast<double>(index) / kTestSampleRate;
+      double sample = 0.55 * std::sin(2.0 * kPi * 440.0 * time);
+      if (i < 48)
+      {
+        const double burstEnv = std::exp(-static_cast<double>(i) / 14.0);
+        sample += 0.22 * burstEnv * std::sin(2.0 * kPi * 3200.0 * time);
+      }
+      transientInput[index] = static_cast<float>(sample);
+    }
+  }
+  std::vector<float> assistedOutput(static_cast<size_t>(transientSamples), 0.0f);
+  renderEffect(*assistedEffect, transientInput, assistedOutput);
+
+  const size_t onsetStart = static_cast<size_t>(std::min(transientSamples - 1,
+    (latencyBlocks + 2) * kTestBlockSize + deepLatency));
+  const size_t onsetEnd = std::min(assistedOutput.size(), onsetStart + static_cast<size_t>(kTestBlockSize));
+  const size_t steadyStart = std::min(assistedOutput.size() - 1, onsetStart + static_cast<size_t>(kTestBlockSize * 3));
+  const size_t steadyEnd = std::min(assistedOutput.size(), steadyStart + static_cast<size_t>(kTestBlockSize));
+  double onsetPeak = 0.0;
+  double steadyPeak = 0.0;
+  for (size_t i = onsetStart; i < onsetEnd; ++i)
+  {
+    onsetPeak = std::max(onsetPeak,
+      std::abs(static_cast<double>(assistedOutput[i])));
+  }
+  for (size_t i = steadyStart; i < steadyEnd; ++i)
+  {
+    steadyPeak = std::max(steadyPeak,
+      std::abs(static_cast<double>(assistedOutput[i])));
+  }
+
   const bool bypassLatencyClears = bypassLatency == 0;
-  const bool deepShiftIncreasesLatency = lightLatency > 0 && deepLatency >= lightLatency;
-  const bool latencyStaysBelowTwoBlocks = deepLatency > 0 && deepLatency <= kTestBlockSize * 2;
-  const bool outputHealthy = !analysis.hasNaN && !analysis.hasInf && !analysis.isAllZeros && analysis.peakValue > 0.05;
+  const bool deepShiftSelectsQualityMode = lightLatency > 0 && deepLatency == expectedDeepLatency && deepLatency > lightLatency;
+  const bool sineOutputHealthy = !sineAnalysis.hasNaN && !sineAnalysis.hasInf && !sineAnalysis.isAllZeros && sineAnalysis.peakValue > 0.05;
   const bool octaveDownDetected = detectedFrequency >= 200.0 && detectedFrequency <= 240.0;
+  const bool chordOutputHealthy = !chordAnalysis.hasNaN && !chordAnalysis.hasInf && !chordAnalysis.isAllZeros && chordAnalysis.peakValue > 0.05;
+  const bool transientOnsetStable = onsetPeak > 0.03 && steadyPeak > 0.03
+    && onsetPeak < steadyPeak * 2.5 && onsetPeak > steadyPeak * 0.35;
 
   std::cout << "  " << std::left << std::setw(44) << "0 st bypass clears reported latency:" << (bypassLatencyClears ? "PASS" : "FAIL")
             << " (latency=" << bypassLatency << ")\n";
-  std::cout << "  " << std::left << std::setw(44) << "Deeper shifts keep or raise latency:" << (deepShiftIncreasesLatency ? "PASS" : "FAIL")
-            << " (-3=" << lightLatency << ", -12=" << deepLatency << ")\n";
-  std::cout << "  " << std::left << std::setw(44) << "Hybrid latency stays within two blocks:" << (latencyStaysBelowTwoBlocks ? "PASS" : "FAIL")
-            << " (latency=" << deepLatency << ")\n";
-  std::cout << "  " << std::left << std::setw(44) << "Steady-state output remains valid:" << (outputHealthy ? "PASS" : "FAIL")
-            << " (peak=" << std::fixed << std::setprecision(3) << analysis.peakValue << ")\n";
+  std::cout << "  " << std::left << std::setw(44) << "Deep shifts switch to quality latency path:" << (deepShiftSelectsQualityMode ? "PASS" : "FAIL")
+            << " (-3=" << lightLatency << ", -12=" << deepLatency << ", expected=" << expectedDeepLatency << ")\n";
+  std::cout << "  " << std::left << std::setw(44) << "Steady-state sine output remains valid:" << (sineOutputHealthy ? "PASS" : "FAIL")
+            << " (peak=" << std::fixed << std::setprecision(3) << sineAnalysis.peakValue << ")\n";
   std::cout << "  " << std::left << std::setw(44) << "-12 st lands near one octave down:" << (octaveDownDetected ? "PASS" : "FAIL")
             << " (freq=" << std::fixed << std::setprecision(1) << detectedFrequency << " Hz)\n";
+  std::cout << "  " << std::left << std::setw(44) << "Triad input remains finite and audible:" << (chordOutputHealthy ? "PASS" : "FAIL")
+            << " (peak=" << std::fixed << std::setprecision(3) << chordAnalysis.peakValue << ")\n";
+  std::cout << "  " << std::left << std::setw(44) << "Bright transient stays audible and bounded:" << (transientOnsetStable ? "PASS" : "FAIL")
+            << " (onsetPeak=" << std::fixed << std::setprecision(3) << onsetPeak << ", steadyPeak=" << steadyPeak << ")\n";
 
   return bypassLatencyClears
-    && deepShiftIncreasesLatency
-    && latencyStaysBelowTwoBlocks
-    && outputHealthy
-    && octaveDownDetected;
+    && deepShiftSelectsQualityMode
+    && sineOutputHealthy
+    && octaveDownDetected
+    && chordOutputHealthy
+    && transientOnsetStable;
 }
 
 bool TestStftTransposeSpecific()
