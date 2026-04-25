@@ -1396,9 +1396,12 @@ bool TestHybridTransposeSpecific()
   const int bypassLatency = effect->GetLatencySamples();
   effect->SetParam("semitones", -3.0);
   const int lightLatency = effect->GetLatencySamples();
+  effect->SetParam("semitones", -4.0);
+  const int mediumLatency = effect->GetLatencySamples();
   effect->SetParam("semitones", -12.0);
   const int deepLatency = effect->GetLatencySamples();
 
+  const int expectedMediumLatency = guitarfx::detail::StftTransposeChannel::GetExpectedLatencySamples(-4, 1);
   const int expectedDeepLatency = guitarfx::detail::StftTransposeChannel::GetExpectedLatencySamples(-12, 1);
   const int latencyBlocks = std::max(0, (deepLatency + kTestBlockSize - 1) / kTestBlockSize);
   const int blocksToProcess = latencyBlocks + 12;
@@ -1476,7 +1479,8 @@ bool TestHybridTransposeSpecific()
   }
 
   const bool bypassLatencyClears = bypassLatency == 0;
-  const bool deepShiftSelectsQualityMode = lightLatency > 0 && deepLatency == expectedDeepLatency && deepLatency > lightLatency;
+  const bool mediumShiftSelectsQualityMode = lightLatency > 0 && mediumLatency == expectedMediumLatency && mediumLatency > lightLatency;
+  const bool deepShiftSelectsQualityMode = deepLatency == expectedDeepLatency && deepLatency >= mediumLatency;
   const bool sineOutputHealthy = !sineAnalysis.hasNaN && !sineAnalysis.hasInf && !sineAnalysis.isAllZeros && sineAnalysis.peakValue > 0.05;
   const bool octaveDownDetected = detectedFrequency >= 200.0 && detectedFrequency <= 240.0;
   const bool chordOutputHealthy = !chordAnalysis.hasNaN && !chordAnalysis.hasInf && !chordAnalysis.isAllZeros && chordAnalysis.peakValue > 0.05;
@@ -1485,8 +1489,10 @@ bool TestHybridTransposeSpecific()
 
   std::cout << "  " << std::left << std::setw(44) << "0 st bypass clears reported latency:" << (bypassLatencyClears ? "PASS" : "FAIL")
             << " (latency=" << bypassLatency << ")\n";
-  std::cout << "  " << std::left << std::setw(44) << "Deep shifts switch to quality latency path:" << (deepShiftSelectsQualityMode ? "PASS" : "FAIL")
-            << " (-3=" << lightLatency << ", -12=" << deepLatency << ", expected=" << expectedDeepLatency << ")\n";
+  std::cout << "  " << std::left << std::setw(44) << "Medium shifts use quality latency path:" << (mediumShiftSelectsQualityMode ? "PASS" : "FAIL")
+            << " (-3=" << lightLatency << ", -4=" << mediumLatency << ", expected=" << expectedMediumLatency << ")\n";
+  std::cout << "  " << std::left << std::setw(44) << "Deep shifts stay on quality latency path:" << (deepShiftSelectsQualityMode ? "PASS" : "FAIL")
+            << " (-12=" << deepLatency << ", expected=" << expectedDeepLatency << ")\n";
   std::cout << "  " << std::left << std::setw(44) << "Steady-state sine output remains valid:" << (sineOutputHealthy ? "PASS" : "FAIL")
             << " (peak=" << std::fixed << std::setprecision(3) << sineAnalysis.peakValue << ")\n";
   std::cout << "  " << std::left << std::setw(44) << "-12 st lands near one octave down:" << (octaveDownDetected ? "PASS" : "FAIL")
@@ -1498,10 +1504,78 @@ bool TestHybridTransposeSpecific()
 
   return bypassLatencyClears
     && deepShiftSelectsQualityMode
+    && mediumShiftSelectsQualityMode
     && sineOutputHealthy
     && octaveDownDetected
     && chordOutputHealthy
     && transientOnsetStable;
+}
+
+bool TestHybridTransposeLiveChangesSpecific()
+{
+  std::cout << "\n--- HybridTransposeEffect Live Change Tests ---\n";
+
+  auto& registry = guitarfx::EffectRegistry::Instance();
+  auto effect = registry.Create(guitarfx::EffectGuids::kTransposeHybrid);
+  if (!effect)
+  {
+    std::cout << "  FAIL: Could not create hybrid transpose effect\n";
+    return false;
+  }
+
+  effect->Prepare(kTestSampleRate, kTestBlockSize);
+  effect->SetParam("mix", 1.0);
+
+  std::vector<float> inputL(kTestBlockSize, 0.0f);
+  std::vector<float> inputR(kTestBlockSize, 0.0f);
+  std::vector<float> outputL(kTestBlockSize, 0.0f);
+  std::vector<float> outputR(kTestBlockSize, 0.0f);
+  GenerateSineWave(inputL, 440.0, 0.5);
+  GenerateSineWave(inputR, 440.0, 0.5);
+
+  float* inputs[2] = {inputL.data(), inputR.data()};
+  float* outputs[2] = {outputL.data(), outputR.data()};
+
+  const std::vector<int> semitoneSequence = {0, -3, -12, -5, -15, -2, 0, -9, -1, 0};
+  bool allBlocksHealthy = true;
+  bool allBlocksBounded = true;
+  bool latencyTracksTarget = true;
+
+  for (const int semitones : semitoneSequence)
+  {
+    effect->SetParam("semitones", static_cast<double>(semitones));
+
+    const int expectedLatency = (semitones == 0)
+      ? 0
+      : guitarfx::detail::StftTransposeChannel::GetExpectedLatencySamples(semitones, guitarfx::detail::GetHybridTransposePitchMode(semitones));
+    const int reportedLatency = effect->GetLatencySamples();
+    latencyTracksTarget = latencyTracksTarget && (reportedLatency == expectedLatency);
+
+    for (int block = 0; block < 4; ++block)
+    {
+      std::fill(outputL.begin(), outputL.end(), 0.0f);
+      std::fill(outputR.begin(), outputR.end(), 0.0f);
+      effect->Process(inputs, outputs, kTestBlockSize);
+
+      const auto leftAnalysis = AnalyzeSignal(outputL);
+      const auto rightAnalysis = AnalyzeSignal(outputR);
+      allBlocksHealthy = allBlocksHealthy
+        && !leftAnalysis.hasNaN && !leftAnalysis.hasInf
+        && !rightAnalysis.hasNaN && !rightAnalysis.hasInf;
+      allBlocksBounded = allBlocksBounded
+        && leftAnalysis.peakValue < 4.0
+        && rightAnalysis.peakValue < 4.0;
+    }
+  }
+
+  std::cout << "  " << std::left << std::setw(44) << "Reported latency tracks requested target:" 
+            << (latencyTracksTarget ? "PASS" : "FAIL") << "\n";
+  std::cout << "  " << std::left << std::setw(44) << "Rapid semitone changes stay finite:" 
+            << (allBlocksHealthy ? "PASS" : "FAIL") << "\n";
+  std::cout << "  " << std::left << std::setw(44) << "Rapid semitone changes stay bounded:" 
+            << (allBlocksBounded ? "PASS" : "FAIL") << "\n";
+
+  return latencyTracksTarget && allBlocksHealthy && allBlocksBounded;
 }
 
 bool TestStftTransposeSpecific()
@@ -1822,6 +1896,9 @@ int main()
     return 1;
 
   if (!TestHybridTransposeSpecific())
+    return 1;
+
+  if (!TestHybridTransposeLiveChangesSpecific())
     return 1;
 
   if (!TestPitchShiftLatencySpecific())

@@ -361,7 +361,7 @@ High-quality transpose effect optimized for integer semitone steps using Signals
 | `mix` | 0.0–1.0 | 1.0 | — |
 
 ### Transpose (Hybrid) (`transpose_hybrid`)
-Low-latency hybrid transpose path for down-tuning. Uses a dual-band STFT sustain path, automatically switches deeper downshifts to the more stable polyphonic analysis mode, and blends in a latency-aligned dry transient assist to keep pick attacks tighter without leaving the low fundamentals unshifted.
+Low-latency hybrid transpose path for down-tuning. Uses a dual-band STFT sustain path, switches medium and deeper downshifts to the more stable polyphonic analysis mode, and blends in a latency-aligned dry transient assist to keep pick attacks tighter without leaving the low fundamentals unshifted. Live semitone changes fade the reconfigured wet path back in to reduce clicks and STFT warmup artifacts.
 
 | Parameter | Range | Default | Unit |
 |-----------|-------|---------|------|

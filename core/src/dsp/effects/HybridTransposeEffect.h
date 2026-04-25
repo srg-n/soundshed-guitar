@@ -6,6 +6,7 @@
 #include "dsp/effects/StftTransposeEffect.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <vector>
 
@@ -13,6 +14,13 @@ namespace guitarfx
 {
   namespace detail
   {
+    inline constexpr int kHybridTransposeQualityModeThresholdSemitones = 4;
+
+    [[nodiscard]] inline int GetHybridTransposePitchMode(int semitones)
+    {
+      return std::abs(std::clamp(semitones, -15, 0)) >= kHybridTransposeQualityModeThresholdSemitones ? 1 : 0;
+    }
+
     struct HybridTransposeConfig
     {
       int semitones = 0;
@@ -47,6 +55,8 @@ namespace guitarfx
                      double transientAssist,
                      double brightness)
       {
+        const HybridTransposeConfig previousConfig = mConfig;
+        const bool wasPitchPrepared = mPitchPrepared;
         mTransientAssist = std::clamp(transientAssist, 0.0, 1.0);
         mBrightness = std::clamp(brightness, 0.0, 1.0);
         mConfig = BuildConfig(mSampleRate, mMaxBlockSize, semitones, transientHoldMs);
@@ -66,6 +76,15 @@ namespace guitarfx
         }
 
         EnsureBuffers();
+
+        if (wasPitchPrepared
+          && (previousConfig.semitones != mConfig.semitones
+            || previousConfig.latencySamples != mConfig.latencySamples
+            || previousConfig.pitchMode != mConfig.pitchMode))
+        {
+          mReconfigurationFadeSamples = std::max(1, static_cast<int>(std::lround(mSampleRate * 0.006)));
+          mReconfigurationFadeRemaining = mReconfigurationFadeSamples;
+        }
       }
 
       void Reset()
@@ -82,6 +101,7 @@ namespace guitarfx
         mToneLowpass = 0.0f;
         mInputLowState = 0.0f;
         mDryLowState = 0.0f;
+        mReconfigurationFadeRemaining = 0;
         if (mPitchPrepared)
         {
           mLowPitch.Reset();
@@ -142,6 +162,14 @@ namespace guitarfx
             + dryHigh * assist
             + dryLow * lowAssist;
 
+          if (mReconfigurationFadeRemaining > 0)
+          {
+            const float wetWeight = 1.0f - static_cast<float>(mReconfigurationFadeRemaining)
+              / static_cast<float>(std::max(1, mReconfigurationFadeSamples));
+            wet[i] = alignedDry * (1.0f - wetWeight) + wet[i] * wetWeight;
+            --mReconfigurationFadeRemaining;
+          }
+
           AdvanceWrite();
         }
       }
@@ -163,7 +191,7 @@ namespace guitarfx
           return config;
 
         config.shiftDepth = std::clamp(-static_cast<double>(config.semitones) / 15.0, 0.0, 1.0);
-        config.pitchMode = std::abs(config.semitones) >= 7 ? 1 : 0;
+        config.pitchMode = GetHybridTransposePitchMode(config.semitones);
         config.latencySamples = StftTransposeChannel::GetExpectedLatencySamples(config.semitones, config.pitchMode);
         config.transientHoldSamples = std::max(1,
                                                static_cast<int>(std::lround(sampleRate * std::clamp(transientHoldMs, 2.0, 40.0) * 0.001)));
@@ -183,12 +211,18 @@ namespace guitarfx
       void EnsureBuffers()
       {
         const size_t bufferSize = static_cast<size_t>(std::max(mConfig.latencySamples + mMaxBlockSize + 8, 4096));
-        mDelayBuffer.assign(bufferSize, 0.0f);
+        if (mDelayBuffer.size() < bufferSize)
+          mDelayBuffer.resize(bufferSize, 0.0f);
+
         const size_t blockSize = static_cast<size_t>(std::max(1, mMaxBlockSize));
-        mLowInputBuffer.assign(blockSize, 0.0f);
-        mHighInputBuffer.assign(blockSize, 0.0f);
-        mLowPitchBuffer.assign(blockSize, 0.0f);
-        mHighPitchBuffer.assign(blockSize, 0.0f);
+        if (mLowInputBuffer.size() < blockSize)
+          mLowInputBuffer.resize(blockSize, 0.0f);
+        if (mHighInputBuffer.size() < blockSize)
+          mHighInputBuffer.resize(blockSize, 0.0f);
+        if (mLowPitchBuffer.size() < blockSize)
+          mLowPitchBuffer.resize(blockSize, 0.0f);
+        if (mHighPitchBuffer.size() < blockSize)
+          mHighPitchBuffer.resize(blockSize, 0.0f);
       }
 
       void EnsureBlockBuffers(int numSamples)
@@ -302,6 +336,8 @@ namespace guitarfx
       float mToneLowpass = 0.0f;
       float mInputLowState = 0.0f;
       float mDryLowState = 0.0f;
+      int mReconfigurationFadeSamples = 1;
+      int mReconfigurationFadeRemaining = 0;
 
       float mAttackCoeff = 0.0f;
       float mReleaseCoeff = 0.0f;
@@ -326,8 +362,16 @@ namespace guitarfx
       mDryR.assign(static_cast<size_t>(maxBlockSize), 0.0f);
       mZero.assign(static_cast<size_t>(maxBlockSize), 0.0f);
 
-      mLeft.Prepare(sampleRate, maxBlockSize, mSemitones, mTransientHoldMs, mTransientAssist, mBrightness);
-      mRight.Prepare(sampleRate, maxBlockSize, mSemitones, mTransientHoldMs, mTransientAssist, mBrightness);
+      mActiveSemitones = static_cast<int>(std::round(std::clamp(mRequestedSemitones.load(std::memory_order_relaxed), -15.0, 0.0)));
+      mActiveMix = std::clamp(mRequestedMix.load(std::memory_order_relaxed), 0.0, 1.0);
+      mActiveTransientAssist = std::clamp(mRequestedTransientAssist.load(std::memory_order_relaxed), 0.0, 1.0);
+      mActiveTransientHoldMs = std::clamp(mRequestedTransientHoldMs.load(std::memory_order_relaxed), 2.0, 40.0);
+      mActiveBrightness = std::clamp(mRequestedBrightness.load(std::memory_order_relaxed), 0.0, 1.0);
+      mParamChangePending.store(false, std::memory_order_relaxed);
+
+      mLeft.Prepare(sampleRate, maxBlockSize, mActiveSemitones, mActiveTransientHoldMs, mActiveTransientAssist, mActiveBrightness);
+      mRight.Prepare(sampleRate, maxBlockSize, mActiveSemitones, mActiveTransientHoldMs, mActiveTransientAssist, mActiveBrightness);
+      mReportedLatencySamples.store(mLeft.GetLatencySamples(), std::memory_order_relaxed);
       mConfigured = true;
       Reset();
     }
@@ -349,7 +393,9 @@ namespace guitarfx
       if (!mConfigured)
         return;
 
-      if (mSemitones == 0)
+      ApplyPendingRealtimeParams();
+
+      if (mActiveSemitones == 0)
       {
         for (int ch = 0; ch < 2; ++ch)
         {
@@ -377,8 +423,8 @@ namespace guitarfx
       mLeft.Process(leftInput, mWetL.data(), mDryL.data(), numSamples);
       mRight.Process(rightInput, mWetR.data(), mDryR.data(), numSamples);
 
-      const float dryMix = static_cast<float>(1.0 - mMix);
-      const float wetMix = static_cast<float>(mMix);
+      const float dryMix = static_cast<float>(1.0 - mActiveMix);
+      const float wetMix = static_cast<float>(mActiveMix);
       for (int i = 0; i < numSamples; ++i)
       {
         if (outputs[0])
@@ -392,31 +438,31 @@ namespace guitarfx
     {
       if (key == "semitones")
       {
-        const int semitones = static_cast<int>(std::round(std::clamp(value, -15.0, 0.0)));
-        if (semitones != mSemitones)
-        {
-          mSemitones = semitones;
-          ReconfigureChannels();
-        }
+        mRequestedSemitones.store(std::clamp(value, -15.0, 0.0), std::memory_order_relaxed);
+        mReportedLatencySamples.store(detail::StftTransposeChannel::GetExpectedLatencySamples(
+                                        static_cast<int>(std::round(std::clamp(value, -15.0, 0.0))),
+                                        detail::GetHybridTransposePitchMode(static_cast<int>(std::round(std::clamp(value, -15.0, 0.0))))),
+                                      std::memory_order_relaxed);
+        mParamChangePending.store(true, std::memory_order_release);
       }
       else if (key == "mix")
       {
-        mMix = std::clamp(value, 0.0, 1.0);
+        mRequestedMix.store(std::clamp(value, 0.0, 1.0), std::memory_order_relaxed);
       }
       else if (key == "transientAssist")
       {
-        mTransientAssist = std::clamp(value, 0.0, 1.0);
-        ReconfigureChannels();
+        mRequestedTransientAssist.store(std::clamp(value, 0.0, 1.0), std::memory_order_relaxed);
+        mParamChangePending.store(true, std::memory_order_release);
       }
       else if (key == "transientHoldMs")
       {
-        mTransientHoldMs = std::clamp(value, 2.0, 40.0);
-        ReconfigureChannels();
+        mRequestedTransientHoldMs.store(std::clamp(value, 2.0, 40.0), std::memory_order_relaxed);
+        mParamChangePending.store(true, std::memory_order_release);
       }
       else if (key == "brightness")
       {
-        mBrightness = std::clamp(value, 0.0, 1.0);
-        ReconfigureChannels();
+        mRequestedBrightness.store(std::clamp(value, 0.0, 1.0), std::memory_order_relaxed);
+        mParamChangePending.store(true, std::memory_order_release);
       }
     }
 
@@ -425,15 +471,15 @@ namespace guitarfx
     [[nodiscard]] double GetParam(const std::string &key) const override
     {
       if (key == "semitones")
-        return static_cast<double>(mSemitones);
+        return mRequestedSemitones.load(std::memory_order_relaxed);
       if (key == "mix")
-        return mMix;
+        return mRequestedMix.load(std::memory_order_relaxed);
       if (key == "transientAssist")
-        return mTransientAssist;
+        return mRequestedTransientAssist.load(std::memory_order_relaxed);
       if (key == "transientHoldMs")
-        return mTransientHoldMs;
+        return mRequestedTransientHoldMs.load(std::memory_order_relaxed);
       if (key == "brightness")
-        return mBrightness;
+        return mRequestedBrightness.load(std::memory_order_relaxed);
       return 0.0;
     }
 
@@ -442,25 +488,58 @@ namespace guitarfx
 
     [[nodiscard]] int GetLatencySamples() const override
     {
-      return mConfigured ? mLeft.GetLatencySamples() : 0;
+      return mConfigured ? mReportedLatencySamples.load(std::memory_order_relaxed) : 0;
     }
 
   private:
-    void ReconfigureChannels()
+    void ApplyPendingRealtimeParams()
     {
       if (!mConfigured)
         return;
 
-      mLeft.Configure(mSemitones, mTransientHoldMs, mTransientAssist, mBrightness);
-      mRight.Configure(mSemitones, mTransientHoldMs, mTransientAssist, mBrightness);
+      mActiveMix = std::clamp(mRequestedMix.load(std::memory_order_relaxed), 0.0, 1.0);
+
+      const bool paramChanged = mParamChangePending.exchange(false, std::memory_order_acq_rel);
+      if (!paramChanged)
+        return;
+
+      const int requestedSemitones = static_cast<int>(std::round(std::clamp(mRequestedSemitones.load(std::memory_order_acquire), -15.0, 0.0)));
+      const double requestedTransientAssist = std::clamp(mRequestedTransientAssist.load(std::memory_order_acquire), 0.0, 1.0);
+      const double requestedTransientHoldMs = std::clamp(mRequestedTransientHoldMs.load(std::memory_order_acquire), 2.0, 40.0);
+      const double requestedBrightness = std::clamp(mRequestedBrightness.load(std::memory_order_acquire), 0.0, 1.0);
+
+      if (requestedSemitones == mActiveSemitones
+          && std::abs(requestedTransientAssist - mActiveTransientAssist) < 1.0e-9
+          && std::abs(requestedTransientHoldMs - mActiveTransientHoldMs) < 1.0e-9
+          && std::abs(requestedBrightness - mActiveBrightness) < 1.0e-9)
+      {
+        return;
+      }
+
+      mActiveSemitones = requestedSemitones;
+      mActiveTransientAssist = requestedTransientAssist;
+      mActiveTransientHoldMs = requestedTransientHoldMs;
+      mActiveBrightness = requestedBrightness;
+
+      mLeft.Configure(mActiveSemitones, mActiveTransientHoldMs, mActiveTransientAssist, mActiveBrightness);
+      mRight.Configure(mActiveSemitones, mActiveTransientHoldMs, mActiveTransientAssist, mActiveBrightness);
+      mReportedLatencySamples.store(mLeft.GetLatencySamples(), std::memory_order_relaxed);
     }
 
-    int mSemitones = 0;
-    double mMix = 1.0;
-    double mTransientAssist = 0.65;
-    double mTransientHoldMs = 12.0;
-    double mBrightness = 0.35;
+    std::atomic<double> mRequestedSemitones{0.0};
+    std::atomic<double> mRequestedMix{1.0};
+    std::atomic<double> mRequestedTransientAssist{0.65};
+    std::atomic<double> mRequestedTransientHoldMs{12.0};
+    std::atomic<double> mRequestedBrightness{0.35};
+    std::atomic<bool> mParamChangePending{false};
+    std::atomic<int> mReportedLatencySamples{0};
     bool mConfigured = false;
+
+    int mActiveSemitones = 0;
+    double mActiveMix = 1.0;
+    double mActiveTransientAssist = 0.65;
+    double mActiveTransientHoldMs = 12.0;
+    double mActiveBrightness = 0.35;
 
     detail::HybridTransposeChannel mLeft;
     detail::HybridTransposeChannel mRight;
