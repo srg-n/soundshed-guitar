@@ -63,6 +63,9 @@ namespace guitarfx
     void SetNodeConfig(const std::string &nodeId, const std::string &key, const std::string &value);
     void SetNodeConfigForType(const std::string &type, const std::string &key, const std::string &value);
     bool LoadNodeResource(const std::string &nodeId, const ResourceRef &ref);
+    [[nodiscard]] std::string GetNodeConfig(const std::string &nodeId, const std::string &key) const;
+    [[nodiscard]] EffectProcessor *GetNodeProcessor(const std::string &nodeId);
+    [[nodiscard]] const EffectProcessor *GetNodeProcessor(const std::string &nodeId) const;
 
     // Queries
     [[nodiscard]] std::string FindFirstNodeOfType(const std::string &type) const;
@@ -107,6 +110,7 @@ namespace guitarfx
     void CreateProcessors();
     void AllocateBuffers(int maxBlockSize);
     [[nodiscard]] NodeState *FindNodeState(const std::string &id);
+    [[nodiscard]] const NodeState *FindNodeState(const std::string &id) const;
 
     SignalGraph mGraph;
     ResourceLibrary *mResourceLibrary = nullptr;

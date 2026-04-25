@@ -179,6 +179,21 @@ Quality levels: 0=Economy, 1=Standard, 2=High, 3=Full
 
 **Resource**: Audio file (`.wav`)
 
+### Plugin Host (`plugin_host`)
+JUCE-only utility effect that hosts an external plugin supported by JUCE's plugin hosting APIs. It is registered by the JUCE adapter, so core-only/iPlug2 builds do not expose this effect type.
+
+| Parameter | Range | Default | Unit |
+|-----------|-------|---------|------|
+| `mix` | 0.0-1.0 | 1.0 | - |
+| `inputGain` | -24..+24 | 0.0 | dB |
+| `outputGain` | -24..+24 | 0.0 | dB |
+
+**Resource**: Plugin file or bundle (`resourceType: "plugin"`). On Windows this enables VST3 hosting; macOS builds additionally enable AudioUnit hosting; Linux builds additionally enable LV2 hosting.
+
+**Plugin UI/state**: The node parameter panel can open the hosted plugin's native editor. Plugin state is stored on the graph node as standard base64-encoded `config.pluginStateBase64`; the JUCE adapter captures the live hosted-plugin state before preset save and also exposes a manual capture action in the node panel. Older presets saved with JUCE's `MemoryBlock::toBase64Encoding()` format are still accepted when restoring state.
+
+**Runtime notes**: The current signal graph routes stereo audio only. Hosted plugins may accept or produce MIDI at the JUCE level, but MIDI events are not yet routed between graph nodes.
+
 ### Noise Gate (`dynamics_gate`)
 Input noise reduction.
 
@@ -476,6 +491,8 @@ For portable preset sharing, resources can be embedded:
 6. Place in `core/src/dsp/effects/`.
 7. Call the registration function from `RegisterAllEffects()` in `BuiltinEffects.h`.
 8. Effect appears in UI automatically via registry queries.
+
+Framework-specific effects, such as the JUCE plugin host, may live in the adapter layer instead. They should still use a stable UUID from `EffectGuids.h` and register with `EffectRegistry` before presets or the effect catalog are loaded.
 
 > **Renaming an existing effect?** The UUID stays the same — just update `info.displayName`. Add the old alias string to `info.aliases` if it was previously used in preset JSON.
 

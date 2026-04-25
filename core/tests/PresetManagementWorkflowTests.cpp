@@ -464,6 +464,226 @@ bool TestLoadPresetViaMessage()
     return true;
 }
 
+bool TestLoadPresetRehydratesScrubbedHostedPluginState()
+{
+    try
+    {
+        const fs::path sandbox = fs::temp_directory_path() / "guitarfx-preset-management-tests" / "hosted-plugin-rehydrate";
+        std::error_code ec;
+        fs::remove_all(sandbox, ec);
+        fs::create_directories(sandbox, ec);
+        SetSettingsEnvRoot(sandbox);
+
+        const fs::path presetDir = sandbox / "Soundshed Guitar" / "data" / "v1" / "presets" / "user";
+        fs::create_directories(presetDir, ec);
+
+        constexpr const char* expectedPluginState = "expected-plugin-state";
+
+        guitarfx::Preset storedPreset;
+        storedPreset.id = "user-hosted-plugin-rehydrate";
+        storedPreset.name = "Hosted Plugin Rehydrate";
+        storedPreset.version = 2;
+        storedPreset.category = "Test";
+
+        guitarfx::GraphNode inputNode;
+        inputNode.id = "__input__";
+        inputNode.type = guitarfx::kNodeTypeInput;
+
+        guitarfx::GraphNode outputNode;
+        outputNode.id = "__output__";
+        outputNode.type = guitarfx::kNodeTypeOutput;
+
+        guitarfx::GraphNode pluginNode;
+        pluginNode.id = "plugin-host-node";
+        pluginNode.type = guitarfx::EffectGuids::kPluginHost;
+        pluginNode.category = "utility";
+        pluginNode.config["pluginStateBase64"] = expectedPluginState;
+
+        storedPreset.graph.nodes = {inputNode, pluginNode, outputNode};
+        storedPreset.graph.edges = {
+            {"__input__", "plugin-host-node", 0, 0, 1.0},
+            {"plugin-host-node", "__output__", 0, 0, 1.0},
+        };
+        guitarfx::NormalizePresetScenes(storedPreset);
+
+        const fs::path presetPath = presetDir / (storedPreset.id + ".json");
+        if (!guitarfx::PresetStorage::SaveToFile(storedPreset, presetPath))
+        {
+            std::cerr << "Failed to write stored hosted-plugin preset fixture\n";
+            return false;
+        }
+
+        guitarfx::Preset scrubbedPreset = storedPreset;
+        if (auto* liveNode = scrubbedPreset.graph.FindNode(pluginNode.id))
+        {
+            liveNode->config["pluginStateBase64Length"] = std::to_string(liveNode->config["pluginStateBase64"].size());
+            liveNode->config.erase("pluginStateBase64");
+        }
+        for (auto& scene : scrubbedPreset.scenes)
+        {
+            if (auto* sceneNode = scene.graph.FindNode(pluginNode.id))
+            {
+                sceneNode->config["pluginStateBase64Length"] = std::to_string(std::string(expectedPluginState).size());
+                sceneNode->config.erase("pluginStateBase64");
+            }
+        }
+
+        TestHost host(sandbox);
+        guitarfx::PluginController controller(host);
+        controller.Initialize();
+
+        nlohmann::json message;
+        message["type"] = "loadPreset";
+        message["presetId"] = storedPreset.id;
+        message["preset"] = nlohmann::json::parse(guitarfx::PresetStorage::SerializeToJson(scrubbedPreset));
+        controller.HandleUIMessage(message.dump());
+
+        const auto& active = controller.GetActivePreset();
+        if (!active)
+        {
+            std::cerr << "No active preset after scrubbed hosted-plugin load\n";
+            return false;
+        }
+
+        const auto* rehydratedNode = active->graph.FindNode(pluginNode.id);
+        if (!rehydratedNode)
+        {
+            std::cerr << "Rehydrated hosted-plugin node missing from active preset\n";
+            return false;
+        }
+
+        const auto stateIt = rehydratedNode->config.find("pluginStateBase64");
+        if (stateIt == rehydratedNode->config.end() || stateIt->second != expectedPluginState)
+        {
+            std::cerr << "Hosted-plugin state was not rehydrated from stored preset data\n";
+            return false;
+        }
+
+        return true;
+    }
+    catch (const std::exception& ex)
+    {
+        std::cerr << "Exception in TestLoadPresetRehydratesScrubbedHostedPluginState: " << ex.what() << "\n";
+        return false;
+    }
+}
+
+bool TestLoadPresetRehydratesScrubbedHostedPluginStateFromActivePreset()
+{
+    try
+    {
+        const fs::path sandbox = fs::temp_directory_path() / "guitarfx-preset-management-tests" / "hosted-plugin-rehydrate-active";
+        std::error_code ec;
+        fs::remove_all(sandbox, ec);
+        fs::create_directories(sandbox, ec);
+        SetSettingsEnvRoot(sandbox);
+
+        const fs::path presetDir = sandbox / "Soundshed Guitar" / "data" / "v1" / "presets" / "user";
+        fs::create_directories(presetDir, ec);
+
+        constexpr const char* storedPluginState = "stored-plugin-state";
+        constexpr const char* activePluginState = "active-plugin-state";
+
+        auto buildHostedPreset = [](const std::string& stateValue) {
+            guitarfx::Preset preset;
+            preset.id = "user-hosted-plugin-active-rehydrate";
+            preset.name = "Hosted Plugin Active Rehydrate";
+            preset.version = 2;
+            preset.category = "Test";
+
+            guitarfx::GraphNode inputNode;
+            inputNode.id = "__input__";
+            inputNode.type = guitarfx::kNodeTypeInput;
+
+            guitarfx::GraphNode outputNode;
+            outputNode.id = "__output__";
+            outputNode.type = guitarfx::kNodeTypeOutput;
+
+            guitarfx::GraphNode pluginNode;
+            pluginNode.id = "plugin-host-node";
+            pluginNode.type = guitarfx::EffectGuids::kPluginHost;
+            pluginNode.category = "utility";
+            pluginNode.config["pluginStateBase64"] = stateValue;
+
+            preset.graph.nodes = {inputNode, pluginNode, outputNode};
+            preset.graph.edges = {
+                {"__input__", "plugin-host-node", 0, 0, 1.0},
+                {"plugin-host-node", "__output__", 0, 0, 1.0},
+            };
+            guitarfx::NormalizePresetScenes(preset);
+            return preset;
+        };
+
+        const auto storedPreset = buildHostedPreset(storedPluginState);
+        const fs::path presetPath = presetDir / (storedPreset.id + ".json");
+        if (!guitarfx::PresetStorage::SaveToFile(storedPreset, presetPath))
+        {
+            std::cerr << "Failed to write stored hosted-plugin preset fixture\n";
+            return false;
+        }
+
+        TestHost host(sandbox);
+        guitarfx::PluginController controller(host);
+        controller.Initialize();
+
+        const auto activePreset = buildHostedPreset(activePluginState);
+        nlohmann::json initialLoad;
+        initialLoad["type"] = "loadPreset";
+        initialLoad["presetId"] = activePreset.id;
+        initialLoad["preset"] = nlohmann::json::parse(guitarfx::PresetStorage::SerializeToJson(activePreset));
+        controller.HandleUIMessage(initialLoad.dump());
+
+        guitarfx::Preset scrubbedPreset = activePreset;
+        if (auto* liveNode = scrubbedPreset.graph.FindNode("plugin-host-node"))
+        {
+            liveNode->config["pluginStateBase64Length"] = std::to_string(liveNode->config["pluginStateBase64"].size());
+            liveNode->config.erase("pluginStateBase64");
+        }
+        for (auto& scene : scrubbedPreset.scenes)
+        {
+            if (auto* sceneNode = scene.graph.FindNode("plugin-host-node"))
+            {
+                sceneNode->config["pluginStateBase64Length"] = std::to_string(std::string(activePluginState).size());
+                sceneNode->config.erase("pluginStateBase64");
+            }
+        }
+
+        nlohmann::json reloadMessage;
+        reloadMessage["type"] = "loadPreset";
+        reloadMessage["presetId"] = activePreset.id;
+        reloadMessage["preset"] = nlohmann::json::parse(guitarfx::PresetStorage::SerializeToJson(scrubbedPreset));
+        controller.HandleUIMessage(reloadMessage.dump());
+
+        const auto& active = controller.GetActivePreset();
+        if (!active)
+        {
+            std::cerr << "No active preset after scrubbed hosted-plugin reload from memory\n";
+            return false;
+        }
+
+        const auto* rehydratedNode = active->graph.FindNode("plugin-host-node");
+        if (!rehydratedNode)
+        {
+            std::cerr << "Rehydrated hosted-plugin node missing from active preset\n";
+            return false;
+        }
+
+        const auto stateIt = rehydratedNode->config.find("pluginStateBase64");
+        if (stateIt == rehydratedNode->config.end() || stateIt->second != activePluginState)
+        {
+            std::cerr << "Hosted-plugin state did not prefer the active in-memory preset over stored data\n";
+            return false;
+        }
+
+        return true;
+    }
+    catch (const std::exception& ex)
+    {
+        std::cerr << "Exception in TestLoadPresetRehydratesScrubbedHostedPluginStateFromActivePreset: " << ex.what() << "\n";
+        return false;
+    }
+}
+
 bool TestLoadPresetRestoresUnifiedLevelState()
 {
     const fs::path sandbox = fs::temp_directory_path() / "guitarfx-preset-management-tests" / "level-load";
@@ -1224,6 +1444,8 @@ int main()
     };
 
     run("Load preset via message", TestLoadPresetViaMessage());
+    run("Load preset rehydrates scrubbed hosted plugin state", TestLoadPresetRehydratesScrubbedHostedPluginState());
+    run("Load preset rehydrates scrubbed hosted plugin state from active preset", TestLoadPresetRehydratesScrubbedHostedPluginStateFromActivePreset());
     run("Load preset restores unified level state", TestLoadPresetRestoresUnifiedLevelState());
     run("Load preset retires NAM input auto-leveling", TestLoadPresetRetiresNamInputAutoLeveling());
     run("Load app settings applies user input calibration", TestLoadAppSettingsAppliesUserInputCalibrationProfile());

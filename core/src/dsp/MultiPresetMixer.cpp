@@ -692,6 +692,43 @@ namespace guitarfx
     }
   }
 
+  void MultiPresetMixer::SetNodeConfig(const std::string &presetId, const std::string &nodeId, const std::string &key, const std::string &value)
+  {
+    if (auto *inst = FindInstance(presetId))
+    {
+      inst->executor.SetNodeConfig(nodeId, key, value);
+    }
+  }
+
+  std::string MultiPresetMixer::GetNodeConfig(const std::string &presetId, const std::string &nodeId, const std::string &key) const
+  {
+    if (const auto *inst = FindInstance(presetId))
+    {
+      return inst->executor.GetNodeConfig(nodeId, key);
+    }
+    return {};
+  }
+
+  EffectProcessor *MultiPresetMixer::GetNodeProcessor(const std::string &presetId, const std::string &nodeId)
+  {
+    if (auto *inst = FindInstance(presetId))
+    {
+      return inst->executor.GetNodeProcessor(nodeId);
+    }
+
+    return nullptr;
+  }
+
+  const EffectProcessor *MultiPresetMixer::GetNodeProcessor(const std::string &presetId, const std::string &nodeId) const
+  {
+    if (const auto *inst = FindInstance(presetId))
+    {
+      return inst->executor.GetNodeProcessor(nodeId);
+    }
+
+    return nullptr;
+  }
+
   void MultiPresetMixer::SetTempo(double bpm)
   {
     for (auto &inst : mInstances)

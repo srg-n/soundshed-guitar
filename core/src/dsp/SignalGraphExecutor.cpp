@@ -388,6 +388,12 @@ namespace guitarfx
     return types;
   }
 
+  const SignalGraphExecutor::NodeState *SignalGraphExecutor::FindNodeState(const std::string &id) const
+  {
+    auto it = mNodeStates.find(id);
+    return it != mNodeStates.end() ? &it->second : nullptr;
+  }
+
   void SignalGraphExecutor::Prepare(double sampleRate, int maxBlockSize)
   {
     mSampleRate = sampleRate;
@@ -815,11 +821,44 @@ namespace guitarfx
 
   void SignalGraphExecutor::SetNodeConfig(const std::string &nodeId, const std::string &key, const std::string &value)
   {
+    if (auto* node = mGraph.FindNode(nodeId))
+    {
+      node->config[key] = value;
+    }
+
     auto *state = FindNodeState(nodeId);
     if (state && state->processor)
     {
       state->processor->SetConfig(key, value);
     }
+  }
+
+  std::string SignalGraphExecutor::GetNodeConfig(const std::string &nodeId, const std::string &key) const
+  {
+    const auto *state = FindNodeState(nodeId);
+    if (state && state->processor)
+      return state->processor->GetConfig(key);
+
+    if (const auto* node = mGraph.FindNode(nodeId))
+    {
+      const auto it = node->config.find(key);
+      if (it != node->config.end())
+        return it->second;
+    }
+
+    return {};
+  }
+
+  EffectProcessor *SignalGraphExecutor::GetNodeProcessor(const std::string &nodeId)
+  {
+    auto *state = FindNodeState(nodeId);
+    return state ? state->processor.get() : nullptr;
+  }
+
+  const EffectProcessor *SignalGraphExecutor::GetNodeProcessor(const std::string &nodeId) const
+  {
+    const auto *state = FindNodeState(nodeId);
+    return state ? state->processor.get() : nullptr;
   }
 
   void SignalGraphExecutor::SetNodeConfigForType(const std::string &type, const std::string &key, const std::string &value)

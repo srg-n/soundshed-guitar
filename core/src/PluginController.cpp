@@ -1217,6 +1217,62 @@ static std::string GenerateGuidV4String()
     return part1 + "-" + part2 + "-" + part3 + "-" + part4 + "-" + part5;
 }
 
+static void ScrubHostedPluginStateForUi(SignalGraph& graph)
+{
+    for (auto& node : graph.nodes)
+    {
+        if (EffectRegistry::Instance().Resolve(node.type) != EffectGuids::kPluginHost)
+            continue;
+
+        const auto stateIt = node.config.find("pluginStateBase64");
+        if (stateIt == node.config.end())
+            continue;
+
+        node.config["pluginStateBase64Length"] = std::to_string(stateIt->second.size());
+        node.config.erase(stateIt);
+    }
+}
+
+static nlohmann::json SerializePresetForUi(const Preset& preset)
+{
+    Preset uiPreset = preset;
+    ScrubHostedPluginStateForUi(uiPreset.graph);
+    for (auto& scene : uiPreset.scenes)
+        ScrubHostedPluginStateForUi(scene.graph);
+
+    return nlohmann::json::parse(PresetStorage::SerializeToJson(uiPreset));
+}
+
+static bool GraphHasScrubbedHostedPluginState(const SignalGraph& graph)
+{
+    for (const auto& node : graph.nodes)
+    {
+        if (EffectRegistry::Instance().Resolve(node.type) != EffectGuids::kPluginHost)
+            continue;
+
+        const auto stateIt = node.config.find("pluginStateBase64");
+        const auto lengthIt = node.config.find("pluginStateBase64Length");
+        if (lengthIt != node.config.end() && (stateIt == node.config.end() || stateIt->second.empty()))
+            return true;
+    }
+
+    return false;
+}
+
+static bool PresetHasScrubbedHostedPluginState(const Preset& preset)
+{
+    if (GraphHasScrubbedHostedPluginState(preset.graph))
+        return true;
+
+    for (const auto& scene : preset.scenes)
+    {
+        if (GraphHasScrubbedHostedPluginState(scene.graph))
+            return true;
+    }
+
+    return false;
+}
+
 static std::string GenerateUserPresetId()
 {
     return "user-" + GenerateGuidV4String();
@@ -2215,7 +2271,11 @@ std::string PluginController::SerializeState() const
     nlohmann::json state = nlohmann::json::object();
     state["version"] = 1;
     if (mActivePreset)
-        state["preset"] = nlohmann::json::parse(PresetStorage::SerializeToJson(*mActivePreset));
+    {
+        Preset presetWithRuntimeState = *mActivePreset;
+        CaptureRuntimePluginStates(presetWithRuntimeState, mActivePresetId);
+        state["preset"] = nlohmann::json::parse(PresetStorage::SerializeToJson(presetWithRuntimeState));
+    }
     state["presetId"] = mActivePresetId;
     state["appSettings"] = mAppSettings;
     state["uiSettings"] = mUiSettings;
@@ -2696,7 +2756,7 @@ void PluginController::ReportErrorToUI(const std::string& message, const std::st
     SendMessageToUI(msg.dump());
 }
 
-void PluginController::AppendSessionLog(const std::string& message)
+void PluginController::AppendSessionLog(const std::string& message) const
 {
     if (message.empty())
         return;
@@ -2734,6 +2794,14 @@ void PluginController::HandlePresetLoadRequest(const nlohmann::json& payload)
 
         if (!presetOpt) return;
         preset = std::move(*presetOpt);
+
+        const std::string requestedPresetId = payload.value("presetId", preset.id);
+        if (!requestedPresetId.empty() && PresetHasScrubbedHostedPluginState(preset))
+        {
+            if (auto storedPreset = TryLoadStoredPresetById(requestedPresetId))
+                preset = std::move(*storedPreset);
+        }
+
         NormalizePresetScenes(preset);
 
         const std::string requestedSceneId = payload.value("sceneId", "");
@@ -2742,7 +2810,7 @@ void PluginController::HandlePresetLoadRequest(const nlohmann::json& payload)
 
         ApplyBlendDefinitions(preset);
 
-        mActivePresetId = payload.value("presetId", preset.id);
+        mActivePresetId = requestedPresetId.empty() ? preset.id : requestedPresetId;
         ApplyPreset(preset); // SetGlobalChainConfig is called inside ApplyPreset under mDSPMutex
 
         mPendingStateBroadcast = true;
@@ -2751,7 +2819,7 @@ void PluginController::HandlePresetLoadRequest(const nlohmann::json& payload)
         {
             nlohmann::json loaded;
             loaded["type"] = "presetLoaded";
-            loaded["preset"] = nlohmann::json::parse(mActivePresetJson);
+            loaded["preset"] = SerializePresetForUi(*mActivePreset);
             nlohmann::json activeIds = nlohmann::json::array();
             for (const auto& id : mPresetMixer.GetActivePresetIds())
                 activeIds.push_back(id);
@@ -2799,6 +2867,53 @@ void PluginController::HandleSetParameterRequest(const nlohmann::json& payload)
         OnParamChange(it->second, value);
 }
 
+
+std::optional<Preset> PluginController::TryLoadStoredPresetById(const std::string& presetId)
+{
+    if (presetId.empty())
+        return std::nullopt;
+
+    const auto aliasIt = mFactoryArchivePresetAliases.find(presetId);
+    const std::string resolvedPresetId = aliasIt != mFactoryArchivePresetAliases.end() ? aliasIt->second : presetId;
+
+    if (mActivePreset)
+    {
+        const bool matchesActivePreset = mActivePreset->id == resolvedPresetId
+            || (!mActivePresetId.empty() && (mActivePresetId == presetId || mActivePresetId == resolvedPresetId));
+        if (matchesActivePreset)
+        {
+            Preset preset = *mActivePreset;
+            CaptureRuntimePluginStates(preset, mActivePresetId.empty() ? resolvedPresetId : mActivePresetId);
+            return preset;
+        }
+    }
+
+    if (!IsFactoryPresetArchiveLoadingEnabled() && mTrackedFactoryArchivePresetIds.contains(resolvedPresetId))
+        return std::nullopt;
+
+    if (mUserPresetsPath.empty())
+        mUserPresetsPath = mFileSystem.ResolvePresetDirectory() / "user";
+
+    const auto userPath = mUserPresetsPath / (resolvedPresetId + ".json");
+    if (std::filesystem::exists(userPath))
+    {
+        if (auto presetOpt = PresetStorage::LoadFromFile(userPath))
+            return presetOpt;
+    }
+
+    const auto factoryPath = ResolveFactoryPresetDirectory(mHost, mResourceRoot) / (resolvedPresetId + ".json");
+    if (std::filesystem::exists(factoryPath))
+    {
+        if (auto presetOpt = PresetStorage::LoadFromFile(factoryPath))
+            return presetOpt;
+    }
+
+    const auto archiveIt = mFactoryArchivePresets.find(resolvedPresetId);
+    if (archiveIt != mFactoryArchivePresets.end())
+        return archiveIt->second;
+
+    return std::nullopt;
+}
 void PluginController::HandleSetGlobalChainParamRequest(const nlohmann::json& payload)
 {
     std::string path = payload.value("path", "");
@@ -3267,6 +3382,8 @@ void PluginController::HandleSavePresetRequest(const nlohmann::json& payload)
             mUserPresetsPath = mFileSystem.ResolvePresetDirectory() / "user";
         [[maybe_unused]] const auto ensuredUserPresetPath = mFileSystem.EnsureDirectory(mUserPresetsPath);
 
+        CaptureRuntimePluginStates(newPreset, sourcePresetId.empty() ? mActivePresetId : sourcePresetId);
+
         const auto presetPath = mUserPresetsPath / (newPreset.id + ".json");
         if (!PresetStorage::SaveToFile(newPreset, presetPath))
         {
@@ -3282,7 +3399,7 @@ void PluginController::HandleSavePresetRequest(const nlohmann::json& payload)
 
         nlohmann::json reply;
         reply["type"] = "presetSaved";
-        reply["preset"] = nlohmann::json::parse(mActivePresetJson);
+        reply["preset"] = SerializePresetForUi(newPreset);
         reply["sceneId"] = GetResolvedActiveSceneId();
         SendMessageToUI(reply.dump());
     }
@@ -3357,7 +3474,7 @@ void PluginController::HandleGetPresetByIdRequest(const nlohmann::json& payload)
 
     nlohmann::json msg;
     msg["type"] = "presetData";
-    msg["preset"] = nlohmann::json::parse(PresetStorage::SerializeToJson(*presetOpt));
+    msg["preset"] = SerializePresetForUi(*presetOpt);
     SendMessageToUI(msg.dump());
 }
 
@@ -3409,6 +3526,67 @@ void PluginController::HandleUpdateSignalPathNodeBypassRequest(const nlohmann::j
     mPresetMixer.SetNodeEnabled(presetId, nodeId, enabled);
     mActivePresetJson = mActivePreset ? PresetStorage::SerializeToJson(*mActivePreset) : "{}";
     mPendingStateBroadcast = true;
+}
+
+void PluginController::HandleUpdateSignalPathNodeConfigRequest(const nlohmann::json& payload)
+{
+    const std::string nodeId = payload.value("nodeId", "");
+    std::string key = payload.value("key", payload.value("configKey", ""));
+    std::string value = payload.value("value", "");
+    const bool persist = payload.value("persist", true);
+    const bool capture = payload.value("capture", false) || value == "__capture_plugin_state__";
+    const std::string fallbackId = mActivePresetId.empty() ? "p1" : mActivePresetId;
+    const std::string presetId = payload.value("presetId", fallbackId);
+
+    if (nodeId.empty() || key.empty())
+        return;
+
+    if (capture)
+    {
+        key = "pluginStateBase64";
+        value = mPresetMixer.GetNodeConfig(presetId, nodeId, key);
+        if (value.empty())
+        {
+            ReportErrorToUI("Plugin state capture failed", "No hosted plugin state was available for node " + nodeId);
+            return;
+        }
+    }
+
+    mPresetMixer.SetNodeConfig(presetId, nodeId, key, value);
+
+    if (persist)
+    {
+        auto* graph = ResolveEditTarget();
+        auto* node = graph ? graph->FindNode(nodeId) : nullptr;
+        if (!node)
+            return;
+
+        node->config[key] = value;
+        RefreshWasmNodeDescriptor(*node);
+
+        if (IsCompositeEditMode())
+        {
+            BroadcastCompositeEditState();
+        }
+        else if (mActivePreset)
+        {
+            SyncActivePresetSceneGraph();
+            mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+            if (!capture)
+                mPendingStateBroadcast = true;
+        }
+    }
+
+    if (capture)
+    {
+        SendMessageToUI(nlohmann::json{
+            {"type", "signalPathNodeConfigUpdated"},
+            {"nodeId", nodeId},
+            {"key", key},
+            {"captured", true},
+            {"valueLength", value.size()}
+        }.dump());
+    }
 }
 
 void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& payload)
@@ -7464,7 +7642,7 @@ void PluginController::BroadcastState()
     if (mActivePreset)
     {
         SyncActivePresetSceneGraph();
-        state["preset"] = nlohmann::json::parse(PresetStorage::SerializeToJson(*mActivePreset));
+        state["preset"] = SerializePresetForUi(*mActivePreset);
         state["activePresetId"] = mActivePresetId;
         state["activeSceneId"] = GetResolvedActiveSceneId();
     }
@@ -7802,6 +7980,89 @@ void PluginController::ApplyBlendDefinitions(Preset& preset)
         node.config["blendMode"] = blendMode;
         if (node.label.empty()) node.label = blend.value("name", "");
     }
+}
+
+void PluginController::CaptureRuntimePluginStates(Preset& preset, const std::string& presetId) const
+{
+    const auto findExistingState = [&](const std::string& nodeId) -> std::string
+    {
+        if (!mActivePreset)
+            return {};
+
+        const auto findInGraph = [&](const SignalGraph& graph) -> std::string
+        {
+            if (const auto* existingNode = graph.FindNode(nodeId))
+            {
+                const auto it = existingNode->config.find("pluginStateBase64");
+                if (it != existingNode->config.end())
+                    return it->second;
+            }
+            return {};
+        };
+
+        if (const auto state = findInGraph(mActivePreset->graph); !state.empty())
+            return state;
+        for (const auto& scene : mActivePreset->scenes)
+        {
+            if (const auto state = findInGraph(scene.graph); !state.empty())
+                return state;
+        }
+        return {};
+    };
+
+    const auto captureRuntimeState = [&](const std::string& nodeId) -> std::string
+    {
+        if (!presetId.empty())
+        {
+            if (const auto state = mPresetMixer.GetNodeConfig(presetId, nodeId, "pluginStateBase64"); !state.empty())
+                return state;
+        }
+
+        if (!mActivePresetId.empty() && mActivePresetId != presetId)
+        {
+            if (const auto state = mPresetMixer.GetNodeConfig(mActivePresetId, nodeId, "pluginStateBase64"); !state.empty())
+                return state;
+        }
+
+        for (const auto& activeId : mPresetMixer.GetActivePresetIds())
+        {
+            if (activeId == presetId || activeId == mActivePresetId)
+                continue;
+
+            if (const auto state = mPresetMixer.GetNodeConfig(activeId, nodeId, "pluginStateBase64"); !state.empty())
+                return state;
+        }
+
+        return {};
+    };
+
+    const auto captureGraph = [&](SignalGraph& graph)
+    {
+        for (auto& node : graph.nodes)
+        {
+            if (EffectRegistry::Instance().Resolve(node.type) != EffectGuids::kPluginHost)
+                continue;
+
+            node.config.erase("pluginStateBase64Length");
+
+            std::string state = captureRuntimeState(node.id);
+            if (state.empty())
+                state = findExistingState(node.id);
+            if (!state.empty())
+            {
+                node.config["pluginStateBase64"] = state;
+            }
+            else
+            {
+                node.config.erase("pluginStateBase64");
+                AppendSessionLog("Hosted plugin state capture unavailable for node " + node.id + " while saving preset " + preset.id);
+            }
+        }
+    };
+
+    captureGraph(preset.graph);
+    for (auto& scene : preset.scenes)
+        captureGraph(scene.graph);
 }
 
 bool PluginController::ApplyNodeParameter(const GraphNode& node, const std::string& paramKey, double value)

@@ -7,6 +7,7 @@
  */
 
 #include "PluginProcessorAdapter.h"
+#include "JuceHostedPluginEffect.h"
 #include "PluginEditor.h"   // existing editor, unchanged
 #include "UiBridge.h"
 
@@ -88,6 +89,7 @@ PluginProcessorAdapter::PluginProcessorAdapter()
       ),
     mController(*this)
 {
+    guitarfx::RegisterJuceHostedPluginEffect();
     mAssetRoot = locateAssetsRoot();
     mController.Initialize();
 }

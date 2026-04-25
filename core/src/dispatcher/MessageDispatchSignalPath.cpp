@@ -18,6 +18,11 @@ bool MessageDispatcher::DispatchSignalPath(PluginController& c,
         c.HandleUpdateSignalPathNodeBypassRequest(msg);
         return true;
     }
+    if (type == "updateSignalPathNodeConfig")
+    {
+        c.HandleUpdateSignalPathNodeConfigRequest(msg);
+        return true;
+    }
     if (type == "updateNodeResource")
     {
         c.HandleUpdateNodeResourceRequest(msg);

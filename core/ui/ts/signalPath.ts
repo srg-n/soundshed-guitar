@@ -547,6 +547,26 @@ function buildCustomEffectActions(node: GraphNode): string {
   `;
 }
 
+function buildHostedPluginActions(node: GraphNode): string {
+  if (EffectTypeRegistry.resolve(node.type) !== EffectGuids.kPluginHost) {
+    return "";
+  }
+
+  const stateSize = Number(node.config?.pluginStateBase64Length ?? "") || node.config?.pluginStateBase64?.length || 0;
+  const stateLabel = stateSize > 0 ? `State captured (${Math.round(stateSize / 1024)} KB encoded)` : "No captured plugin state";
+
+  return `
+    <div class="node-resource-selector node-plugin-host-actions" data-node-id="${node.id}">
+      <label>Hosted Plugin</label>
+      <div class="resource-controls">
+        <button type="button" class="primary-btn plugin-host-open-btn" data-node-id="${node.id}">Open Plugin UI</button>
+        <button type="button" class="secondary-btn plugin-host-capture-state-btn" data-node-id="${node.id}">Capture State</button>
+      </div>
+      <div class="resource-path-info">${escapeHtml(stateLabel)}</div>
+    </div>
+  `;
+}
+
 function promptSaveCurrentCustomEffect(node: GraphNode, applyToNode: boolean): void {
   if (!hasCustomEffectModuleSelection(node)) {
     showNotification("Custom Effect save failed", "Select a WASM module first");
@@ -1939,6 +1959,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
 
   const isEqNode = typeInfo?.category === "eq" || node.type.startsWith("eq_");
   const customEffectActions = buildCustomEffectActions(node);
+  const hostedPluginActions = buildHostedPluginActions(node);
   const eqVisualizer = isEqNode ? `
     <div class="eq-visualizer" data-node-id="${node.id}">
       <div class="eq-visualizer-header">
@@ -2325,6 +2346,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
   ` : "";
   const shellMainContent = customLayoutHtml ? `
     ${layoutIncludesResourceControls ? "" : resourceSelector}
+    ${hostedPluginActions}
     ${customEffectActions}
     ${eqVisualizer}
     ${mixerInputControls}
@@ -2361,6 +2383,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
       : defaultControlsHtml;
     return `
       ${layoutIncludesResourceControls ? "" : resourceSelector}
+      ${hostedPluginActions}
       ${customEffectActions}
       ${eqVisualizer}
       ${mixerInputControls}
@@ -2412,6 +2435,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
   bindNodeParamControls(node, preset);
   bindLayoutOverlayBypassToggles(node, preset);
   bindResourceControls(node, preset);
+  bindHostedPluginActionControls(node);
   bindCustomEffectActionControls(node);
   bindBlendEditorControls(nodeParamsPanelElement, node);
   bindCloseButton();
@@ -3028,6 +3052,18 @@ function bindCustomEffectActionControls(node: GraphNode): void {
   });
 }
 
+function bindHostedPluginActionControls(node: GraphNode): void {
+  const openButton = nodeParamsPanelElement?.querySelector<HTMLButtonElement>(".plugin-host-open-btn");
+  openButton?.addEventListener("click", () => {
+    sendSignalPathNodeConfigUpdate(node.id, "showPluginEditor", "1", false);
+  });
+
+  const captureButton = nodeParamsPanelElement?.querySelector<HTMLButtonElement>(".plugin-host-capture-state-btn");
+  captureButton?.addEventListener("click", () => {
+    sendSignalPathNodeConfigUpdate(node.id, "pluginStateBase64", "__capture_plugin_state__", true, true);
+  });
+}
+
 function getNodeResourceIds(node: GraphNode): string[] {
   const anyNode = node as unknown as { resources?: unknown };
   if (!Array.isArray(anyNode.resources)) {
@@ -3144,6 +3180,20 @@ function sendSignalPathNodeBypassUpdate(nodeId: string, presetId: string, bypass
     bypassed,
   });
   setPresetDirty(true);
+}
+
+function sendSignalPathNodeConfigUpdate(nodeId: string, key: string, value: string, persist = true, capture = false): void {
+  postMessage({
+    type: "updateSignalPathNodeConfig",
+    nodeId,
+    key,
+    value,
+    persist,
+    capture,
+  });
+  if (persist) {
+    setPresetDirty(true);
+  }
 }
 
 function sendNodeResourceUpdate(

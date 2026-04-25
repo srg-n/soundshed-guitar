@@ -321,6 +321,8 @@ include(SharedCodeDefaults)
 # Only the JUCE adapter and editor sources are compiled here.
 set(SourceFiles
     "${CMAKE_CURRENT_SOURCE_DIR}/source/Main.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/source/JuceHostedPluginEffect.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/source/JuceHostedPluginEffect.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/source/PluginEditor.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/source/PluginEditor.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/source/PluginProcessorAdapter.h"
@@ -345,6 +347,9 @@ target_compile_definitions(SharedCode
     JUCE_WEB_BROWSER=1  # If you set this to 1, add `NEEDS_WEB_BROWSER TRUE` to the `juce_add_plugin` call
     JUCE_USE_CURL=0     # If you set this to 1, add `NEEDS_CURL TRUE` to the `juce_add_plugin` call
     JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_PLUGINHOST_VST3=1
+    $<$<PLATFORM_ID:Darwin>:JUCE_PLUGINHOST_AU=1>
+    $<$<PLATFORM_ID:Linux>:JUCE_PLUGINHOST_LV2=1>
 
     # Enable ASIO on Windows. JUCE 8.0.11+ uses bundled ASIO sources by default.
     JUCE_ASIO=${GUITARFX_JUCE_ASIO_ENABLED}
@@ -462,7 +467,50 @@ if(GUITARFX_IPP_AVAILABLE)
 endif()
 
 # Everything related to the tests target
-# include(Tests)
+if(WIN32)
+    enable_testing()
+
+    add_executable(HostedPluginGrapheneStateTests
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/HostedPluginGrapheneStateTests.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/source/JuceHostedPluginEffect.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/source/JuceHostedPluginEffect.h"
+    )
+
+    target_include_directories(HostedPluginGrapheneStateTests
+        PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/source"
+    )
+
+    target_compile_definitions(HostedPluginGrapheneStateTests
+        PRIVATE
+            JUCE_PLUGINHOST_VST3=1
+            JUCE_VST3_CAN_REPLACE_VST2=0
+            GUITARFX_ENABLE_PLUGIN_HOST_TEST_API=1
+    )
+
+    target_link_libraries(HostedPluginGrapheneStateTests
+        PRIVATE
+            SoundshedGuitarCore
+            nlohmann_json::nlohmann_json
+            juce_audio_utils
+            juce_audio_processors
+            juce_dsp
+            juce_gui_basics
+            juce_gui_extra
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_lto_flags
+            juce::juce_recommended_warning_flags
+    )
+
+    set_target_properties(HostedPluginGrapheneStateTests PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED ON
+        FOLDER "GuitarFX/Tests"
+    )
+
+    add_test(NAME HostedPluginGrapheneStateTests COMMAND HostedPluginGrapheneStateTests)
+    set_tests_properties(HostedPluginGrapheneStateTests PROPERTIES SKIP_RETURN_CODE 77)
+endif()
 
 # A separate target for Benchmarks (keeps the Tests target fast)
 # include(Benchmarks)

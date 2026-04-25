@@ -185,6 +185,7 @@ private:
     void HandleSetMetronomeRequest(const nlohmann::json& payload);
     void HandleUpdateSignalPathNodeParamRequest(const nlohmann::json& payload);
     void HandleUpdateSignalPathNodeBypassRequest(const nlohmann::json& payload);
+    void HandleUpdateSignalPathNodeConfigRequest(const nlohmann::json& payload);
     void HandleUpdateNodeResourceRequest(const nlohmann::json& payload);
     void HandleBrowseNodeResourceRequest(const nlohmann::json& payload);
     void HandleAddSignalPathNodeRequest(const nlohmann::json& payload);
@@ -279,6 +280,8 @@ private:
     void ApplyPreset(const Preset& preset);
     void UpdateHostLatency();
     void ApplyBlendDefinitions(Preset& preset);
+    void CaptureRuntimePluginStates(Preset& preset, const std::string& presetId) const;
+    std::optional<Preset> TryLoadStoredPresetById(const std::string& presetId);
     bool ApplyNodeParameter(const GraphNode& node, const std::string& paramKey, double value);
     void ApplyDiagnosticsSettingsFromAppSettings();
     void ApplyDspLevelTargetSettingsFromAppSettings();
@@ -356,7 +359,7 @@ private:
 
     bool WriteFile(const std::filesystem::path& target, const std::vector<std::uint8_t>& data) const;
 
-    void AppendSessionLog(const std::string& message);
+    void AppendSessionLog(const std::string& message) const;
     void ApplyParamChangeLocked(int paramIdx, double value);
     void ProcessAudioLocked(float** inputs, float** outputs, int numSamples);
 

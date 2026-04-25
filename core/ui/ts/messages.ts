@@ -43,6 +43,7 @@ function normalizeResourceRef(ref?: ResourceRef | null): void {
   if (!ref.type && resourceType) {
     ref.type = resourceType;
   }
+
   if (!ref.id && resourceId) {
     ref.id = resourceId;
   }
@@ -62,6 +63,42 @@ function normalizePresetResources(preset?: Preset | null): void {
       }
     });
   }
+}
+
+function applySignalPathNodeConfigUpdate(nodeId: string, key: string, value: string | undefined, valueLength?: number): void {
+  const preset = getActivePresetForRender();
+  if (!preset) {
+    return;
+  }
+
+  const updateGraph = (graph: Preset["graph"] | undefined): boolean => {
+    const node = graph?.nodes?.find((candidate) => candidate.id === nodeId);
+    if (!node) {
+      return false;
+    }
+    node.config = { ...(node.config ?? {}) };
+    if (typeof value === "string") {
+      node.config[key] = value;
+    }
+    if (key === "pluginStateBase64" && typeof valueLength === "number") {
+      node.config.pluginStateBase64Length = `${valueLength}`;
+    }
+    return true;
+  };
+
+  let updated = updateGraph(preset.graph);
+  for (const scene of preset.scenes ?? []) {
+    updated = updateGraph(scene.graph) || updated;
+  }
+
+  if (!updated) {
+    return;
+  }
+
+  setActivePresetDraft(preset);
+  setPresetDirty(true);
+  refreshSelectedNodeParams();
+  renderSignalPathBar();
 }
 
 function presetSignature(preset?: Preset | null): string {
@@ -887,6 +924,20 @@ export function handleIncomingMessage(message: string): void {
         handleUserInputCalibrationDiagnosticsUpdate();
         updateSelectedNodePeakMeter();
         refreshSavePresetModalPeakInfoIfOpen();
+      }
+      break;
+    }
+    case "signalPathNodeConfigUpdated": {
+      const update = payload as { nodeId?: string; key?: string; value?: string; valueLength?: number; captured?: boolean };
+      if (typeof update.nodeId === "string" && typeof update.key === "string") {
+        if (typeof update.value === "string") {
+          applySignalPathNodeConfigUpdate(update.nodeId, update.key, update.value, update.valueLength);
+        } else if (update.captured && update.key === "pluginStateBase64") {
+          applySignalPathNodeConfigUpdate(update.nodeId, update.key, undefined, update.valueLength);
+        }
+        if (update.key === "pluginStateBase64") {
+          showNotification("Plugin state captured", "success");
+        }
       }
       break;
     }

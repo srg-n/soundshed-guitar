@@ -164,6 +164,10 @@ namespace guitarfx
     // Node-level control (for signal chain editing)
     void SetNodeEnabled(const std::string &presetId, const std::string &nodeId, bool enabled);
     void SetNodeParam(const std::string &presetId, const std::string &nodeId, const std::string &key, double value);
+    void SetNodeConfig(const std::string &presetId, const std::string &nodeId, const std::string &key, const std::string &value);
+    [[nodiscard]] std::string GetNodeConfig(const std::string &presetId, const std::string &nodeId, const std::string &key) const;
+    [[nodiscard]] EffectProcessor *GetNodeProcessor(const std::string &presetId, const std::string &nodeId);
+    [[nodiscard]] const EffectProcessor *GetNodeProcessor(const std::string &presetId, const std::string &nodeId) const;
     bool LoadNodeResource(const std::string &presetId, const std::string &nodeId, const ResourceRef &ref);
 
     // Push the current tempo (BPM) to all tempo-aware nodes in every preset and global chain.
