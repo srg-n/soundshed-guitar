@@ -2,16 +2,50 @@
 
 #include "dsp/EffectGuids.h"
 #include "dsp/EffectRegistry.h"
+#include "util/FileSystem.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <cstring>
 #include <cmath>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 
 namespace guitarfx
 {
 namespace
 {
 constexpr const char* kPluginStateBase64ConfigKey = "pluginStateBase64";
+constexpr const char* kHostedPluginTraceLogFileName = "logs/session-log.txt";
+constexpr std::uint64_t kFNVOffsetBasis = 14695981039346656037ull;
+constexpr std::uint64_t kFNVPrime = 1099511628211ull;
+constexpr char kHostedPluginStateEnvelopeMagic[] = {'G', 'F', 'X', 'H', 'P', 'S', 'T', '1'};
+constexpr int kHostedPluginStateEnvelopeVersion = 1;
+
+struct HostedParameterState
+{
+    int index = -1;
+    std::string parameterId;
+    float value = 0.0f;
+};
+
+struct HostedPluginStateSnapshot
+{
+    juce::MemoryBlock rawPluginState;
+    int currentProgram = -1;
+    std::vector<HostedParameterState> parameters;
+};
+
+enum class HostedPluginStateEnvelopeDecodeResult
+{
+    notEnvelope,
+    success,
+    invalid,
+};
+
+std::string SummarizePluginSnapshot(juce::AudioPluginInstance& plugin);
 
 double Clamp(double value, double minimum, double maximum)
 {
@@ -43,14 +77,306 @@ std::string FromJuceString(const juce::String& value)
     return value.toStdString();
 }
 
+void AppendHostedPluginTrace(const std::string& message)
+{
+    FileSystem fileSystem;
+    const auto logPath = fileSystem.ResolveSettingsDirectory() / kHostedPluginTraceLogFileName;
+    [[maybe_unused]] const auto ensuredLogDir = fileSystem.EnsureDirectory(logPath.parent_path());
+
+    std::ofstream output(logPath, std::ios::app);
+    if (output)
+        output << "[HostedPluginEffect] " << message << "\n";
+
+    std::cerr << "[JuceHostedPluginEffect] " << message << std::endl;
+}
+
+void HashBytes(std::uint64_t& hash, const void* data, std::size_t size)
+{
+    const auto* bytes = static_cast<const unsigned char*>(data);
+    for (std::size_t index = 0; index < size; ++index)
+    {
+        hash ^= static_cast<std::uint64_t>(bytes[index]);
+        hash *= kFNVPrime;
+    }
+}
+
+std::string HashStringForLog(std::string_view value)
+{
+    std::uint64_t hash = kFNVOffsetBasis;
+    HashBytes(hash, value.data(), value.size());
+
+    std::ostringstream stream;
+    stream << "0x" << std::hex << std::setw(16) << std::setfill('0') << hash;
+    return stream.str();
+}
+
+std::string GetHostedParameterId(const juce::AudioProcessorParameter& parameter)
+{
+    if (const auto* hostedParameter = dynamic_cast<const juce::HostedAudioProcessorParameter*>(&parameter))
+        return FromJuceString(hostedParameter->getParameterID());
+
+    return {};
+}
+
+bool DecodeBase64State(const std::string& value, juce::MemoryBlock& state)
+{
+    juce::MemoryOutputStream standardDecoded;
+    if (juce::Base64::convertFromBase64(standardDecoded, juce::String(value)))
+    {
+        state = standardDecoded.getMemoryBlock();
+        return true;
+    }
+
+    return state.fromBase64Encoding(juce::String(value));
+}
+
+bool HasHostedPluginStateData(const HostedPluginStateSnapshot& snapshot)
+{
+    return !snapshot.rawPluginState.isEmpty()
+        || snapshot.currentProgram >= 0
+        || !snapshot.parameters.empty();
+}
+
+HostedPluginStateSnapshot CaptureHostedPluginStateSnapshot(juce::AudioPluginInstance& plugin)
+{
+    HostedPluginStateSnapshot snapshot;
+    plugin.getStateInformation(snapshot.rawPluginState);
+
+    if (plugin.getNumPrograms() > 1)
+        snapshot.currentProgram = plugin.getCurrentProgram();
+
+    const auto& parameters = plugin.getParameters();
+    snapshot.parameters.reserve(parameters.size());
+    for (auto* parameter : parameters)
+    {
+        if (parameter == nullptr || !parameter->isAutomatable())
+            continue;
+
+        snapshot.parameters.push_back(HostedParameterState{
+            parameter->getParameterIndex(),
+            GetHostedParameterId(*parameter),
+            parameter->getValue(),
+        });
+    }
+
+    return snapshot;
+}
+
+std::string EncodeHostedPluginStateBase64(const HostedPluginStateSnapshot& snapshot)
+{
+    if (!HasHostedPluginStateData(snapshot))
+        return {};
+
+    juce::MemoryOutputStream encoded;
+    encoded.write(kHostedPluginStateEnvelopeMagic, sizeof(kHostedPluginStateEnvelopeMagic));
+    encoded.writeInt(kHostedPluginStateEnvelopeVersion);
+    encoded.writeInt(snapshot.currentProgram);
+    encoded.writeInt(static_cast<int>(snapshot.parameters.size()));
+    encoded.writeInt(static_cast<int>(snapshot.rawPluginState.getSize()));
+
+    if (!snapshot.rawPluginState.isEmpty())
+        encoded.write(snapshot.rawPluginState.getData(), snapshot.rawPluginState.getSize());
+
+    for (const auto& parameter : snapshot.parameters)
+    {
+        encoded.writeInt(parameter.index);
+        encoded.writeString(juce::String(parameter.parameterId));
+        encoded.write(&parameter.value, sizeof(parameter.value));
+    }
+
+    return FromJuceString(juce::Base64::toBase64(encoded.getData(), encoded.getDataSize()));
+}
+
+HostedPluginStateEnvelopeDecodeResult DecodeHostedPluginStateEnvelope(const juce::MemoryBlock& state,
+                                                                     HostedPluginStateSnapshot& snapshot)
+{
+    snapshot = {};
+
+    if (state.getSize() < sizeof(kHostedPluginStateEnvelopeMagic))
+        return HostedPluginStateEnvelopeDecodeResult::notEnvelope;
+
+    if (std::memcmp(state.getData(), kHostedPluginStateEnvelopeMagic, sizeof(kHostedPluginStateEnvelopeMagic)) != 0)
+        return HostedPluginStateEnvelopeDecodeResult::notEnvelope;
+
+    juce::MemoryInputStream stream(state, false);
+    char magic[sizeof(kHostedPluginStateEnvelopeMagic)]{};
+    if (stream.read(magic, sizeof(magic)) != static_cast<int>(sizeof(magic))
+        || std::memcmp(magic, kHostedPluginStateEnvelopeMagic, sizeof(magic)) != 0)
+    {
+        return HostedPluginStateEnvelopeDecodeResult::invalid;
+    }
+
+    if (stream.readInt() != kHostedPluginStateEnvelopeVersion)
+        return HostedPluginStateEnvelopeDecodeResult::invalid;
+
+    snapshot.currentProgram = stream.readInt();
+    const int parameterCount = stream.readInt();
+    const int rawStateSize = stream.readInt();
+    if (parameterCount < 0 || parameterCount > 32768 || rawStateSize < 0)
+        return HostedPluginStateEnvelopeDecodeResult::invalid;
+
+    if (stream.getNumBytesRemaining() < rawStateSize)
+        return HostedPluginStateEnvelopeDecodeResult::invalid;
+
+    snapshot.rawPluginState.setSize(static_cast<size_t>(rawStateSize));
+    if (rawStateSize > 0
+        && stream.read(snapshot.rawPluginState.getData(), rawStateSize) != rawStateSize)
+    {
+        return HostedPluginStateEnvelopeDecodeResult::invalid;
+    }
+
+    snapshot.parameters.reserve(static_cast<size_t>(parameterCount));
+    for (int index = 0; index < parameterCount; ++index)
+    {
+        HostedParameterState parameter;
+        parameter.index = stream.readInt();
+        parameter.parameterId = FromJuceString(stream.readString());
+
+        float value = 0.0f;
+        if (stream.read(&value, sizeof(value)) != static_cast<int>(sizeof(value)))
+            return HostedPluginStateEnvelopeDecodeResult::invalid;
+
+        parameter.value = value;
+        snapshot.parameters.push_back(std::move(parameter));
+    }
+
+    return HostedPluginStateEnvelopeDecodeResult::success;
+}
+
+bool DecodeHostedPluginStateBase64(const std::string& value, HostedPluginStateSnapshot& snapshot)
+{
+    juce::MemoryBlock decoded;
+    if (!DecodeBase64State(value, decoded))
+        return false;
+
+    const auto result = DecodeHostedPluginStateEnvelope(decoded, snapshot);
+    if (result == HostedPluginStateEnvelopeDecodeResult::invalid)
+        return false;
+
+    if (result == HostedPluginStateEnvelopeDecodeResult::notEnvelope)
+    {
+        snapshot = {};
+        snapshot.rawPluginState = decoded;
+    }
+
+    return true;
+}
+
+juce::AudioProcessorParameter* FindHostedPluginParameter(juce::AudioPluginInstance& plugin,
+                                                         const HostedParameterState& savedParameter)
+{
+    const auto& parameters = plugin.getParameters();
+
+    if (!savedParameter.parameterId.empty())
+    {
+        for (auto* parameter : parameters)
+        {
+            if (parameter == nullptr || !parameter->isAutomatable())
+                continue;
+
+            if (GetHostedParameterId(*parameter) == savedParameter.parameterId)
+                return parameter;
+        }
+    }
+
+    if (savedParameter.index >= 0 && savedParameter.index < static_cast<int>(parameters.size()))
+    {
+        auto* parameter = parameters[static_cast<size_t>(savedParameter.index)];
+        if (parameter != nullptr && parameter->isAutomatable())
+            return parameter;
+    }
+
+    return nullptr;
+}
+
+std::string ApplyHostedPluginStateSnapshot(juce::AudioPluginInstance& plugin,
+                                           const HostedPluginStateSnapshot& snapshot)
+{
+    if (!snapshot.rawPluginState.isEmpty())
+    {
+        plugin.setStateInformation(snapshot.rawPluginState.getData(),
+                                   static_cast<int>(snapshot.rawPluginState.getSize()));
+    }
+
+    if (snapshot.currentProgram >= 0 && plugin.getNumPrograms() > 1)
+    {
+        const int programCount = plugin.getNumPrograms();
+        if (snapshot.currentProgram < programCount)
+            plugin.setCurrentProgram(snapshot.currentProgram);
+    }
+
+    for (const auto& savedParameter : snapshot.parameters)
+    {
+        auto* parameter = FindHostedPluginParameter(plugin, savedParameter);
+        if (parameter == nullptr)
+            continue;
+
+        if (std::abs(parameter->getValue() - savedParameter.value) <= 1.0e-6f)
+            continue;
+
+        parameter->setValueNotifyingHost(savedParameter.value);
+    }
+
+    return SummarizePluginSnapshot(plugin);
+}
+
+std::string SummarizePluginSnapshot(juce::AudioPluginInstance& plugin)
+{
+    std::uint64_t hash = kFNVOffsetBasis;
+    std::size_t parameterCount = 0;
+    std::ostringstream preview;
+    preview << std::fixed << std::setprecision(6);
+
+    const auto& parameters = plugin.getParameters();
+    for (auto* parameter : parameters)
+    {
+        if (parameter == nullptr)
+            continue;
+
+        const float value = parameter->getValue();
+        std::uint32_t bits = 0;
+        static_assert(sizeof(bits) == sizeof(value));
+        std::memcpy(&bits, &value, sizeof(bits));
+        HashBytes(hash, &bits, sizeof(bits));
+
+        if (parameterCount < 6)
+        {
+            if (parameterCount > 0)
+                preview << ',';
+            preview << value;
+        }
+
+        ++parameterCount;
+    }
+
+    int currentProgram = -1;
+    if (plugin.getNumPrograms() > 1)
+        currentProgram = plugin.getCurrentProgram();
+    HashBytes(hash, &currentProgram, sizeof(currentProgram));
+
+    std::ostringstream summary;
+    summary << "program=";
+    if (currentProgram >= 0)
+        summary << currentProgram;
+    else
+        summary << "<none>";
+    summary << ", paramCount=" << parameterCount
+            << ", paramHash=0x" << std::hex << std::setw(16) << std::setfill('0') << hash << std::dec
+            << ", preview=[" << preview.str() << ']';
+    return summary.str();
+}
+
 class HostedPluginEditorWindow final : public juce::DocumentWindow
 {
 public:
-    HostedPluginEditorWindow(const juce::String& title, juce::AudioProcessorEditor* editor)
+    HostedPluginEditorWindow(const juce::String& title,
+                             juce::AudioProcessorEditor* editor,
+                             std::function<void()> onClose)
         : DocumentWindow(title,
                          juce::Desktop::getInstance().getDefaultLookAndFeel()
                              .findColour(juce::ResizableWindow::backgroundColourId),
                          juce::DocumentWindow::closeButton)
+        , mOnClose(std::move(onClose))
     {
         setUsingNativeTitleBar(true);
         setContentOwned(editor, true);
@@ -63,7 +389,12 @@ public:
     void closeButtonPressed() override
     {
         setVisible(false);
+        if (mOnClose)
+            mOnClose();
     }
+
+private:
+    std::function<void()> mOnClose;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(HostedPluginEditorWindow)
 };
@@ -74,8 +405,7 @@ JuceHostedPluginEffect::JuceHostedPluginEffect() = default;
 JuceHostedPluginEffect::~JuceHostedPluginEffect()
 {
     ClosePluginEditor();
-    if (mPlugin)
-        mPlugin->releaseResources();
+    ReleaseHostedPlugin();
 }
 
 void JuceHostedPluginEffect::EnsureFormatsAdded()
@@ -96,6 +426,10 @@ void JuceHostedPluginEffect::Prepare(double sampleRate, int maxBlockSize)
     mMaxBlockSize = maxBlockSize;
     mPrepared = true;
     mWorkBuffer.setSize(2, maxBlockSize, false, false, true);
+    AppendHostedPluginTrace("Prepare sampleRate=" + std::to_string(sampleRate)
+        + ", blockSize=" + std::to_string(maxBlockSize)
+        + ", pluginLoaded=" + std::string{mPlugin ? "true" : "false"}
+        + ", pendingStateLength=" + std::to_string(mPluginStateBase64.size()));
     PrepareLoadedPlugin();
 }
 
@@ -103,7 +437,10 @@ void JuceHostedPluginEffect::Reset()
 {
     mMidiBuffer.clear();
     if (mPlugin)
+    {
+        AppendHostedPluginTrace("Reset plugin=" + FromJuceString(mPlugin->getName()));
         mPlugin->reset();
+    }
 }
 
 void JuceHostedPluginEffect::Process(float** inputs, float** outputs, int numSamples)
@@ -148,6 +485,7 @@ void JuceHostedPluginEffect::SetConfig(const std::string& key, const std::string
 {
     if (key == "pluginPath")
     {
+        AppendHostedPluginTrace("SetConfig pluginPath=" + value);
         if (!value.empty())
             LoadPluginFromPath(std::filesystem::path(value));
         return;
@@ -168,6 +506,9 @@ void JuceHostedPluginEffect::SetConfig(const std::string& key, const std::string
     if (key == kPluginStateBase64ConfigKey)
     {
         mPluginStateBase64 = value;
+        AppendHostedPluginTrace("SetConfig pluginStateBase64 length=" + std::to_string(value.size())
+            + ", prepared=" + std::string{mPrepared ? "true" : "false"}
+            + ", pluginLoaded=" + std::string{mPlugin ? "true" : "false"});
         ApplyPendingPluginState();
         return;
     }
@@ -178,6 +519,11 @@ void JuceHostedPluginEffect::SetConfig(const std::string& key, const std::string
             OpenPluginEditor();
         return;
     }
+}
+
+void JuceHostedPluginEffect::SetRuntimeConfigChangedCallback(RuntimeConfigChangedCallback callback)
+{
+    mRuntimeConfigChangedCallback = std::move(callback);
 }
 
 std::string JuceHostedPluginEffect::GetConfig(const std::string& key) const
@@ -199,6 +545,7 @@ std::string JuceHostedPluginEffect::GetConfig(const std::string& key) const
 
 bool JuceHostedPluginEffect::LoadResource(const std::filesystem::path& path)
 {
+    AppendHostedPluginTrace("LoadResource path=" + ToDisplayPath(path));
     return LoadPluginFromPath(path);
 }
 
@@ -229,12 +576,16 @@ int JuceHostedPluginEffect::GetLatencySamples() const
 bool JuceHostedPluginEffect::LoadPluginFromPath(const std::filesystem::path& path)
 {
     EnsureFormatsAdded();
+    AppendHostedPluginTrace("LoadPluginFromPath begin path=" + ToDisplayPath(path)
+        + ", pendingStateLength=" + std::to_string(mPluginStateBase64.size())
+        + ", sampleRate=" + std::to_string(mSampleRate)
+        + ", blockSize=" + std::to_string(mMaxBlockSize));
 
     const juce::File pluginFile(ToJucePath(path));
     if (!pluginFile.exists())
     {
         SetError("Plugin file does not exist: " + ToDisplayPath(path));
-        mPlugin.reset();
+        ReleaseHostedPlugin();
         return false;
     }
 
@@ -257,7 +608,7 @@ bool JuceHostedPluginEffect::LoadPluginFromPath(const std::filesystem::path& pat
     if (descriptions.isEmpty())
     {
         SetError("No JUCE-supported plugin types were found in: " + ToDisplayPath(path));
-        mPlugin.reset();
+        ReleaseHostedPlugin();
         return false;
     }
 
@@ -278,7 +629,7 @@ bool JuceHostedPluginEffect::LoadPluginFromPath(const std::filesystem::path& pat
     if (!selected)
     {
         SetError("Plugin scan returned no selectable plugin descriptions");
-        mPlugin.reset();
+        ReleaseHostedPlugin();
         return false;
     }
 
@@ -287,7 +638,7 @@ bool JuceHostedPluginEffect::LoadPluginFromPath(const std::filesystem::path& pat
     if (!instance)
     {
         SetError(error.isNotEmpty() ? FromJuceString(error) : "JUCE failed to instantiate plugin");
-        mPlugin.reset();
+        ReleaseHostedPlugin();
         return false;
     }
 
@@ -295,7 +646,7 @@ bool JuceHostedPluginEffect::LoadPluginFromPath(const std::filesystem::path& pat
     {
         SetError("Plugin does not support a mono or stereo main bus layout");
         instance->releaseResources();
-        mPlugin.reset();
+        ReleaseHostedPlugin();
         return false;
     }
 
@@ -304,10 +655,17 @@ bool JuceHostedPluginEffect::LoadPluginFromPath(const std::filesystem::path& pat
     mPluginFormat = FromJuceString(selected->pluginFormatName);
     mPluginIdentifier = FromJuceString(selected->createIdentifierString());
     ClosePluginEditor();
+    ReleaseHostedPlugin();
     mPlugin = std::move(instance);
+    AttachHostedPluginListeners();
     mLastError.clear();
+    AppendHostedPluginTrace("LoadPluginFromPath instantiated name=" + FromJuceString(mPluginDescription.name)
+        + ", format=" + mPluginFormat + ", identifier=" + mPluginIdentifier);
     if (!mPluginStateBase64.empty())
+    {
+        AppendHostedPluginTrace("LoadPluginFromPath applying pending state length=" + std::to_string(mPluginStateBase64.size()));
         ApplyPluginStateBase64(mPluginStateBase64);
+    }
     PrepareLoadedPlugin();
     return true;
 }
@@ -355,6 +713,10 @@ void JuceHostedPluginEffect::PrepareLoadedPlugin()
     if (!mPlugin || !mPrepared)
         return;
 
+    AppendHostedPluginTrace("PrepareLoadedPlugin plugin=" + FromJuceString(mPlugin->getName())
+        + ", sampleRate=" + std::to_string(mSampleRate)
+        + ", blockSize=" + std::to_string(mMaxBlockSize)
+        + ", pendingStateLength=" + std::to_string(mPluginStateBase64.size()));
     mPlugin->setRateAndBufferSizeDetails(mSampleRate, mMaxBlockSize);
     mPlugin->prepareToPlay(mSampleRate, mMaxBlockSize);
     ApplyPendingPluginState();
@@ -417,43 +779,69 @@ void JuceHostedPluginEffect::ApplyPluginStateBase64(const std::string& value)
     if (!mPlugin || value.empty())
         return;
 
-    juce::MemoryOutputStream standardDecoded;
-    juce::MemoryBlock state;
-    if (juce::Base64::convertFromBase64(standardDecoded, juce::String(value)))
-    {
-        state = standardDecoded.getMemoryBlock();
-    }
-    else if (!state.fromBase64Encoding(juce::String(value)))
+    AppendHostedPluginTrace("ApplyPluginStateBase64 begin plugin=" + FromJuceString(mPlugin->getName())
+        + ", encodedLength=" + std::to_string(value.size())
+        + ", encodedHash=" + HashStringForLog(value)
+        + ", preApply=" + SummarizePluginSnapshot(*mPlugin));
+
+    HostedPluginStateSnapshot snapshot;
+    if (!DecodeHostedPluginStateBase64(value, snapshot))
     {
         SetError("Invalid hosted plugin state encoding");
         return;
     }
 
-    const auto applyState = [this, state]()
+    AppendHostedPluginTrace("ApplyPluginStateBase64 decodedBytes=" + std::to_string(snapshot.rawPluginState.getSize())
+        + ", currentProgram=" + std::to_string(snapshot.currentProgram)
+        + ", parameterCount=" + std::to_string(snapshot.parameters.size()));
+
+    const auto applyState = [this, snapshot]() -> std::string
     {
         if (!mPlugin)
-            return;
+            return "plugin missing";
 
-        mPlugin->setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+        ++mAutoCaptureSuppressionDepth;
+        return ApplyHostedPluginStateSnapshot(*mPlugin, snapshot);
     };
+
+    std::string applySummary;
 
     if (juce::MessageManager::getInstance()->isThisTheMessageThread())
     {
-        applyState();
+        applySummary = applyState();
+        --mAutoCaptureSuppressionDepth;
     }
-    else if (!juce::MessageManager::callSync(applyState))
+    else if (auto result = juce::MessageManager::callSync(applyState))
     {
+        applySummary = *result;
+        --mAutoCaptureSuppressionDepth;
+    }
+    else
+    {
+        mAutoCaptureSuppressionDepth.store(0, std::memory_order_release);
         SetError("Failed to restore hosted plugin state on the message thread");
         return;
     }
 
+    AppendHostedPluginTrace("ApplyPluginStateBase64 complete plugin=" + FromJuceString(mPlugin->getName())
+        + ", postApply=" + applySummary);
     mLastError.clear();
 }
 
 void JuceHostedPluginEffect::ApplyPendingPluginState()
 {
     if (mPlugin && mPrepared && !mPluginStateBase64.empty())
+    {
+        AppendHostedPluginTrace("ApplyPendingPluginState applying plugin=" + FromJuceString(mPlugin->getName())
+            + ", stateLength=" + std::to_string(mPluginStateBase64.size()));
         ApplyPluginStateBase64(mPluginStateBase64);
+    }
+    else
+    {
+        AppendHostedPluginTrace("ApplyPendingPluginState skipped pluginLoaded=" + std::string{mPlugin ? "true" : "false"}
+            + ", prepared=" + std::string{mPrepared ? "true" : "false"}
+            + ", stateLength=" + std::to_string(mPluginStateBase64.size()));
+    }
 }
 
 std::string JuceHostedPluginEffect::CapturePluginStateBase64() const
@@ -466,21 +854,131 @@ std::string JuceHostedPluginEffect::CapturePluginStateBase64() const
         if (!mPlugin)
             return mPluginStateBase64;
 
-        juce::MemoryBlock state;
-        mPlugin->getStateInformation(state);
-        if (state.isEmpty())
-            return {};
-
-        return FromJuceString(juce::Base64::toBase64(state.getData(), state.getSize()));
+        const auto snapshot = CaptureHostedPluginStateSnapshot(*mPlugin);
+        return EncodeHostedPluginStateBase64(snapshot);
     };
 
     if (juce::MessageManager::getInstance()->isThisTheMessageThread())
-        return captureState();
+    {
+        const auto captured = captureState();
+        AppendHostedPluginTrace("CapturePluginStateBase64 plugin=" + FromJuceString(mPlugin->getName())
+            + ", encodedLength=" + std::to_string(captured.size())
+            + ", encodedHash=" + HashStringForLog(captured)
+            + ", snapshot=" + SummarizePluginSnapshot(*mPlugin));
+        return captured;
+    }
 
     if (auto captured = juce::MessageManager::callSync(captureState))
+    {
+        AppendHostedPluginTrace("CapturePluginStateBase64 plugin=" + FromJuceString(mPlugin->getName())
+            + ", encodedLength=" + std::to_string(captured->size())
+            + ", encodedHash=" + HashStringForLog(*captured)
+            + ", snapshot=" + SummarizePluginSnapshot(*mPlugin));
         return *captured;
+    }
 
     return {};
+}
+
+void JuceHostedPluginEffect::AttachHostedPluginListeners()
+{
+    if (!mPlugin || mHostedPluginListenerAttached)
+        return;
+
+    mPlugin->addListener(this);
+    AttachHostedPluginParameterListeners();
+    mHostedPluginListenerAttached = true;
+}
+
+void JuceHostedPluginEffect::AttachHostedPluginParameterListeners()
+{
+    DetachHostedPluginParameterListeners();
+
+    if (!mPlugin)
+        return;
+
+    const auto& parameters = mPlugin->getParameters();
+    mHostedParametersWithListeners.reserve(parameters.size());
+    for (auto* parameter : parameters)
+    {
+        if (parameter == nullptr)
+            continue;
+
+        parameter->addListener(this);
+        mHostedParametersWithListeners.push_back(parameter);
+    }
+}
+
+void JuceHostedPluginEffect::DetachHostedPluginParameterListeners()
+{
+    for (auto* parameter : mHostedParametersWithListeners)
+    {
+        if (parameter != nullptr)
+            parameter->removeListener(this);
+    }
+
+    mHostedParametersWithListeners.clear();
+}
+
+void JuceHostedPluginEffect::ReleaseHostedPlugin()
+{
+    cancelPendingUpdate();
+    mForceAutoCaptureNotification.store(false, std::memory_order_release);
+    mAutoCaptureSuppressionDepth.store(0, std::memory_order_release);
+
+    DetachHostedPluginParameterListeners();
+
+    if (mHostedPluginListenerAttached && mPlugin)
+        mPlugin->removeListener(this);
+
+    mHostedPluginListenerAttached = false;
+
+    if (mPlugin)
+    {
+        mPlugin->releaseResources();
+        mPlugin.reset();
+    }
+}
+
+void JuceHostedPluginEffect::ScheduleAutoCapture(bool forceNotify)
+{
+    if (!mPlugin)
+        return;
+
+    if (forceNotify)
+        mForceAutoCaptureNotification.store(true, std::memory_order_release);
+
+    if (juce::MessageManager::getInstance()->isThisTheMessageThread())
+    {
+        CaptureAndPublishPluginState(mForceAutoCaptureNotification.exchange(false, std::memory_order_acq_rel));
+        return;
+    }
+
+    triggerAsyncUpdate();
+}
+
+void JuceHostedPluginEffect::CaptureAndPublishPluginState(bool forceNotify)
+{
+    if (!mPlugin)
+        return;
+
+    PublishCapturedPluginState(CapturePluginStateBase64(), forceNotify);
+}
+
+void JuceHostedPluginEffect::PublishCapturedPluginState(const std::string& capturedState, bool forceNotify)
+{
+    const bool changed = capturedState != mPluginStateBase64;
+    if (!changed && !forceNotify)
+        return;
+
+    mPluginStateBase64 = capturedState;
+    AppendHostedPluginTrace("Auto-captured hosted plugin state plugin=" + FromJuceString(mPlugin->getName())
+        + ", forceNotify=" + std::string{forceNotify ? "true" : "false"}
+        + ", stateLength=" + std::to_string(mPluginStateBase64.size())
+        + ", stateHash=" + HashStringForLog(mPluginStateBase64));
+
+    if (mRuntimeConfigChangedCallback)
+        mRuntimeConfigChangedCallback(kPluginStateBase64ConfigKey, mPluginStateBase64);
 }
 
 void JuceHostedPluginEffect::OpenPluginEditor()
@@ -515,7 +1013,10 @@ void JuceHostedPluginEffect::OpenPluginEditor()
         const auto title = mPluginDescription.name.isNotEmpty()
             ? mPluginDescription.name
             : mPlugin->getName();
-        mEditorWindow = std::make_unique<HostedPluginEditorWindow>(title, editor);
+        mEditorWindow = std::make_unique<HostedPluginEditorWindow>(title, editor, [this]()
+        {
+            ScheduleAutoCapture(true);
+        });
     };
 
     if (juce::MessageManager::getInstance()->isThisTheMessageThread())
@@ -543,6 +1044,52 @@ void JuceHostedPluginEffect::SetError(const std::string& message)
 {
     mLastError = message;
     std::cerr << "[JuceHostedPluginEffect] " << message << std::endl;
+}
+
+void JuceHostedPluginEffect::parameterValueChanged(int,
+                                                   float)
+{
+    if (!mPlugin || mAutoCaptureSuppressionDepth.load(std::memory_order_acquire) > 0)
+        return;
+
+    ScheduleAutoCapture(false);
+}
+
+void JuceHostedPluginEffect::parameterGestureChanged(int,
+                                                     bool gestureIsStarting)
+{
+    if (gestureIsStarting || !mPlugin || mAutoCaptureSuppressionDepth.load(std::memory_order_acquire) > 0)
+        return;
+
+    ScheduleAutoCapture(false);
+}
+
+void JuceHostedPluginEffect::audioProcessorParameterChanged(juce::AudioProcessor* processor,
+                                                            int,
+                                                            float)
+{
+    if (processor != mPlugin.get() || mAutoCaptureSuppressionDepth.load(std::memory_order_acquire) > 0)
+        return;
+
+    ScheduleAutoCapture(false);
+}
+
+void JuceHostedPluginEffect::audioProcessorChanged(juce::AudioProcessor* processor,
+                                                   const juce::AudioProcessorListener::ChangeDetails& details)
+{
+    if (processor != mPlugin.get() || mAutoCaptureSuppressionDepth.load(std::memory_order_acquire) > 0)
+        return;
+
+    if (details.parameterInfoChanged)
+        AttachHostedPluginParameterListeners();
+
+    if (details.programChanged || details.nonParameterStateChanged || details.parameterInfoChanged)
+        ScheduleAutoCapture(details.parameterInfoChanged);
+}
+
+void JuceHostedPluginEffect::handleAsyncUpdate()
+{
+    CaptureAndPublishPluginState(mForceAutoCaptureNotification.exchange(false, std::memory_order_acq_rel));
 }
 
 void RegisterJuceHostedPluginEffect()

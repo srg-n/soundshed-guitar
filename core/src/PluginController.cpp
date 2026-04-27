@@ -1295,6 +1295,7 @@ static void ScrubHostedPluginStateForUi(SignalGraph& graph)
             continue;
 
         node.config["pluginStateBase64Length"] = std::to_string(stateIt->second.size());
+        node.config["pluginStateBase64Hash"] = HashStringForLog(stateIt->second);
         node.config.erase(stateIt);
     }
 }
@@ -3805,10 +3806,12 @@ void PluginController::HandleUpdateSignalPathNodeConfigRequest(const nlohmann::j
     {
         SendMessageToUI(nlohmann::json{
             {"type", "signalPathNodeConfigUpdated"},
+            {"presetId", presetId},
             {"nodeId", nodeId},
             {"key", key},
             {"captured", true},
-            {"valueLength", value.size()}
+            {"valueLength", value.size()},
+            {"valueHash", HashStringForLog(value)}
         }.dump());
     }
 }
@@ -8028,6 +8031,79 @@ void PluginController::UpdateHostLatency()
     mHost.NotifyLatencyChanged(latency);
 }
 
+void PluginController::AttachRuntimeConfigCallbacks(const std::string& presetId)
+{
+    if (presetId.empty() || !mActivePreset)
+        return;
+
+    for (const auto& node : mActivePreset->graph.nodes)
+    {
+        if (auto* processor = mPresetMixer.GetNodeProcessor(presetId, node.id))
+        {
+            processor->SetRuntimeConfigChangedCallback(
+                [this, presetId, nodeId = node.id](const std::string& key, const std::string& value)
+                {
+                    mHost.RunOnMainThread([this, presetId, nodeId, key, value]()
+                    {
+                        HandleRuntimeNodeConfigChanged(presetId, nodeId, key, value);
+                    });
+                });
+        }
+    }
+}
+
+void PluginController::HandleRuntimeNodeConfigChanged(const std::string& presetId,
+                                                      const std::string& nodeId,
+                                                      const std::string& key,
+                                                      const std::string& value)
+{
+    if (presetId.empty() || nodeId.empty() || key.empty() || !mActivePreset || IsCompositeEditMode())
+        return;
+
+    if (!mActivePresetId.empty() && presetId != mActivePresetId)
+        return;
+
+    auto* targetGraph = ResolveEditTarget();
+    auto* node = targetGraph ? targetGraph->FindNode(nodeId) : nullptr;
+    if (!node)
+        node = mActivePreset->graph.FindNode(nodeId);
+    if (!node)
+        return;
+
+    const auto existingIt = node->config.find(key);
+    if ((value.empty() && existingIt == node->config.end())
+        || (existingIt != node->config.end() && existingIt->second == value))
+    {
+        return;
+    }
+
+    if (value.empty())
+        node->config.erase(key);
+    else
+        node->config[key] = value;
+
+    SyncActivePresetSceneGraph();
+    mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
+    mMixerPresetJsonCache[presetId] = mActivePresetJson;
+
+    if (key == "pluginStateBase64")
+    {
+        SendMessageToUI(nlohmann::json{
+            {"type", "signalPathNodeConfigUpdated"},
+            {"presetId", presetId},
+            {"nodeId", nodeId},
+            {"key", key},
+            {"captured", true},
+            {"valueLength", value.size()},
+            {"valueHash", HashStringForLog(value)},
+            {"silent", true}
+        }.dump());
+    }
+
+    mPendingStateBroadcast = true;
+    mHost.NotifyStateChanged();
+}
+
 void PluginController::ApplyPreset(const Preset& preset)
 {
     std::lock_guard<std::mutex> lock(mDSPMutex);
@@ -8098,6 +8174,7 @@ void PluginController::ApplyPreset(const Preset& preset)
     const std::string initialSlotId = normalizedPreset.id.empty() ? "p1" : normalizedPreset.id;
     mPresetMixer.AddActivePreset(normalizedPreset, initialSlotId, normalizedPreset.name);
     mMixerPresetJsonCache[initialSlotId] = mActivePresetJson;
+    AttachRuntimeConfigCallbacks(initialSlotId);
 
     // Register tuner callback
     mPresetMixer.SetTunerCallback(
@@ -8268,6 +8345,7 @@ void PluginController::CaptureRuntimePluginStates(Preset& preset, const std::str
                 continue;
 
             node.config.erase("pluginStateBase64Length");
+            node.config.erase("pluginStateBase64Hash");
 
             std::string state = captureRuntimeState(node.id);
             std::string source = "runtime";

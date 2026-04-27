@@ -280,6 +280,11 @@ private:
     // ── Internal helpers ───────────────────────────────────────────
     void BroadcastState();
     void ApplyPreset(const Preset& preset);
+    void AttachRuntimeConfigCallbacks(const std::string& presetId);
+    void HandleRuntimeNodeConfigChanged(const std::string& presetId,
+                                        const std::string& nodeId,
+                                        const std::string& key,
+                                        const std::string& value);
     void UpdateHostLatency();
     void ApplyBlendDefinitions(Preset& preset);
     void CaptureRuntimePluginStates(Preset& preset, const std::string& presetId) const;

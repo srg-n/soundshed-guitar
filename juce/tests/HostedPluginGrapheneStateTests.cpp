@@ -7,6 +7,7 @@
 
 #include <juce_events/juce_events.h>
 
+#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
@@ -28,6 +29,8 @@ constexpr auto kBlockSize = 512;
 constexpr const char* kGraphenePath = R"(C:\Program Files\Common Files\VST3\PolyChrome DSP\Graphene.vst3)";
 constexpr const char* kStateConfigKey = "pluginStateBase64";
 constexpr const char* kPluginNodeId = "plugin-host-node";
+constexpr int kGrapheneTransposeParameterIndex = 104;
+constexpr const char* kGrapheneTransposeParameterLabel = "Transpose";
 
 class TestHost final : public guitarfx::IPluginHost
 {
@@ -139,6 +142,13 @@ struct PluginSnapshot
     std::string stateBase64;
 };
 
+struct NamedParameterSnapshot
+{
+    int index = -1;
+    std::string name;
+    float value = 0.0f;
+};
+
 bool CompareSnapshots(const PluginSnapshot& lhs, const PluginSnapshot& rhs)
 {
     if (lhs.currentProgram != rhs.currentProgram)
@@ -155,6 +165,24 @@ bool CompareSnapshots(const PluginSnapshot& lhs, const PluginSnapshot& rhs)
     }
 
     return true;
+}
+
+std::optional<nlohmann::json> FindLastUiMessageOfType(const TestHost& host, const std::string& type)
+{
+    for (auto it = host.sentMessages.rbegin(); it != host.sentMessages.rend(); ++it)
+    {
+        try
+        {
+            const auto message = nlohmann::json::parse(*it);
+            if (message.value("type", "") == type)
+                return message;
+        }
+        catch (...)
+        {
+        }
+    }
+
+    return std::nullopt;
 }
 
 std::string DescribeSnapshotDifference(const PluginSnapshot& expected, const PluginSnapshot& actual)
@@ -239,6 +267,150 @@ PluginSnapshot CaptureSnapshot(guitarfx::JuceHostedPluginEffect& effect, juce::A
         return values;
     });
     return snapshot;
+}
+
+std::optional<NamedParameterSnapshot> FindParameterByName(juce::AudioPluginInstance& plugin,
+                                                          const std::string& needle)
+{
+    return CallOnMessageThread([&plugin, needle]() -> std::optional<NamedParameterSnapshot>
+    {
+        const auto& parameters = plugin.getParameters();
+        for (int index = 0; index < static_cast<int>(parameters.size()); ++index)
+        {
+            auto* parameter = parameters[static_cast<size_t>(index)];
+            if (parameter == nullptr)
+                continue;
+
+            const auto name = parameter->getName(256);
+            if (!name.containsIgnoreCase(needle))
+                continue;
+
+            return NamedParameterSnapshot{
+                index,
+                name.toStdString(),
+                parameter->getValue(),
+            };
+        }
+
+        return std::nullopt;
+    });
+}
+
+std::optional<NamedParameterSnapshot> FindParameterByIndex(juce::AudioPluginInstance& plugin,
+                                                           int index)
+{
+    return CallOnMessageThread([&plugin, index]() -> std::optional<NamedParameterSnapshot>
+    {
+        const auto& parameters = plugin.getParameters();
+        if (index < 0 || index >= static_cast<int>(parameters.size()))
+            return std::nullopt;
+
+        auto* parameter = parameters[static_cast<size_t>(index)];
+        if (parameter == nullptr)
+            return std::nullopt;
+
+        return NamedParameterSnapshot{
+            index,
+            parameter->getName(256).toStdString(),
+            parameter->getValue(),
+        };
+    });
+}
+
+std::string DescribeAvailableParameters(juce::AudioPluginInstance& plugin, size_t limit = 24)
+{
+    return CallOnMessageThread([&plugin, limit]() {
+        std::string summary;
+        const auto& parameters = plugin.getParameters();
+        const size_t parameterCount = static_cast<size_t>(parameters.size());
+        const size_t count = std::min(limit, parameterCount);
+        for (size_t index = 0; index < count; ++index)
+        {
+            auto* parameter = parameters[index];
+            if (parameter == nullptr)
+                continue;
+
+            if (!summary.empty())
+                summary += ", ";
+
+            summary += parameter->getName(256).toStdString();
+        }
+
+        if (parameterCount > limit)
+            summary += ", ...";
+
+        return summary;
+    });
+}
+
+float ChooseDistinctParameterValue(float currentValue)
+{
+    if (currentValue < 0.2f)
+        return 0.82f;
+    if (currentValue > 0.8f)
+        return 0.18f;
+    return currentValue < 0.5f ? 0.86f : 0.14f;
+}
+
+bool SetParameterValue(juce::AudioPluginInstance& plugin, int index, float targetValue)
+{
+    return CallOnMessageThread([&plugin, index, targetValue]() {
+        const auto& parameters = plugin.getParameters();
+        if (index < 0 || index >= static_cast<int>(parameters.size()))
+            return false;
+
+        auto* parameter = parameters[static_cast<size_t>(index)];
+        if (parameter == nullptr)
+            return false;
+
+        if (NearlyEqual(parameter->getValue(), targetValue))
+            return false;
+
+        parameter->beginChangeGesture();
+        parameter->setValueNotifyingHost(targetValue);
+        parameter->endChangeGesture();
+        return true;
+    });
+}
+
+bool MutateSpecificParameter(juce::AudioPluginInstance& plugin,
+                             const std::string& parameterNeedle,
+                             NamedParameterSnapshot& mutatedParameter)
+{
+    const auto foundParameter = FindParameterByName(plugin, parameterNeedle);
+    if (!foundParameter.has_value())
+        return false;
+
+    const float targetValue = ChooseDistinctParameterValue(foundParameter->value);
+    if (!SetParameterValue(plugin, foundParameter->index, targetValue))
+        return false;
+
+    const auto updatedParameter = FindParameterByName(plugin, parameterNeedle);
+    if (!updatedParameter.has_value())
+        return false;
+
+    mutatedParameter = *updatedParameter;
+    return !NearlyEqual(foundParameter->value, mutatedParameter.value);
+}
+
+bool MutateSpecificParameterByIndex(juce::AudioPluginInstance& plugin,
+                                    int parameterIndex,
+                                    NamedParameterSnapshot& mutatedParameter)
+{
+    const auto foundParameter = FindParameterByIndex(plugin, parameterIndex);
+    if (!foundParameter.has_value())
+        return false;
+
+    const float targetValue = ChooseDistinctParameterValue(foundParameter->value);
+    if (!SetParameterValue(plugin, foundParameter->index, targetValue))
+        return false;
+
+    const auto updatedParameter = FindParameterByIndex(plugin, parameterIndex);
+    if (!updatedParameter.has_value())
+        return false;
+
+    mutatedParameter = *updatedParameter;
+    return !NearlyEqual(foundParameter->value, mutatedParameter.value);
 }
 
 struct PluginMutationSummary
@@ -399,6 +571,165 @@ bool TestHostedPluginSnapshotRoundTrip()
     return true;
 }
 
+bool TestHostedPluginSpecificParameterStateRoundTrip(const std::string& parameterNeedle)
+{
+    guitarfx::JuceHostedPluginEffect sourceEffect;
+    if (!LoadPreparedPlugin(sourceEffect))
+    {
+        Fail("Failed to load Graphene in source effect for parameter '" + parameterNeedle + "'");
+        return false;
+    }
+
+    auto* sourcePlugin = RequirePlugin(sourceEffect);
+    if (sourcePlugin == nullptr)
+    {
+        Fail("Source effect did not expose a hosted plugin instance for parameter '" + parameterNeedle + "'");
+        return false;
+    }
+
+    const PluginSnapshot baselineSnapshot = CaptureSnapshot(sourceEffect, *sourcePlugin);
+    const auto baselineParameter = FindParameterByName(*sourcePlugin, parameterNeedle);
+    if (!baselineParameter.has_value())
+    {
+        Fail("Graphene did not expose a host-visible parameter containing '" + parameterNeedle
+            + "'. Available parameters: " + DescribeAvailableParameters(*sourcePlugin));
+        return false;
+    }
+
+    NamedParameterSnapshot mutatedParameter;
+    if (!MutateSpecificParameter(*sourcePlugin, parameterNeedle, mutatedParameter))
+    {
+        Fail("Graphene parameter '" + baselineParameter->name + "' did not change after mutation");
+        return false;
+    }
+
+    const PluginSnapshot mutatedSnapshot = CaptureSnapshot(sourceEffect, *sourcePlugin);
+    if (mutatedSnapshot.stateBase64.empty())
+    {
+        Fail("Mutated Graphene state capture returned an empty blob for parameter '" + mutatedParameter.name + "'");
+        return false;
+    }
+    const bool stateBlobChanged = mutatedSnapshot.stateBase64 != baselineSnapshot.stateBase64;
+
+    guitarfx::JuceHostedPluginEffect restoredEffect;
+    restoredEffect.Prepare(kSampleRate, kBlockSize);
+    restoredEffect.SetConfig(kStateConfigKey, mutatedSnapshot.stateBase64);
+    if (!restoredEffect.LoadResource(fs::path{kGraphenePath}))
+    {
+        Fail("Failed to load Graphene in restored effect for parameter '" + mutatedParameter.name + "'");
+        return false;
+    }
+
+    auto* restoredPlugin = RequirePlugin(restoredEffect);
+    if (restoredPlugin == nullptr)
+    {
+        Fail("Restored effect did not expose a hosted plugin instance for parameter '" + mutatedParameter.name + "'");
+        return false;
+    }
+
+    const auto restoredParameter = FindParameterByName(*restoredPlugin, parameterNeedle);
+    if (!restoredParameter.has_value())
+    {
+        Fail("Restored Graphene instance no longer exposed parameter containing '" + parameterNeedle + "'");
+        return false;
+    }
+
+    if (!NearlyEqual(restoredParameter->value, mutatedParameter.value))
+    {
+        Fail("Graphene parameter '" + mutatedParameter.name + "' did not round-trip through hosted state: expected "
+            + std::to_string(mutatedParameter.value) + ", got " + std::to_string(restoredParameter->value)
+            + "; state blob " + std::string{stateBlobChanged ? "changed" : "did not change"} + " after mutation");
+        return false;
+    }
+
+    return true;
+}
+
+bool TestHostedPluginSpecificParameterIndexStateRoundTrip(int parameterIndex,
+                                                          const std::string& expectedLabel)
+{
+    guitarfx::JuceHostedPluginEffect sourceEffect;
+    if (!LoadPreparedPlugin(sourceEffect))
+    {
+        Fail("Failed to load Graphene in source effect for parameter index " + std::to_string(parameterIndex));
+        return false;
+    }
+
+    auto* sourcePlugin = RequirePlugin(sourceEffect);
+    if (sourcePlugin == nullptr)
+    {
+        Fail("Source effect did not expose a hosted plugin instance for parameter index " + std::to_string(parameterIndex));
+        return false;
+    }
+
+    const PluginSnapshot baselineSnapshot = CaptureSnapshot(sourceEffect, *sourcePlugin);
+    const auto baselineParameter = FindParameterByIndex(*sourcePlugin, parameterIndex);
+    if (!baselineParameter.has_value())
+    {
+        Fail("Graphene did not expose parameter index " + std::to_string(parameterIndex)
+            + ". Available parameters: " + DescribeAvailableParameters(*sourcePlugin));
+        return false;
+    }
+
+    if (!expectedLabel.empty() && baselineParameter->name.find(expectedLabel) == std::string::npos)
+    {
+        Fail("Graphene parameter index " + std::to_string(parameterIndex) + " was expected to contain '"
+            + expectedLabel + "' but exposed '" + baselineParameter->name + "'");
+        return false;
+    }
+
+    NamedParameterSnapshot mutatedParameter;
+    if (!MutateSpecificParameterByIndex(*sourcePlugin, parameterIndex, mutatedParameter))
+    {
+        Fail("Graphene parameter index " + std::to_string(parameterIndex) + " ('" + baselineParameter->name
+            + "') did not change after mutation");
+        return false;
+    }
+
+    const PluginSnapshot mutatedSnapshot = CaptureSnapshot(sourceEffect, *sourcePlugin);
+    if (mutatedSnapshot.stateBase64.empty())
+    {
+        Fail("Mutated Graphene state capture returned an empty blob for parameter index " + std::to_string(parameterIndex)
+            + " ('" + mutatedParameter.name + "')");
+        return false;
+    }
+    const bool stateBlobChanged = mutatedSnapshot.stateBase64 != baselineSnapshot.stateBase64;
+
+    guitarfx::JuceHostedPluginEffect restoredEffect;
+    restoredEffect.Prepare(kSampleRate, kBlockSize);
+    restoredEffect.SetConfig(kStateConfigKey, mutatedSnapshot.stateBase64);
+    if (!restoredEffect.LoadResource(fs::path{kGraphenePath}))
+    {
+        Fail("Failed to load Graphene in restored effect for parameter index " + std::to_string(parameterIndex));
+        return false;
+    }
+
+    auto* restoredPlugin = RequirePlugin(restoredEffect);
+    if (restoredPlugin == nullptr)
+    {
+        Fail("Restored effect did not expose a hosted plugin instance for parameter index " + std::to_string(parameterIndex));
+        return false;
+    }
+
+    const auto restoredParameter = FindParameterByIndex(*restoredPlugin, parameterIndex);
+    if (!restoredParameter.has_value())
+    {
+        Fail("Restored Graphene instance no longer exposed parameter index " + std::to_string(parameterIndex));
+        return false;
+    }
+
+    if (!NearlyEqual(restoredParameter->value, mutatedParameter.value))
+    {
+        Fail("Graphene parameter index " + std::to_string(parameterIndex) + " ('" + mutatedParameter.name
+            + "') did not round-trip through hosted state: expected " + std::to_string(mutatedParameter.value)
+            + ", got " + std::to_string(restoredParameter->value)
+            + "; state blob " + std::string{stateBlobChanged ? "changed" : "did not change"} + " after mutation");
+        return false;
+    }
+
+    return true;
+}
+
 bool TestControllerPresetSaveLoadRoundTrip()
 {
     const fs::path sandbox = fs::temp_directory_path() / "guitarfx-hosted-plugin-tests" / "controller-save-load";
@@ -520,6 +851,497 @@ bool TestControllerPresetSaveLoadRoundTrip()
 
     return true;
 }
+
+bool TestControllerSpecificParameterStateRoundTrip(const std::string& parameterNeedle)
+{
+    const fs::path sandbox = fs::temp_directory_path() / "guitarfx-hosted-plugin-tests" / ("controller-parameter-" + parameterNeedle);
+    std::error_code ec;
+    fs::remove_all(sandbox, ec);
+    fs::create_directories(sandbox, ec);
+    SetSettingsEnvRoot(sandbox);
+
+    guitarfx::RegisterJuceHostedPluginEffect();
+
+    TestHost sourceHost(sandbox);
+    guitarfx::PluginController sourceController(sourceHost);
+    sourceController.Initialize();
+    sourceController.Prepare(kSampleRate, kBlockSize);
+
+    const auto sourcePreset = BuildHostedPluginPreset("graphene-controller-specific-source", "Graphene Controller Specific Source");
+    sourceController.HandleUIMessage(nlohmann::json{
+        {"type", "loadPreset"},
+        {"presetId", sourcePreset.id},
+        {"preset", nlohmann::json::parse(guitarfx::PresetStorage::SerializeToJson(sourcePreset))}
+    }.dump());
+
+    auto* sourceEffect = RequireHostedEffect(sourceController, sourcePreset.id, kPluginNodeId);
+    if (sourceEffect == nullptr)
+    {
+        Fail("Controller source preset did not create a hosted plugin effect for parameter '" + parameterNeedle + "'");
+        return false;
+    }
+
+    auto* sourcePlugin = RequirePlugin(*sourceEffect);
+    if (sourcePlugin == nullptr)
+    {
+        Fail("Controller source preset did not expose a hosted plugin instance for parameter '" + parameterNeedle + "'");
+        return false;
+    }
+
+    const PluginSnapshot baselineSnapshot = CaptureSnapshot(*sourceEffect, *sourcePlugin);
+    const auto baselineParameter = FindParameterByName(*sourcePlugin, parameterNeedle);
+    if (!baselineParameter.has_value())
+    {
+        Fail("Graphene did not expose a host-visible parameter containing '" + parameterNeedle
+            + "' in controller test. Available parameters: " + DescribeAvailableParameters(*sourcePlugin));
+        return false;
+    }
+
+    NamedParameterSnapshot mutatedParameter;
+    if (!MutateSpecificParameter(*sourcePlugin, parameterNeedle, mutatedParameter))
+    {
+        Fail("Graphene parameter '" + baselineParameter->name + "' did not change in controller mutation test");
+        return false;
+    }
+
+    const PluginSnapshot mutatedSnapshot = CaptureSnapshot(*sourceEffect, *sourcePlugin);
+    if (mutatedSnapshot.stateBase64.empty())
+    {
+        Fail("Controller source preset captured an empty hosted plugin state blob for parameter '" + mutatedParameter.name + "'");
+        return false;
+    }
+    const bool stateBlobChanged = mutatedSnapshot.stateBase64 != baselineSnapshot.stateBase64;
+
+    const std::string savedPresetId = "graphene-controller-specific-saved";
+    sourceController.HandleUIMessage(nlohmann::json{
+        {"type", "savePreset"},
+        {"name", "Graphene Controller Specific Saved"},
+        {"category", "Unit"},
+        {"description", "Hosted plugin specific-parameter save/load round-trip"},
+        {"presetId", savedPresetId}
+    }.dump());
+
+    const fs::path savedPresetPath = sandbox / "Soundshed Guitar" / "data" / "v1" / "presets" / "user" / (savedPresetId + ".json");
+    const auto savedPreset = guitarfx::PresetStorage::LoadFromFile(savedPresetPath);
+    if (!savedPreset)
+    {
+        Fail("Saved preset file was not written for specific parameter '" + mutatedParameter.name + "'");
+        return false;
+    }
+
+    const auto* savedNode = savedPreset->graph.FindNode(kPluginNodeId);
+    if (savedNode == nullptr)
+    {
+        Fail("Saved preset is missing the hosted plugin node for parameter '" + mutatedParameter.name + "'");
+        return false;
+    }
+
+    const auto savedStateIt = savedNode->config.find(kStateConfigKey);
+    if (savedStateIt == savedNode->config.end() || savedStateIt->second.empty())
+    {
+        Fail("Saved preset did not persist the hosted plugin state blob for parameter '" + mutatedParameter.name + "'");
+        return false;
+    }
+
+    if (savedStateIt->second != mutatedSnapshot.stateBase64)
+    {
+        Fail("Saved preset hosted plugin state blob did not match the mutated snapshot for parameter '" + mutatedParameter.name + "'");
+        return false;
+    }
+
+    TestHost restoredHost(sandbox);
+    guitarfx::PluginController restoredController(restoredHost);
+    restoredController.Initialize();
+    restoredController.Prepare(kSampleRate, kBlockSize);
+    restoredController.HandleUIMessage(nlohmann::json{
+        {"type", "loadPreset"},
+        {"presetId", savedPreset->id},
+        {"preset", nlohmann::json::parse(guitarfx::PresetStorage::SerializeToJson(*savedPreset))}
+    }.dump());
+
+    auto* restoredEffect = RequireHostedEffect(restoredController, savedPreset->id, kPluginNodeId);
+    if (restoredEffect == nullptr)
+    {
+        Fail("Restored controller preset did not create a hosted plugin effect for parameter '" + mutatedParameter.name + "'");
+        return false;
+    }
+
+    auto* restoredPlugin = RequirePlugin(*restoredEffect);
+    if (restoredPlugin == nullptr)
+    {
+        Fail("Restored controller preset did not expose a hosted plugin instance for parameter '" + mutatedParameter.name + "'");
+        return false;
+    }
+
+    const auto restoredParameter = FindParameterByName(*restoredPlugin, parameterNeedle);
+    if (!restoredParameter.has_value())
+    {
+        Fail("Restored Graphene instance no longer exposed parameter containing '" + parameterNeedle + "' in controller test");
+        return false;
+    }
+
+    if (!NearlyEqual(restoredParameter->value, mutatedParameter.value))
+    {
+        Fail("Controller preset save/load did not restore parameter '" + mutatedParameter.name + "': expected "
+            + std::to_string(mutatedParameter.value) + ", got " + std::to_string(restoredParameter->value)
+            + "; state blob " + std::string{stateBlobChanged ? "changed" : "did not change"} + " after mutation");
+        return false;
+    }
+
+    return true;
+}
+
+bool TestControllerSpecificParameterIndexStateRoundTrip(int parameterIndex,
+                                                        const std::string& expectedLabel)
+{
+    const fs::path sandbox = fs::temp_directory_path() / "guitarfx-hosted-plugin-tests"
+        / ("controller-parameter-index-" + std::to_string(parameterIndex));
+    std::error_code ec;
+    fs::remove_all(sandbox, ec);
+    fs::create_directories(sandbox, ec);
+    SetSettingsEnvRoot(sandbox);
+
+    guitarfx::RegisterJuceHostedPluginEffect();
+
+    TestHost sourceHost(sandbox);
+    guitarfx::PluginController sourceController(sourceHost);
+    sourceController.Initialize();
+    sourceController.Prepare(kSampleRate, kBlockSize);
+
+    const auto sourcePreset = BuildHostedPluginPreset("graphene-controller-index-source", "Graphene Controller Index Source");
+    sourceController.HandleUIMessage(nlohmann::json{
+        {"type", "loadPreset"},
+        {"presetId", sourcePreset.id},
+        {"preset", nlohmann::json::parse(guitarfx::PresetStorage::SerializeToJson(sourcePreset))}
+    }.dump());
+
+    auto* sourceEffect = RequireHostedEffect(sourceController, sourcePreset.id, kPluginNodeId);
+    if (sourceEffect == nullptr)
+    {
+        Fail("Controller source preset did not create a hosted plugin effect for parameter index " + std::to_string(parameterIndex));
+        return false;
+    }
+
+    auto* sourcePlugin = RequirePlugin(*sourceEffect);
+    if (sourcePlugin == nullptr)
+    {
+        Fail("Controller source preset did not expose a hosted plugin instance for parameter index " + std::to_string(parameterIndex));
+        return false;
+    }
+
+    const PluginSnapshot baselineSnapshot = CaptureSnapshot(*sourceEffect, *sourcePlugin);
+    const auto baselineParameter = FindParameterByIndex(*sourcePlugin, parameterIndex);
+    if (!baselineParameter.has_value())
+    {
+        Fail("Graphene did not expose parameter index " + std::to_string(parameterIndex)
+            + " in controller test. Available parameters: " + DescribeAvailableParameters(*sourcePlugin));
+        return false;
+    }
+
+    if (!expectedLabel.empty() && baselineParameter->name.find(expectedLabel) == std::string::npos)
+    {
+        Fail("Graphene parameter index " + std::to_string(parameterIndex) + " in controller test was expected to contain '"
+            + expectedLabel + "' but exposed '" + baselineParameter->name + "'");
+        return false;
+    }
+
+    NamedParameterSnapshot mutatedParameter;
+    if (!MutateSpecificParameterByIndex(*sourcePlugin, parameterIndex, mutatedParameter))
+    {
+        Fail("Graphene parameter index " + std::to_string(parameterIndex) + " ('" + baselineParameter->name
+            + "') did not change in controller mutation test");
+        return false;
+    }
+
+    const PluginSnapshot mutatedSnapshot = CaptureSnapshot(*sourceEffect, *sourcePlugin);
+    if (mutatedSnapshot.stateBase64.empty())
+    {
+        Fail("Controller source preset captured an empty hosted plugin state blob for parameter index "
+            + std::to_string(parameterIndex) + " ('" + mutatedParameter.name + "')");
+        return false;
+    }
+    const bool stateBlobChanged = mutatedSnapshot.stateBase64 != baselineSnapshot.stateBase64;
+
+    const std::string savedPresetId = "graphene-controller-index-saved";
+    sourceController.HandleUIMessage(nlohmann::json{
+        {"type", "savePreset"},
+        {"name", "Graphene Controller Index Saved"},
+        {"category", "Unit"},
+        {"description", "Hosted plugin specific-index save/load round-trip"},
+        {"presetId", savedPresetId}
+    }.dump());
+
+    const fs::path savedPresetPath = sandbox / "Soundshed Guitar" / "data" / "v1" / "presets" / "user" / (savedPresetId + ".json");
+    const auto savedPreset = guitarfx::PresetStorage::LoadFromFile(savedPresetPath);
+    if (!savedPreset)
+    {
+        Fail("Saved preset file was not written for parameter index " + std::to_string(parameterIndex));
+        return false;
+    }
+
+    const auto* savedNode = savedPreset->graph.FindNode(kPluginNodeId);
+    if (savedNode == nullptr)
+    {
+        Fail("Saved preset is missing the hosted plugin node for parameter index " + std::to_string(parameterIndex));
+        return false;
+    }
+
+    const auto savedStateIt = savedNode->config.find(kStateConfigKey);
+    if (savedStateIt == savedNode->config.end() || savedStateIt->second.empty())
+    {
+        Fail("Saved preset did not persist the hosted plugin state blob for parameter index " + std::to_string(parameterIndex));
+        return false;
+    }
+
+    if (savedStateIt->second != mutatedSnapshot.stateBase64)
+    {
+        Fail("Saved preset hosted plugin state blob did not match the mutated snapshot for parameter index "
+            + std::to_string(parameterIndex) + " ('" + mutatedParameter.name + "')");
+        return false;
+    }
+
+    TestHost restoredHost(sandbox);
+    guitarfx::PluginController restoredController(restoredHost);
+    restoredController.Initialize();
+    restoredController.Prepare(kSampleRate, kBlockSize);
+    restoredController.HandleUIMessage(nlohmann::json{
+        {"type", "loadPreset"},
+        {"presetId", savedPreset->id},
+        {"preset", nlohmann::json::parse(guitarfx::PresetStorage::SerializeToJson(*savedPreset))}
+    }.dump());
+
+    auto* restoredEffect = RequireHostedEffect(restoredController, savedPreset->id, kPluginNodeId);
+    if (restoredEffect == nullptr)
+    {
+        Fail("Restored controller preset did not create a hosted plugin effect for parameter index " + std::to_string(parameterIndex));
+        return false;
+    }
+
+    auto* restoredPlugin = RequirePlugin(*restoredEffect);
+    if (restoredPlugin == nullptr)
+    {
+        Fail("Restored controller preset did not expose a hosted plugin instance for parameter index " + std::to_string(parameterIndex));
+        return false;
+    }
+
+    const auto restoredParameter = FindParameterByIndex(*restoredPlugin, parameterIndex);
+    if (!restoredParameter.has_value())
+    {
+        Fail("Restored Graphene instance no longer exposed parameter index " + std::to_string(parameterIndex) + " in controller test");
+        return false;
+    }
+
+    if (!NearlyEqual(restoredParameter->value, mutatedParameter.value))
+    {
+        Fail("Controller preset save/load did not restore parameter index " + std::to_string(parameterIndex)
+            + " ('" + mutatedParameter.name + "'): expected " + std::to_string(mutatedParameter.value)
+            + ", got " + std::to_string(restoredParameter->value)
+            + "; state blob " + std::string{stateBlobChanged ? "changed" : "did not change"} + " after mutation");
+        return false;
+    }
+
+    return true;
+}
+
+bool TestControllerAutoCapturesHostedPluginStateOnParameterChange(const std::string& parameterNeedle)
+{
+    const fs::path sandbox = fs::temp_directory_path() / "guitarfx-hosted-plugin-tests" / ("controller-auto-capture-" + parameterNeedle);
+    std::error_code ec;
+    fs::remove_all(sandbox, ec);
+    fs::create_directories(sandbox, ec);
+    SetSettingsEnvRoot(sandbox);
+
+    guitarfx::RegisterJuceHostedPluginEffect();
+
+    TestHost sourceHost(sandbox);
+    guitarfx::PluginController sourceController(sourceHost);
+    sourceController.Initialize();
+    sourceController.Prepare(kSampleRate, kBlockSize);
+    sourceController.OnWebContentLoaded();
+    sourceHost.sentMessages.clear();
+
+    const auto sourcePreset = BuildHostedPluginPreset("graphene-controller-auto-capture-source", "Graphene Controller Auto Capture Source");
+    sourceController.HandleUIMessage(nlohmann::json{
+        {"type", "loadPreset"},
+        {"presetId", sourcePreset.id},
+        {"preset", nlohmann::json::parse(guitarfx::PresetStorage::SerializeToJson(sourcePreset))}
+    }.dump());
+
+    auto* sourceEffect = RequireHostedEffect(sourceController, sourcePreset.id, kPluginNodeId);
+    if (sourceEffect == nullptr)
+    {
+        Fail("Controller auto-capture test did not create a hosted plugin effect");
+        return false;
+    }
+
+    auto* sourcePlugin = RequirePlugin(*sourceEffect);
+    if (sourcePlugin == nullptr)
+    {
+        Fail("Controller auto-capture test did not expose a hosted plugin instance");
+        return false;
+    }
+
+    const PluginSnapshot baselineSnapshot = CaptureSnapshot(*sourceEffect, *sourcePlugin);
+
+    NamedParameterSnapshot mutatedParameter;
+    if (!MutateSpecificParameter(*sourcePlugin, parameterNeedle, mutatedParameter))
+    {
+        Fail("Controller auto-capture test could not mutate parameter '" + parameterNeedle + "'");
+        return false;
+    }
+
+    sourceController.OnIdle();
+
+    const auto nodeConfigMessage = FindLastUiMessageOfType(sourceHost, "signalPathNodeConfigUpdated");
+    if (!nodeConfigMessage.has_value())
+    {
+        Fail("Controller auto-capture test did not emit a signalPathNodeConfigUpdated message");
+        return false;
+    }
+
+    if (nodeConfigMessage->value("nodeId", "") != kPluginNodeId
+        || nodeConfigMessage->value("key", "") != kStateConfigKey
+        || !nodeConfigMessage->value("captured", false)
+        || !nodeConfigMessage->value("silent", false))
+    {
+        Fail("Controller auto-capture emitted an unexpected signalPathNodeConfigUpdated payload");
+        return false;
+    }
+
+    if (nodeConfigMessage->value("presetId", "") != sourcePreset.id)
+    {
+        Fail("Controller auto-capture signalPathNodeConfigUpdated payload did not include the active preset id");
+        return false;
+    }
+
+    if (nodeConfigMessage->value("valueLength", 0) <= 0)
+    {
+        Fail("Controller auto-capture signalPathNodeConfigUpdated message did not include the hosted plugin state length");
+        return false;
+    }
+
+    if (nodeConfigMessage->value("valueHash", "").empty())
+    {
+        Fail("Controller auto-capture signalPathNodeConfigUpdated message did not include the hosted plugin state hash");
+        return false;
+    }
+
+    const auto stateMessage = FindLastUiMessageOfType(sourceHost, "state");
+    if (!stateMessage.has_value())
+    {
+        Fail("Controller auto-capture test did not broadcast updated state");
+        return false;
+    }
+
+    const auto presetGraphsIt = stateMessage->find("mixer");
+    if (presetGraphsIt == stateMessage->end() || !presetGraphsIt->is_object())
+    {
+        Fail("Controller auto-capture state broadcast is missing mixer state");
+        return false;
+    }
+
+    const auto graphsIt = presetGraphsIt->find("presetGraphs");
+    if (graphsIt == presetGraphsIt->end() || !graphsIt->is_object())
+    {
+        Fail("Controller auto-capture state broadcast is missing presetGraphs");
+        return false;
+    }
+
+    const auto uiPresetIt = stateMessage->find("preset");
+    if (uiPresetIt == stateMessage->end() || !uiPresetIt->is_object())
+    {
+        Fail("Controller auto-capture state broadcast is missing the scrubbed UI preset");
+        return false;
+    }
+
+    const auto* uiPresetNode = [&]() -> const nlohmann::json*
+    {
+        if (const auto scenesIt = uiPresetIt->find("scenes"); scenesIt != uiPresetIt->end() && scenesIt->is_array())
+        {
+            for (const auto& scene : *scenesIt)
+            {
+                const auto graphIt = scene.find("graph");
+                if (graphIt == scene.end() || !graphIt->is_object())
+                    continue;
+
+                const auto nodesIt = graphIt->find("nodes");
+                if (nodesIt == graphIt->end() || !nodesIt->is_array())
+                    continue;
+
+                for (const auto& node : *nodesIt)
+                {
+                    if (node.value("id", "") == kPluginNodeId)
+                        return &node;
+                }
+            }
+        }
+
+        return nullptr;
+    }();
+
+    if (uiPresetNode == nullptr)
+    {
+        Fail("Controller auto-capture scrubbed UI preset is missing the hosted plugin node");
+        return false;
+    }
+
+    const auto uiConfigIt = uiPresetNode->find("config");
+    if (uiConfigIt == uiPresetNode->end() || !uiConfigIt->is_object())
+    {
+        Fail("Controller auto-capture scrubbed UI preset is missing hosted plugin config");
+        return false;
+    }
+
+    if (uiConfigIt->value("pluginStateBase64Hash", "").empty())
+    {
+        Fail("Controller auto-capture scrubbed UI preset did not include pluginStateBase64Hash");
+        return false;
+    }
+
+    const auto presetIt = graphsIt->find(sourcePreset.id);
+    if (presetIt == graphsIt->end() || !presetIt->is_object())
+    {
+        Fail("Controller auto-capture state broadcast is missing the active preset graph");
+        return false;
+    }
+
+    const auto autoCapturedPreset = guitarfx::PresetStorage::DeserializeFromJson(presetIt->dump());
+    if (!autoCapturedPreset)
+    {
+        Fail("Controller auto-capture state broadcast did not contain a valid preset graph");
+        return false;
+    }
+
+    const auto* pluginNode = autoCapturedPreset->graph.FindNode(kPluginNodeId);
+    if (pluginNode == nullptr)
+    {
+        Fail("Controller auto-capture preset graph is missing the hosted plugin node");
+        return false;
+    }
+
+    const auto stateIt = pluginNode->config.find(kStateConfigKey);
+    if (stateIt == pluginNode->config.end() || stateIt->second.empty())
+    {
+        Fail("Controller auto-capture did not persist the hosted plugin state blob into the active preset graph");
+        return false;
+    }
+
+    if (stateIt->second == baselineSnapshot.stateBase64)
+    {
+        Fail("Controller auto-capture left the active preset graph at the baseline hosted plugin state after mutating parameter '"
+            + mutatedParameter.name + "'");
+        return false;
+    }
+
+    if (stateIt->second != CaptureState(*sourceEffect))
+    {
+        Fail("Controller auto-capture active preset graph does not match the hosted runtime state for parameter '"
+            + mutatedParameter.name + "'");
+        return false;
+    }
+
+    return true;
+}
 } // namespace
 
 int main()
@@ -542,6 +1364,16 @@ int main()
 
     run("Hosted effect full snapshot round-trip", TestHostedPluginSnapshotRoundTrip());
     run("Controller preset save/load full snapshot round-trip", TestControllerPresetSaveLoadRoundTrip());
+    run("Controller auto-captures hosted state on parameter change: Blue Amp Tight",
+        TestControllerAutoCapturesHostedPluginStateOnParameterChange("Blue Amp Tight"));
+    run("Hosted effect specific parameter round-trip: Blue Amp Tight",
+        TestHostedPluginSpecificParameterStateRoundTrip("Blue Amp Tight"));
+    run("Controller preset specific parameter round-trip: Blue Amp Tight",
+        TestControllerSpecificParameterStateRoundTrip("Blue Amp Tight"));
+    run("Hosted effect parameter-index round-trip: 104",
+        TestHostedPluginSpecificParameterIndexStateRoundTrip(kGrapheneTransposeParameterIndex, kGrapheneTransposeParameterLabel));
+    run("Controller preset parameter-index round-trip: 104",
+        TestControllerSpecificParameterIndexStateRoundTrip(kGrapheneTransposeParameterIndex, kGrapheneTransposeParameterLabel));
 
     if (failed != 0)
         return kFailCode;

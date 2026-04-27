@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -17,6 +18,8 @@ namespace guitarfx
   class EffectProcessor
   {
   public:
+    using RuntimeConfigChangedCallback = std::function<void(const std::string&, const std::string&)>;
+
     virtual ~EffectProcessor() = default;
 
     // Lifecycle
@@ -31,6 +34,7 @@ namespace guitarfx
     virtual void SetConfig(const std::string &key, const std::string &value) = 0;
     [[nodiscard]] virtual double GetParam(const std::string &key) const = 0;
     [[nodiscard]] virtual std::string GetConfig(const std::string & /*key*/) const { return ""; }
+    virtual void SetRuntimeConfigChangedCallback(RuntimeConfigChangedCallback /*callback*/) {}
 
     // Resource loading (for effects that need external files)
     virtual bool LoadResource(const std::filesystem::path & /*path*/) { return true; }

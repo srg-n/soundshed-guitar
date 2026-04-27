@@ -183,8 +183,25 @@ window.SoundshedDebug = {
   },
 };
 
-function applySignalPathNodeConfigUpdate(nodeId: string, key: string, value: string | undefined, valueLength?: number): void {
-  const preset = getActivePresetForRender();
+function applySignalPathNodeConfigUpdate(
+  nodeId: string,
+  key: string,
+  value: string | undefined,
+  valueLength?: number,
+  valueHash?: string,
+  presetId?: string,
+): void {
+  const renderedPreset = getActivePresetForRender();
+  let preset = renderedPreset;
+  let shouldRefreshRenderedPreset = true;
+
+  if (typeof presetId === "string" && presetId.length > 0) {
+    if (!renderedPreset || renderedPreset.id !== presetId) {
+      preset = uiState.presetCache.get(presetId) ?? uiState.presets.find((candidate) => candidate.id === presetId) ?? null;
+      shouldRefreshRenderedPreset = false;
+    }
+  }
+
   if (!preset) {
     return;
   }
@@ -201,6 +218,9 @@ function applySignalPathNodeConfigUpdate(nodeId: string, key: string, value: str
     if (key === "pluginStateBase64" && typeof valueLength === "number") {
       node.config.pluginStateBase64Length = `${valueLength}`;
     }
+    if (key === "pluginStateBase64" && typeof valueHash === "string" && valueHash.length > 0) {
+      node.config.pluginStateBase64Hash = valueHash;
+    }
     return true;
   };
 
@@ -213,10 +233,18 @@ function applySignalPathNodeConfigUpdate(nodeId: string, key: string, value: str
     return;
   }
 
-  setActivePresetDraft(preset);
+  uiState.presetCache.set(preset.id, clonePreset(preset));
+
+  if (shouldRefreshRenderedPreset || uiState.activePresetId === preset.id) {
+    setActivePresetDraft(preset);
+  }
+
   setPresetDirty(true);
-  refreshSelectedNodeParams();
-  renderSignalPathBar();
+
+  if (shouldRefreshRenderedPreset || uiState.activePresetId === preset.id) {
+    refreshSelectedNodeParams();
+    renderSignalPathBar();
+  }
 }
 
 function presetSignature(preset?: Preset | null): string {
@@ -1062,14 +1090,23 @@ export function handleIncomingMessage(message: string): void {
       break;
     }
     case "signalPathNodeConfigUpdated": {
-      const update = payload as { nodeId?: string; key?: string; value?: string; valueLength?: number; captured?: boolean };
+      const update = payload as {
+        presetId?: string;
+        nodeId?: string;
+        key?: string;
+        value?: string;
+        valueLength?: number;
+        valueHash?: string;
+        captured?: boolean;
+        silent?: boolean;
+      };
       if (typeof update.nodeId === "string" && typeof update.key === "string") {
         if (typeof update.value === "string") {
-          applySignalPathNodeConfigUpdate(update.nodeId, update.key, update.value, update.valueLength);
+          applySignalPathNodeConfigUpdate(update.nodeId, update.key, update.value, update.valueLength, update.valueHash, update.presetId);
         } else if (update.captured && update.key === "pluginStateBase64") {
-          applySignalPathNodeConfigUpdate(update.nodeId, update.key, undefined, update.valueLength);
+          applySignalPathNodeConfigUpdate(update.nodeId, update.key, undefined, update.valueLength, update.valueHash, update.presetId);
         }
-        if (update.key === "pluginStateBase64") {
+        if (update.key === "pluginStateBase64" && !update.silent) {
           showNotification("Plugin state captured", "success");
         }
       }
