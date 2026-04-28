@@ -1,0 +1,3 @@
+/home/runner/work/soundshed-guitar/soundshed-guitar/core/build-validate/_deps/stftpitchshift-subbuild/CMakeFiles/stftpitchshift-populate.dir
+/home/runner/work/soundshed-guitar/soundshed-guitar/core/build-validate/_deps/stftpitchshift-subbuild/CMakeFiles/edit_cache.dir
+/home/runner/work/soundshed-guitar/soundshed-guitar/core/build-validate/_deps/stftpitchshift-subbuild/CMakeFiles/rebuild_cache.dir

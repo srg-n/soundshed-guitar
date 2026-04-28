@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/runner/work/soundshed-guitar/soundshed-guitar/core/build-validate/_deps/neuralampmodelercore-subbuild/CMakeFiles/neuralampmodelercore-populate"
+		},
+		{
+			"file" : "/home/runner/work/soundshed-guitar/soundshed-guitar/core/build-validate/_deps/neuralampmodelercore-subbuild/CMakeFiles/neuralampmodelercore-populate.rule"
+		},
+		{
+			"file" : "/home/runner/work/soundshed-guitar/soundshed-guitar/core/build-validate/_deps/neuralampmodelercore-subbuild/CMakeFiles/neuralampmodelercore-populate-complete.rule"
+		},
+		{
+			"file" : "/home/runner/work/soundshed-guitar/soundshed-guitar/core/build-validate/_deps/neuralampmodelercore-subbuild/neuralampmodelercore-populate-prefix/src/neuralampmodelercore-populate-stamp/neuralampmodelercore-populate-build.rule"
+		},
+		{
+			"file" : "/home/runner/work/soundshed-guitar/soundshed-guitar/core/build-validate/_deps/neuralampmodelercore-subbuild/neuralampmodelercore-populate-prefix/src/neuralampmodelercore-populate-stamp/neuralampmodelercore-populate-configure.rule"
+		},
+		{
+			"file" : "/home/runner/work/soundshed-guitar/soundshed-guitar/core/build-validate/_deps/neuralampmodelercore-subbuild/neuralampmodelercore-populate-prefix/src/neuralampmodelercore-populate-stamp/neuralampmodelercore-populate-download.rule"
+		},
+		{
+			"file" : "/home/runner/work/soundshed-guitar/soundshed-guitar/core/build-validate/_deps/neuralampmodelercore-subbuild/neuralampmodelercore-populate-prefix/src/neuralampmodelercore-populate-stamp/neuralampmodelercore-populate-install.rule"
+		},
+		{
+			"file" : "/home/runner/work/soundshed-guitar/soundshed-guitar/core/build-validate/_deps/neuralampmodelercore-subbuild/neuralampmodelercore-populate-prefix/src/neuralampmodelercore-populate-stamp/neuralampmodelercore-populate-mkdir.rule"
+		},
+		{
+			"file" : "/home/runner/work/soundshed-guitar/soundshed-guitar/core/build-validate/_deps/neuralampmodelercore-subbuild/neuralampmodelercore-populate-prefix/src/neuralampmodelercore-populate-stamp/neuralampmodelercore-populate-patch.rule"
+		},
+		{
+			"file" : "/home/runner/work/soundshed-guitar/soundshed-guitar/core/build-validate/_deps/neuralampmodelercore-subbuild/neuralampmodelercore-populate-prefix/src/neuralampmodelercore-populate-stamp/neuralampmodelercore-populate-test.rule"
+		},
+		{
+			"file" : "/home/runner/work/soundshed-guitar/soundshed-guitar/core/build-validate/_deps/neuralampmodelercore-subbuild/neuralampmodelercore-populate-prefix/src/neuralampmodelercore-populate-stamp/neuralampmodelercore-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"neuralampmodelercore-populate"
+		],
+		"name" : "neuralampmodelercore-populate"
+	}
+}
