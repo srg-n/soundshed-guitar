@@ -4,6 +4,7 @@ import { fail, ok, safeJson } from "../lib/http";
 import { optionalAuth, requireAuth } from "../middleware/session";
 import { Env } from "../types/env";
 import { randomId } from "../lib/utils";
+import { parsePackConfig, stringifyPackConfig, type PackConfig } from "../lib/content-config";
 
 type CreatePackBody = {
   title?: string;
@@ -42,39 +43,6 @@ type ModeratePackBody = {
   action?: "approve" | "reject";
   notes?: string;
 };
-
-type PackConfig = {
-  description: string | null;
-  zipAssetId: string | null;
-  thumbnailAssetId: string | null;
-};
-
-function parsePackConfig(configJson: string | null | undefined): PackConfig {
-  const defaults: PackConfig = {
-    description: null,
-    zipAssetId: null,
-    thumbnailAssetId: null
-  };
-
-  if (!configJson) {
-    return defaults;
-  }
-
-  try {
-    const parsed = JSON.parse(configJson) as Partial<PackConfig>;
-    return {
-      description: typeof parsed.description === "string" ? parsed.description : null,
-      zipAssetId: typeof parsed.zipAssetId === "string" ? parsed.zipAssetId : null,
-      thumbnailAssetId: typeof parsed.thumbnailAssetId === "string" ? parsed.thumbnailAssetId : null
-    };
-  } catch {
-    return defaults;
-  }
-}
-
-function stringifyPackConfig(config: PackConfig): string {
-  return JSON.stringify(config);
-}
 
 async function loadCreator(db: D1Database, creatorUserId: string): Promise<CreatorRow | null> {
   return db.prepare(

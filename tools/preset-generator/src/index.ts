@@ -1,17 +1,17 @@
-import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import JSZip from "jszip";
-import { cachedResourceDownload, type CacheStats } from "./cache.js";
-import { ensureDir, nowIso, readJsonFile, sha256Hex, slugify, writeJsonFile } from "./fs-utils.js";
+import type { CacheStats } from "./cache.js";
+import { nowIso, readJsonFile, sha256Hex, writeJsonFile } from "./fs-utils.js";
 import { buildPresetsFromPairings } from "./generator.js";
 import { buildPairings } from "./pairing.js";
-import { getTone3000AccessToken, loadTone3000Candidates } from "./tone3000.js";
+import { buildResourceIndex, materializeResourceCache, writeRunArtifacts } from "./resource-artifacts.js";
+import { loadTone3000Candidates } from "./tone3000.js";
 import {
   type GeneratorConfig,
   type PresetV2,
   type ResourceCandidate,
   type ResourceIndex,
-  type ResourceIndexItem,
   type RunManifest,
   type SeedFile
 } from "./types.js";
@@ -46,105 +46,6 @@ function splitCandidates(all: ResourceCandidate[]): { nams: ResourceCandidate[];
     nams: all.filter((r) => r.kind === "nam"),
     irs: all.filter((r) => r.kind === "ir")
   };
-}
-
-async function materializeResourceCache(opts: {
-  config: GeneratorConfig;
-  cacheRoot: string;
-  resources: ResourceCandidate[];
-  stats: CacheStats;
-}): Promise<Map<string, { hash: string; ext: string; blobPath: string }>> {
-  const map = new Map<string, { hash: string; ext: string; blobPath: string }>();
-
-  const needsTone3000Auth = opts.resources.some((resource) => resource.source === "tone3000" && !!resource.downloadUrl);
-  const tone3000AccessToken = needsTone3000Auth ? await getTone3000AccessToken(opts.config) : null;
-
-  for (const resource of opts.resources) {
-    if (!resource.downloadUrl) {
-      continue;
-    }
-    const fallbackExt = resource.kind === "nam" ? "nam" : "wav";
-    const headers = resource.source === "tone3000" && tone3000AccessToken
-      ? { Authorization: `Bearer ${tone3000AccessToken}` }
-      : undefined;
-    try {
-      const resolved = await cachedResourceDownload({
-        cacheRoot: opts.cacheRoot,
-        url: resource.downloadUrl,
-        fallbackExt,
-        headers,
-        stats: opts.stats
-      });
-      map.set(resource.id, resolved);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(`Warning: resource download skipped for ${resource.id}: ${message}`);
-    }
-  }
-  return map;
-}
-
-function buildResourceIndex(opts: {
-  resources: ResourceCandidate[];
-  resolved: Map<string, { hash: string; ext: string; blobPath: string }>;
-}): ResourceIndex {
-  const items: ResourceIndexItem[] = opts.resources.map((resource) => {
-    const cached = opts.resolved.get(resource.id);
-    const hash = cached?.hash ?? sha256Hex(resource.id);
-    const ext = cached?.ext ?? (resource.kind === "nam" ? "nam" : "wav");
-    const fileName = `${hash}.${ext}`;
-    return {
-      resourceId: resource.id,
-      resourceType: resource.kind,
-      provider: resource.source,
-      contentHash: hash,
-      fileExt: ext,
-      filePath: `content/${resource.source}/${fileName}`,
-      displayName: resource.name,
-      originalFileName: `${slugify(resource.name)}.${ext}`
-    };
-  });
-
-  return {
-    schemaVersion: 1,
-    updatedAt: nowIso(),
-    items
-  };
-}
-
-async function writeRunArtifacts(opts: {
-  runRoot: string;
-  presets: PresetV2[];
-  index: ResourceIndex;
-  resources: ResourceCandidate[];
-  manifest: RunManifest;
-  resolved: Map<string, { hash: string; ext: string; blobPath: string }>;
-}): Promise<void> {
-  const presetsDir = path.join(opts.runRoot, "presets");
-  const indexPath = path.join(opts.runRoot, "resources", "indexes", "resources-index.json");
-  const contentDir = path.join(opts.runRoot, "resources", "content");
-
-  await ensureDir(presetsDir);
-  await ensureDir(path.dirname(indexPath));
-  await ensureDir(contentDir);
-
-  for (const preset of opts.presets) {
-    const filePath = path.join(presetsDir, `${preset.id}.json`);
-    await writeJsonFile(filePath, preset);
-  }
-
-  for (const resource of opts.resources) {
-    const cached = opts.resolved.get(resource.id);
-    if (!cached) {
-      continue;
-    }
-    const destination = path.join(contentDir, resource.source, `${cached.hash}.${cached.ext}`);
-    await ensureDir(path.dirname(destination));
-    await cp(cached.blobPath, destination);
-  }
-
-  await writeJsonFile(indexPath, opts.index);
-  await writeJsonFile(path.join(opts.runRoot, "manifest.run.json"), opts.manifest);
 }
 
 async function generate(configPath: string): Promise<void> {

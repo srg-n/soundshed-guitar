@@ -1,15 +1,7 @@
 import { Hono } from "hono";
 import { ok, fail, safeJson } from "../lib/http";
 import { Env } from "../types/env";
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+import { escapeHtml } from "../lib/utils";
 
 function parseConfigJson(raw: string | null | undefined): Record<string, unknown> {
   if (!raw) {

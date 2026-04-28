@@ -12,7 +12,7 @@ import type {
   CustomEffectLibraryEntry,
 } from "./types.js";
 import { postMessage, setPresetMix, setPresetPan, setPresetMute, setPresetSolo, setMasterGain, setLimiterEnabled, removeActivePreset } from "./bridge.js";
-import { idAccentColor } from "./utils.js";
+import { escapeHtml, idAccentColor } from "./utils.js";
 import { showNotification } from "./notifications.js";
 import { EffectTypeRegistry, getNodeEffectInfo, type EffectTypeInfo } from "./presetV2.js";
 import { EffectGuids } from "./effectGuids.js";
@@ -388,15 +388,6 @@ function getCategoryClass(category: string): string {
 function getResourceBaseName(filePath: string): string {
   const normalized = filePath.replace(/\\/g, "/");
   return normalized.split("/").pop() || filePath;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 }
 
 function getLibraryResource(resourceType: string | undefined, resourceId: string): LibraryResource | undefined {

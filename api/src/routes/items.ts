@@ -5,9 +5,9 @@ import { hasToneSharingPublishConsent } from "../lib/shareConsent";
 import { optionalAuth, requireAuth } from "../middleware/session";
 import { Env } from "../types/env";
 import { randomId } from "../lib/utils";
+import { allowedItemVisibilities, parseItemConfig, stringifyItemConfig, type ItemConfig, type ItemVisibility } from "../lib/content-config";
 
 type ItemType = "preset" | "blend" | "layout" | "composite" | "combo";
-type ItemVisibility = "public" | "unlisted" | "private";
 
 type CreateItemBody = {
   type?: ItemType;
@@ -27,7 +27,6 @@ type CreateItemBody = {
 type UpdateItemBody = Partial<CreateItemBody>;
 
 const allowedTypes = new Set<ItemType>(["preset", "blend", "layout", "composite", "combo"]);
-const allowedVisibility = new Set<ItemVisibility>(["public", "unlisted", "private"]);
 
 type ItemRow = {
   id: string;
@@ -65,62 +64,6 @@ type ModerateItemBody = {
   action?: "approve" | "reject";
   notes?: string;
 };
-
-type ItemConfig = {
-  description: string | null;
-  visibility: ItemVisibility;
-  tags: string[] | null;
-  appMinVersion: string | null;
-  appMaxVersion: string | null;
-  payloadAssetId: string | null;
-  privatePayloadAssetId: string | null;
-  manifestAssetId: string | null;
-  thumbnailAssetId: string | null;
-  previewAssetId: string | null;
-};
-
-function parseItemConfig(configJson: string | null | undefined): ItemConfig {
-  const defaults: ItemConfig = {
-    description: null,
-    visibility: "public",
-    tags: null,
-    appMinVersion: null,
-    appMaxVersion: null,
-    payloadAssetId: null,
-    privatePayloadAssetId: null,
-    manifestAssetId: null,
-    thumbnailAssetId: null,
-    previewAssetId: null
-  };
-
-  if (!configJson) {
-    return defaults;
-  }
-
-  try {
-    const parsed = JSON.parse(configJson) as Partial<ItemConfig>;
-    const visibility = parsed.visibility;
-    const rawTags = parsed.tags;
-    return {
-      description: typeof parsed.description === "string" ? parsed.description : null,
-      visibility: visibility && allowedVisibility.has(visibility) ? visibility : "public",
-      tags: Array.isArray(rawTags) ? rawTags.filter((t): t is string => typeof t === "string") : null,
-      appMinVersion: typeof parsed.appMinVersion === "string" ? parsed.appMinVersion : null,
-      appMaxVersion: typeof parsed.appMaxVersion === "string" ? parsed.appMaxVersion : null,
-      payloadAssetId: typeof parsed.payloadAssetId === "string" ? parsed.payloadAssetId : null,
-      privatePayloadAssetId: typeof parsed.privatePayloadAssetId === "string" ? parsed.privatePayloadAssetId : null,
-      manifestAssetId: typeof parsed.manifestAssetId === "string" ? parsed.manifestAssetId : null,
-      thumbnailAssetId: typeof parsed.thumbnailAssetId === "string" ? parsed.thumbnailAssetId : null,
-      previewAssetId: typeof parsed.previewAssetId === "string" ? parsed.previewAssetId : null
-    };
-  } catch {
-    return defaults;
-  }
-}
-
-function stringifyItemConfig(config: ItemConfig): string {
-  return JSON.stringify(config);
-}
 
 async function loadCreator(db: D1Database, creatorUserId: string): Promise<CreatorRow | null> {
   return db.prepare(
@@ -325,7 +268,7 @@ export function itemRoutes() {
     if (!title) {
       return fail(c, "INVALID_TITLE", "title is required", 422);
     }
-    if (!allowedVisibility.has(visibility)) {
+    if (!allowedItemVisibilities.has(visibility)) {
       return fail(c, "INVALID_VISIBILITY", "Invalid visibility", 422);
     }
 
@@ -411,7 +354,7 @@ export function itemRoutes() {
     if (!title) {
       return fail(c, "INVALID_TITLE", "title cannot be empty", 422);
     }
-    if (!allowedVisibility.has(visibility)) {
+    if (!allowedItemVisibilities.has(visibility)) {
       return fail(c, "INVALID_VISIBILITY", "Invalid visibility", 422);
     }
 

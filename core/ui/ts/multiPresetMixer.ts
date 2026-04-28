@@ -16,6 +16,7 @@ import {
   getCompositePresetList,
   removeCompositePreset,
 } from "./bridge.js";
+import { escapeHtml } from "./utils.js";
 import { showNotification } from "./notifications.js";
 import { showConfirm } from "./dialogs.js";
 import { Features, isFeatureEnabled } from "./featureFlags.js";
@@ -200,10 +201,3 @@ export function initMultiRigTab(): void {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}

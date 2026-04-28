@@ -60,6 +60,21 @@ function parseJsonValue<T>(raw: string | null | undefined, fallback: T): T {
   }
 }
 
+function parseNumericRecord(raw: unknown): Record<string, number> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return undefined;
+  }
+
+  const values: Record<string, number> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      values[key] = value;
+    }
+  }
+
+  return Object.keys(values).length > 0 ? values : undefined;
+}
+
 function parseNodeContext(raw: unknown): ModuleNodeContext {
   if (!raw || typeof raw !== "object") {
     return {};
@@ -74,9 +89,7 @@ function parseNodeContext(raw: unknown): ModuleNodeContext {
     currentModuleName: normaliseText(candidate.currentModuleName, 120),
     currentModuleResourceId: normaliseText(candidate.currentModuleResourceId, 160),
     currentModuleVersion: normaliseText(candidate.currentModuleVersion, 40),
-    currentParams: currentParams && typeof currentParams === "object"
-      ? Object.fromEntries(Object.entries(currentParams as Record<string, unknown>).filter(([, value]) => typeof value === "number"))
-      : undefined,
+    currentParams: parseNumericRecord(currentParams),
     existingCustomEffectId: normaliseText(candidate.existingCustomEffectId, 80),
     existingCustomEffectName: normaliseText(candidate.existingCustomEffectName, 120),
     descriptorSummary: descriptorSummary && typeof descriptorSummary === "object"

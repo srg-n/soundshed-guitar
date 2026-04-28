@@ -7,7 +7,7 @@ import { updateSignalDiagnosticsView, updateDSPPerformancePlot } from "./views.j
 import { initTone3000Browser } from "./tone3000Browser.js";
 import { getAudioFxLibrary, getIrLibrary } from "./dataLibraries.js";
 import { buildArchiveFileName, requestResourceData, sanitizeFilename, arrayBufferToBase64 } from "./archiveUtils.js";
-import { sha256HexFromBase64 } from "./utils.js";
+import { escapeHtml, sha256HexFromBase64 } from "./utils.js";
 import type { AppSettingValue, Preset, BlendDefinition, ResourceRef, LibraryResource, UserInputCalibrationProfile } from "./types.js";
 import { buildBlendModelMappingsFromIds } from "./blendUtils.js";
 import { themeSwitcher, type ThemeName } from "./theme-switcher.js";
@@ -2564,14 +2564,6 @@ function humanizeId(value: string): string {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
 
 function getSettingValue(key: string): AppSettingValue {
   return uiState.appSettings?.[key] ?? null;

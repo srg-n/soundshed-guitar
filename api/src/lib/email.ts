@@ -1,13 +1,5 @@
 import { Env } from "../types/env";
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+import { escapeHtml } from "./utils";
 
 export async function sendMagicCodeEmail(
   env: Env,

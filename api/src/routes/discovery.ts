@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { parseItemConfig, parsePackConfig } from "../lib/content-config";
 import { ok } from "../lib/http";
 import { Env } from "../types/env";
 
@@ -44,37 +45,23 @@ export function discoveryRoutes() {
 
       const mappedItems: RowItem[] = rowItems.results.map((entry) => {
         if (entry.item_id) {
-          let itemDescription: string | null = null;
-          let itemTags: string[] | null = null;
-          if (entry.item_config_json) {
-            try {
-              const cfg = JSON.parse(entry.item_config_json) as { description?: string | null; tags?: string[] | null };
-              itemDescription = typeof cfg.description === "string" ? cfg.description : null;
-              itemTags = Array.isArray(cfg.tags) ? cfg.tags.filter((t): t is string => typeof t === "string") : null;
-            } catch { }
-          }
+          const config = parseItemConfig(entry.item_config_json);
           return {
             id: entry.item_id,
             kind: "item",
             title: entry.item_title ?? "Untitled",
             type: entry.item_type,
-            description: itemDescription,
-            tags: itemTags
+            description: config.description,
+            tags: config.tags
           };
         }
-        let thumbnailAssetId: string | null = null;
-        if (entry.pack_config_json) {
-          try {
-            const cfg = JSON.parse(entry.pack_config_json) as { thumbnailAssetId?: string | null };
-            thumbnailAssetId = typeof cfg.thumbnailAssetId === "string" ? cfg.thumbnailAssetId : null;
-          } catch { }
-        }
+        const config = parsePackConfig(entry.pack_config_json);
         return {
           id: entry.pack_id ?? "",
           kind: "pack",
           title: entry.pack_title ?? "Untitled Pack",
           type: null,
-          thumbnailAssetId
+          thumbnailAssetId: config.thumbnailAssetId
         };
       });
 
@@ -113,22 +100,14 @@ export function discoveryRoutes() {
           slug: "latest-items",
           title: "Latest Presets",
           items: latestItems.results.map((item) => {
-            let itemDescription: string | null = null;
-            let itemTags: string[] | null = null;
-            if (item.config_json) {
-              try {
-                const cfg = JSON.parse(item.config_json) as { description?: string | null; tags?: string[] | null };
-                itemDescription = typeof cfg.description === "string" ? cfg.description : null;
-                itemTags = Array.isArray(cfg.tags) ? cfg.tags.filter((t): t is string => typeof t === "string") : null;
-              } catch { }
-            }
+            const config = parseItemConfig(item.config_json);
             return {
               id: item.id,
               kind: "item" as const,
               title: item.title,
               type: item.type,
-              description: itemDescription,
-              tags: itemTags
+              description: config.description,
+              tags: config.tags
             };
           })
         });
@@ -140,19 +119,13 @@ export function discoveryRoutes() {
           slug: "latest-packs",
           title: "Latest Packs",
           items: latestPacks.results.map((pack) => {
-            let thumbnailAssetId: string | null = null;
-            if (pack.config_json) {
-              try {
-                const cfg = JSON.parse(pack.config_json) as { thumbnailAssetId?: string | null };
-                thumbnailAssetId = typeof cfg.thumbnailAssetId === "string" ? cfg.thumbnailAssetId : null;
-              } catch { }
-            }
+            const config = parsePackConfig(pack.config_json);
             return {
               id: pack.id,
               kind: "pack" as const,
               title: pack.title,
               type: null,
-              thumbnailAssetId
+              thumbnailAssetId: config.thumbnailAssetId
             };
           })
         });

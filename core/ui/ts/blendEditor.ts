@@ -12,7 +12,7 @@ import { postMessage } from "./bridge.js";
 import { GenericKnob } from "./controls.js";
 import { buildBlendModelMappingsFromIds, inferParamValueFromName } from "./blendUtils.js";
 import { arrayBufferToBase64, buildArchiveFileName, generateResourceId, requestResourceData, sanitizeFilename } from "./archiveUtils.js";
-import { sha256HexFromBase64 } from "./utils.js";
+import { escapeHtml, sha256HexFromBase64 } from "./utils.js";
 
 type BlendEditorDependencies = {
   getBlendLibrary: () => BlendLibrary;
@@ -1536,14 +1536,5 @@ function denormalizeValue(value: number, spec: ParamSpec): string {
   const range = spec.max - spec.min;
   const raw = value < 0 ? value * 10 : spec.min + value * range;
   return raw.toFixed(1);
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 }
 

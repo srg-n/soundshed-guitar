@@ -4,7 +4,7 @@ import { showNotification } from "./notifications.js";
 import { postMessage } from "./bridge.js";
 import { ensureTone3000Session } from "./tone3000.js";
 import { buildBlendModelMappingsFromIds } from "./blendUtils.js";
-import { arrayBufferToBase64 } from "./utils.js";
+import { arrayBufferToBase64, escapeHtml } from "./utils.js";
 import { openBlendEditorWithDefinition } from "./signalPath.js";
 
 const API_BASE = "https://www.tone3000.com/api/v1";
@@ -318,7 +318,7 @@ async function runSearch(page = 1): Promise<void> {
     renderResults(filtered);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    resultsEl.innerHTML = `<div class="tone3000-empty">${message}</div>`;
+    resultsEl.innerHTML = `<div class="tone3000-empty">${escapeHtml(message)}</div>`;
     updatePagination(false);
   }
 }
@@ -902,12 +902,3 @@ function sanitizeFilename(raw: string): string {
   return trimmed.replace(/[^a-z0-9-_\.]+/gi, "-");
 }
 
-function escapeHtml(value: string | number | null | undefined): string {
-  const text = value === null || value === undefined ? "" : String(value);
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}

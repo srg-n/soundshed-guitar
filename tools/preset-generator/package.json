@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx --test test/*.test.ts",
     "generate": "tsx src/index.ts generate --config config/default.json",
     "validate": "tsx src/index.ts validate --config config/default.json",
     "pack": "tsx src/index.ts pack --config config/default.json"

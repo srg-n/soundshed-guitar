@@ -39,6 +39,10 @@ async function readJson(response: Response) {
       session: {
         id: string;
         status: string;
+        nodeContext?: {
+          nodeId?: string;
+          currentParams?: Record<string, number>;
+        };
         currentPlan: { title: string; executionReadiness?: "executable" | "plan_only" } | null;
         latestRevisionId: string | null;
         messages: Array<{ role: "user" | "assistant"; content: string }>;
@@ -142,5 +146,33 @@ describe("module session routes", () => {
     expect(generateResponse.status).toBe(409);
     expect(generateJson.ok).toBe(false);
     expect(generateJson.error?.code).toBe("PLAN_NOT_EXECUTABLE");
+  });
+
+  it("keeps only numeric current params in node context", async () => {
+    const { app, env } = createApp(createTestEnv());
+
+    const response = await app.request("/v1/module-sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        nodeContext: {
+          nodeId: "node-3",
+          currentParams: {
+            mix: 0.5,
+            outputGain: -3,
+            label: "hot",
+            missing: null,
+          },
+        },
+      }),
+    }, env);
+    const json = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(json.data?.session.nodeContext?.nodeId).toBe("node-3");
+    expect(json.data?.session.nodeContext?.currentParams).toEqual({
+      mix: 0.5,
+      outputGain: -3,
+    });
   });
 });

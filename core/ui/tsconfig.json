@@ -6,7 +6,7 @@
     "lib": ["DOM", "ES2019"],
     "strict": true,
     "noImplicitAny": true,
-    "noEmitOnError": false,
+    "noEmitOnError": true,
     "outDir": "./dist",
     "rootDir": "./ts",
     "resolveJsonModule": true,

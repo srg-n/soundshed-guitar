@@ -7,6 +7,7 @@
 import { uiState } from "./state.js";
 import { EffectTypeRegistry, type ParameterDef } from "./presetV2.js";
 import { renderIcon } from "./iconAssets.js";
+import { escapeHtml } from "./utils.js";
 import type {
   EffectLayout,
   LayoutControl,
@@ -545,14 +546,3 @@ export function formatParamValue(value: number, unit?: string, labels?: string[]
   return value.toFixed(2);
 }
 
-/**
- * Escape HTML entities
- */
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}

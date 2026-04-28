@@ -4,6 +4,7 @@ import { Features, isFeatureEnabled } from "./featureFlags.js";
 import { showNotification } from "./notifications.js";
 import { getApiBaseUrl } from "./toneSharingPanel.js";
 import type { GraphNode } from "./types.js";
+import { escapeHtml } from "./utils.js";
 
 type ModuleNodeContext = {
   nodeId?: string;
@@ -106,15 +107,6 @@ const state: {
   busy: false,
   statusMessage: "",
 };
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 function normaliseText(value: unknown, maxLength: number): string {
   if (typeof value !== "string") {
