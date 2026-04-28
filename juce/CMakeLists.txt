@@ -89,10 +89,10 @@ if (WIN32)
     string(TOLOWER "${_guitarfx_windows_target_arch}" _guitarfx_windows_target_arch)
 
     if(_guitarfx_windows_target_arch MATCHES "^(x64|amd64|x86_64)$")
-    CPMAddPackage(
-        NAME intelipp_static_win_x64
-        URL https://www.nuget.org/api/v2/package/intelipp.static.win-x64/2022.3.1.8
-    )
+        CPMAddPackage(
+            NAME intelipp_static_win_x64
+            URL https://www.nuget.org/api/v2/package/intelipp.static.win-x64/2022.3.1.8
+        )
     endif()
 endif()
 
