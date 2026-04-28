@@ -84,7 +84,13 @@ public:
         return kBlockSize;
     }
 
+    void NotifyStateChanged() override
+    {
+        ++stateChangedNotifications;
+    }
+
     std::vector<std::string> sentMessages;
+    int stateChangedNotifications = 0;
 
 private:
     fs::path mUserDataPath;
@@ -673,6 +679,12 @@ bool TestControllerAutoCapturesHostedPluginStateOnParameterChange(const std::str
 
     sourceController.OnIdle();
 
+    if (sourceHost.stateChangedNotifications <= 0)
+    {
+        Fail("Controller auto-capture did not notify the host that plugin state changed");
+        return false;
+    }
+
     const auto nodeConfigMessage = FindLastUiMessageOfType(sourceHost, "signalPathNodeConfigUpdated");
     if (!nodeConfigMessage.has_value())
     {
@@ -683,6 +695,8 @@ bool TestControllerAutoCapturesHostedPluginStateOnParameterChange(const std::str
     if (nodeConfigMessage->value("nodeId", "") != kPluginNodeId
         || nodeConfigMessage->value("key", "") != kStateConfigKey
         || !nodeConfigMessage->value("captured", false)
+        || !nodeConfigMessage->value("dirty", false)
+        || !nodeConfigMessage->value("persist", false)
         || !nodeConfigMessage->value("silent", false))
     {
         Fail("Controller auto-capture emitted an unexpected signalPathNodeConfigUpdated payload");
@@ -803,6 +817,127 @@ bool TestControllerAutoCapturesHostedPluginStateOnParameterChange(const std::str
         return false;
     }
 
+    const int notifyCountBeforeManualCapture = sourceHost.stateChangedNotifications;
+    sourceHost.sentMessages.clear();
+    sourceController.HandleUIMessage(nlohmann::json{
+        {"type", "updateSignalPathNodeConfig"},
+        {"nodeId", kPluginNodeId},
+        {"key", kStateConfigKey},
+        {"value", "__capture_plugin_state__"},
+        {"persist", true},
+        {"capture", true}
+    }.dump());
+
+    if (sourceHost.stateChangedNotifications <= notifyCountBeforeManualCapture)
+    {
+        Fail("Manual hosted plugin state capture did not notify the host that plugin state changed");
+        return false;
+    }
+
+    const auto manualCaptureMessage = FindLastUiMessageOfType(sourceHost, "signalPathNodeConfigUpdated");
+    if (!manualCaptureMessage.has_value()
+        || manualCaptureMessage->value("nodeId", "") != kPluginNodeId
+        || manualCaptureMessage->value("key", "") != kStateConfigKey
+        || !manualCaptureMessage->value("captured", false)
+        || !manualCaptureMessage->value("dirty", false)
+        || !manualCaptureMessage->value("persist", false)
+        || manualCaptureMessage->value("silent", false))
+    {
+        Fail("Manual hosted plugin state capture emitted an unexpected signalPathNodeConfigUpdated payload");
+        return false;
+    }
+
+    sourceController.OnIdle();
+    if (!FindLastUiMessageOfType(sourceHost, "state").has_value())
+    {
+        Fail("Manual hosted plugin state capture did not broadcast updated state");
+        return false;
+    }
+
+    return true;
+}
+
+bool TestControllerAutoCaptureAfterStateRestore(const std::string& parameterNeedle)
+{
+    const fs::path sandbox = fs::temp_directory_path() / "guitarfx-hosted-plugin-tests" / ("controller-auto-capture-after-restore-" + parameterNeedle);
+    std::error_code ec;
+    fs::remove_all(sandbox, ec);
+    fs::create_directories(sandbox, ec);
+    SetSettingsEnvRoot(sandbox);
+
+    guitarfx::RegisterJuceHostedPluginEffect();
+
+    const auto sourcePreset = BuildHostedPluginPreset("graphene-controller-restored-auto-capture-source", "Graphene Restored Auto Capture Source");
+
+    TestHost sourceHost(sandbox);
+    guitarfx::PluginController sourceController(sourceHost);
+    sourceController.Initialize();
+    sourceController.Prepare(kSampleRate, kBlockSize);
+    sourceController.OnWebContentLoaded();
+    sourceController.HandleUIMessage(nlohmann::json{
+        {"type", "loadPreset"},
+        {"presetId", sourcePreset.id},
+        {"preset", nlohmann::json::parse(guitarfx::PresetStorage::SerializeToJson(sourcePreset))}
+    }.dump());
+
+    const std::string serializedState = sourceController.SerializeState();
+
+    TestHost restoredHost(sandbox);
+    guitarfx::PluginController restoredController(restoredHost);
+    restoredController.Initialize();
+    restoredController.Prepare(kSampleRate, kBlockSize);
+    restoredController.OnWebContentLoaded();
+    restoredHost.sentMessages.clear();
+    restoredController.DeserializeState(serializedState);
+    restoredHost.sentMessages.clear();
+
+    auto* restoredEffect = RequireHostedEffect(restoredController, sourcePreset.id, kPluginNodeId);
+    if (restoredEffect == nullptr)
+    {
+        Fail("Controller restored auto-capture test did not create a hosted plugin effect");
+        return false;
+    }
+
+    auto* restoredPlugin = RequirePlugin(*restoredEffect);
+    if (restoredPlugin == nullptr)
+    {
+        Fail("Controller restored auto-capture test did not expose a hosted plugin instance");
+        return false;
+    }
+
+    NamedParameterSnapshot mutatedParameter;
+    if (!MutateSpecificParameter(*restoredPlugin, parameterNeedle, mutatedParameter))
+    {
+        Fail("Controller restored auto-capture test could not mutate parameter '" + parameterNeedle + "'");
+        return false;
+    }
+
+    restoredController.OnIdle();
+
+    if (restoredHost.stateChangedNotifications <= 0)
+    {
+        Fail("Controller restored auto-capture did not notify the host that plugin state changed");
+        return false;
+    }
+
+    const auto nodeConfigMessage = FindLastUiMessageOfType(restoredHost, "signalPathNodeConfigUpdated");
+    if (!nodeConfigMessage.has_value())
+    {
+        Fail("Controller restored auto-capture did not emit a signalPathNodeConfigUpdated message");
+        return false;
+    }
+
+    if (nodeConfigMessage->value("nodeId", "") != kPluginNodeId
+        || nodeConfigMessage->value("key", "") != kStateConfigKey
+        || !nodeConfigMessage->value("captured", false)
+        || !nodeConfigMessage->value("dirty", false)
+        || !nodeConfigMessage->value("persist", false)
+        || !nodeConfigMessage->value("silent", false))
+    {
+        Fail("Controller restored auto-capture emitted an unexpected signalPathNodeConfigUpdated payload");
+        return false;
+    }
+
     return true;
 }
 } // namespace
@@ -829,6 +964,8 @@ int main()
     run("Controller preset save/load full snapshot round-trip", TestControllerPresetSaveLoadRoundTrip());
     run("Controller auto-captures hosted state on parameter change: Blue Amp Tight",
         TestControllerAutoCapturesHostedPluginStateOnParameterChange("Blue Amp Tight"));
+    run("Controller auto-captures hosted state after state restore: Blue Amp Tight",
+        TestControllerAutoCaptureAfterStateRestore("Blue Amp Tight"));
 
     if (failed != 0)
         return kFailCode;

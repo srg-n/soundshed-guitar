@@ -35,6 +35,7 @@ import { themeSwitcher } from "./theme-switcher.js";
 import { applyUiViewState } from "./navigation.js";
 import { triggerUpdateCheck } from "./updateCheck.js";
 import { getPresetSceneGraphs, normalizePresetScenes } from "./presetScenes.js";
+import { shouldMarkSignalPathNodeConfigUpdateDirty } from "./signalPathConfigUpdates.js";
 
 function normalizeResourceRef(ref?: ResourceRef | null): void {
   if (!ref) return;
@@ -183,10 +184,20 @@ window.SoundshedDebug = {
   },
 };
 
-function applySignalPathNodeConfigUpdate(nodeId: string, key: string, value: string | undefined, valueLength?: number): void {
+type SignalPathNodeConfigUpdateOptions = {
+  markDirty?: boolean;
+};
+
+function applySignalPathNodeConfigUpdate(
+  nodeId: string,
+  key: string,
+  value: string | undefined,
+  valueLength?: number,
+  options: SignalPathNodeConfigUpdateOptions = {},
+): boolean {
   const preset = getActivePresetForRender();
   if (!preset) {
-    return;
+    return false;
   }
 
   const updateGraph = (graph: Preset["graph"] | undefined): boolean => {
@@ -210,13 +221,16 @@ function applySignalPathNodeConfigUpdate(nodeId: string, key: string, value: str
   }
 
   if (!updated) {
-    return;
+    return false;
   }
 
   setActivePresetDraft(preset);
-  setPresetDirty(true);
+  if (options.markDirty !== false) {
+    setPresetDirty(true);
+  }
   refreshSelectedNodeParams();
   renderSignalPathBar();
+  return true;
 }
 
 function presetSignature(preset?: Preset | null): string {
@@ -1068,13 +1082,20 @@ export function handleIncomingMessage(message: string): void {
         value?: string;
         valueLength?: number;
         captured?: boolean;
+        dirty?: boolean;
+        persist?: boolean;
         silent?: boolean;
       };
       if (typeof update.nodeId === "string" && typeof update.key === "string") {
+        const markDirty = shouldMarkSignalPathNodeConfigUpdateDirty(update);
+        let applied = false;
         if (typeof update.value === "string") {
-          applySignalPathNodeConfigUpdate(update.nodeId, update.key, update.value, update.valueLength);
+          applied = applySignalPathNodeConfigUpdate(update.nodeId, update.key, update.value, update.valueLength, { markDirty });
         } else if (update.captured && update.key === "pluginStateBase64") {
-          applySignalPathNodeConfigUpdate(update.nodeId, update.key, undefined, update.valueLength);
+          applied = applySignalPathNodeConfigUpdate(update.nodeId, update.key, undefined, update.valueLength, { markDirty });
+        }
+        if (!applied && markDirty) {
+          setPresetDirty(true);
         }
         if (update.key === "pluginStateBase64" && !update.silent) {
           showNotification("Plugin state captured", "success");

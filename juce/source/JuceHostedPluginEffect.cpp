@@ -19,6 +19,7 @@ namespace
 {
 constexpr const char* kPluginStateBase64ConfigKey = "pluginStateBase64";
 constexpr const char* kHostedPluginTraceLogFileName = "logs/session-log.txt";
+constexpr int kHostedPluginEditorAutoCaptureIntervalMs = 750;
 constexpr std::uint64_t kFNVOffsetBasis = 14695981039346656037ull;
 constexpr std::uint64_t kFNVPrime = 1099511628211ull;
 constexpr char kHostedPluginStateEnvelopeMagic[] = {'G', 'F', 'X', 'H', 'P', 'S', 'T', '1'};
@@ -923,6 +924,7 @@ void JuceHostedPluginEffect::DetachHostedPluginParameterListeners()
 void JuceHostedPluginEffect::ReleaseHostedPlugin()
 {
     cancelPendingUpdate();
+    stopTimer();
     mForceAutoCaptureNotification.store(false, std::memory_order_release);
     mAutoCaptureSuppressionDepth.store(0, std::memory_order_release);
 
@@ -981,6 +983,17 @@ void JuceHostedPluginEffect::PublishCapturedPluginState(const std::string& captu
         mRuntimeConfigChangedCallback(kPluginStateBase64ConfigKey, mPluginStateBase64);
 }
 
+void JuceHostedPluginEffect::EnsurePluginStateBaseline()
+{
+    if (!mPlugin || !mPluginStateBase64.empty())
+        return;
+
+    mPluginStateBase64 = CapturePluginStateBase64();
+    AppendHostedPluginTrace("Initialized hosted plugin state baseline plugin=" + FromJuceString(mPlugin->getName())
+        + ", stateLength=" + std::to_string(mPluginStateBase64.size())
+        + ", stateHash=" + HashStringForLog(mPluginStateBase64));
+}
+
 void JuceHostedPluginEffect::OpenPluginEditor()
 {
     if (!mPlugin)
@@ -996,8 +1009,10 @@ void JuceHostedPluginEffect::OpenPluginEditor()
 
         if (mEditorWindow)
         {
+            EnsurePluginStateBaseline();
             mEditorWindow->setVisible(true);
             mEditorWindow->toFront(true);
+            startTimer(kHostedPluginEditorAutoCaptureIntervalMs);
             return;
         }
 
@@ -1013,10 +1028,13 @@ void JuceHostedPluginEffect::OpenPluginEditor()
         const auto title = mPluginDescription.name.isNotEmpty()
             ? mPluginDescription.name
             : mPlugin->getName();
+        EnsurePluginStateBaseline();
         mEditorWindow = std::make_unique<HostedPluginEditorWindow>(title, editor, [this]()
         {
-            ScheduleAutoCapture(true);
+            stopTimer();
+            ScheduleAutoCapture(false);
         });
+        startTimer(kHostedPluginEditorAutoCaptureIntervalMs);
     };
 
     if (juce::MessageManager::getInstance()->isThisTheMessageThread())
@@ -1027,6 +1045,8 @@ void JuceHostedPluginEffect::OpenPluginEditor()
 
 void JuceHostedPluginEffect::ClosePluginEditor()
 {
+    stopTimer();
+
     if (!mEditorWindow)
         return;
 
@@ -1090,6 +1110,17 @@ void JuceHostedPluginEffect::audioProcessorChanged(juce::AudioProcessor* process
 void JuceHostedPluginEffect::handleAsyncUpdate()
 {
     CaptureAndPublishPluginState(mForceAutoCaptureNotification.exchange(false, std::memory_order_acq_rel));
+}
+
+void JuceHostedPluginEffect::timerCallback()
+{
+    if (!mPlugin || !mEditorWindow || !mEditorWindow->isVisible()
+        || mAutoCaptureSuppressionDepth.load(std::memory_order_acquire) > 0)
+    {
+        return;
+    }
+
+    CaptureAndPublishPluginState(false);
 }
 
 void RegisterJuceHostedPluginEffect()

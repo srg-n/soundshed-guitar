@@ -3191,7 +3191,7 @@ function sendSignalPathNodeConfigUpdate(nodeId: string, key: string, value: stri
     persist,
     capture,
   });
-  if (persist) {
+  if (persist && !capture) {
     setPresetDirty(true);
   }
 }

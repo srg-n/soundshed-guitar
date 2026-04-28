@@ -821,9 +821,13 @@ namespace guitarfx
 
   void SignalGraphExecutor::SetNodeConfig(const std::string &nodeId, const std::string &key, const std::string &value)
   {
-    if (auto* node = mGraph.FindNode(nodeId))
+    const bool transientCommand = key == "showPluginEditor" || key == "openPluginEditor";
+    if (!transientCommand)
     {
-      node->config[key] = value;
+      if (auto* node = mGraph.FindNode(nodeId))
+      {
+        node->config[key] = value;
+      }
     }
 
     auto *state = FindNodeState(nodeId);

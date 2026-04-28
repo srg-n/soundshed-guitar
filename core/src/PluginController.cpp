@@ -2518,6 +2518,8 @@ void PluginController::DeserializeState(const std::string& json)
                 if (mActivePreset && (id == "p1" || id == mActivePresetId))
                 {
                     added = mPresetMixer.AddActivePreset(*mActivePreset, id, name);
+                    if (added)
+                        AttachRuntimeConfigCallbacks(id, *mActivePreset);
                 }
                 if (!added)
                 {
@@ -2525,7 +2527,9 @@ void PluginController::DeserializeState(const std::string& json)
                 }
                 if (!added && mActivePreset)
                 {
-                    (void)mPresetMixer.AddActivePreset(*mActivePreset, id, name);
+                    added = mPresetMixer.AddActivePreset(*mActivePreset, id, name);
+                    if (added)
+                        AttachRuntimeConfigCallbacks(id, *mActivePreset);
                 }
 
                 if (presetEntry.is_object())
@@ -2735,6 +2739,7 @@ bool PluginController::AddActivePreset(const Preset& preset, const std::string& 
     const bool added = mPresetMixer.AddActivePreset(preset, presetId, name);
     if (added)
     {
+        AttachRuntimeConfigCallbacks(presetId, preset);
         try { mMixerPresetJsonCache[presetId] = PresetStorage::SerializeToJson(preset); }
         catch (...) {}
         UpdateHostLatency();
@@ -3755,6 +3760,7 @@ void PluginController::HandleUpdateSignalPathNodeConfigRequest(const nlohmann::j
     const bool capture = payload.value("capture", false) || value == "__capture_plugin_state__";
     const std::string fallbackId = mActivePresetId.empty() ? "p1" : mActivePresetId;
     const std::string presetId = payload.value("presetId", fallbackId);
+    bool notifyStateChanged = false;
 
     if (nodeId.empty() || key.empty())
         return;
@@ -3796,8 +3802,9 @@ void PluginController::HandleUpdateSignalPathNodeConfigRequest(const nlohmann::j
         {
             SyncActivePresetSceneGraph();
             mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
-            if (!capture)
-                mPendingStateBroadcast = true;
+            mMixerPresetJsonCache[presetId] = mActivePresetJson;
+            mPendingStateBroadcast = true;
+            notifyStateChanged = true;
         }
     }
 
@@ -3805,12 +3812,18 @@ void PluginController::HandleUpdateSignalPathNodeConfigRequest(const nlohmann::j
     {
         SendMessageToUI(nlohmann::json{
             {"type", "signalPathNodeConfigUpdated"},
+            {"presetId", presetId},
             {"nodeId", nodeId},
             {"key", key},
             {"captured", true},
-            {"valueLength", value.size()}
+            {"valueLength", value.size()},
+            {"persist", persist},
+            {"dirty", persist}
         }.dump());
     }
+
+    if (notifyStateChanged)
+        mHost.NotifyStateChanged();
 }
 
 void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& payload)
@@ -8028,12 +8041,12 @@ void PluginController::UpdateHostLatency()
     mHost.NotifyLatencyChanged(latency);
 }
 
-void PluginController::AttachRuntimeConfigCallbacks(const std::string& presetId)
+void PluginController::AttachRuntimeConfigCallbacks(const std::string& presetId, const Preset& preset)
 {
-    if (presetId.empty() || !mActivePreset)
+    if (presetId.empty())
         return;
 
-    for (const auto& node : mActivePreset->graph.nodes)
+    for (const auto& node : preset.graph.nodes)
     {
         if (auto* processor = mPresetMixer.GetNodeProcessor(presetId, node.id))
         {
@@ -8087,10 +8100,13 @@ void PluginController::HandleRuntimeNodeConfigChanged(const std::string& presetI
     {
         SendMessageToUI(nlohmann::json{
             {"type", "signalPathNodeConfigUpdated"},
+            {"presetId", presetId},
             {"nodeId", nodeId},
             {"key", key},
             {"captured", true},
             {"valueLength", value.size()},
+            {"persist", true},
+            {"dirty", true},
             {"silent", true}
         }.dump());
     }
@@ -8169,7 +8185,7 @@ void PluginController::ApplyPreset(const Preset& preset)
     const std::string initialSlotId = normalizedPreset.id.empty() ? "p1" : normalizedPreset.id;
     mPresetMixer.AddActivePreset(normalizedPreset, initialSlotId, normalizedPreset.name);
     mMixerPresetJsonCache[initialSlotId] = mActivePresetJson;
-    AttachRuntimeConfigCallbacks(initialSlotId);
+    AttachRuntimeConfigCallbacks(initialSlotId, normalizedPreset);
 
     // Register tuner callback
     mPresetMixer.SetTunerCallback(

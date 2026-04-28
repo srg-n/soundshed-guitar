@@ -280,7 +280,7 @@ private:
     // ── Internal helpers ───────────────────────────────────────────
     void BroadcastState();
     void ApplyPreset(const Preset& preset);
-    void AttachRuntimeConfigCallbacks(const std::string& presetId);
+    void AttachRuntimeConfigCallbacks(const std::string& presetId, const Preset& preset);
     void HandleRuntimeNodeConfigChanged(const std::string& presetId,
                                         const std::string& nodeId,
                                         const std::string& key,
