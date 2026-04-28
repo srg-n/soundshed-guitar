@@ -254,6 +254,7 @@ jobs:
     runs-on: windows-latest
     env:
       WINDOWS_ARCH: x86
+      # Visual Studio uses Win32 for the 32-bit x86 CMake platform name.
       WINDOWS_CMAKE_ARCH: Win32
       WINDOWS_CMAKE_GENERATOR: Visual Studio 17 2022
     steps:

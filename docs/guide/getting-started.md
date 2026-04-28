@@ -11,6 +11,8 @@ This guide walks you through installing Soundshed Guitar, setting up your audio 
 - An audio interface with a guitar input (recommended) or a USB guitar cable
 - Headphones or monitors
 
+The Windows x86 build excludes generic WASM effects because Wasmtime does not provide a Windows x86 C API bundle.
+
 ---
 
 ## Installation
