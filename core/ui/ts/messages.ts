@@ -10,7 +10,7 @@ import { updateDSPPerformancePlot, updateSignalDiagnosticsView } from "./views.j
 import { refreshSettingsView, handleUserInputCalibrationDiagnosticsUpdate } from "./settings.js";
 import { applyRiffCaptureProgress, applyRiffCaptureState, applyRiffLibraryState, handleCapturedPreviewComplete, handleRiffPreviewPlayback, handleSavedRiffPreviewComplete, renderRiffLibraryPanel } from "./riffLibrary.js";
 import { getRiffLibrary, postMessage } from "./bridge.js";
-import { refreshSelectedNodeParams, renderSignalPathBar, updateSelectedNodePeakMeter } from "./signalPath.js";
+import { handleHostedPluginResourceLoadFailed, refreshSelectedNodeParams, renderSignalPathBar, updateSelectedNodePeakMeter } from "./signalPath.js";
 import { refreshFxSelector } from "./fxSelector.js";
 import { applyEnvironmentState, applyMetronomeState } from "./metronome.js";
 import { applyToneSharingAppSettings, registerInstalledToneSharingPackFromImport } from "./toneSharingPanel.js";
@@ -780,6 +780,17 @@ export function handleIncomingMessage(message: string): void {
       const info = payload as { message?: string; detail?: string };
       appendLog(`resource import failed ← ${info.message ?? "unknown"}`);
       showNotification(info.message ?? "Import failed", info.detail ?? "");
+      break;
+    }
+    case "hostedPluginResourceLoadFailed": {
+      handleHostedPluginResourceLoadFailed(payload as {
+        nodeId?: string;
+        resourceType?: string;
+        resourceId?: string;
+        filePath?: string;
+        resourceIndex?: number;
+        message?: string;
+      });
       break;
     }
     case "toneSharingPackImported": {

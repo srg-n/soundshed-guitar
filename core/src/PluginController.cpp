@@ -3916,8 +3916,10 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
             slot.parameterValue = ref.parameterValue;
         if (!ref.parameters.empty())
             slot.parameters = ref.parameters;
+        const ResourceRef selectedRef = slot;
 
         RefreshWasmNodeDescriptor(*target);
+        bool appliedPreset = false;
 
         if (IsCompositeEditMode())
         {
@@ -3928,6 +3930,7 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
             SyncActivePresetSceneGraph();
             ApplyPreset(*mActivePreset);
             mPendingStateBroadcast = true;
+            appliedPreset = true;
         }
 
         if (!IsCompositeEditMode()
@@ -3937,6 +3940,8 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
         {
             ResetNamNodeLevelState(nodeId);
         }
+        if (appliedPreset && ReportHostedPluginResourceLoadFailure(nodeId, selectedRef, resourceIndex))
+            DiscardFailedHostedPluginResourceSelection(nodeId, selectedRef, resourceIndex);
         return;
     }
 
@@ -3948,7 +3953,9 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
         {
             node->resources.clear();
             node->resources.push_back(ref);
+            const ResourceRef selectedRef = ref;
             RefreshWasmNodeDescriptor(*node);
+            bool appliedPreset = false;
 
             if (IsCompositeEditMode())
             {
@@ -3959,6 +3966,7 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
                 SyncActivePresetSceneGraph();
                 ApplyPreset(*mActivePreset);
                 mPendingStateBroadcast = true;
+                appliedPreset = true;
             }
 
             if (!IsCompositeEditMode()
@@ -3968,11 +3976,13 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
             {
                 ResetNamNodeLevelState(node->id);
             }
+            if (appliedPreset && ReportHostedPluginResourceLoadFailure(nodeId, selectedRef))
+                DiscardFailedHostedPluginResourceSelection(nodeId, selectedRef);
             return;
         }
     }
 
-    UpdateResourceForNodeId(nodeId, ref);
+    const bool updatedResource = UpdateResourceForNodeId(nodeId, ref);
 
     if (auto* targetGraph = ResolveEditTarget())
     {
@@ -3989,6 +3999,8 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
             ResetNamNodeLevelState(nodeId);
         }
     }
+    if (updatedResource && ReportHostedPluginResourceLoadFailure(nodeId, ref))
+        DiscardFailedHostedPluginResourceSelection(nodeId, ref);
 }
 
 void PluginController::HandleBrowseNodeResourceRequest(const nlohmann::json& payload)
@@ -4732,6 +4744,12 @@ void PluginController::HandleSaveLocalLibraryResourceRequest(const nlohmann::jso
         if (payload.contains("exposedResourceId"))
             updatePayload["exposedResourceId"] = payload["exposedResourceId"];
         HandleUpdateNodeResourceRequest(updatePayload);
+    }
+
+    if (!mResourceLibrary.HasResource(saved->type, saved->id))
+    {
+        BroadcastState();
+        return;
     }
 
     BroadcastState();
@@ -7847,7 +7865,9 @@ void PluginController::HandleLoadNodeResourceRequest(const nlohmann::json& paylo
     if (payload.contains("resourceType")) ref.resourceType = payload["resourceType"].get<std::string>();
     if (payload.contains("resourceId")) ref.resourceId = payload["resourceId"].get<std::string>();
     if (payload.contains("filePath")) ref.filePath = payload["filePath"].get<std::string>();
-    mPresetMixer.LoadNodeResource(presetId, nodeId, ref);
+    const bool loaded = mPresetMixer.LoadNodeResource(presetId, nodeId, ref);
+    if (!loaded && ReportHostedPluginResourceLoadFailure(nodeId, ref))
+        DiscardFailedHostedPluginResourceSelection(nodeId, ref);
     UpdateHostLatency();
 }
 
@@ -8059,6 +8079,110 @@ void PluginController::AttachRuntimeConfigCallbacks(const std::string& presetId,
                     });
                 });
         }
+    }
+}
+
+bool PluginController::ReportHostedPluginResourceLoadFailure(const std::string& nodeId,
+                                                             const ResourceRef& ref,
+                                                             int resourceIndex)
+{
+    if (nodeId.empty() || ref.resourceType != "plugin" || !mActivePreset)
+        return false;
+
+    const std::string presetId = !mActivePresetId.empty() ? mActivePresetId : mActivePreset->id;
+    if (presetId.empty())
+        return false;
+
+    auto* processor = mPresetMixer.GetNodeProcessor(presetId, nodeId);
+    if (!processor)
+        return false;
+
+    const std::string lastError = processor->GetConfig("lastError");
+    if (lastError.empty())
+        return false;
+
+    nlohmann::json message{
+        {"type", "hostedPluginResourceLoadFailed"},
+        {"nodeId", nodeId},
+        {"resourceType", "plugin"},
+        {"message", lastError}
+    };
+    if (resourceIndex >= 0)
+        message["resourceIndex"] = resourceIndex;
+    if (!ref.resourceId.empty())
+        message["resourceId"] = ref.resourceId;
+    if (!ref.filePath.empty())
+        message["filePath"] = ref.filePath.string();
+    else if (auto resolvedPath = ResolveResourceRef(ref))
+        message["filePath"] = resolvedPath->string();
+
+    SendMessageToUI(message.dump());
+    return true;
+}
+
+void PluginController::DiscardFailedHostedPluginResourceSelection(const std::string& nodeId,
+                                                                  const ResourceRef& ref,
+                                                                  int resourceIndex)
+{
+    if (nodeId.empty() || ref.resourceType != "plugin")
+        return;
+
+    if (!ref.resourceId.empty())
+    {
+        if (auto resource = mResourceLibrary.LookupResource("plugin", ref.resourceId))
+        {
+            const auto providerIt = resource->metadata.find("provider");
+            const bool isLocalResource = providerIt != resource->metadata.end()
+                && providerIt->second == kLocalResourceProvider;
+            mResourceLibrary.RemoveResource("plugin", ref.resourceId);
+            if (isLocalResource)
+            {
+                const auto libraryFile = mFileSystem.ResolveSettingsDirectory() / "resources" / "indexes" / "resources-index.json";
+                [[maybe_unused]] const auto ensuredLibraryDir = mFileSystem.EnsureDirectory(libraryFile.parent_path());
+                mResourceLibrary.SaveToFile(libraryFile);
+            }
+        }
+    }
+
+    auto* targetGraph = ResolveEditTarget();
+    auto* target = targetGraph ? targetGraph->FindNode(nodeId) : nullptr;
+    if (!target)
+        return;
+
+    const auto clearResourceSlot = [](ResourceRef& slot)
+    {
+        slot = ResourceRef{};
+        slot.resourceType = "plugin";
+    };
+
+    if (resourceIndex >= 0)
+    {
+        if (static_cast<std::size_t>(resourceIndex) < target->resources.size())
+            clearResourceSlot(target->resources[static_cast<std::size_t>(resourceIndex)]);
+    }
+    else
+    {
+        for (auto& slot : target->resources)
+        {
+            if (slot.resourceType == "plugin")
+            {
+                clearResourceSlot(slot);
+                break;
+            }
+        }
+    }
+
+    if (IsCompositeEditMode())
+    {
+        BroadcastCompositeEditState();
+        return;
+    }
+
+    if (mActivePreset)
+    {
+        SyncActivePresetSceneGraph();
+        ApplyPreset(*mActivePreset);
+        mPendingStateBroadcast = true;
     }
 }
 

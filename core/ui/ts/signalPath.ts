@@ -83,6 +83,13 @@ let overlayBypassClickCleanup: (() => void) | null = null;
 let nodeDragStartPoint: { nodeId: string; x: number; y: number } | null = null;
 let lastNodeDragPoint: { x: number; y: number } | null = null;
 let nodeDragDropHandled = false;
+type HostedPluginLoadFailure = {
+  selectionKey: string;
+  resourceIndex?: number;
+  resource: PluginResourceSupportInfo;
+  message: string;
+};
+const hostedPluginLoadFailures = new Map<string, HostedPluginLoadFailure>();
 
 const NODE_BYPASS_DRAG_DISTANCE_PX = 36;
 const NODE_BYPASS_DRAG_DIRECTION_RATIO = 1.2;
@@ -114,7 +121,6 @@ function updateEffectVisualization(node?: GraphNode): void {
     effectVisualizationElement.style.removeProperty("--effect-visual-bg");
     effectVisualizationElement.dataset.effectType = "";
     effectVisualizationElement.dataset.effectCategory = "";
-    updateUnsupportedPluginVisualizationNotice(null);
     return;
   }
 
@@ -125,47 +131,40 @@ function updateEffectVisualization(node?: GraphNode): void {
   effectVisualizationElement.style.setProperty("--effect-visual-bg", background);
   effectVisualizationElement.dataset.effectType = node.type;
   effectVisualizationElement.dataset.effectCategory = category;
-  updateUnsupportedPluginVisualizationNotice(getSelectedPluginResourceSupportInfo(node));
 }
 
-function updateUnsupportedPluginVisualizationNotice(resource: PluginResourceSupportInfo | null | undefined): void {
-  if (!effectVisualizationElement) {
+export function handleHostedPluginResourceLoadFailed(payload: {
+  nodeId?: string;
+  resourceType?: string;
+  resourceId?: string;
+  filePath?: string;
+  resourceIndex?: number;
+  message?: string;
+}): void {
+  if (payload.resourceType && payload.resourceType !== "plugin") {
     return;
   }
 
-  const unsupportedPlugin = getUnsupportedPluginSelection(resource);
-  let notice = effectVisualizationElement.querySelector<HTMLElement>(".effect-visualization-plugin-notice");
-  effectVisualizationElement.classList.toggle("has-plugin-warning", Boolean(unsupportedPlugin));
-
-  if (!unsupportedPlugin) {
-    notice?.remove();
+  const nodeId = payload.nodeId ?? "";
+  if (!nodeId) {
     return;
   }
 
-  if (!notice) {
-    notice = document.createElement("div");
-    notice.className = "effect-visualization-plugin-notice";
-    notice.setAttribute("role", "status");
-    notice.setAttribute("aria-live", "polite");
+  const resource = (payload.resourceId ? getLibraryResource("plugin", payload.resourceId) : undefined)
+    ?? ({ filePath: payload.filePath ?? "" } satisfies PluginResourceSupportInfo);
+  const message = payload.message?.trim() || "The selected plugin cannot be hosted by this build.";
+  const failure: HostedPluginLoadFailure = {
+    selectionKey: getPluginResourceSelectionKey(payload.resourceId, payload.filePath),
+    resourceIndex: typeof payload.resourceIndex === "number" ? payload.resourceIndex : undefined,
+    resource,
+    message,
+  };
+  hostedPluginLoadFailures.set(nodeId, failure);
 
-    const title = document.createElement("div");
-    title.className = "effect-visualization-plugin-notice-title";
-    notice.appendChild(title);
-
-    const detail = document.createElement("div");
-    detail.className = "effect-visualization-plugin-notice-detail";
-    notice.appendChild(detail);
-
-    effectVisualizationElement.appendChild(notice);
-  }
-
-  const title = notice.querySelector<HTMLElement>(".effect-visualization-plugin-notice-title");
-  const detail = notice.querySelector<HTMLElement>(".effect-visualization-plugin-notice-detail");
-  if (title) {
-    title.textContent = "Selected Plugin Type Not Supported";
-  }
-  if (detail) {
-    detail.textContent = `${unsupportedPlugin.label} plugins cannot be hosted by this build.`;
+  const selectedNode = getSelectedSignalPathNode(getSignalPathPreset());
+  if (selectedNode?.id === nodeId && getPluginResourceIndex(selectedNode) !== null) {
+    renderHostedPluginWarningIntoOpenPanel(nodeId, failure.resourceIndex, buildHostedPluginLoadErrorMarkup(failure));
+    updateEffectVisualization(selectedNode);
   }
 }
 
@@ -411,13 +410,40 @@ function getLibraryResourceName(resourceType: string | undefined, resourceId: st
   return match?.name?.trim() ?? "";
 }
 
-function getSelectedPluginResourceSupportInfo(node: GraphNode): PluginResourceSupportInfo | null {
+function getPluginResourceIndex(node: GraphNode): number | null {
   const typeInfo = getNodeEffectInfo(node);
-  if (typeInfo?.resourceType !== "plugin") {
-    return null;
+  if (typeInfo?.resourceType === "plugin") {
+    return 0;
   }
 
-  const current = getNodeResourceAtIndex(node, 0);
+  const exposedPluginResource = typeInfo?.exposedResources?.find((resource) => resource.resourceType === "plugin");
+  if (exposedPluginResource) {
+    return exposedPluginResource.resourceIndex ?? 0;
+  }
+
+  const resources = (node as unknown as { resources?: ResourceRef[] }).resources;
+  if (Array.isArray(resources)) {
+    const index = resources.findIndex((resource) => (resource.resourceType ?? resource.type) === "plugin");
+    if (index >= 0) {
+      return index;
+    }
+  }
+
+  return null;
+}
+
+function getPluginResourceSelectionKey(resourceId?: string, filePath?: string): string {
+  if (resourceId) {
+    return `id:${resourceId}`;
+  }
+  if (filePath) {
+    return `file:${filePath.replace(/\\/g, "/").toLowerCase()}`;
+  }
+  return "";
+}
+
+function getPluginResourceSupportInfoAtIndex(node: GraphNode, resourceIndex: number): PluginResourceSupportInfo | null {
+  const current = getNodeResourceAtIndex(node, resourceIndex);
   if (current.id) {
     const resource = getLibraryResource("plugin", current.id);
     if (resource) {
@@ -430,6 +456,96 @@ function getSelectedPluginResourceSupportInfo(node: GraphNode): PluginResourceSu
   }
 
   return null;
+}
+
+function getHostedPluginLoadFailureForResource(node: GraphNode, resourceIndex: number): HostedPluginLoadFailure | null {
+  const failure = hostedPluginLoadFailures.get(node.id);
+  if (!failure) {
+    return null;
+  }
+
+  if (failure.resourceIndex !== undefined && failure.resourceIndex !== resourceIndex) {
+    return null;
+  }
+
+  const current = getNodeResourceAtIndex(node, resourceIndex);
+  const currentSelectionKey = getPluginResourceSelectionKey(current.id, current.filePath);
+  if (failure.selectionKey && currentSelectionKey && failure.selectionKey !== currentSelectionKey) {
+    return null;
+  }
+
+  return failure;
+}
+
+function buildHostedPluginLoadErrorMarkup(failure: HostedPluginLoadFailure): string {
+  const unsupportedPlugin = getUnsupportedPluginSelection(failure.resource);
+  const title = unsupportedPlugin ? "Selected Plugin Type Not Supported" : "Plugin Load Error";
+  const detail = failure.message.trim() || "The selected plugin cannot be hosted by this build.";
+  return buildHostedPluginWarningMarkup(title, detail);
+}
+
+function buildUnsupportedPluginWarningMarkup(resource: PluginResourceSupportInfo | null | undefined): string {
+  const unsupportedPlugin = getUnsupportedPluginSelection(resource);
+  if (!unsupportedPlugin) {
+    return "";
+  }
+
+  return buildHostedPluginWarningMarkup(
+    "Selected Plugin Type Not Supported",
+    `${unsupportedPlugin.label} plugins cannot be hosted by this build.`,
+  );
+}
+
+function buildHostedPluginWarningMarkup(title: string, detail: string): string {
+  return `
+    <div class="plugin-host-load-error" role="status" aria-live="polite">
+      <div class="plugin-host-load-error-title">${escapeHtml(title)}</div>
+      <div class="plugin-host-load-error-detail">${escapeHtml(detail)}</div>
+    </div>
+  `;
+}
+
+function buildHostedPluginLoadErrorHtml(node: GraphNode, resourceIndex: number): string {
+  const failure = getHostedPluginLoadFailureForResource(node, resourceIndex);
+  if (failure) {
+    return buildHostedPluginLoadErrorMarkup(failure);
+  }
+
+  return buildUnsupportedPluginWarningMarkup(getPluginResourceSupportInfoAtIndex(node, resourceIndex));
+}
+
+function renderHostedPluginWarningIntoOpenPanel(nodeId: string, resourceIndex: number | undefined, warningHtml: string): void {
+  if (!nodeParamsPanelElement?.classList.contains("visible")) {
+    return;
+  }
+
+  const pluginControls = Array.from(
+    nodeParamsPanelElement.querySelectorAll<HTMLElement>(`.resource-dropdown[data-resource-type="plugin"], .resource-picker-btn[data-resource-type="plugin"]`),
+  );
+  const targetControl = pluginControls.find((control) => {
+    if (control.dataset.nodeId !== nodeId) {
+      return false;
+    }
+    if (resourceIndex === undefined) {
+      return true;
+    }
+    const controlResourceIndex = control.dataset.resourceIndex ? parseInt(control.dataset.resourceIndex, 10) : 0;
+    return controlResourceIndex === resourceIndex;
+  });
+  const container = targetControl?.closest(".node-resource-selector");
+  if (!container) {
+    return;
+  }
+
+  container.querySelector(".plugin-host-load-error")?.remove();
+  const controlsRow = container.querySelector(".resource-controls");
+  if (warningHtml) {
+    controlsRow?.insertAdjacentHTML("afterend", warningHtml);
+  }
+}
+
+function clearInlineHostedPluginLoadError(source: Element): void {
+  source.closest(".node-resource-selector")?.querySelector(".plugin-host-load-error")?.remove();
 }
 
 function getNodeResourceDisplayName(node: GraphNode, index = 0, overrideResourceType?: string): string {
@@ -2165,6 +2281,9 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
         const hostedPluginOpenButton = resourceType === "plugin"
           ? `<button type="button" class="resource-picker-btn plugin-host-open-btn" data-node-id="${node.id}">Open Plugin UI</button>`
           : "";
+        const hostedPluginLoadError = resourceType === "plugin"
+          ? buildHostedPluginLoadErrorHtml(node, resourceIndex)
+          : "";
 
         customLayoutResourceControls.push({
           resourceControlKey: `__resource__:${exposedResource.resourceId}:${resourceIndex}`,
@@ -2224,6 +2343,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
               ` : ""}
               ${hostedPluginOpenButton}
             </div>
+            ${hostedPluginLoadError}
             ${current.filePath ? `<div class="resource-path-info" title="${current.filePath}">${current.filePath}</div>` : ""}
           </div>
         `;
@@ -2270,6 +2390,9 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
       const missingClass = isMissing ? "resource-picker-label is-missing" : "resource-picker-label";
       const hostedPluginOpenButton = resourceType === "plugin"
         ? `<button type="button" class="resource-picker-btn plugin-host-open-btn" data-node-id="${node.id}">Open Plugin UI</button>`
+        : "";
+      const hostedPluginLoadError = resourceType === "plugin"
+        ? buildHostedPluginLoadErrorHtml(node, index)
         : "";
 
       customLayoutResourceControls.push({
@@ -2323,6 +2446,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
             >${renderIcon("folder", "resource-browse-icon")}</button>
             ${hostedPluginOpenButton}
           </div>
+          ${hostedPluginLoadError}
           ${current.filePath ? `<div class="resource-path-info" title="${current.filePath}">${current.filePath}</div>` : ""}
         </div>
       `;
@@ -3008,10 +3132,16 @@ function bindResourceControls(node: GraphNode, preset: Preset): void {
       const resourceIndex = dropdown.dataset.resourceIndex ? parseInt(dropdown.dataset.resourceIndex, 10) : undefined;
 
       if (resourceType === "plugin") {
+        if (nodeId) {
+          hostedPluginLoadFailures.delete(nodeId);
+        }
+        clearInlineHostedPluginLoadError(dropdown);
         const selectedResource = resourceId && resourceId !== "__custom__"
           ? getLibraryResource("plugin", resourceId)
           : null;
-        updateUnsupportedPluginVisualizationNotice(selectedResource);
+        if (nodeId) {
+          renderHostedPluginWarningIntoOpenPanel(nodeId, resourceIndex, buildUnsupportedPluginWarningMarkup(selectedResource));
+        }
       }
       
       if (nodeId && resourceType && resourceId && resourceId !== "__custom__") {
@@ -3072,6 +3202,13 @@ function bindResourceControls(node: GraphNode, preset: Preset): void {
       const resourceIndex = browseBtn.dataset.resourceIndex ? parseInt(browseBtn.dataset.resourceIndex, 10) : undefined;
       const exposedResourceId = browseBtn.dataset.exposedResourceId;
       
+      if (resourceType === "plugin") {
+        if (nodeId) {
+          hostedPluginLoadFailures.delete(nodeId);
+        }
+        clearInlineHostedPluginLoadError(browseBtn);
+      }
+
       if (nodeId && resourceType) {
         sendBrowseNodeResource(nodeId, resourceType, resourceIndex, exposedResourceId);
       }

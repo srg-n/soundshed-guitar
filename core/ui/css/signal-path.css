@@ -1907,6 +1907,33 @@
   gap: 10px;
 }
 
+.default-effect-shell .plugin-host-load-error {
+  display: grid;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 9px 11px;
+  border: 1px solid rgba(245, 158, 11, 0.42);
+  border-radius: 8px;
+  background: rgba(38, 28, 15, 0.72);
+  color: rgba(255, 245, 230, 0.92);
+  overflow: hidden;
+}
+
+.default-effect-shell .plugin-host-load-error-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.default-effect-shell .plugin-host-load-error-detail {
+  font-size: 11px;
+  line-height: 1.35;
+  color: rgba(255, 232, 195, 0.82);
+  overflow-wrap: anywhere;
+}
+
 .default-effect-shell .resource-picker-btn,
 .default-effect-shell .resource-browse-btn,
 .default-effect-shell .blend-open-btn {
@@ -2147,6 +2174,16 @@
   border-color: rgba(120, 138, 172, 0.16);
 }
 
+.theme-light .default-effect-shell .plugin-host-load-error {
+  background: rgba(255, 247, 232, 0.9);
+  border-color: rgba(180, 83, 9, 0.34);
+  color: #463015;
+}
+
+.theme-light .default-effect-shell .plugin-host-load-error-detail {
+  color: rgba(78, 55, 23, 0.82);
+}
+
 .theme-light .default-effect-shell .node-param-knob {
   border-width: 2px;
   border-color: var(--border-light);
@@ -2301,6 +2338,16 @@
   border-color: rgba(255, 232, 187, 0.16);
   background: linear-gradient(180deg, rgba(72, 46, 27, 0.82) 0%, rgba(49, 30, 18, 0.94) 100%);
   color: var(--text-dark-primary);
+}
+
+.theme-classic .default-effect-shell .plugin-host-load-error {
+  background: rgba(46, 29, 13, 0.82);
+  border-color: rgba(236, 171, 72, 0.5);
+  color: var(--text-dark-primary);
+}
+
+.theme-classic .default-effect-shell .plugin-host-load-error-detail {
+  color: var(--text-dark-tertiary);
 }
 
 .theme-classic .node-params-title {

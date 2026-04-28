@@ -285,6 +285,12 @@ private:
                                         const std::string& nodeId,
                                         const std::string& key,
                                         const std::string& value);
+    bool ReportHostedPluginResourceLoadFailure(const std::string& nodeId,
+                                               const ResourceRef& ref,
+                                               int resourceIndex = -1);
+    void DiscardFailedHostedPluginResourceSelection(const std::string& nodeId,
+                                                    const ResourceRef& ref,
+                                                    int resourceIndex = -1);
     void UpdateHostLatency();
     void ApplyBlendDefinitions(Preset& preset);
     void CaptureRuntimePluginStates(Preset& preset, const std::string& presetId) const;
