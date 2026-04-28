@@ -65,6 +65,7 @@ src/.DS_Store
 .DS_Store
 
 core/build/
+core/build-*/
 
 juce/JUCE/
 
@@ -104,4 +105,3 @@ linux-dist
 juce/builds-linux-x64/
 linux-dist-x64/
 soundshed-install
-
