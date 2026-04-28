@@ -14,17 +14,17 @@ namespace
     bool isYouTubeUrl (const juce::String& url)
     {
         return url.containsIgnoreCase ("youtube-nocookie.com")
-            || url.containsIgnoreCase ("youtube.com")
-            || url.containsIgnoreCase ("youtu.be");
+               || url.containsIgnoreCase ("youtube.com")
+               || url.containsIgnoreCase ("youtu.be");
     }
 
     juce::WebBrowserComponent::Options::Backend getPreferredBrowserBackend()
     {
-       #if JUCE_WINDOWS
+#if JUCE_WINDOWS
         return juce::WebBrowserComponent::Options::Backend::webview2;
-       #else
+#else
         return juce::WebBrowserComponent::Options::Backend::defaultBackend;
-       #endif
+#endif
     }
 
     const char* getMimeForExtension (const juce::String& extension)
@@ -55,7 +55,7 @@ namespace
     std::vector<std::byte> readFileToVector (const juce::File& file)
     {
         juce::FileInputStream stream (file);
-        if (! stream.openedOk())
+        if (!stream.openedOk())
             return {};
 
         std::vector<std::byte> result (static_cast<size_t> (stream.getTotalLength()));
@@ -64,6 +64,35 @@ namespace
 
         stream.read (result.data(), static_cast<int> (result.size()));
         return result;
+    }
+
+    bool isSafeResourcePath (const juce::String& path)
+    {
+        if (path.isEmpty() || path.startsWithChar ('/') || path.startsWithChar ('\\') || path.contains (":"))
+            return false;
+
+        juce::StringArray parts;
+        parts.addTokens (path.replaceCharacter ('\\', '/'), "/", "");
+        for (const auto& part : parts)
+        {
+            if (part.isEmpty() || part == "." || part == "..")
+                return false;
+        }
+
+        return true;
+    }
+
+    juce::String getResourcePathFromUrl (juce::String url)
+    {
+        url = url.upToFirstOccurrenceOf ("#", false, false)
+                  .upToFirstOccurrenceOf ("?", false, false);
+
+        if (url.startsWith (kResourceOrigin))
+            url = url.substring (kResourceOrigin.length());
+        else if (url.startsWithChar ('/'))
+            url = url.substring (1);
+
+        return url.isEmpty() ? juce::String ("index.html") : url;
     }
 
     juce::String extractToneSharingDeepLinkQuery (juce::String commandLine)
@@ -196,51 +225,58 @@ namespace
             stream.writeText (line, false, false, nullptr);
         }
 
-       #if ! JUCE_LINUX
+#if !JUCE_LINUX
         juce::Logger::writeToLog (message);
-       #endif
+#endif
     }
 }
 
 PluginEditor::PluginEditor (PluginProcessorAdapter& p)
     : AudioProcessorEditor (&p),
       processorRef (p),
-      resourceRoot ([]{
-        // --- Resource root resolution logging ---
-        const auto exeFile = juce::File::getSpecialLocation (juce::File::currentExecutableFile);
-        const auto exeDir  = std::filesystem::path (exeFile.getParentDirectory().getFullPathName().toStdString());
-        const auto cwd     = std::filesystem::current_path();
+      resourceRoot ([&p] {
+          const auto exeFile = juce::File::getSpecialLocation (juce::File::currentExecutableFile);
+          const auto exeDir = std::filesystem::path (exeFile.getParentDirectory().getFullPathName().toStdString());
+          const auto cwd = std::filesystem::current_path();
+          const auto adapterRoot = p.GetBundledAssetsPath();
 
-        writeStartupLog ("[PluginEditor] exe       : " + exeFile.getFullPathName());
-        writeStartupLog ("[PluginEditor] cwd       : " + juce::String (cwd.string()));
-        writeStartupLog ("[PluginEditor] candidate : " + juce::String ((exeDir / "resources").string()));
+          std::vector<std::filesystem::path> candidates;
+          if (!adapterRoot.empty())
+              candidates.push_back (adapterRoot);
+          candidates.push_back (exeDir / "resources");
+          candidates.push_back (exeDir / "Resources");
+          candidates.push_back (cwd / "resources");
+          candidates.push_back (cwd / "Resources");
 
-        const auto resolved = guitarfx::ui::ResolveResourceRoot ({ exeDir / "resources" });
-        writeStartupLog ("[PluginEditor] resolved  : " + juce::String (resolved.string()));
+          writeStartupLog ("[PluginEditor] exe       : " + exeFile.getFullPathName());
+          writeStartupLog ("[PluginEditor] cwd       : " + juce::String (cwd.string()));
+          writeStartupLog ("[PluginEditor] adapter   : " + juce::String (adapterRoot.string()));
 
-        if (resolved.empty())
-        {
-            writeStartupLog ("[PluginEditor] WARNING: resource root NOT found – UI will show fallback");
-        }
-        else
-        {
-            const auto indexPath = resolved / "ui" / "index.html";
-            const bool indexExists = std::filesystem::exists (indexPath);
-            writeStartupLog ("[PluginEditor] index.html exists: " + juce::String (indexExists ? "YES" : "NO")
-                             + " (" + juce::String (indexPath.string()) + ")");
-        }
+          const auto resolved = guitarfx::ui::ResolveResourceRoot (candidates);
+          writeStartupLog ("[PluginEditor] resolved  : " + juce::String (resolved.string()));
 
-        return juce::File (resolved.string());
-    }()),
-      webView ([this]
-      {
-          auto options = juce::WebBrowserComponent::Options{}
+          if (resolved.empty())
+          {
+              writeStartupLog ("[PluginEditor] WARNING: resource root NOT found – UI will show fallback");
+          }
+          else
+          {
+              const auto indexPath = resolved / "ui" / "index.html";
+              const bool indexExists = std::filesystem::exists (indexPath);
+              writeStartupLog ("[PluginEditor] index.html exists: " + juce::String (indexExists ? "YES" : "NO")
+                               + " (" + juce::String (indexPath.string()) + ")");
+          }
+
+          return juce::File (resolved.string());
+      }()),
+      webView ([this] {
+          auto options = juce::WebBrowserComponent::Options {}
                              .withBackend (getPreferredBrowserBackend())
-                             .withWinWebView2Options (juce::WebBrowserComponent::Options::WinWebView2{}
-                                                          .withUserDataFolder (
-                                                              juce::File::getSpecialLocation (juce::File::tempDirectory)
-                                                                  .getChildFile ("SoundshedGuitarWebView2")
-                                                                  .getChildFile (juce::String (juce::Time::getCurrentTime().toMilliseconds()))))
+                             .withWinWebView2Options (juce::WebBrowserComponent::Options::WinWebView2 {}
+                                     .withUserDataFolder (
+                                         juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                             .getChildFile ("SoundshedGuitarWebView2")
+                                             .getChildFile (juce::String (juce::Time::getCurrentTime().toMilliseconds()))))
                              .withUserScript (
                                  "window.IPlugSendMsg = function(payload) {"
                                  "  try {"
@@ -251,15 +287,13 @@ PluginEditor::PluginEditor (PluginProcessorAdapter& p)
                                  "  }"
                                  "};")
                              .withNativeIntegrationEnabled()
-                             .withEventListener ("iplugSendMsg", [this] (const juce::var& payload)
-                             {
+                             .withEventListener ("iplugSendMsg", [this] (const juce::var& payload) {
                                  const auto message = payload.isString() ? payload.toString()
                                                                          : juce::JSON::toString (payload);
                                  if (message.isNotEmpty())
                                      processorRef.handleWebMessage (message);
                              })
-                             .withNativeFunction ("IPlugSendMsg", [this] (const juce::Array<juce::var>& args, auto complete)
-                             {
+                             .withNativeFunction ("IPlugSendMsg", [this] (const juce::Array<juce::var>& args, auto complete) {
                                  if (args.size() > 0)
                                  {
                                      const auto& arg = args[0];
@@ -270,8 +304,7 @@ PluginEditor::PluginEditor (PluginProcessorAdapter& p)
 
                                  complete (juce::var());
                              })
-                             .withNativeFunction ("postMessage", [this] (const juce::Array<juce::var>& args, auto complete)
-                             {
+                             .withNativeFunction ("postMessage", [this] (const juce::Array<juce::var>& args, auto complete) {
                                  if (args.size() > 0)
                                  {
                                      const auto& arg = args[0];
@@ -283,29 +316,26 @@ PluginEditor::PluginEditor (PluginProcessorAdapter& p)
                                  complete (juce::var());
                              });
 
-         #if JUCE_WEB_BROWSER_RESOURCE_PROVIDER_AVAILABLE
-          options = options.withResourceProvider ([this] (const auto& url)
-                                                  {
-                                                      return getResource (url);
-                                                  },
-                                                  std::optional<juce::String> { getResourceRootUrl() });
-         #else
+#if JUCE_WEB_BROWSER_RESOURCE_PROVIDER_AVAILABLE
+          options = options.withResourceProvider ([this] (const auto& url) {
+              return getResource (url);
+          },
+              std::optional<juce::String> { getResourceRootUrl() });
+#else
           writeStartupLog ("[PluginEditor] Resource provider unavailable for this JUCE configuration; using file:// UI loading");
-         #endif
+#endif
 
           return options;
       }())
 {
     addAndMakeVisible (webView);
 
-   #if JUCE_LINUX
-    webView.setPageFinishedCallback ([this] (const juce::String& url)
-    {
+#if JUCE_LINUX
+    webView.setPageFinishedCallback ([this] (const juce::String& url) {
         markLinuxWebViewLoaded (url);
     });
 
-    webView.setNetworkErrorCallback ([this] (const juce::String& errorInfo)
-    {
+    webView.setNetworkErrorCallback ([this] (const juce::String& errorInfo) {
         return handleLinuxWebViewNetworkError (errorInfo);
     });
 
@@ -319,59 +349,58 @@ PluginEditor::PluginEditor (PluginProcessorAdapter& p)
     linuxWebViewStatusLabel.setVisible (false);
 
     const auto linuxWebViewSupported = juce::WebBrowserComponent::areOptionsSupported (
-        juce::WebBrowserComponent::Options{}
+        juce::WebBrowserComponent::Options {}
             .withBackend (getPreferredBrowserBackend())
             .withNativeIntegrationEnabled());
 
-    if (! linuxWebViewSupported)
+    if (!linuxWebViewSupported)
     {
         showLinuxWebViewDependencyMessage ("Embedded WebKit support was not detected. webkit2gtk is required.");
         writeStartupLog ("[PluginEditor] Linux WebView unsupported: missing runtime dependencies");
     }
-   #endif
+#endif
 
-    processorRef.setWebMessageCallback ([this] (const juce::String& message)
-    {
+    processorRef.setWebMessageCallback ([this] (const juce::String& message) {
         const auto script = guitarfx::ui::BuildIPlugReceiveScript (message.toStdString());
-       #if JUCE_LINUX
+#if JUCE_LINUX
         // JUCE's Linux WebKit backend emits evaluation callbacks even when none
         // were requested; providing a no-op callback avoids assertion noise.
         webView.evaluateJavascript (juce::String (script), [] (const auto&) {});
-       #else
+#else
         webView.evaluateJavascript (juce::String (script));
-       #endif
+#endif
     });
 
-   #if JUCE_WINDOWS
+#if JUCE_WINDOWS
     // NOTE: areOptionsSupported must be called with a writable user data folder.
     // When installed under Program Files the default folder (next to the .exe) is
     // read-only for standard users, causing the check to falsely return false.
     const auto webView2Supported = juce::WebBrowserComponent::areOptionsSupported (
-        juce::WebBrowserComponent::Options{}
+        juce::WebBrowserComponent::Options {}
             .withBackend (getPreferredBrowserBackend())
-            .withWinWebView2Options (juce::WebBrowserComponent::Options::WinWebView2{}
-                .withUserDataFolder (
-                    juce::File::getSpecialLocation (juce::File::tempDirectory)
-                        .getChildFile ("SoundshedGuitarWebView2Check"))));
+            .withWinWebView2Options (juce::WebBrowserComponent::Options::WinWebView2 {}
+                    .withUserDataFolder (
+                        juce::File::getSpecialLocation (juce::File::tempDirectory)
+                            .getChildFile ("SoundshedGuitarWebView2Check"))));
 
     writeStartupLog ("[PluginEditor] WebView2 supported: " + juce::String (webView2Supported ? "YES" : "NO"));
 
-    if (! webView2Supported)
+    if (!webView2Supported)
     {
         const juce::String missingRuntimeHtml =
-            "data:text/html;charset=UTF-8," \
-            "<!doctype html><html><head><meta charset='utf-8'/>" \
-            "<title>Soundshed Guitar</title></head>" \
-            "<body style='font-family:sans-serif;background:#101014;color:#eee;padding:24px;line-height:1.5;'>" \
-            "<h2>Microsoft Edge WebView2 Runtime is required</h2>" \
-            "<p>The Soundshed Guitar UI cannot start because WebView2 is not available.</p>" \
-            "<p>Install the runtime, then restart the app.</p>" \
-            "<p>Download: <a href='https://aka.ms/webview2' style='color:#8ab4ff;'>https://aka.ms/webview2</a></p>" \
+            "data:text/html;charset=UTF-8,"
+            "<!doctype html><html><head><meta charset='utf-8'/>"
+            "<title>Soundshed Guitar</title></head>"
+            "<body style='font-family:sans-serif;background:#101014;color:#eee;padding:24px;line-height:1.5;'>"
+            "<h2>Microsoft Edge WebView2 Runtime is required</h2>"
+            "<p>The Soundshed Guitar UI cannot start because WebView2 is not available.</p>"
+            "<p>Install the runtime, then restart the app.</p>"
+            "<p>Download: <a href='https://aka.ms/webview2' style='color:#8ab4ff;'>https://aka.ms/webview2</a></p>"
             "</body></html>";
         webView.goToURL (missingRuntimeHtml);
     }
     else
-   #endif
+#endif
     {
         auto cacheBust = "?v=" + juce::String (juce::Time::getCurrentTime().toMilliseconds());
         const auto deepLinkQuery = getStandaloneDeepLinkQuery();
@@ -379,20 +408,20 @@ PluginEditor::PluginEditor (PluginProcessorAdapter& p)
             cacheBust << "&" << deepLinkQuery;
         juce::String startUrl;
 
-       #if JUCE_WEB_BROWSER_RESOURCE_PROVIDER_AVAILABLE
+#if JUCE_WEB_BROWSER_RESOURCE_PROVIDER_AVAILABLE
         startUrl = juce::WebBrowserComponent::getResourceProviderRoot() + cacheBust;
-       #else
+#else
         const auto indexFile = resourceRoot.getChildFile ("ui").getChildFile ("index.html");
         if (indexFile.existsAsFile())
             startUrl = juce::URL (indexFile).toString (false) + cacheBust;
         else
             startUrl = "data:text/html;charset=UTF-8,<html><body><h2>UI not found</h2></body></html>";
-       #endif
+#endif
 
         writeStartupLog ("[PluginEditor] goToURL: " + startUrl);
 
-       #if JUCE_LINUX
-        if (! linuxWebViewFallbackShown)
+#if JUCE_LINUX
+        if (!linuxWebViewFallbackShown)
         {
             linuxInitialUrl = startUrl;
             linuxWebViewInitTimeMs = juce::Time::getMillisecondCounter();
@@ -401,9 +430,9 @@ PluginEditor::PluginEditor (PluginProcessorAdapter& p)
             linuxWebViewNetworkErrorCount = 0;
             webView.goToURL (startUrl);
         }
-       #else
+#else
         webView.goToURL (startUrl);
-       #endif
+#endif
     }
 
     setResizable (true, true);
@@ -425,21 +454,21 @@ void PluginEditor::timerCallback()
 {
     processorRef.getController().OnIdle();
 
-   #if JUCE_LINUX
-    if (! linuxWebViewLoadCompleted && ! linuxWebViewFallbackShown)
+#if JUCE_LINUX
+    if (!linuxWebViewLoadCompleted && !linuxWebViewFallbackShown)
     {
         constexpr juce::uint32 loadWarningMs = 8000;
         constexpr juce::uint32 loadRetryMs = 12000;
         constexpr juce::uint32 loadTimeoutMs = 25000;
         const auto elapsedMs = juce::Time::getMillisecondCounter() - linuxWebViewInitTimeMs;
 
-        if (! linuxWebViewSlowLoadLogged && elapsedMs > loadWarningMs)
+        if (!linuxWebViewSlowLoadLogged && elapsedMs > loadWarningMs)
         {
             linuxWebViewSlowLoadLogged = true;
             writeStartupLog ("[PluginEditor] Linux WebView still loading after 8s");
         }
 
-        if (! linuxWebViewRetryAttempted && elapsedMs > loadRetryMs && linuxInitialUrl.isNotEmpty())
+        if (!linuxWebViewRetryAttempted && elapsedMs > loadRetryMs && linuxInitialUrl.isNotEmpty())
         {
             linuxWebViewRetryAttempted = true;
             linuxWebViewInitTimeMs = juce::Time::getMillisecondCounter();
@@ -452,15 +481,18 @@ void PluginEditor::timerCallback()
         if (elapsedMs > loadTimeoutMs)
             showLinuxWebViewDependencyMessage ("Timed out while waiting for the embedded WebView to finish loading.");
     }
-   #endif
+#endif
 }
 
 std::optional<juce::WebBrowserComponent::Resource> PluginEditor::getResource (const juce::String& url)
 {
-    const auto trimmedUrl = url.upToFirstOccurrenceOf ("#", false, false)
-                                .upToFirstOccurrenceOf ("?", false, false);
-    const auto urlToRetrieve = trimmedUrl == "/" ? juce::String ("index.html")
-                                                  : trimmedUrl.fromFirstOccurrenceOf ("/", false, false);
+    const auto urlToRetrieve = getResourcePathFromUrl (url);
+
+    if (!isSafeResourcePath (urlToRetrieve))
+    {
+        writeStartupLog ("[getResource] rejected unsafe path: " + urlToRetrieve);
+        return std::nullopt;
+    }
 
     if (resourceRoot.exists())
     {
@@ -468,9 +500,9 @@ std::optional<juce::WebBrowserComponent::Resource> PluginEditor::getResource (co
         if (file.existsAsFile())
         {
             auto data = readFileToVector (file);
-     
+
             return juce::WebBrowserComponent::Resource { std::move (data),
-                                                         getMimeForExtension (file.getFileExtension().substring (1)) };
+                getMimeForExtension (file.getFileExtension().substring (1)) };
         }
 
         writeStartupLog ("[getResource] MISS " + resourceRoot.getChildFile ("ui").getChildFile (urlToRetrieve).getFullPathName());
@@ -488,8 +520,9 @@ std::optional<juce::WebBrowserComponent::Resource> PluginEditor::getResource (co
             "<title>Soundshed Guitar</title></head>"
             "<body style=\"font-family:sans-serif;background:#101014;color:#eee;padding:24px;\">"
             "<h1>UI not found</h1><p>Expected resources/ui/index.html on disk.</p>"
-            "<p>Resource root: " + resourceRoot.getFullPathName() + "</p>"
-            "</body></html>";
+            "<p>Resource root: "
+            + resourceRoot.getFullPathName() + "</p>"
+                                               "</body></html>";
 
         std::vector<std::byte> bytes (fallbackHtml.getNumBytesAsUTF8());
         std::memcpy (bytes.data(), fallbackHtml.toRawUTF8(), bytes.size());
@@ -507,7 +540,7 @@ juce::String PluginEditor::getResourceRootUrl() const
 #if JUCE_LINUX
 void PluginEditor::markLinuxWebViewLoaded (const juce::String& url)
 {
-    if (! linuxWebViewLoadCompleted)
+    if (!linuxWebViewLoadCompleted)
         writeStartupLog ("[PluginEditor] Linux WebView loaded: " + url);
 
     linuxWebViewLoadCompleted = true;
@@ -530,8 +563,8 @@ bool PluginEditor::handleLinuxWebViewNetworkError (const juce::String& errorInfo
     ++linuxWebViewNetworkErrorCount;
 
     const bool missingResourceError = errorInfo.containsIgnoreCase ("ERR_FILE_NOT_FOUND")
-                                   || errorInfo.containsIgnoreCase ("FILE_DOES_NOT_EXIST")
-                                   || errorInfo.containsIgnoreCase ("404");
+                                      || errorInfo.containsIgnoreCase ("FILE_DOES_NOT_EXIST")
+                                      || errorInfo.containsIgnoreCase ("404");
 
     if (missingResourceError || linuxWebViewNetworkErrorCount >= 3)
         showLinuxWebViewDependencyMessage ("Network/WebView error: " + errorInfo);
@@ -541,7 +574,7 @@ bool PluginEditor::handleLinuxWebViewNetworkError (const juce::String& errorInfo
 
 void PluginEditor::showLinuxWebViewDependencyMessage (const juce::String& reason)
 {
-    if (! linuxWebViewFallbackShown)
+    if (!linuxWebViewFallbackShown)
     {
         writeStartupLog ("[PluginEditor] Linux WebView fallback shown: " + reason);
         linuxWebViewFallbackShown = true;
@@ -551,7 +584,8 @@ void PluginEditor::showLinuxWebViewDependencyMessage (const juce::String& reason
         "The Soundshed Guitar UI could not be displayed in the embedded browser on Linux.\n\n"
         "Please confirm the required app dependencies are installed.\n"
         "See guitar.soundshed.com for details.\n\n"
-        "Details: " + reason;
+        "Details: "
+        + reason;
 
     linuxWebViewStatusLabel.setText (message, juce::dontSendNotification);
 
@@ -574,7 +608,7 @@ void PluginEditor::resized()
 {
     webView.setBounds (getLocalBounds());
 
-   #if JUCE_LINUX
+#if JUCE_LINUX
     linuxWebViewStatusLabel.setBounds (getLocalBounds().reduced (24));
-   #endif
+#endif
 }

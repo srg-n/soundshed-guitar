@@ -8,7 +8,7 @@
 
 #include "PluginProcessorAdapter.h"
 #include "JuceHostedPluginEffect.h"
-#include "PluginEditor.h"   // existing editor, unchanged
+#include "PluginEditor.h" // existing editor, unchanged
 #include "UiBridge.h"
 
 #include <nlohmann/json.hpp>
@@ -22,55 +22,59 @@
 #include <thread>
 
 #ifdef _WIN32
-#include <windows.h>
-#include <shobjidl.h>
-#include <wrl/client.h>
+    #include <shobjidl.h>
+    #include <windows.h>
+    #include <wrl/client.h>
 #endif
 
 namespace juce
 {
-void JUCE_CALLTYPE juce_showStandaloneAudioSettingsDialog();
+    void JUCE_CALLTYPE juce_showStandaloneAudioSettingsDialog();
 }
 
 namespace
 {
 #ifdef _WIN32
-struct ScopedComInitializer
-{
-    HRESULT hr;
-    ScopedComInitializer() : hr(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)) {}
-    ~ScopedComInitializer() { if (SUCCEEDED(hr)) CoUninitialize(); }
-    ScopedComInitializer(const ScopedComInitializer&) = delete;
-    ScopedComInitializer& operator=(const ScopedComInitializer&) = delete;
-};
+    struct ScopedComInitializer
+    {
+        HRESULT hr;
+        ScopedComInitializer() : hr (CoInitializeEx (nullptr, COINIT_APARTMENTTHREADED)) {}
+        ~ScopedComInitializer()
+        {
+            if (SUCCEEDED (hr))
+                CoUninitialize();
+        }
+        ScopedComInitializer (const ScopedComInitializer&) = delete;
+        ScopedComInitializer& operator= (const ScopedComInitializer&) = delete;
+    };
 #endif
 
 #if JUCE_LINUX
-class HeadlessLv2ManifestEditor final : public juce::AudioProcessorEditor
-{
-public:
-    explicit HeadlessLv2ManifestEditor(juce::AudioProcessor& processor)
-        : juce::AudioProcessorEditor(&processor)
+    class HeadlessLv2ManifestEditor final : public juce::AudioProcessorEditor
     {
-        setResizable(true, true);
-        setResizeLimits(800, 600, 8192, 8192);
-        setSize(1200, 900);
-    }
+    public:
+        explicit HeadlessLv2ManifestEditor (juce::AudioProcessor& processor)
+            : juce::AudioProcessorEditor (&processor)
+        {
+            setResizable (true, true);
+            setResizeLimits (800, 600, 8192, 8192);
+            setSize (1200, 900);
+        }
 
-    void paint(juce::Graphics& g) override
+        void paint (juce::Graphics& g) override
+        {
+            g.fillAll (juce::Colours::black);
+        }
+
+        void resized() override {}
+    };
+
+    bool shouldUseHeadlessLv2ManifestEditor (const PluginProcessorAdapter& processor)
     {
-        g.fillAll(juce::Colours::black);
+        return processor.wrapperType == juce::AudioProcessor::wrapperType_LV2
+               && std::getenv ("DISPLAY") == nullptr
+               && std::getenv ("WAYLAND_DISPLAY") == nullptr;
     }
-
-    void resized() override {}
-};
-
-bool shouldUseHeadlessLv2ManifestEditor(const PluginProcessorAdapter& processor)
-{
-    return processor.wrapperType == juce::AudioProcessor::wrapperType_LV2
-        && std::getenv("DISPLAY") == nullptr
-        && std::getenv("WAYLAND_DISPLAY") == nullptr;
-}
 #endif
 }
 
@@ -79,15 +83,15 @@ bool shouldUseHeadlessLv2ManifestEditor(const PluginProcessorAdapter& processor)
 // ════════════════════════════════════════════════════════════════════════
 
 PluginProcessorAdapter::PluginProcessorAdapter()
-    : AudioProcessor(BusesProperties()
-#if ! JucePlugin_IsMidiEffect
-#if ! JucePlugin_IsSynth
-          .withInput("Input", juce::AudioChannelSet::stereo(), true)
+    : AudioProcessor (BusesProperties()
+#if !JucePlugin_IsMidiEffect
+    #if !JucePlugin_IsSynth
+              .withInput ("Input", juce::AudioChannelSet::stereo(), true)
+    #endif
+              .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
 #endif
-          .withOutput("Output", juce::AudioChannelSet::stereo(), true)
-#endif
-      ),
-    mController(*this)
+              ),
+      mController (*this)
 {
     guitarfx::RegisterJuceHostedPluginEffect();
     mAssetRoot = locateAssetsRoot();
@@ -100,9 +104,9 @@ PluginProcessorAdapter::~PluginProcessorAdapter() = default;
 // juce::AudioProcessor overrides
 // ════════════════════════════════════════════════════════════════════════
 
-void PluginProcessorAdapter::prepareToPlay(double sampleRate, int samplesPerBlock)
+void PluginProcessorAdapter::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    mController.Prepare(sampleRate, samplesPerBlock);
+    mController.Prepare (sampleRate, samplesPerBlock);
 }
 
 void PluginProcessorAdapter::releaseResources()
@@ -110,13 +114,13 @@ void PluginProcessorAdapter::releaseResources()
     mController.Reset();
 }
 
-bool PluginProcessorAdapter::isBusesLayoutSupported(const BusesLayout& layouts) const
+bool PluginProcessorAdapter::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
     if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
         && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
         return false;
 
-#if ! JucePlugin_IsSynth
+#if !JucePlugin_IsSynth
     if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
         return false;
 #endif
@@ -124,10 +128,10 @@ bool PluginProcessorAdapter::isBusesLayoutSupported(const BusesLayout& layouts) 
     return true;
 }
 
-void PluginProcessorAdapter::processBlock(juce::AudioBuffer<float>& buffer,
-                                           juce::MidiBuffer& midiMessages)
+void PluginProcessorAdapter::processBlock (juce::AudioBuffer<float>& buffer,
+    juce::MidiBuffer& midiMessages)
 {
-    juce::ignoreUnused(midiMessages);
+    juce::ignoreUnused (midiMessages);
     juce::ScopedNoDenormals noDenormals;
 
     const auto totalInputCh = getTotalNumInputChannels();
@@ -136,19 +140,19 @@ void PluginProcessorAdapter::processBlock(juce::AudioBuffer<float>& buffer,
 
     // Clear any output channels that don't have corresponding inputs
     for (auto i = totalInputCh; i < totalOutputCh; ++i)
-        buffer.clear(i, 0, numSamples);
+        buffer.clear (i, 0, numSamples);
 
     // Set up float** for the core ProcessAudio
     float* inputs[2] = {
-        const_cast<float*>(buffer.getReadPointer(0)),
-        (totalInputCh > 1) ? const_cast<float*>(buffer.getReadPointer(1)) : nullptr
+        const_cast<float*> (buffer.getReadPointer (0)),
+        (totalInputCh > 1) ? const_cast<float*> (buffer.getReadPointer (1)) : nullptr
     };
     float* outputs[2] = {
-        buffer.getWritePointer(0),
-        (totalOutputCh > 1) ? buffer.getWritePointer(1) : nullptr
+        buffer.getWritePointer (0),
+        (totalOutputCh > 1) ? buffer.getWritePointer (1) : nullptr
     };
 
-    const bool processed = mController.ProcessAudio(inputs, outputs, numSamples);
+    const bool processed = mController.ProcessAudio (inputs, outputs, numSamples);
     if (!processed)
     {
         // Controller couldn't acquire DSP lock — silence
@@ -161,11 +165,11 @@ juce::AudioProcessorEditor* PluginProcessorAdapter::createEditor()
 #if JUCE_LINUX
     // JUCE's LV2 manifest helper instantiates the editor in headless CI just to query
     // resize metadata. Avoid constructing the real WebView-based editor in that path.
-    if (shouldUseHeadlessLv2ManifestEditor(*this))
-        return new HeadlessLv2ManifestEditor(*this);
+    if (shouldUseHeadlessLv2ManifestEditor (*this))
+        return new HeadlessLv2ManifestEditor (*this);
 #endif
 
-    return new PluginEditor(*this);
+    return new PluginEditor (*this);
 }
 
 bool PluginProcessorAdapter::hasEditor() const { return true; }
@@ -176,57 +180,58 @@ bool PluginProcessorAdapter::isMidiEffect() const { return false; }
 double PluginProcessorAdapter::getTailLengthSeconds() const { return 0.0; }
 int PluginProcessorAdapter::getNumPrograms() { return 1; }
 int PluginProcessorAdapter::getCurrentProgram() { return 0; }
-void PluginProcessorAdapter::setCurrentProgram(int) {}
-const juce::String PluginProcessorAdapter::getProgramName(int) { return {}; }
-void PluginProcessorAdapter::changeProgramName(int, const juce::String&) {}
+void PluginProcessorAdapter::setCurrentProgram (int) {}
+const juce::String PluginProcessorAdapter::getProgramName (int) { return {}; }
+void PluginProcessorAdapter::changeProgramName (int, const juce::String&) {}
 
-void PluginProcessorAdapter::getStateInformation(juce::MemoryBlock& destData)
+void PluginProcessorAdapter::getStateInformation (juce::MemoryBlock& destData)
 {
     const auto controllerState = mController.SerializeState();
-    juce::MemoryOutputStream stream(destData, false);
-    stream.write(controllerState.data(), controllerState.size());
+    juce::MemoryOutputStream stream (destData, false);
+    stream.write (controllerState.data(), controllerState.size());
 }
 
-void PluginProcessorAdapter::setStateInformation(const void* data, int sizeInBytes)
+void PluginProcessorAdapter::setStateInformation (const void* data, int sizeInBytes)
 {
-    if (data == nullptr || sizeInBytes <= 0) return;
+    if (data == nullptr || sizeInBytes <= 0)
+        return;
 
-    std::string controllerState(reinterpret_cast<const char*>(data), static_cast<size_t>(sizeInBytes));
-    if (controllerState.empty()) return;
+    std::string controllerState (reinterpret_cast<const char*> (data), static_cast<size_t> (sizeInBytes));
+    if (controllerState.empty())
+        return;
 
-    mController.DeserializeState(controllerState);
+    mController.DeserializeState (controllerState);
 }
 
 // ════════════════════════════════════════════════════════════════════════
 // IPluginHost implementation
 // ════════════════════════════════════════════════════════════════════════
 
-void PluginProcessorAdapter::SendMessageToUI(const std::string& jsonMessage)
+void PluginProcessorAdapter::SendMessageToUI (const std::string& jsonMessage)
 {
     // evaluateJavascript must be called on the message thread.
     // When called from the audio thread (e.g. riffCaptureStarted/Progress/Stopped),
     // dispatch asynchronously; when already on the message thread call directly.
-    auto msg = juce::String(jsonMessage);
+    auto msg = juce::String (jsonMessage);
     if (juce::MessageManager::getInstance()->isThisTheMessageThread())
     {
-        sendMessageToUI(msg);
+        sendMessageToUI (msg);
     }
     else
     {
-        juce::MessageManager::callAsync([this, msg]() { sendMessageToUI(msg); });
+        juce::MessageManager::callAsync ([this, msg]() { sendMessageToUI (msg); });
     }
 }
 
-void PluginProcessorAdapter::BrowseFileAsync(
+void PluginProcessorAdapter::BrowseFileAsync (
     guitarfx::BrowseFileType type,
     const std::string& title,
-    std::function<void(const guitarfx::BrowseFileResult&)> callback)
+    std::function<void (const guitarfx::BrowseFileResult&)> callback)
 {
     if (!juce::MessageManager::getInstance()->isThisTheMessageThread())
     {
-        juce::MessageManager::callAsync([this, type, title, callback = std::move(callback)]() mutable
-        {
-            BrowseFileAsync(type, title, std::move(callback));
+        juce::MessageManager::callAsync ([this, type, title, callback = std::move (callback)]() mutable {
+            BrowseFileAsync (type, title, std::move (callback));
         });
         return;
     }
@@ -234,24 +239,39 @@ void PluginProcessorAdapter::BrowseFileAsync(
     juce::String filters;
     switch (type)
     {
-        case guitarfx::BrowseFileType::NAMModel:   filters = "*.nam"; break;
-        case guitarfx::BrowseFileType::IRFile:      filters = "*.wav;*.aiff;*.aif;*.flac"; break;
-        case guitarfx::BrowseFileType::PresetFile:  filters = "*.json"; break;
-        case guitarfx::BrowseFileType::ImageFile:   filters = "*.png;*.jpg;*.jpeg;*.svg"; break;
-        case guitarfx::BrowseFileType::AudioFile:   filters = "*.wav;*.mp3;*.flac;*.ogg"; break;
-        case guitarfx::BrowseFileType::ArchiveFile: filters = "*.soundshed.preset;*.soundshed.presets;*.zip"; break;
-        case guitarfx::BrowseFileType::Any:         filters = "*.*"; break;
-        default:                                    filters = "*.*"; break;
+        case guitarfx::BrowseFileType::NAMModel:
+            filters = "*.nam";
+            break;
+        case guitarfx::BrowseFileType::IRFile:
+            filters = "*.wav;*.aiff;*.aif;*.flac";
+            break;
+        case guitarfx::BrowseFileType::PresetFile:
+            filters = "*.json";
+            break;
+        case guitarfx::BrowseFileType::ImageFile:
+            filters = "*.png;*.jpg;*.jpeg;*.svg";
+            break;
+        case guitarfx::BrowseFileType::AudioFile:
+            filters = "*.wav;*.mp3;*.flac;*.ogg";
+            break;
+        case guitarfx::BrowseFileType::ArchiveFile:
+            filters = "*.soundshed.preset;*.soundshed.presets;*.zip";
+            break;
+        case guitarfx::BrowseFileType::Any:
+            filters = "*.*";
+            break;
+        default:
+            filters = "*.*";
+            break;
     }
 
-    mFileChooser = std::make_unique<juce::FileChooser>(
-        juce::String(title), juce::File(), filters);
+    mFileChooser = std::make_unique<juce::FileChooser> (
+        juce::String (title), juce::File(), filters);
 
     const auto flags = juce::FileBrowserComponent::openMode
-                     | juce::FileBrowserComponent::canSelectFiles;
+                       | juce::FileBrowserComponent::canSelectFiles;
 
-    mFileChooser->launchAsync(flags, [this, callback](const juce::FileChooser& chooser)
-    {
+    mFileChooser->launchAsync (flags, [this, callback] (const juce::FileChooser& chooser) {
         guitarfx::BrowseFileResult result;
         const auto file = chooser.getResult();
         mFileChooser.reset();
@@ -259,41 +279,40 @@ void PluginProcessorAdapter::BrowseFileAsync(
         if (file.existsAsFile())
         {
             result.success = true;
-            result.path = std::filesystem::path(file.getFullPathName().toStdString());
+            result.path = std::filesystem::path (file.getFullPathName().toStdString());
         }
 
-        if (callback) callback(result);
+        if (callback)
+            callback (result);
     });
 }
 
-void PluginProcessorAdapter::SaveFileAsync(
+void PluginProcessorAdapter::SaveFileAsync (
     guitarfx::BrowseFileType type,
     const std::string& title,
     const std::string& defaultName,
-    std::function<void(const guitarfx::BrowseFileResult&)> callback)
+    std::function<void (const guitarfx::BrowseFileResult&)> callback)
 {
 #ifdef _WIN32
-    std::thread([type, title, defaultName, callback = std::move(callback)]() mutable
-    {
+    std::thread ([type, title, defaultName, callback = std::move (callback)]() mutable {
         ScopedComInitializer com;
         guitarfx::BrowseFileResult result;
 
         Microsoft::WRL::ComPtr<IFileSaveDialog> dialog;
-        HRESULT hr = CoCreateInstance(CLSID_FileSaveDialog, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&dialog));
-        if (FAILED(hr))
+        HRESULT hr = CoCreateInstance (CLSID_FileSaveDialog, nullptr, CLSCTX_ALL, IID_PPV_ARGS (&dialog));
+        if (FAILED (hr))
         {
-            if (callback) callback(result);
+            if (callback)
+                callback (result);
             return;
         }
 
         auto normalizedDefaultName = defaultName;
-        std::transform(normalizedDefaultName.begin(), normalizedDefaultName.end(), normalizedDefaultName.begin(),
-            [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        std::transform (normalizedDefaultName.begin(), normalizedDefaultName.end(), normalizedDefaultName.begin(), [] (unsigned char ch) { return static_cast<char> (std::tolower (ch)); });
 
-        const auto hasSuffix = [&normalizedDefaultName](std::string_view suffix)
-        {
+        const auto hasSuffix = [&normalizedDefaultName] (std::string_view suffix) {
             return normalizedDefaultName.size() >= suffix.size()
-                && normalizedDefaultName.compare(normalizedDefaultName.size() - suffix.size(), suffix.size(), suffix) == 0;
+                   && normalizedDefaultName.compare (normalizedDefaultName.size() - suffix.size(), suffix.size(), suffix) == 0;
         };
 
         std::vector<COMDLG_FILTERSPEC> filters;
@@ -301,118 +320,123 @@ void PluginProcessorAdapter::SaveFileAsync(
         switch (type)
         {
             case guitarfx::BrowseFileType::PresetFile:
-                filters = {{ L"JSON Files", L"*.json" }};
+                filters = { { L"JSON Files", L"*.json" } };
                 defaultExtension = L"json";
                 break;
             case guitarfx::BrowseFileType::ArchiveFile:
-                if (hasSuffix(".soundshed.preset"))
+                if (hasSuffix (".soundshed.preset"))
                 {
-                    filters = {{ L"Preset Archive", L"*.soundshed.preset" }};
+                    filters = { { L"Preset Archive", L"*.soundshed.preset" } };
                     defaultExtension = L"soundshed.preset";
                 }
-                else if (hasSuffix(".soundshed.presets"))
+                else if (hasSuffix (".soundshed.presets"))
                 {
-                    filters = {{ L"Preset Archives", L"*.soundshed.presets" }};
+                    filters = { { L"Preset Archives", L"*.soundshed.presets" } };
                     defaultExtension = L"soundshed.presets";
                 }
-                else if (hasSuffix(".zip"))
+                else if (hasSuffix (".zip"))
                 {
-                    filters = {{ L"ZIP Archives", L"*.zip" }};
+                    filters = { { L"ZIP Archives", L"*.zip" } };
                     defaultExtension = L"zip";
                 }
                 else
                 {
-                    filters = {{ L"Preset Archive", L"*.soundshed.preset" }};
+                    filters = { { L"Preset Archive", L"*.soundshed.preset" } };
                     defaultExtension = L"soundshed.preset";
                 }
                 break;
             case guitarfx::BrowseFileType::AudioFile:
-                filters = {{ L"WAV Files", L"*.wav" }};
+                filters = { { L"WAV Files", L"*.wav" } };
                 defaultExtension = L"wav";
                 break;
             default:
-                filters = {{ L"All Files", L"*.*" }};
+                filters = { { L"All Files", L"*.*" } };
                 break;
         }
 
-        dialog->SetFileTypes(static_cast<UINT>(filters.size()), filters.data());
+        dialog->SetFileTypes (static_cast<UINT> (filters.size()), filters.data());
         if (!defaultExtension.empty())
-            dialog->SetDefaultExtension(defaultExtension.c_str());
+            dialog->SetDefaultExtension (defaultExtension.c_str());
 
-        std::wstring wtitle(title.begin(), title.end());
-        dialog->SetTitle(wtitle.c_str());
+        std::wstring wtitle (title.begin(), title.end());
+        dialog->SetTitle (wtitle.c_str());
 
-        std::wstring wname(defaultName.begin(), defaultName.end());
-        dialog->SetFileName(wname.c_str());
+        std::wstring wname (defaultName.begin(), defaultName.end());
+        dialog->SetFileName (wname.c_str());
 
-        hr = dialog->Show(nullptr);
-        if (SUCCEEDED(hr))
+        hr = dialog->Show (nullptr);
+        if (SUCCEEDED (hr))
         {
             Microsoft::WRL::ComPtr<IShellItem> item;
-            hr = dialog->GetResult(&item);
-            if (SUCCEEDED(hr))
+            hr = dialog->GetResult (&item);
+            if (SUCCEEDED (hr))
             {
                 PWSTR filePath = nullptr;
-                hr = item->GetDisplayName(SIGDN_FILESYSPATH, &filePath);
-                if (SUCCEEDED(hr) && filePath)
+                hr = item->GetDisplayName (SIGDN_FILESYSPATH, &filePath);
+                if (SUCCEEDED (hr) && filePath)
                 {
-                    result.path = std::filesystem::path(filePath);
+                    result.path = std::filesystem::path (filePath);
                     result.success = true;
-                    CoTaskMemFree(filePath);
+                    CoTaskMemFree (filePath);
                 }
             }
         }
 
-        if (callback) callback(result);
+        if (callback)
+            callback (result);
     }).detach();
     return;
 #endif
 
     if (!juce::MessageManager::getInstance()->isThisTheMessageThread())
     {
-        juce::MessageManager::callAsync([this, type, title, defaultName, callback = std::move(callback)]() mutable
-        {
-            SaveFileAsync(type, title, defaultName, std::move(callback));
+        juce::MessageManager::callAsync ([this, type, title, defaultName, callback = std::move (callback)]() mutable {
+            SaveFileAsync (type, title, defaultName, std::move (callback));
         });
         return;
     }
 
     auto normalizedDefaultName = defaultName;
-    std::transform(normalizedDefaultName.begin(), normalizedDefaultName.end(), normalizedDefaultName.begin(),
-        [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    std::transform (normalizedDefaultName.begin(), normalizedDefaultName.end(), normalizedDefaultName.begin(), [] (unsigned char ch) { return static_cast<char> (std::tolower (ch)); });
 
-    const auto hasSuffix = [&normalizedDefaultName](std::string_view suffix)
-    {
+    const auto hasSuffix = [&normalizedDefaultName] (std::string_view suffix) {
         return normalizedDefaultName.size() >= suffix.size()
-            && normalizedDefaultName.compare(normalizedDefaultName.size() - suffix.size(), suffix.size(), suffix) == 0;
+               && normalizedDefaultName.compare (normalizedDefaultName.size() - suffix.size(), suffix.size(), suffix) == 0;
     };
 
     juce::String filters;
     switch (type)
     {
-        case guitarfx::BrowseFileType::PresetFile:  filters = "*.json"; break;
+        case guitarfx::BrowseFileType::PresetFile:
+            filters = "*.json";
+            break;
         case guitarfx::BrowseFileType::ArchiveFile:
-            if (hasSuffix(".soundshed.preset"))      filters = "*.soundshed.preset";
-            else if (hasSuffix(".soundshed.presets")) filters = "*.soundshed.presets";
-            else if (hasSuffix(".zip"))               filters = "*.zip";
-            else                                        filters = "*.soundshed.preset";
+            if (hasSuffix (".soundshed.preset"))
+                filters = "*.soundshed.preset";
+            else if (hasSuffix (".soundshed.presets"))
+                filters = "*.soundshed.presets";
+            else if (hasSuffix (".zip"))
+                filters = "*.zip";
+            else
+                filters = "*.soundshed.preset";
             break;
         case guitarfx::BrowseFileType::NAMModel:
         case guitarfx::BrowseFileType::IRFile:
         case guitarfx::BrowseFileType::ImageFile:
         case guitarfx::BrowseFileType::AudioFile:
         case guitarfx::BrowseFileType::Any:
-        default:                                    filters = "*.*"; break;
+        default:
+            filters = "*.*";
+            break;
     }
 
-    mFileChooser = std::make_unique<juce::FileChooser>(
-        juce::String(title), juce::File(juce::String(defaultName)), filters);
+    mFileChooser = std::make_unique<juce::FileChooser> (
+        juce::String (title), juce::File (juce::String (defaultName)), filters);
 
     const auto flags = juce::FileBrowserComponent::saveMode
-                     | juce::FileBrowserComponent::canSelectFiles;
+                       | juce::FileBrowserComponent::canSelectFiles;
 
-    mFileChooser->launchAsync(flags, [this, callback](const juce::FileChooser& chooser)
-    {
+    mFileChooser->launchAsync (flags, [this, callback] (const juce::FileChooser& chooser) {
         guitarfx::BrowseFileResult result;
         const auto file = chooser.getResult();
         mFileChooser.reset();
@@ -420,23 +444,24 @@ void PluginProcessorAdapter::SaveFileAsync(
         if (file != juce::File())
         {
             result.success = true;
-            result.path = std::filesystem::path(file.getFullPathName().toStdString());
+            result.path = std::filesystem::path (file.getFullPathName().toStdString());
         }
 
-        if (callback) callback(result);
+        if (callback)
+            callback (result);
     });
 }
 
-void PluginProcessorAdapter::RunOnMainThread(std::function<void()> fn)
+void PluginProcessorAdapter::RunOnMainThread (std::function<void()> fn)
 {
-    juce::MessageManager::callAsync(std::move(fn));
+    juce::MessageManager::callAsync (std::move (fn));
 }
 
 std::filesystem::path PluginProcessorAdapter::GetUserDataPath() const
 {
-    return std::filesystem::path(
-        juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-            .getChildFile("Soundshed Guitar")
+    return std::filesystem::path (
+        juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+            .getChildFile ("Soundshed Guitar")
             .getFullPathName()
             .toStdString());
 }
@@ -469,26 +494,25 @@ void PluginProcessorAdapter::OpenAudioPreferences()
         return;
     }
 
-    juce::MessageManager::callAsync ([]()
-    {
+    juce::MessageManager::callAsync ([]() {
         juce::juce_showStandaloneAudioSettingsDialog();
     });
 }
 
 void PluginProcessorAdapter::NotifyStateChanged()
 {
-    updateHostDisplay(juce::AudioProcessor::ChangeDetails().withNonParameterStateChanged(true));
+    updateHostDisplay (juce::AudioProcessor::ChangeDetails().withNonParameterStateChanged (true));
 }
 
-void PluginProcessorAdapter::NotifyLatencyChanged(int newLatencySamples)
+void PluginProcessorAdapter::NotifyLatencyChanged (int newLatencySamples)
 {
-    setLatencySamples(newLatencySamples);
-    updateHostDisplay(juce::AudioProcessor::ChangeDetails().withLatencyChanged(true));
+    setLatencySamples (newLatencySamples);
+    updateHostDisplay (juce::AudioProcessor::ChangeDetails().withLatencyChanged (true));
 }
 
 double PluginProcessorAdapter::GetHostTempo() const
 {
-    if (auto* ph = const_cast<PluginProcessorAdapter*>(this)->getPlayHead())
+    if (auto* ph = const_cast<PluginProcessorAdapter*> (this)->getPlayHead())
     {
         if (auto pos = ph->getPosition())
         {
@@ -501,7 +525,7 @@ double PluginProcessorAdapter::GetHostTempo() const
 
 bool PluginProcessorAdapter::IsHostPlaying() const
 {
-    if (auto* ph = const_cast<PluginProcessorAdapter*>(this)->getPlayHead())
+    if (auto* ph = const_cast<PluginProcessorAdapter*> (this)->getPlayHead())
     {
         if (auto pos = ph->getPosition())
             return pos->getIsPlaying();
@@ -514,21 +538,21 @@ bool PluginProcessorAdapter::IsStandalone() const
     return wrapperType == wrapperType_Standalone;
 }
 
-void PluginProcessorAdapter::setWebMessageCallback(
-    std::function<void(const juce::String&)> callback)
+void PluginProcessorAdapter::setWebMessageCallback (
+    std::function<void (const juce::String&)> callback)
 {
-    std::scoped_lock lock(mWebMessageMutex);
-    mWebMessageCallback = std::move(callback);
+    std::scoped_lock lock (mWebMessageMutex);
+    mWebMessageCallback = std::move (callback);
 }
 
-void PluginProcessorAdapter::handleWebMessage(const juce::String& message)
+void PluginProcessorAdapter::handleWebMessage (const juce::String& message)
 {
     // Handle openUrl locally — open in the system default browser.
     const auto parsed = juce::JSON::parse (message);
     if (auto* obj = parsed.getDynamicObject(); obj != nullptr)
     {
         const auto typeId = juce::Identifier { "type" };
-        const auto urlId  = juce::Identifier { "url" };
+        const auto urlId = juce::Identifier { "url" };
         if (obj->getProperty (typeId).toString() == "openUrl")
         {
             const auto url = obj->getProperty (urlId).toString();
@@ -538,41 +562,44 @@ void PluginProcessorAdapter::handleWebMessage(const juce::String& message)
         }
     }
 
-    mController.HandleUIMessage(message.toStdString());
+    mController.HandleUIMessage (message.toStdString());
 }
 
-void PluginProcessorAdapter::sendMessageToUI(const juce::String& message)
+void PluginProcessorAdapter::sendMessageToUI (const juce::String& message)
 {
-    std::function<void(const juce::String&)> callback;
+    std::function<void (const juce::String&)> callback;
     {
-        std::scoped_lock lock(mWebMessageMutex);
+        std::scoped_lock lock (mWebMessageMutex);
         callback = mWebMessageCallback;
     }
-    if (callback) callback(message);
+    if (callback)
+        callback (message);
 }
 
 std::filesystem::path PluginProcessorAdapter::locateAssetsRoot() const
 {
     std::vector<std::filesystem::path> candidates;
 
-    const auto cwd = std::filesystem::path(
+    const auto cwd = std::filesystem::path (
         juce::File::getCurrentWorkingDirectory().getFullPathName().toStdString());
     if (!cwd.empty())
     {
-        candidates.push_back(cwd / "resources");
-        candidates.push_back(cwd / "Resources");
+        candidates.push_back (cwd / "resources");
+        candidates.push_back (cwd / "Resources");
     }
 
-    const auto exeDir = std::filesystem::path(
-        juce::File::getSpecialLocation(juce::File::currentExecutableFile)
-            .getParentDirectory().getFullPathName().toStdString());
+    const auto exeDir = std::filesystem::path (
+        juce::File::getSpecialLocation (juce::File::currentExecutableFile)
+            .getParentDirectory()
+            .getFullPathName()
+            .toStdString());
     if (!exeDir.empty())
     {
-        candidates.push_back(exeDir / "resources");
-        candidates.push_back(exeDir / "Resources");
+        candidates.push_back (exeDir / "resources");
+        candidates.push_back (exeDir / "Resources");
     }
 
-    return guitarfx::ui::ResolveResourceRoot(candidates);
+    return guitarfx::ui::ResolveResourceRoot (candidates);
 }
 
 // ════════════════════════════════════════════════════════════════════════

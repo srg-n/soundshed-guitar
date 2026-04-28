@@ -1,20 +1,19 @@
-#include <juce_gui_basics/juce_gui_basics.h>
-#include <juce_audio_processors/juce_audio_processors.h>
-#include <juce_audio_devices/juce_audio_devices.h>
-#include <juce_audio_utils/juce_audio_utils.h>
-#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
 #include "PluginProcessorAdapter.h"
+#include <juce_audio_devices/juce_audio_devices.h>
+#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_audio_utils/juce_audio_utils.h>
+#include <juce_gui_basics/juce_gui_basics.h>
 
 //==============================================================================
 class MainWindow : public juce::DocumentWindow
 {
 public:
     explicit MainWindow (const juce::String& appName,
-                         std::unique_ptr<juce::StandalonePluginHolder> pluginHolderIn)
+        std::unique_ptr<juce::StandalonePluginHolder> pluginHolderIn)
         : DocumentWindow (appName,
-                          juce::Desktop::getInstance().getDefaultLookAndFeel()
-                              .findColour (juce::ResizableWindow::backgroundColourId),
-                          juce::DocumentWindow::allButtons),
+              juce::Desktop::getInstance().getDefaultLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId),
+              juce::DocumentWindow::allButtons),
           mPluginHolder (std::move (pluginHolderIn))
     {
         setUsingNativeTitleBar (true);
@@ -24,8 +23,8 @@ public:
         if (auto* processor = mPluginHolder != nullptr ? mPluginHolder->processor.get() : nullptr)
         {
             auto* editor = processor->hasEditor()
-                ? processor->createEditorIfNeeded()
-                : static_cast<juce::AudioProcessorEditor*> (new juce::GenericAudioProcessorEditor (*processor));
+                               ? processor->createEditorIfNeeded()
+                               : static_cast<juce::AudioProcessorEditor*> (new juce::GenericAudioProcessorEditor (*processor));
 
             if (editor != nullptr)
             {
@@ -62,7 +61,7 @@ public:
     {
         juce::DocumentWindow::resized();
 
-        if (! isFullScreen())
+        if (!isFullScreen())
             mLastNonMaximizedBounds = getBounds();
     }
 
@@ -84,8 +83,8 @@ public:
 private:
     struct WindowState
     {
-        int width    = 1200;
-        int height   = 900;
+        int width = 1200;
+        int height = 900;
         bool maximized = false;
     };
 
@@ -110,8 +109,8 @@ private:
             const auto parsed = juce::JSON::parse (file.loadFileAsString());
             if (auto* obj = parsed.getDynamicObject(); obj != nullptr)
             {
-                const auto widthId     = juce::Identifier { "width" };
-                const auto heightId    = juce::Identifier { "height" };
+                const auto widthId = juce::Identifier { "width" };
+                const auto heightId = juce::Identifier { "height" };
                 const auto maximizedId = juce::Identifier { "maximized" };
 
                 if (obj->hasProperty (widthId))
@@ -127,12 +126,12 @@ private:
         if (auto* primary = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
         {
             const auto userArea = primary->userArea;
-            state.width  = juce::jmin (state.width,  userArea.getWidth());
+            state.width = juce::jmin (state.width, userArea.getWidth());
             state.height = juce::jmin (state.height, userArea.getHeight());
         }
 
-        state.width  = juce::jlimit (1024, 8192, state.width);
-        state.height = juce::jlimit (768,  8192, state.height);
+        state.width = juce::jlimit (1024, 8192, state.width);
+        state.height = juce::jlimit (768, 8192, state.height);
 
         return state;
     }
@@ -140,14 +139,14 @@ private:
     void saveWindowState() const
     {
         const auto file = getWindowStateFile();
-        if (file == juce::File{})
+        if (file == juce::File {})
             return;
 
         file.getParentDirectory().createDirectory();
 
         juce::DynamicObject::Ptr state (new juce::DynamicObject());
-        state->setProperty ("width",     mLastNonMaximizedBounds.getWidth());
-        state->setProperty ("height",    mLastNonMaximizedBounds.getHeight());
+        state->setProperty ("width", mLastNonMaximizedBounds.getWidth());
+        state->setProperty ("height", mLastNonMaximizedBounds.getHeight());
         state->setProperty ("maximized", isFullScreen());
         file.replaceWithText (juce::JSON::toString (juce::var (state)));
     }
@@ -168,11 +167,11 @@ public:
         options.applicationName = PRODUCT_NAME_WITHOUT_VERSION;
         options.filenameSuffix = ".settings";
         options.osxLibrarySubFolder = "Application Support";
-       #if JUCE_LINUX || JUCE_BSD
+#if JUCE_LINUX || JUCE_BSD
         options.folderName = "~/.config";
-       #else
+#else
         options.folderName = {};
-       #endif
+#endif
         mAppProperties.setStorageParameters (options);
     }
 
@@ -205,8 +204,7 @@ public:
 
         if (juce::ModalComponentManager::getInstance()->cancelAllModalComponents())
         {
-            juce::Timer::callAfterDelay (100, []()
-            {
+            juce::Timer::callAfterDelay (100, []() {
                 if (auto* app = juce::JUCEApplicationBase::getInstance())
                     app->systemRequestedQuit();
             });
@@ -225,25 +223,25 @@ private:
     std::unique_ptr<juce::StandalonePluginHolder> createPluginHolder()
     {
         constexpr auto autoOpenMidiDevices =
-       #if (JUCE_ANDROID || JUCE_IOS) && ! JUCE_DONT_AUTO_OPEN_MIDI_DEVICES_ON_MOBILE
+#if (JUCE_ANDROID || JUCE_IOS) && !JUCE_DONT_AUTO_OPEN_MIDI_DEVICES_ON_MOBILE
             true;
-       #else
+#else
             false;
-       #endif
+#endif
 
-       #ifdef JucePlugin_PreferredChannelConfigurations
+#ifdef JucePlugin_PreferredChannelConfigurations
         constexpr juce::StandalonePluginHolder::PluginInOuts channels[] { JucePlugin_PreferredChannelConfigurations };
         const juce::Array<juce::StandalonePluginHolder::PluginInOuts> channelConfig (channels, juce::numElementsInArray (channels));
-       #else
+#else
         const juce::Array<juce::StandalonePluginHolder::PluginInOuts> channelConfig;
-       #endif
+#endif
 
         return std::make_unique<juce::StandalonePluginHolder> (mAppProperties.getUserSettings(),
-                                                                false,
-                                                                juce::String {},
-                                                                nullptr,
-                                                                channelConfig,
-                                                                autoOpenMidiDevices);
+            false,
+            juce::String {},
+            nullptr,
+            channelConfig,
+            autoOpenMidiDevices);
     }
 
     juce::ApplicationProperties mAppProperties;
@@ -252,11 +250,11 @@ private:
 
 namespace juce
 {
-void JUCE_CALLTYPE juce_showStandaloneAudioSettingsDialog()
-{
-    if (auto* holder = StandalonePluginHolder::getInstance())
-        holder->showAudioSettingsDialog();
-}
+    void JUCE_CALLTYPE juce_showStandaloneAudioSettingsDialog()
+    {
+        if (auto* holder = StandalonePluginHolder::getInstance())
+            holder->showAudioSettingsDialog();
+    }
 }
 
 //==============================================================================

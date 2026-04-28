@@ -61,7 +61,8 @@ public:
                                  const std::string& title,
                                  std::function<void(const BrowseFileResult&)> callback) = 0;
 
-    /// Open a native save-file dialog asynchronously.
+    /// Open a native save-file dialog asynchronously. Callback thread is host-specific;
+    /// controller code that touches UI or framework state must bounce explicitly.
     virtual void SaveFileAsync(BrowseFileType type,
                                const std::string& title,
                                const std::string& defaultName,
