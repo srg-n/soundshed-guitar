@@ -8,9 +8,9 @@
 
 namespace guitarfx
 {
-  /**
-   * Simple noise gate effect.
-   */
+    /**
+     * Noise gate with peak envelope tracking, hold time, and attack/release smoothing.
+     */
   class NoiseGateEffect : public EffectProcessor
   {
   public:
@@ -36,12 +36,10 @@ namespace guitarfx
 
     void Process(float **inputs, float **outputs, int numSamples) override
     {
-      // Guard against div-by-zero if Prepare() not yet called
+      // If Prepare() failed or has not run, stay transparent rather than divide by zero.
       if (mSampleRate <= 0.0)
       {
-        for (int ch = 0; ch < 2; ++ch)
-          if (inputs[ch] && outputs[ch])
-            std::copy(inputs[ch], inputs[ch] + numSamples, outputs[ch]);
+        CopyStereoInputToOutput(inputs, outputs, numSamples);
         return;
       }
 
@@ -62,6 +60,8 @@ namespace guitarfx
             : ((ch == 1 && inputs[0]) ? inputs[0][i] : 0.0f);
           const float peak = std::abs(inputSample);
 
+          // Track peaks quickly and decay with release; open while above threshold
+          // or while the hold counter is still active.
           if (peak > mEnvelope[ch])
             mEnvelope[ch] = attackCoef * mEnvelope[ch] + (1.0f - attackCoef) * peak;
           else

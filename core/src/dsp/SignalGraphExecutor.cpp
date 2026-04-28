@@ -228,7 +228,8 @@ namespace guitarfx
 
   void SignalGraphExecutor::BuildExecutionOrder()
   {
-    // Topological sort using Kahn's algorithm
+    // Topological sort using Kahn's algorithm. A valid graph processes every
+    // node once; fewer processed nodes means a cycle exists and audio is muted.
     std::map<std::string, int> inDegree;
     std::map<std::string, std::vector<std::string>> adjacency;
 
@@ -517,7 +518,10 @@ namespace guitarfx
       }
     }
 
-    // Process nodes in topological order
+    // Graph execution algorithm:
+    // 1. Route/accumulate edge inputs into each node buffer.
+    // 2. Run the node processor into temporary buffers.
+    // 3. Copy processed audio back for downstream nodes and diagnostics.
     for (const auto &nodeId : mExecutionOrder)
     {
       auto *state = FindNodeState(nodeId);

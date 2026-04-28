@@ -10,9 +10,10 @@
 
 namespace guitarfx
 {
-  /**
-   * VCA-style compressor with standard controls.
-   */
+    /**
+     * VCA-style compressor with peak detection, soft-knee gain computer,
+     * attack/release smoothing, makeup gain, dry/wet mix, and optional soft clip.
+     */
   class CompressorEffect : public EffectProcessor
   {
   public:
@@ -44,6 +45,8 @@ namespace guitarfx
       const float clipKnee = 0.995f - 0.075f * std::clamp(softClip, 0.0f, 1.0f);
       const auto computeTargetGainDb = [thresholdDb, ratio, knee](float detectorDb)
       {
+        // Gain computer: above-threshold level is reduced by the ratio; the
+        // optional knee eases into compression around the threshold.
         float targetGainDb = 0.0f;
         if (detectorDb > thresholdDb)
         {
