@@ -42,7 +42,12 @@ namespace guitarfx
       const float softClip = mSoftClip.load(std::memory_order_relaxed);
       const float attackCoef = mAttackCoef.load(std::memory_order_relaxed);
       const float releaseCoef = mReleaseCoef.load(std::memory_order_relaxed);
-      const float clipKnee = 0.995f - 0.075f * std::clamp(softClip, 0.0f, 1.0f);
+      constexpr float kSoftClipTransparentKnee = 0.995f;
+      constexpr float kSoftClipMaxKneeReduction = 0.075f;
+      // Move the soft-clip knee from nearly transparent at 0.995 to 0.92 at
+      // full softClip so makeup gain is rounded off before the hard ceiling.
+      const float clipKnee =
+          kSoftClipTransparentKnee - kSoftClipMaxKneeReduction * std::clamp(softClip, 0.0f, 1.0f);
       const auto computeTargetGainDb = [thresholdDb, ratio, knee](float detectorDb)
       {
         // Gain computer: above-threshold level is reduced by the ratio; the
