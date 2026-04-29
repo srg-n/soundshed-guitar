@@ -65,7 +65,7 @@ function(guitarfx_detect_ipp)
             endif()
         endif()
 
-        if(NOT _ipp_root STREQUAL "" AND NOT _ipp_windows_lib_arch STREQUAL "")
+        if(NOT _ipp_windows_lib_arch STREQUAL "" AND NOT _ipp_root STREQUAL "")
             set(_ipp_inc "${_ipp_root}/build/native/include/ipp")
             set(_ipp_lib "${_ipp_root}/build/native/${_ipp_windows_lib_arch}")
             set(_ipp_libs ippsmt ippcoremt ippimt ippcvmt ippvmmt)
