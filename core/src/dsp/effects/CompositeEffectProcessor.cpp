@@ -53,20 +53,12 @@ namespace guitarfx
   {
     if (!mEnabled)
     {
-      // Bypass: copy input to output
-      for (int ch = 0; ch < 2; ++ch)
-      {
-        if (inputs[ch] && outputs[ch])
-        {
-          for (int i = 0; i < numSamples; ++i)
-          {
-            outputs[ch][i] = inputs[ch][i];
-          }
-        }
-      }
+      CopyStereoInputToOutput(inputs, outputs, numSamples);
       return;
     }
 
+    // Composite effects run an inner signal graph; each exposed parameter/resource
+    // is mapped onto the corresponding inner node before audio reaches this call.
     mInnerExecutor.Process(inputs, outputs, numSamples);
   }
 
@@ -77,10 +69,9 @@ namespace guitarfx
     {
       const ExposedParameter *ep = it->second;
 
-      // Clamp to exposed range
+      // Clamp to the composite's public range before routing to the inner node.
       double clamped = std::clamp(value, ep->minValue, ep->maxValue);
 
-      // Route to inner node
       mInnerExecutor.SetNodeParam(ep->nodeId, ep->nodeParamKey, clamped);
     }
   }

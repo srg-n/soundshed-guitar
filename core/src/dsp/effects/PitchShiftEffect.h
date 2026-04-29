@@ -10,10 +10,9 @@
 
 namespace guitarfx
 {
-  /**
-   * Pitchshift effect using Signalsmith Stretch.
-    * Uses a direct semitone control (-12 to +12).
-   */
+    /**
+     * Pitch-shift effect using Signalsmith Stretch with a direct semitone control.
+     */
   class PitchShiftEffect : public EffectProcessor
   {
   public:
@@ -50,13 +49,7 @@ namespace guitarfx
 
       if (mSemitones == 0.0 && mMix >= 1.0)
       {
-        for (int ch = 0; ch < 2; ++ch)
-        {
-          if (inputs[ch] && outputs[ch])
-          {
-            std::copy(inputs[ch], inputs[ch] + numSamples, outputs[ch]);
-          }
-        }
+        CopyStereoInputToOutput(inputs, outputs, numSamples);
         return;
       }
 
@@ -76,6 +69,8 @@ namespace guitarfx
       };
       float *wetPtrs[2] = { mWetL.data(), mWetR.data() };
 
+      // Stretch produces a pitch-shifted wet buffer; the final loop blends it
+      // with the dry signal so mix automation remains sample-accurate per block.
       mStretch.process(inputPtrs, numSamples, wetPtrs, numSamples);
 
       const float dryMix = static_cast<float>(1.0 - mMix);

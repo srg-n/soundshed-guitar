@@ -9,10 +9,10 @@
 
 namespace guitarfx
 {
-  /**
-   * Doubler effect - adds a slightly delayed copy of the signal
-   * to create stereo width and thickness.
-   */
+    /**
+     * Doubler: mixes a short delayed copy with opposite polarity on the right
+     * channel to create stereo width and thickness.
+     */
   class DoublerEffect : public EffectProcessor
   {
   public:
@@ -41,14 +41,7 @@ namespace guitarfx
     {
       if (mDelaySamples <= 0)
       {
-        // No delay - pass through
-        for (int ch = 0; ch < 2; ++ch)
-        {
-          if (inputs[ch] && outputs[ch])
-          {
-            std::copy(inputs[ch], inputs[ch] + numSamples, outputs[ch]);
-          }
-        }
+        CopyStereoInputToOutput(inputs, outputs, numSamples);
         return;
       }
 
@@ -61,7 +54,8 @@ namespace guitarfx
         const float inL = inputs[0] ? inputs[0][i] : 0.0f;
         const float inR = inputs[1] ? inputs[1][i] : inL;
 
-        // Preserve channel separation for stereo sources.
+        // Circular delay keeps channel separation; polarity inversion on R widens
+        // the image without summing extra low-frequency energy to mono.
         mBufferL[mWriteIndex] = inL;
         mBufferR[mWriteIndex] = inR;
 

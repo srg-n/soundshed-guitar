@@ -9,10 +9,10 @@
 
 namespace guitarfx
 {
-  /**
-   * Brickwall limiterwith instantaneous attack and smoothed release.
-   * Prevents output from exceeding a ceiling (dBFS).
-   */
+    /**
+     * Brickwall limiter with instantaneous gain reduction and smoothed release.
+     * Prevents output from exceeding a ceiling (dBFS).
+     */
   class LimiterEffect : public EffectProcessor
   {
   public:
@@ -51,6 +51,7 @@ namespace guitarfx
             targetGain = ceiling / peak;
           }
 
+          // Attack clamps immediately on overs, release eases back to unity.
           if (targetGain < mGain[ch])
           {
             mGain[ch] = targetGain;

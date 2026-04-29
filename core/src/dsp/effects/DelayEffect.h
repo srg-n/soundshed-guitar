@@ -10,10 +10,10 @@
 
 namespace guitarfx
 {
-  /**
-   * Digital delaywith high/low cut filtering, stereo spread, ping-pong,
-   * LFO modulation, drive saturation, and ducking.
-   */
+    /**
+     * Digital delay with high/low cut filtering, stereo spread, ping-pong,
+     * LFO modulation, drive saturation, and ducking.
+     */
   class DelayEffect : public EffectProcessor
   {
   public:
@@ -63,7 +63,8 @@ namespace guitarfx
 
       for (int i = 0; i < numSamples; ++i)
       {
-        // LFO
+        // Per sample: modulate delay time, read interpolated taps, filter/drive
+        // the feedback path, then mix ducked wet signal with dry input.
         const float lfoVal = std::sin(mLfoPhase * 6.28318530f);
         mLfoPhase += lfoStep;
         if (mLfoPhase >= 1.0f)

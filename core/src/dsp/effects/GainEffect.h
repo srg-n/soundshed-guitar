@@ -7,9 +7,9 @@
 
 namespace guitarfx
 {
-  /**
-   * Simple gain stage effect.
-   */
+    /**
+     * Linear gain stage driven by a dB parameter.
+     */
   class GainEffect : public EffectProcessor
   {
   public:
@@ -25,6 +25,7 @@ namespace guitarfx
     {
       const float gain = static_cast<float>(std::pow(10.0, mGainDb / 20.0));
 
+      // Apply the same scalar to each available channel; missing channels stay untouched.
       for (int ch = 0; ch < 2; ++ch)
       {
         if (inputs[ch] && outputs[ch])

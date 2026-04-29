@@ -10,10 +10,9 @@
 
 namespace guitarfx
 {
-  /**
-   * Transposeeffect using Signalsmith Stretch.
-   * Integer semitone steps (-36 to +12).
-   */
+    /**
+     * Transpose effect using Signalsmith Stretch for integer semitone steps.
+     */
   class TransposeEffect : public EffectProcessor
   {
   public:
@@ -49,13 +48,7 @@ namespace guitarfx
 
       if (mSemitones == 0 && mMix >= 1.0)
       {
-        for (int ch = 0; ch < 2; ++ch)
-        {
-          if (inputs[ch] && outputs[ch])
-          {
-            std::copy(inputs[ch], inputs[ch] + numSamples, outputs[ch]);
-          }
-        }
+        CopyStereoInputToOutput(inputs, outputs, numSamples);
         return;
       }
 
@@ -75,6 +68,8 @@ namespace guitarfx
       };
       float *wetPtrs[2] = { mWetL.data(), mWetR.data() };
 
+      // Render transposed audio into wet buffers, then crossfade against dry
+      // input so zero-shift/high-mix cases can remain transparent.
       mStretch.process(inputPtrs, numSamples, wetPtrs, numSamples);
 
       const float dryMix = static_cast<float>(1.0 - mMix);

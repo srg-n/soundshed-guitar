@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <filesystem>
 #include <functional>
@@ -70,6 +71,24 @@ namespace guitarfx
       return sampleRate > 0.0 && maxBlockSize > 0;
     }
 
+    /**
+     * Copies stereo input to output for bypass/passthrough paths.
+     * Null channels are skipped so callers can handle sparse mono/stereo buffers safely.
+     */
+    static void CopyStereoInputToOutput(float *const *inputs, float **outputs, int numSamples)
+    {
+      if (!inputs || !outputs || numSamples <= 0)
+        return;
+
+      for (int ch = 0; ch < 2; ++ch)
+      {
+        if (inputs[ch] && outputs[ch])
+        {
+          std::copy_n(inputs[ch], numSamples, outputs[ch]);
+        }
+      }
+    }
+
     bool mEnabled = true;
     double mSampleRate = 44100.0;
     int mMaxBlockSize = 512;
@@ -93,19 +112,7 @@ namespace guitarfx
 
     void Process(float **inputs, float **outputs, int numSamples) override
     {
-      if (inputs && outputs)
-      {
-        for (int ch = 0; ch < 2; ++ch)
-        {
-          if (inputs[ch] && outputs[ch])
-          {
-            for (int i = 0; i < numSamples; ++i)
-            {
-              outputs[ch][i] = inputs[ch][i];
-            }
-          }
-        }
-      }
+      CopyStereoInputToOutput(inputs, outputs, numSamples);
     }
 
     void SetParam(const std::string &, double) override {}
