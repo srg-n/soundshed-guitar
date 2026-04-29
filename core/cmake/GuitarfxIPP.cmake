@@ -2,6 +2,7 @@ include_guard(GLOBAL)
 include("${CMAKE_CURRENT_LIST_DIR}/GuitarfxWindowsArch.cmake")
 
 set(GUITARFX_IPP_WIN_X64_VERSION "2022.3.1.8" CACHE STRING "Intel IPP static NuGet package version for Windows x64")
+# The x86 static NuGet package line stops at 2021.12.1.13; use the latest available x86 package.
 set(GUITARFX_IPP_WIN_X86_VERSION "2021.12.1.13" CACHE STRING "Intel IPP static NuGet package version for Windows x86")
 
 function(guitarfx_detect_ipp)
@@ -40,6 +41,11 @@ function(guitarfx_detect_ipp)
         endif()
 
         if(NOT _ipp_windows_lib_arch STREQUAL "")
+            set(_ipp_windows_userprofile_root "")
+            if(DEFINED ENV{USERPROFILE})
+                file(TO_CMAKE_PATH "$ENV{USERPROFILE}/.nuget/packages/${_ipp_windows_package_id}/${_ipp_windows_package_version}" _ipp_windows_userprofile_root)
+            endif()
+
             if(DEFINED IPP_ROOT AND IS_DIRECTORY "${IPP_ROOT}")
                 set(_ipp_root "${IPP_ROOT}")
             else()
@@ -50,10 +56,9 @@ function(guitarfx_detect_ipp)
                         break()
                     endif()
                 endforeach()
-            endif()
-
-            if(_ipp_root STREQUAL "" AND DEFINED ENV{USERPROFILE} AND EXISTS "$ENV{USERPROFILE}/.nuget/packages/${_ipp_windows_package_id}/${_ipp_windows_package_version}")
-                file(TO_CMAKE_PATH "$ENV{USERPROFILE}/.nuget/packages/${_ipp_windows_package_id}/${_ipp_windows_package_version}" _ipp_root)
+                if(_ipp_root STREQUAL "" AND IS_DIRECTORY "${_ipp_windows_userprofile_root}")
+                    set(_ipp_root "${_ipp_windows_userprofile_root}")
+                endif()
             endif()
         endif()
 
