@@ -699,8 +699,10 @@ namespace guitarfx
 
         if (std::abs(impulseSampleRate - mSampleRate) > 1.0)
         {
-          irwav::ResampleLinear(processedL, impulseSampleRate, mSampleRate);
-          irwav::ResampleLinear(processedR, impulseSampleRate, mSampleRate);
+          // Use the highest-quality path for sample-rate conversion so cabinet
+          // tone remains consistent across host sample-rate changes.
+          irwav::ResampleSinc(processedL, impulseSampleRate, mSampleRate);
+          irwav::ResampleSinc(processedR, impulseSampleRate, mSampleRate);
         }
 
         if (outEnergy)
@@ -724,7 +726,11 @@ namespace guitarfx
         return false;
 
       if (std::abs(impulseSampleRate - mSampleRate) > 1.0)
-        irwav::ResampleLinear(processedIR, impulseSampleRate, mSampleRate);
+      {
+        // Use the highest-quality path for sample-rate conversion so cabinet
+        // tone remains consistent across host sample-rate changes.
+        irwav::ResampleSinc(processedIR, impulseSampleRate, mSampleRate);
+      }
 
       if (outEnergy)
       {

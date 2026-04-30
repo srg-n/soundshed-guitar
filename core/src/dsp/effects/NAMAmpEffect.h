@@ -9,7 +9,6 @@
 #include "NAM/get_dsp.h"
 #include <filesystem>
 #include <algorithm>
-#include <iostream>
 #include <memory>
 #include <optional>
 #include <string>
@@ -381,14 +380,7 @@ namespace guitarfx
       if (!mModelLeft)
         return;
       const double expectedSR = mModelLeft->GetExpectedSampleRate();
-      const bool mismatch = (expectedSR > 0.0 && std::abs(expectedSR - mSampleRate) > 1.0);
-      if (mismatch && !mSampleRateMismatch && mPrepared)
-      {
-        std::cerr << "[NAMAmpEffect] Sample rate mismatch: model expects "
-                  << static_cast<int>(expectedSR) << " Hz, plugin running at "
-                  << static_cast<int>(mSampleRate) << " Hz - output quality may be degraded\n";
-      }
-      mSampleRateMismatch = mismatch;
+      mSampleRateMismatch = (expectedSR > 0.0 && std::abs(expectedSR - mSampleRate) > 1.0);
     }
 
     static bool ParseBool(const std::string &value)

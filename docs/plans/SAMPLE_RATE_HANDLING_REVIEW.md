@@ -4,7 +4,7 @@
 
 The sample rate handling in the signal chain and effects appears **architecturally sound** with proper propagation through the call chain. However, there are **several potential issues** that could cause audible differences when changing ASIO sample rate:
 
-1. **NAM Model Sample Rate Mismatch** - Warns but doesn't compensate
+1. **NAM Model Sample Rate Mismatch** - Needs resampling path (no warning-based UX)
 2. **Potential IR Resampling Edge Cases** - Different resampling quality for different effect types
 3. **Convolver Partition Size Changes** - Could create transients if block size changes
 4. **Filter State Not Cleared** - Filter state might contain transients from old SR
@@ -141,19 +141,13 @@ NAMAmpEffect::Prepare(newSampleRate, newBlockSize)
 **Problem**: NAM models are trained at a **specific sample rate** (usually 44.1 or 48 kHz). When the plugin runs at a different SR, the model's learned characteristics don't match the actual signal path.
 
 **Current Behavior**:
-- Warning logged to stderr (not visible in most hosts)
 - Processing continues at mismatched SR
 - Output quality **silently degrades** (~-3 to -6 dB THD increase)
 
-**Recommendation**: 
-1. Log warning to plugin callback (visible in UI)
-2. Consider sample rate conversion for NAM if mismatch > 5%:
-   ```cpp
-   if (mismatch > 0.05 * expectedSR) {
-     // Option A: Resample input to model's SR, then output back
-     // Option B: Apply auto-compensation filter
-   }
-   ```
+**Recommendation**:
+1. Do not warn users for mismatch conditions.
+2. Add a transparent resampling path so NAM processing is aligned to the current global audio sample rate with highest-quality conversion.
+3. Preferred strategy: run a high-quality bidirectional resampler around NAM when the model's expected SR differs from host SR.
 
 ---
 
@@ -201,10 +195,10 @@ WasmEffect::Prepare(newSampleRate, newBlockSize)
 ### IRCabEffect (Cabinet)
 ```cpp
 if (std::abs(impulseSampleRate - mSampleRate) > 1.0) {
-  irwav::ResampleLinear(processedL, impulseSampleRate, mSampleRate);  // ← Linear interp
+  irwav::ResampleSinc(processedL, impulseSampleRate, mSampleRate);  // ← 128-tap Blackman-windowed
 }
 ```
-**Quality**: ~-13 dB alias rejection (adequate for cabinet IRs)
+**Quality**: ~-74 dB alias rejection (highest quality in current codebase)
 
 ### IRReverbEffect (Reverb)
 ```cpp
@@ -214,8 +208,8 @@ if (std::abs(mIRSampleRate - mSampleRate) > 1.0) {
 ```
 **Quality**: ~-74 dB alias rejection (superior, but more expensive)
 
-**Impact**: IRCab uses linear (lower quality), IRReverb uses sinc (higher quality)
-→ Sound difference expected when SR changes
+**Impact**: IRCab and IRReverb both use high-quality sinc conversion
+→ Reduced SR-dependent tone drift from IR resampling differences
 
 ---
 
@@ -242,19 +236,14 @@ MultiPresetMixer::Prepare() {
    - **File**: core/src/dsp/effects/IRCabEffect.h:30-40
    - **Impact**: Eliminates potential pop/click on sample rate change
 
-### **HIGH** 
-2. ⚠️ Add NAM sample rate mismatch UI warning
-   - **File**: core/src/dsp/effects/NAMAmpEffect.h
-   - **Impact**: User awareness of quality degradation
-   - **Complexity**: Requires UI callback
+### **HIGH**
+2. ⚠️ Implement transparent high-quality NAM resampling path (no warning UX)
+  - **File**: core/src/dsp/effects/NAMAmpEffect.h
+  - **Impact**: Removes audible mismatch drift while keeping UX clean
+  - **Complexity**: Medium/High (stateful real-time-safe resampler around NAM process)
 
 ### **MEDIUM**
-3. 🟡 (Optional) Consider sinc resampling for IRCabEffect instead of linear
-   - **File**: core/src/dsp/effects/IRCabEffect.h:698-699
-   - **Impact**: Better audio quality on SR mismatch
-   - **Tradeoff**: Higher CPU on IR load (one-time, not realtime)
-
-4. 🟡 (Optional) Defer WasmEffect runtime rebuild to non-critical path
+3. 🟡 (Optional) Defer WasmEffect runtime rebuild to non-critical path
    - **File**: core/src/dsp/effects/WasmEffect.cpp:616
    - **Complexity**: High (requires async rebuild mechanism)
    - **Impact**: Reduce audio thread blocking on sample rate change
