@@ -1239,7 +1239,9 @@ function renderUserInputCalibrationToolbarMenu(profiles: UserInputCalibrationPro
     const note = document.createElement("span");
     note.className = "input-calibration-toolbar-item-note";
     note.textContent = profile
-      ? (profile.description || `Captured ${formatDbfsValue(profile.capturedPeakDbfs)}`)
+      ? (isActive
+        ? `Applies ${formatSignedDbValue(profile.gainDb)} toward ${formatDbfsValue(profile.targetPeakDbfs)}`
+        : (profile.description || `Captured ${formatDbfsValue(profile.capturedPeakDbfs)}`))
       : "Use raw input without a global trim";
     copy.appendChild(note);
 
