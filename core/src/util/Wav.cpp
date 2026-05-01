@@ -1,9 +1,12 @@
 #include "Wav.h"
 
+#include "dsp/BlockSincResampler.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <string>
 
 namespace
@@ -149,6 +152,13 @@ std::optional<DecodedWav> DecodePcmWav(const std::vector<std::uint8_t>& bytes)
 
 std::vector<std::vector<float>> ConvertToSampleRate(const DecodedWav& wav, double targetRate)
 {
+    return ConvertToSampleRate(wav, targetRate, guitarfx::SampleRateConversionQuality::Linear);
+}
+
+std::vector<std::vector<float>> ConvertToSampleRate(const DecodedWav& wav,
+                                                    double targetRate,
+                                                    guitarfx::SampleRateConversionQuality quality)
+{
     if (wav.channelSamples.empty() || wav.channelSamples.front().empty()) return {};
     const double sourceRate = wav.sampleRate > 0.0 ? wav.sampleRate : targetRate;
     if (sourceRate <= 0.0) return {};
@@ -171,17 +181,47 @@ std::vector<std::vector<float>> ConvertToSampleRate(const DecodedWav& wav, doubl
 
     const double ratio = targetRate / sourceRate;
     const std::size_t destFrames = std::max<std::size_t>(1, static_cast<std::size_t>(std::ceil(sourceFrames * ratio)));
+    if (quality == guitarfx::SampleRateConversionQuality::Linear)
+    {
+        for (std::size_t c = 0; c < channelCount; ++c)
+        {
+            const auto& src = wav.channelSamples[std::min(c, wav.channelSamples.size() - 1)];
+            output[c].resize(destFrames);
+            for (std::size_t f = 0; f < destFrames; ++f)
+            {
+                const double pos = (static_cast<double>(f) * sourceRate) / targetRate;
+                const std::size_t i0 = std::min<std::size_t>(static_cast<std::size_t>(pos), sourceFrames - 1);
+                const std::size_t i1 = std::min(i0 + 1, sourceFrames - 1);
+                const double frac = std::clamp(pos - static_cast<double>(i0), 0.0, 1.0);
+                output[c][f] = static_cast<float>(std::clamp(src[i0] + (src[i1] - src[i0]) * frac, -1.0, 1.0));
+            }
+        }
+        return output;
+    }
+
+    if (destFrames > static_cast<std::size_t>(std::numeric_limits<int>::max())
+        || sourceFrames > static_cast<std::size_t>(std::numeric_limits<int>::max()))
+    {
+        return {};
+    }
+
+    guitarfx::BlockSincResampler resampler;
+    resampler.Prepare(sourceRate,
+                      targetRate,
+                      static_cast<int>(sourceFrames),
+                      quality);
+
     for (std::size_t c = 0; c < channelCount; ++c)
     {
         const auto& src = wav.channelSamples[std::min(c, wav.channelSamples.size() - 1)];
         output[c].resize(destFrames);
-        for (std::size_t f = 0; f < destFrames; ++f)
+        resampler.ProcessFixedOutput(src.data(),
+                                     static_cast<int>(sourceFrames),
+                                     output[c].data(),
+                                     static_cast<int>(destFrames));
+        for (float& sample : output[c])
         {
-            const double pos = (static_cast<double>(f) * sourceRate) / targetRate;
-            const std::size_t i0 = std::min<std::size_t>(static_cast<std::size_t>(pos), sourceFrames - 1);
-            const std::size_t i1 = std::min(i0 + 1, sourceFrames - 1);
-            const double frac = std::clamp(pos - static_cast<double>(i0), 0.0, 1.0);
-            output[c][f] = static_cast<float>(std::clamp(src[i0] + (src[i1] - src[i0]) * frac, -1.0, 1.0));
+            sample = std::clamp(sample, -1.0f, 1.0f);
         }
     }
     return output;

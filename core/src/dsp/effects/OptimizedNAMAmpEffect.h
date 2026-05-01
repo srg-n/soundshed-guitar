@@ -14,9 +14,11 @@
  */
 
 #include "dsp/EffectProcessor.h"
+#include "dsp/BlockSincResampler.h"
 #include "dsp/LevelTargets.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/EffectGuids.h"
+#include "dsp/effects/NAMSampleRate.h"
 #include "dsp/simd/OptimizedNAM.h"
 #include "NAM/dsp.h"
 #include "NAM/get_dsp.h"
@@ -27,7 +29,6 @@
 #include <string>
 #include <vector>
 #include <cmath>
-#include <iostream>
 #include <variant>
 
 // Forward declare factory registration helper to avoid linker dead-stripping
@@ -127,7 +128,6 @@ public:
   {
     mSampleRate = sampleRate;
     mMaxBlockSize = maxBlockSize;
-    mPrepared = true;
 
     mInputBufferL.resize(static_cast<size_t>(maxBlockSize));
     mInputBufferR.resize(static_cast<size_t>(maxBlockSize));
@@ -140,23 +140,7 @@ public:
     mFallbackOutputBufferL.resize(static_cast<size_t>(maxBlockSize));
     mFallbackOutputBufferR.resize(static_cast<size_t>(maxBlockSize));
 
-    if (mOptimizedModelLeft)
-    {
-      mOptimizedModelLeft->Reset(sampleRate, maxBlockSize);
-    }
-    if (mOptimizedModelRight)
-    {
-      mOptimizedModelRight->Reset(sampleRate, maxBlockSize);
-    }
-    if (mFallbackModelLeft)
-    {
-      mFallbackModelLeft->Reset(sampleRate, maxBlockSize);
-    }
-    if (mFallbackModelRight)
-    {
-      mFallbackModelRight->Reset(sampleRate, maxBlockSize);
-    }
-    CheckSampleRateMismatch();
+    ConfigureModelProcessing();
     UpdateToneStack();
   }
 
@@ -164,25 +148,29 @@ public:
   {
     if (mOptimizedModelLeft)
     {
-      mOptimizedModelLeft->Reset(mSampleRate, mMaxBlockSize);
+      mOptimizedModelLeft->Reset(mModelSampleRate, mMaxModelBlockSize);
     }
     if (mOptimizedModelRight)
     {
-      mOptimizedModelRight->Reset(mSampleRate, mMaxBlockSize);
+      mOptimizedModelRight->Reset(mModelSampleRate, mMaxModelBlockSize);
     }
     if (mFallbackModelLeft)
     {
-      mFallbackModelLeft->Reset(mSampleRate, mMaxBlockSize);
+      mFallbackModelLeft->Reset(mModelSampleRate, mMaxModelBlockSize);
     }
     if (mFallbackModelRight)
     {
-      mFallbackModelRight->Reset(mSampleRate, mMaxBlockSize);
+      mFallbackModelRight->Reset(mModelSampleRate, mMaxModelBlockSize);
     }
 
     std::fill(mInputBufferL.begin(), mInputBufferL.end(), 0.0f);
     std::fill(mInputBufferR.begin(), mInputBufferR.end(), 0.0f);
     std::fill(mOutputBufferL.begin(), mOutputBufferL.end(), 0.0f);
     std::fill(mOutputBufferR.begin(), mOutputBufferR.end(), 0.0f);
+    std::fill(mModelInputBufferL.begin(), mModelInputBufferL.end(), 0.0f);
+    std::fill(mModelInputBufferR.begin(), mModelInputBufferR.end(), 0.0f);
+    std::fill(mModelOutputBufferL.begin(), mModelOutputBufferL.end(), 0.0f);
+    std::fill(mModelOutputBufferR.begin(), mModelOutputBufferR.end(), 0.0f);
     std::fill(mDryBufferL.begin(), mDryBufferL.end(), 0.0f);
     std::fill(mDryBufferR.begin(), mDryBufferR.end(), 0.0f);
     std::fill(mFallbackInputBufferL.begin(), mFallbackInputBufferL.end(), static_cast<NAM_SAMPLE>(0.0));
@@ -236,8 +224,7 @@ public:
 
       if (hasOptimized)
       {
-        mOptimizedModelLeft->process(mInputBufferL.data(), mOutputBufferL.data(), numSamples);
-        mOptimizedModelRight->process(mInputBufferR.data(), mOutputBufferR.data(), numSamples);
+        ProcessOptimizedModels(numSamples);
 
         const float outputGainF = static_cast<float>(mOutputGain);
         for (int i = 0; i < numSamples; ++i)
@@ -266,28 +253,12 @@ public:
       }
       else
       {
-        for (int i = 0; i < numSamples; ++i)
-        {
-          mFallbackInputBufferL[i] = static_cast<NAM_SAMPLE>(mInputBufferL[i]);
-          mFallbackInputBufferR[i] = static_cast<NAM_SAMPLE>(mInputBufferR[i]);
-        }
-
-        NAM_SAMPLE* inputPtrL = mFallbackInputBufferL.data();
-        NAM_SAMPLE* outputPtrL = mFallbackOutputBufferL.data();
-        NAM_SAMPLE* inputPtrsL[1] = { inputPtrL };
-        NAM_SAMPLE* outputPtrsL[1] = { outputPtrL };
-        mFallbackModelLeft->process(inputPtrsL, outputPtrsL, numSamples);
-
-        NAM_SAMPLE* inputPtrR = mFallbackInputBufferR.data();
-        NAM_SAMPLE* outputPtrR = mFallbackOutputBufferR.data();
-        NAM_SAMPLE* inputPtrsR[1] = { inputPtrR };
-        NAM_SAMPLE* outputPtrsR[1] = { outputPtrR };
-        mFallbackModelRight->process(inputPtrsR, outputPtrsR, numSamples);
+        ProcessFallbackModels(numSamples);
 
         const float outputGainF = static_cast<float>(mOutputGain);
         for (int i = 0; i < numSamples; ++i)
         {
-          float outL = static_cast<float>(mFallbackOutputBufferL[i]);
+          float outL = mOutputBufferL[i];
           outL = mBassFilter[0].Process(outL);
           outL = mMidFilter[0].Process(outL);
           outL = mTrebleFilter[0].Process(outL);
@@ -295,7 +266,7 @@ public:
           outL *= outputGainF;
           outL = mDryBufferL[i] * dryMix + outL * wetMix;
 
-          float outR = static_cast<float>(mFallbackOutputBufferR[i]);
+          float outR = mOutputBufferR[i];
           outR = mBassFilter[1].Process(outR);
           outR = mMidFilter[1].Process(outR);
           outR = mTrebleFilter[1].Process(outR);
@@ -507,8 +478,6 @@ private:
         {
           mOptimizedModelLeft = std::move(optimizedLeft);
           mOptimizedModelRight = std::move(optimizedRight);
-          mOptimizedModelLeft->Reset(mSampleRate, mMaxBlockSize);
-          mOptimizedModelRight->Reset(mSampleRate, mMaxBlockSize);
           loaded = true;
           mUsingOptimized = true;
         }
@@ -521,8 +490,6 @@ private:
         if (!modelLeft || !modelRight)
           return false;
 
-        modelLeft->Reset(mSampleRate, mMaxBlockSize);
-        modelRight->Reset(mSampleRate, mMaxBlockSize);
         mFallbackModelLeft = std::move(modelLeft);
         mFallbackModelRight = std::move(modelRight);
         loaded = true;
@@ -534,7 +501,7 @@ private:
 
       mModelPath = resourcePath;
       mResourceNormalizationGainDb = ReadResourceMetadataDouble(ref, "normalizationGainDb");
-      CheckSampleRateMismatch();
+      ConfigureModelProcessing();
 
       // Extract metadata
       if (mOptimizedModelLeft)
@@ -580,19 +547,27 @@ private:
   std::filesystem::path mModelPath;
   bool mUsingOptimized = false;
   bool mPreferOptimized = true;
-  bool mSampleRateMismatch = false;  // Default to preferring optimized
-  bool mPrepared = false;
+  bool mResamplingActive = false;
+  double mModelSampleRate = 44100.0;
+  int mMaxModelBlockSize = 512;
 
   std::vector<float> mInputBufferL;
   std::vector<float> mInputBufferR;
   std::vector<float> mOutputBufferL;
   std::vector<float> mOutputBufferR;
+  std::vector<float> mModelInputBufferL;
+  std::vector<float> mModelInputBufferR;
+  std::vector<float> mModelOutputBufferL;
+  std::vector<float> mModelOutputBufferR;
   std::vector<float> mDryBufferL;
   std::vector<float> mDryBufferR;
   std::vector<NAM_SAMPLE> mFallbackInputBufferL;
   std::vector<NAM_SAMPLE> mFallbackInputBufferR;
   std::vector<NAM_SAMPLE> mFallbackOutputBufferL;
   std::vector<NAM_SAMPLE> mFallbackOutputBufferR;
+
+  BlockSincResampler mInputResampler;
+  BlockSincResampler mOutputResampler;
 
   double mUserInputGain = 1.0;
   double mUserOutputGain = 1.0;
@@ -672,22 +647,117 @@ private:
       RecalculateAutoGains();
   }
 
-  void CheckSampleRateMismatch()
+  [[nodiscard]] double ResolveModelSampleRate() const
   {
     double expectedSR = -1.0;
     if (mOptimizedModelLeft)
       expectedSR = mOptimizedModelLeft->GetExpectedSampleRate();
     else if (mFallbackModelLeft)
       expectedSR = mFallbackModelLeft->GetExpectedSampleRate();
+    else
+      return mSampleRate;
 
-    const bool mismatch = (expectedSR > 0.0 && std::abs(expectedSR - mSampleRate) > 1.0);
-    if (mismatch && !mSampleRateMismatch && mPrepared)
+    return ResolveNamModelProcessingSampleRate(expectedSR, mSampleRate);
+  }
+
+  void ConfigureModelProcessing()
+  {
+    mModelSampleRate = ResolveModelSampleRate();
+    mResamplingActive = std::abs(mModelSampleRate - mSampleRate) > 1.0;
+    mMaxModelBlockSize = mResamplingActive
+      ? BlockSincResampler::ComputeMaxOutputFrameCount(mMaxBlockSize, mSampleRate, mModelSampleRate)
+      : mMaxBlockSize;
+    mMaxModelBlockSize = std::max(1, mMaxModelBlockSize);
+
+    mModelInputBufferL.resize(static_cast<size_t>(mMaxModelBlockSize));
+    mModelInputBufferR.resize(static_cast<size_t>(mMaxModelBlockSize));
+    mModelOutputBufferL.resize(static_cast<size_t>(mMaxModelBlockSize));
+    mModelOutputBufferR.resize(static_cast<size_t>(mMaxModelBlockSize));
+    mFallbackInputBufferL.resize(static_cast<size_t>(mMaxModelBlockSize));
+    mFallbackInputBufferR.resize(static_cast<size_t>(mMaxModelBlockSize));
+    mFallbackOutputBufferL.resize(static_cast<size_t>(mMaxModelBlockSize));
+    mFallbackOutputBufferR.resize(static_cast<size_t>(mMaxModelBlockSize));
+
+    mInputResampler.Prepare(mSampleRate, mModelSampleRate, mMaxBlockSize);
+    mOutputResampler.Prepare(mModelSampleRate, mSampleRate, mMaxModelBlockSize);
+
+    if (mOptimizedModelLeft)
+      mOptimizedModelLeft->Reset(mModelSampleRate, mMaxModelBlockSize);
+    if (mOptimizedModelRight)
+      mOptimizedModelRight->Reset(mModelSampleRate, mMaxModelBlockSize);
+    if (mFallbackModelLeft)
+      mFallbackModelLeft->Reset(mModelSampleRate, mMaxModelBlockSize);
+    if (mFallbackModelRight)
+      mFallbackModelRight->Reset(mModelSampleRate, mMaxModelBlockSize);
+  }
+
+  [[nodiscard]] int GetModelFrameCount(int numSamples) const
+  {
+    int modelFrames = BlockSincResampler::ComputeOutputFrameCount(numSamples, mSampleRate, mModelSampleRate);
+    return std::clamp(modelFrames, 1, mMaxModelBlockSize);
+  }
+
+  void ProcessOptimizedModels(int numSamples)
+  {
+    if (!mResamplingActive)
     {
-      std::cerr << "[OptimizedNAMAmpEffect] Sample rate mismatch: model expects "
-                << static_cast<int>(expectedSR) << " Hz, plugin running at "
-                << static_cast<int>(mSampleRate) << " Hz - output quality may be degraded\n";
+      mOptimizedModelLeft->process(mInputBufferL.data(), mOutputBufferL.data(), numSamples);
+      mOptimizedModelRight->process(mInputBufferR.data(), mOutputBufferR.data(), numSamples);
+      return;
     }
-    mSampleRateMismatch = mismatch;
+
+    const int modelFrames = GetModelFrameCount(numSamples);
+    mInputResampler.ProcessFixedOutput(mInputBufferL.data(), numSamples, mModelInputBufferL.data(), modelFrames);
+    mInputResampler.ProcessFixedOutput(mInputBufferR.data(), numSamples, mModelInputBufferR.data(), modelFrames);
+    mOptimizedModelLeft->process(mModelInputBufferL.data(), mModelOutputBufferL.data(), modelFrames);
+    mOptimizedModelRight->process(mModelInputBufferR.data(), mModelOutputBufferR.data(), modelFrames);
+    mOutputResampler.ProcessFixedOutput(mModelOutputBufferL.data(), modelFrames, mOutputBufferL.data(), numSamples);
+    mOutputResampler.ProcessFixedOutput(mModelOutputBufferR.data(), modelFrames, mOutputBufferR.data(), numSamples);
+  }
+
+  void ProcessFallbackModels(int numSamples)
+  {
+    int modelFrames = numSamples;
+    if (mResamplingActive)
+    {
+      modelFrames = GetModelFrameCount(numSamples);
+      mInputResampler.ProcessFixedOutput(mInputBufferL.data(), numSamples, mFallbackInputBufferL.data(), modelFrames);
+      mInputResampler.ProcessFixedOutput(mInputBufferR.data(), numSamples, mFallbackInputBufferR.data(), modelFrames);
+    }
+    else
+    {
+      for (int sampleIndex = 0; sampleIndex < numSamples; ++sampleIndex)
+      {
+        mFallbackInputBufferL[sampleIndex] = static_cast<NAM_SAMPLE>(mInputBufferL[sampleIndex]);
+        mFallbackInputBufferR[sampleIndex] = static_cast<NAM_SAMPLE>(mInputBufferR[sampleIndex]);
+      }
+    }
+
+    NAM_SAMPLE* inputPtrL = mFallbackInputBufferL.data();
+    NAM_SAMPLE* outputPtrL = mFallbackOutputBufferL.data();
+    NAM_SAMPLE* inputPtrsL[1] = { inputPtrL };
+    NAM_SAMPLE* outputPtrsL[1] = { outputPtrL };
+    mFallbackModelLeft->process(inputPtrsL, outputPtrsL, modelFrames);
+
+    NAM_SAMPLE* inputPtrR = mFallbackInputBufferR.data();
+    NAM_SAMPLE* outputPtrR = mFallbackOutputBufferR.data();
+    NAM_SAMPLE* inputPtrsR[1] = { inputPtrR };
+    NAM_SAMPLE* outputPtrsR[1] = { outputPtrR };
+    mFallbackModelRight->process(inputPtrsR, outputPtrsR, modelFrames);
+
+    if (mResamplingActive)
+    {
+      mOutputResampler.ProcessFixedOutput(mFallbackOutputBufferL.data(), modelFrames, mOutputBufferL.data(), numSamples);
+      mOutputResampler.ProcessFixedOutput(mFallbackOutputBufferR.data(), modelFrames, mOutputBufferR.data(), numSamples);
+    }
+    else
+    {
+      for (int sampleIndex = 0; sampleIndex < numSamples; ++sampleIndex)
+      {
+        mOutputBufferL[sampleIndex] = static_cast<float>(mFallbackOutputBufferL[sampleIndex]);
+        mOutputBufferR[sampleIndex] = static_cast<float>(mFallbackOutputBufferR[sampleIndex]);
+      }
+    }
   }
 
   static bool ParseBool(const std::string& value)

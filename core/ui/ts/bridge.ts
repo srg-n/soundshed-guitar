@@ -168,6 +168,7 @@ export function renderDemoAudio(payload: {
   takeId?: string;
   title?: string;
   suggestedName?: string;
+  renderSampleRate?: number;
 }): void {
   postMessage({ type: "renderDemoAudio", ...payload });
 }

@@ -483,6 +483,18 @@ int main()
       4);
 
     allPassed &= RunLeakIsolationTest(
+      "NAM FX keeps stereo separate",
+      "fx_nam",
+      [](guitarfx::EffectProcessor& effect, const TestResources& resources) {
+        return LoadSingleNamModel(effect, resources);
+      },
+      resources,
+      0.20,
+      2.0e-2,
+      1.0e-2,
+      4);
+
+    allPassed &= RunLeakIsolationTest(
       "NAM blend keeps stereo separate",
       "amp_nam_blend",
       [](guitarfx::EffectProcessor& effect, const TestResources& resources) {

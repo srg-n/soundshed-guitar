@@ -10,9 +10,11 @@
  */
 
 #include "dsp/EffectProcessor.h"
+#include "dsp/BlockSincResampler.h"
 #include "dsp/LevelTargets.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/EffectGuids.h"
+#include "dsp/effects/NAMSampleRate.h"
 #include "dsp/simd/OptimizedNAM.h"
 #include "NAM/dsp.h"
 #include "NAM/get_dsp.h"
@@ -25,7 +27,6 @@
 #include <optional>
 #include <string>
 #include <vector>
-#include <iostream>
 
 // Forward declare factory registration helper to avoid linker dead-stripping
 namespace nam
@@ -57,7 +58,6 @@ public:
       ResizeModelBuffers(model, maxBlockSize);
       ResetModel(model, sampleRate, maxBlockSize);
     }
-    CheckAllSampleRates();
   }
 
   void Reset() override
@@ -282,7 +282,6 @@ public:
 
       ResizeModelBuffers(instance, mMaxBlockSize);
       ResetModel(instance, mSampleRate, mMaxBlockSize);
-      CheckInstanceSampleRate(instance);
 
       mModels.push_back(std::move(instance));
     }
@@ -316,13 +315,23 @@ private:
     std::unique_ptr<::nam::DSP> fallbackLeft;
     std::unique_ptr<::nam::DSP> fallbackRight;
     bool usingOptimized = false;
+    bool resamplingActive = false;
+    double processingSampleRate = 44100.0;
+    int maxProcessingBlockSize = 512;
 
     std::vector<float> outputBufferL;
     std::vector<float> outputBufferR;
+    std::vector<float> modelInputL;
+    std::vector<float> modelInputR;
+    std::vector<float> modelOutputL;
+    std::vector<float> modelOutputR;
     std::vector<NAM_SAMPLE> fallbackInputL;
     std::vector<NAM_SAMPLE> fallbackInputR;
     std::vector<NAM_SAMPLE> fallbackOutputL;
     std::vector<NAM_SAMPLE> fallbackOutputR;
+
+    BlockSincResampler inputResampler;
+    BlockSincResampler outputResampler;
 
     std::optional<double> inputLevel;
     std::optional<double> outputLevel;
@@ -447,25 +456,41 @@ private:
 
   void ResizeModelBuffers(ModelInstance& instance, int maxBlockSize)
   {
+    instance.processingSampleRate = ResolveInstanceSampleRate(instance);
+    instance.resamplingActive = std::abs(instance.processingSampleRate - mSampleRate) > 1.0;
+    instance.maxProcessingBlockSize = instance.resamplingActive
+      ? BlockSincResampler::ComputeMaxOutputFrameCount(maxBlockSize, mSampleRate, instance.processingSampleRate)
+      : maxBlockSize;
+    instance.maxProcessingBlockSize = std::max(1, instance.maxProcessingBlockSize);
+
     instance.outputBufferL.resize(static_cast<size_t>(maxBlockSize));
     instance.outputBufferR.resize(static_cast<size_t>(maxBlockSize));
-    instance.fallbackInputL.resize(static_cast<size_t>(maxBlockSize));
-    instance.fallbackInputR.resize(static_cast<size_t>(maxBlockSize));
-    instance.fallbackOutputL.resize(static_cast<size_t>(maxBlockSize));
-    instance.fallbackOutputR.resize(static_cast<size_t>(maxBlockSize));
+    instance.modelInputL.resize(static_cast<size_t>(instance.maxProcessingBlockSize));
+    instance.modelInputR.resize(static_cast<size_t>(instance.maxProcessingBlockSize));
+    instance.modelOutputL.resize(static_cast<size_t>(instance.maxProcessingBlockSize));
+    instance.modelOutputR.resize(static_cast<size_t>(instance.maxProcessingBlockSize));
+    instance.fallbackInputL.resize(static_cast<size_t>(instance.maxProcessingBlockSize));
+    instance.fallbackInputR.resize(static_cast<size_t>(instance.maxProcessingBlockSize));
+    instance.fallbackOutputL.resize(static_cast<size_t>(instance.maxProcessingBlockSize));
+    instance.fallbackOutputR.resize(static_cast<size_t>(instance.maxProcessingBlockSize));
+
+    instance.inputResampler.Prepare(mSampleRate, instance.processingSampleRate, maxBlockSize);
+    instance.outputResampler.Prepare(instance.processingSampleRate, mSampleRate, instance.maxProcessingBlockSize);
   }
 
   void ResetModel(ModelInstance& instance, double sampleRate, int maxBlockSize)
   {
+    (void)sampleRate;
+    (void)maxBlockSize;
     if (instance.usingOptimized && instance.optimizedLeft && instance.optimizedRight)
     {
-      instance.optimizedLeft->Reset(sampleRate, maxBlockSize);
-      instance.optimizedRight->Reset(sampleRate, maxBlockSize);
+      instance.optimizedLeft->Reset(instance.processingSampleRate, instance.maxProcessingBlockSize);
+      instance.optimizedRight->Reset(instance.processingSampleRate, instance.maxProcessingBlockSize);
     }
     else if (instance.fallbackLeft && instance.fallbackRight)
     {
-      instance.fallbackLeft->Reset(sampleRate, maxBlockSize);
-      instance.fallbackRight->Reset(sampleRate, maxBlockSize);
+      instance.fallbackLeft->Reset(instance.processingSampleRate, instance.maxProcessingBlockSize);
+      instance.fallbackRight->Reset(instance.processingSampleRate, instance.maxProcessingBlockSize);
     }
   }
 
@@ -474,7 +499,19 @@ private:
     if (instance.usingOptimized && instance.optimizedLeft && instance.optimizedRight)
     {
       auto* optimized = channel == 0 ? instance.optimizedLeft.get() : instance.optimizedRight.get();
-      optimized->process(input, output, numSamples);
+      if (instance.resamplingActive)
+      {
+        const int modelFrames = GetModelFrameCount(instance, numSamples);
+        auto& modelInput = channel == 0 ? instance.modelInputL : instance.modelInputR;
+        auto& modelOutput = channel == 0 ? instance.modelOutputL : instance.modelOutputR;
+        instance.inputResampler.ProcessFixedOutput(input, numSamples, modelInput.data(), modelFrames);
+        optimized->process(modelInput.data(), modelOutput.data(), modelFrames);
+        instance.outputResampler.ProcessFixedOutput(modelOutput.data(), modelFrames, output, numSamples);
+      }
+      else
+      {
+        optimized->process(input, output, numSamples);
+      }
       return;
     }
 
@@ -483,18 +520,34 @@ private:
       auto& fallbackInput = channel == 0 ? instance.fallbackInputL : instance.fallbackInputR;
       auto& fallbackOutput = channel == 0 ? instance.fallbackOutputL : instance.fallbackOutputR;
       auto* fallback = channel == 0 ? instance.fallbackLeft.get() : instance.fallbackRight.get();
-      for (int i = 0; i < numSamples; ++i)
+      int modelFrames = numSamples;
+      if (instance.resamplingActive)
       {
-        fallbackInput[i] = static_cast<NAM_SAMPLE>(input[i]);
+        modelFrames = GetModelFrameCount(instance, numSamples);
+        instance.inputResampler.ProcessFixedOutput(input, numSamples, fallbackInput.data(), modelFrames);
+      }
+      else
+      {
+        for (int sampleIndex = 0; sampleIndex < numSamples; ++sampleIndex)
+        {
+          fallbackInput[sampleIndex] = static_cast<NAM_SAMPLE>(input[sampleIndex]);
+        }
       }
       NAM_SAMPLE* inputPtr = fallbackInput.data();
       NAM_SAMPLE* outputPtr = fallbackOutput.data();
       NAM_SAMPLE* inputPtrs[1] = { inputPtr };
       NAM_SAMPLE* outputPtrs[1] = { outputPtr };
-      fallback->process(inputPtrs, outputPtrs, numSamples);
-      for (int i = 0; i < numSamples; ++i)
+      fallback->process(inputPtrs, outputPtrs, modelFrames);
+      if (instance.resamplingActive)
       {
-        output[i] = static_cast<float>(fallbackOutput[i]);
+        instance.outputResampler.ProcessFixedOutput(fallbackOutput.data(), modelFrames, output, numSamples);
+      }
+      else
+      {
+        for (int sampleIndex = 0; sampleIndex < numSamples; ++sampleIndex)
+        {
+          output[sampleIndex] = static_cast<float>(fallbackOutput[sampleIndex]);
+        }
       }
       return;
     }
@@ -765,22 +818,16 @@ private:
     return -1.0;
   }
 
-  void CheckInstanceSampleRate(const ModelInstance& instance)
+  double ResolveInstanceSampleRate(const ModelInstance& instance) const
   {
     const double expectedSR = GetInstanceExpectedSampleRate(instance);
-    if (expectedSR > 0.0 && std::abs(expectedSR - mSampleRate) > 1.0)
-    {
-      std::cerr << "[MultiModelNAMAmpEffect] Sample rate mismatch in model '"
-                << instance.path.filename().string() << "': expects "
-                << static_cast<int>(expectedSR) << " Hz, plugin running at "
-                << static_cast<int>(mSampleRate) << " Hz - output quality may be degraded\n";
-    }
+    return ResolveNamModelProcessingSampleRate(expectedSR, mSampleRate);
   }
 
-  void CheckAllSampleRates()
+  int GetModelFrameCount(const ModelInstance& instance, int numSamples) const
   {
-    for (const auto& model : mModels)
-      CheckInstanceSampleRate(model);
+    int modelFrames = BlockSincResampler::ComputeOutputFrameCount(numSamples, mSampleRate, instance.processingSampleRate);
+    return std::clamp(modelFrames, 1, instance.maxProcessingBlockSize);
   }
 };
 

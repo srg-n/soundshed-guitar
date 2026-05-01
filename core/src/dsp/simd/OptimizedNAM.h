@@ -105,6 +105,26 @@ inline std::optional<std::string> ReadMetadataString(const nlohmann::json& meta,
   return readValue(fallbackKey);
 }
 
+inline double ReadExpectedSampleRateFromNamJson(const nlohmann::json& j)
+{
+  if (j.contains("metadata") && j["metadata"].is_object())
+  {
+    if (auto expectedSampleRate = ReadMetadataDouble(j["metadata"], "expected_sample_rate", "sample_rate"))
+      return *expectedSampleRate;
+  }
+
+  if (auto expectedSampleRate = ReadMetadataDouble(j, "expected_sample_rate", "sample_rate"))
+    return *expectedSampleRate;
+
+  if (j.contains("config") && j["config"].is_object())
+  {
+    if (auto expectedSampleRate = ReadMetadataDouble(j["config"], "sample_rate"))
+      return *expectedSampleRate;
+  }
+
+  return -1.0;
+}
+
 // ============================================================================
 // Architecture Type
 // ============================================================================
@@ -279,16 +299,7 @@ inline std::unique_ptr<OptimizedDSP> LoadOptimizedModel(const std::filesystem::p
         weights.push_back(w.get<float>());
     }
 
-    // Parse expected sample rate
-    double expectedSampleRate = -1.0;
-    if (j.contains("metadata") && j["metadata"].contains("expected_sample_rate"))
-    {
-      expectedSampleRate = j["metadata"]["expected_sample_rate"].get<double>();
-    }
-    else if (config.contains("sample_rate"))
-    {
-      expectedSampleRate = config["sample_rate"].get<double>();
-    }
+    const double expectedSampleRate = ReadExpectedSampleRateFromNamJson(j);
 
     // Create optimized processor based on architecture
     std::unique_ptr<OptimizedDSP> dsp;

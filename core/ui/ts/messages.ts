@@ -741,9 +741,12 @@ export function handleIncomingMessage(message: string): void {
       break;
     }
     case "demoAudioRenderSaved": {
-      const info = payload as { path?: string };
-      appendLog(`demo audio rendered ← ${info.path ?? "unknown"}`);
-      showNotification("Demo audio rendered", info.path ?? "");
+      const info = payload as { path?: string; sampleRate?: number };
+      const sampleRate = typeof info.sampleRate === "number" && info.sampleRate > 0
+        ? `${Math.round(info.sampleRate / 100) / 10} kHz`
+        : "";
+      appendLog(`demo audio rendered ← ${info.path ?? "unknown"}${sampleRate ? ` @ ${sampleRate}` : ""}`);
+      showNotification("Demo audio rendered", sampleRate ? `${sampleRate} - ${info.path ?? ""}` : info.path ?? "");
       break;
     }
     case "demoAudioRenderFailed": {

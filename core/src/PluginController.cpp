@@ -16,6 +16,7 @@
 #include "dsp/EffectGuids.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/LevelTargets.h"
+#include "dsp/BlockSincResampler.h"
 #include "dsp/effects/BuiltinEffects.h"
 #if defined(GUITARFX_ENABLE_WASM_EFFECTS)
 #include "dsp/effects/WasmEffect.h"
@@ -870,6 +871,122 @@ namespace
         std::vector<std::vector<float>> channelSamples;
     };
 
+    constexpr std::array<int, 6> kDemoRenderSampleRateOptions = {
+        44100,
+        48000,
+        88200,
+        96000,
+        176400,
+        192000,
+    };
+
+    bool IsSupportedDemoRenderSampleRate(double sampleRate)
+    {
+        if (sampleRate <= 0.0 || sampleRate > 192000.0)
+            return false;
+
+        const int roundedSampleRate = static_cast<int>(std::llround(sampleRate));
+        if (std::abs(sampleRate - static_cast<double>(roundedSampleRate)) >= 1.0)
+            return false;
+
+        return std::find(kDemoRenderSampleRateOptions.begin(), kDemoRenderSampleRateOptions.end(), roundedSampleRate)
+            != kDemoRenderSampleRateOptions.end();
+    }
+
+    double ResolveDemoRenderSampleRate(const nlohmann::json& payload,
+                                       double hostSampleRate,
+                                       std::string& error)
+    {
+        if (hostSampleRate <= 0.0)
+        {
+            error = "Audio device sample rate is unavailable";
+            return 0.0;
+        }
+
+        const auto sampleRateIter = payload.find("renderSampleRate");
+        if (sampleRateIter == payload.end() || sampleRateIter->is_null())
+            return hostSampleRate;
+
+        if (!sampleRateIter->is_number())
+        {
+            error = "Render sample rate is invalid";
+            return 0.0;
+        }
+
+        const double requestedSampleRate = sampleRateIter->get<double>();
+        if (requestedSampleRate <= 0.0)
+            return hostSampleRate;
+
+        if (!IsSupportedDemoRenderSampleRate(requestedSampleRate))
+        {
+            error = "Unsupported render sample rate";
+            return 0.0;
+        }
+
+        return static_cast<double>(std::llround(requestedSampleRate));
+    }
+
+    std::string BuildDemoRenderSuggestedFilename(const std::string& requestedName, double renderSampleRate)
+    {
+        std::string suggestedName = guitarfx::util::SanitizeFilename(
+            requestedName.empty() ? std::string("demo-audio.wav") : requestedName);
+        std::string lowerSuggested = suggestedName;
+        std::transform(lowerSuggested.begin(), lowerSuggested.end(), lowerSuggested.begin(), [](unsigned char ch)
+        {
+            return static_cast<char>(std::tolower(ch));
+        });
+
+        if (lowerSuggested.size() >= 4 && lowerSuggested.compare(lowerSuggested.size() - 4, 4, ".wav") == 0)
+            suggestedName.erase(suggestedName.size() - 4);
+
+        if (suggestedName.empty())
+            suggestedName = "demo-audio";
+
+        const int roundedKilohertz = static_cast<int>(std::llround(renderSampleRate / 1000.0));
+        suggestedName += "-" + std::to_string(roundedKilohertz) + ".wav";
+        return suggestedName;
+    }
+
+    class OfflineRenderMixerPrepareScope
+    {
+    public:
+        OfflineRenderMixerPrepareScope(guitarfx::MultiPresetMixer& mixer,
+                                       double renderSampleRate,
+                                       int renderBlockSize,
+                                       double restoreSampleRate,
+                                       int restoreBlockSize)
+            : mMixer(mixer)
+            , mRestoreSampleRate(restoreSampleRate)
+            , mRestoreBlockSize(restoreBlockSize)
+        {
+            mMixer.Prepare(renderSampleRate, renderBlockSize);
+            mMixer.Reset();
+        }
+
+        ~OfflineRenderMixerPrepareScope()
+        {
+            try
+            {
+                if (mRestoreSampleRate > 0.0 && mRestoreBlockSize > 0)
+                {
+                    mMixer.Prepare(mRestoreSampleRate, mRestoreBlockSize);
+                    mMixer.Reset();
+                }
+            }
+            catch (...)
+            {
+            }
+        }
+
+        OfflineRenderMixerPrepareScope(const OfflineRenderMixerPrepareScope&) = delete;
+        OfflineRenderMixerPrepareScope& operator=(const OfflineRenderMixerPrepareScope&) = delete;
+
+    private:
+        guitarfx::MultiPresetMixer& mMixer;
+        double mRestoreSampleRate = 0.0;
+        int mRestoreBlockSize = 0;
+    };
+
     std::size_t FindTrailingAudibleFrameCount(const std::vector<float>& left,
                                               const std::vector<float>& right,
                                               float threshold,
@@ -935,7 +1052,10 @@ namespace
             return std::nullopt;
         }
 
-        auto resampled = guitarfx::util::ConvertToSampleRate(*wavData, targetSampleRate);
+        auto resampled = guitarfx::util::ConvertToSampleRate(
+            *wavData,
+            targetSampleRate,
+            guitarfx::SampleRateConversionQuality::Highest);
         if (resampled.empty() || resampled.front().empty())
         {
             error = "Audio buffer is empty";
@@ -979,6 +1099,8 @@ namespace
                                   std::mutex& dspMutex,
                                   const OfflineRenderBuffer& source,
                                   int blockSize,
+                                  double restoreSampleRate,
+                                  int restoreBlockSize,
                                   double tempoBpm,
                                   std::vector<float>& renderedLeft,
                                   std::vector<float>& renderedRight)
@@ -1011,7 +1133,12 @@ namespace
         int silentBlocks = 0;
 
         std::lock_guard<std::mutex> lock(dspMutex);
-        mixer.Reset();
+        OfflineRenderMixerPrepareScope renderPrepare(
+            mixer,
+            source.sampleRate,
+            safeBlockSize,
+            restoreSampleRate,
+            std::max(1, restoreBlockSize));
 
         while (frameOffset < totalFrames || tailBlocks < maxTailBlocks)
         {
@@ -6640,18 +6767,22 @@ void PluginController::HandleRenderDemoAudioRequest(const nlohmann::json& payloa
         }.dump());
     };
 
-    std::string suggestedName = util::SanitizeFilename(payload.value("suggestedName", std::string("demo-audio.wav")));
-    std::string lowerSuggested = suggestedName;
-    std::transform(lowerSuggested.begin(), lowerSuggested.end(), lowerSuggested.begin(), [](unsigned char ch)
+    const double hostSampleRate = mHost.GetSampleRate();
+    std::string sampleRateError;
+    const double renderSampleRate = ResolveDemoRenderSampleRate(payload, hostSampleRate, sampleRateError);
+    if (renderSampleRate <= 0.0)
     {
-        return static_cast<char>(std::tolower(ch));
-    });
-    if (!lowerSuggested.ends_with(".wav"))
-        suggestedName += ".wav";
+        sendRenderFailure(sampleRateError.empty() ? "Render sample rate is invalid" : sampleRateError);
+        return;
+    }
+
+    const std::string suggestedName = BuildDemoRenderSuggestedFilename(
+        payload.value("suggestedName", std::string("demo-audio.wav")),
+        renderSampleRate);
 
     const nlohmann::json payloadCopy = payload;
     mHost.SaveFileAsync(BrowseFileType::AudioFile, "Render Demo Audio", suggestedName,
-        [this, payloadCopy, sendRenderFailure](const BrowseFileResult& result)
+        [this, payloadCopy, sendRenderFailure, renderSampleRate](const BrowseFileResult& result)
         {
             if (!result.success)
             {
@@ -6665,12 +6796,13 @@ void PluginController::HandleRenderDemoAudioRequest(const nlohmann::json& payloa
                 return;
             }
 
-            const double targetSampleRate = mHost.GetSampleRate();
-            if (targetSampleRate <= 0.0)
+            const double restoreSampleRate = mHost.GetSampleRate();
+            if (restoreSampleRate <= 0.0)
             {
                 sendRenderFailure("Audio device sample rate is unavailable");
                 return;
             }
+            const int hostBlockSize = std::max(1, mHost.GetBlockSize());
 
             OfflineRenderBuffer source;
             std::string error;
@@ -6709,7 +6841,7 @@ void PluginController::HandleRenderDemoAudioRequest(const nlohmann::json& payloa
 
                 auto prepared = PrepareOfflineRenderBuffer(
                     bytes,
-                    targetSampleRate,
+                    renderSampleRate,
                     takeId,
                     payloadCopy.value("title", take->value("title", std::string("Riff Take"))),
                     error);
@@ -6745,7 +6877,7 @@ void PluginController::HandleRenderDemoAudioRequest(const nlohmann::json& payloa
 
                 auto prepared = PrepareOfflineRenderBuffer(
                     decodedBytes,
-                    targetSampleRate,
+                    renderSampleRate,
                     audioIter->value("id", std::string{}),
                     payloadCopy.value("title", audioIter->value("title", std::string("Demo Audio"))),
                     error);
@@ -6770,7 +6902,9 @@ void PluginController::HandleRenderDemoAudioRequest(const nlohmann::json& payloa
                     mPresetMixer,
                     mDSPMutex,
                     source,
-                    std::max(1, mHost.GetBlockSize()),
+                    hostBlockSize,
+                    restoreSampleRate,
+                    hostBlockSize,
                     GetEffectiveTempoBpm(),
                     renderedLeft,
                     renderedRight))
@@ -6779,7 +6913,7 @@ void PluginController::HandleRenderDemoAudioRequest(const nlohmann::json& payloa
                 return;
             }
 
-            if (!WriteStereo16BitWav(result.path, renderedLeft, renderedRight, static_cast<int>(std::llround(targetSampleRate))))
+            if (!WriteStereo16BitWav(result.path, renderedLeft, renderedRight, static_cast<int>(std::llround(renderSampleRate))))
             {
                 sendRenderFailure("Failed to write WAV file");
                 return;
@@ -6787,9 +6921,11 @@ void PluginController::HandleRenderDemoAudioRequest(const nlohmann::json& payloa
 
             SendMessageToUI(nlohmann::json{
                 {"type", "demoAudioRenderSaved"},
-                {"path", result.path.generic_string()}
+                {"path", result.path.generic_string()},
+                {"sampleRate", renderSampleRate}
             }.dump());
-            AppendSessionLog("Demo audio rendered: " + result.path.generic_string());
+            AppendSessionLog("Demo audio rendered (" + std::to_string(static_cast<int>(std::llround(renderSampleRate)))
+                + " Hz): " + result.path.generic_string());
         });
 }
 

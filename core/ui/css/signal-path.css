@@ -1340,7 +1340,7 @@
   top: calc(100% + 6px);
   right: 0;
   z-index: 40;
-  min-width: 156px;
+  min-width: 180px;
   display: none;
   flex-direction: column;
   gap: 2px;
@@ -1358,6 +1358,24 @@
 .demo-audio-actions-menu.drop-up {
   top: auto;
   bottom: calc(100% + 6px);
+}
+
+.demo-render-rate-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 4px 8px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.demo-render-rate-select {
+  width: 100%;
+  min-width: 150px;
+  font-size: 12px;
+  text-transform: none;
 }
 
 .demo-audio-action-item {

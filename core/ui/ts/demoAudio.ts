@@ -13,6 +13,16 @@ let openDemoActionsButton: HTMLButtonElement | null = null;
 let openDemoActionsMenu: HTMLElement | null = null;
 
 const DEMO_AUDIO_SELECTED_ID_SETTING = "demoAudio.selectedId";
+const DEMO_AUDIO_RENDER_SAMPLE_RATE_SETTING = "demoAudio.renderSampleRate";
+const DEMO_RENDER_SAMPLE_RATE_OPTIONS = [
+  { value: 0, label: "Device rate" },
+  { value: 44100, label: "44.1 kHz" },
+  { value: 48000, label: "48 kHz" },
+  { value: 88200, label: "88.2 kHz" },
+  { value: 96000, label: "96 kHz" },
+  { value: 176400, label: "176.4 kHz" },
+  { value: 192000, label: "192 kHz" },
+] as const;
 
 type DemoAudioSource =
   | { id: string; title: string; kind: "builtin"; path: string }
@@ -85,6 +95,55 @@ function renderDemoAudioOptions(): string {
     .join("");
 }
 
+function normalizeDemoRenderSampleRate(value: unknown): number {
+  const numericValue = typeof value === "number"
+    ? value
+    : typeof value === "string"
+      ? Number(value)
+      : 0;
+  if (!Number.isFinite(numericValue)) {
+    return 0;
+  }
+
+  const rounded = Math.round(numericValue);
+  return DEMO_RENDER_SAMPLE_RATE_OPTIONS.some((option) => option.value === rounded) ? rounded : 0;
+}
+
+function getDemoRenderSampleRate(): number {
+  return normalizeDemoRenderSampleRate(uiState.appSettings?.[DEMO_AUDIO_RENDER_SAMPLE_RATE_SETTING]);
+}
+
+function formatDemoRenderSampleRate(sampleRate: number): string {
+  const normalized = normalizeDemoRenderSampleRate(sampleRate);
+  return DEMO_RENDER_SAMPLE_RATE_OPTIONS.find((option) => option.value === normalized)?.label ?? "Device rate";
+}
+
+function renderDemoRenderSampleRateOptions(): string {
+  const selectedRate = getDemoRenderSampleRate();
+  return DEMO_RENDER_SAMPLE_RATE_OPTIONS
+    .map((option) => `<option value="${option.value}"${option.value === selectedRate ? " selected" : ""}>${option.label}</option>`)
+    .join("");
+}
+
+function persistDemoRenderSampleRate(sampleRate: number): void {
+  const normalized = normalizeDemoRenderSampleRate(sampleRate);
+  uiState.appSettings[DEMO_AUDIO_RENDER_SAMPLE_RATE_SETTING] = normalized;
+  setAppSetting(DEMO_AUDIO_RENDER_SAMPLE_RATE_SETTING, normalized);
+}
+
+function refreshDemoRenderSampleRateSelectors(): void {
+  const selectedRate = String(getDemoRenderSampleRate());
+  const mainSelect = document.getElementById("demo-render-sample-rate") as HTMLSelectElement | null;
+  if (mainSelect) {
+    mainSelect.value = selectedRate;
+  }
+
+  const footerSelect = document.getElementById("footer-demo-render-sample-rate") as HTMLSelectElement | null;
+  if (footerSelect) {
+    footerSelect.value = selectedRate;
+  }
+}
+
 function persistDemoAudioSelection(selectedId: string | null): void {
   uiState.appSettings[DEMO_AUDIO_SELECTED_ID_SETTING] = selectedId;
   setAppSetting(DEMO_AUDIO_SELECTED_ID_SETTING, selectedId);
@@ -104,6 +163,8 @@ type DemoAudioBindConfig = {
   actionsButtonId?: string;
   actionsMenuId?: string;
   renderActionId?: string;
+  renderSampleRateId?: string;
+  syncRenderSampleRateId?: string;
 };
 
 function closeDemoActionsMenu(refocusButton = false): void {
@@ -317,6 +378,24 @@ function bindDemoAudioControlsSet(config: DemoAudioBindConfig): void {
       });
     }
   }
+
+  if (config.renderSampleRateId) {
+    const renderSampleRateSelect = document.getElementById(config.renderSampleRateId) as HTMLSelectElement | null;
+    if (renderSampleRateSelect) {
+      renderSampleRateSelect.value = String(getDemoRenderSampleRate());
+      renderSampleRateSelect.addEventListener("change", (event) => {
+        const sampleRate = normalizeDemoRenderSampleRate((event.target as HTMLSelectElement).value);
+        persistDemoRenderSampleRate(sampleRate);
+        renderSampleRateSelect.value = String(sampleRate);
+        if (config.syncRenderSampleRateId) {
+          const syncSelect = document.getElementById(config.syncRenderSampleRateId) as HTMLSelectElement | null;
+          if (syncSelect) {
+            syncSelect.value = String(sampleRate);
+          }
+        }
+      });
+    }
+  }
 }
 
 /**
@@ -328,6 +407,7 @@ export function renderFooterDemoAudioControls(): string {
     return "";
   }
   const options = renderDemoAudioOptions();
+  const sampleRateOptions = renderDemoRenderSampleRateOptions();
   const debugCaptureHidden = isFeatureEnabled(Features.DebugStateCapture) ? "" : " hidden";
 
   return `
@@ -360,6 +440,12 @@ export function renderFooterDemoAudioControls(): string {
           <span aria-hidden="true">...</span>
         </button>
         <div class="demo-audio-actions-menu footer-demo-audio-actions-menu" id="footer-demo-audio-actions-menu" role="menu" aria-hidden="true">
+          <label class="demo-render-rate-control" title="Render sample rate">
+            <span>Rate</span>
+            <select id="footer-demo-render-sample-rate" class="demo-render-rate-select themed-select" aria-label="Render sample rate">
+              ${sampleRateOptions}
+            </select>
+          </label>
           <button
             id="footer-render-demo-audio"
             class="demo-audio-action-item"
@@ -403,6 +489,8 @@ export function bindFooterDemoAudioControls(): void {
     actionsButtonId: "footer-demo-audio-actions-button",
     actionsMenuId: "footer-demo-audio-actions-menu",
     renderActionId: "footer-render-demo-audio",
+    renderSampleRateId: "footer-demo-render-sample-rate",
+    syncRenderSampleRateId: "demo-render-sample-rate",
   });
 
   const captureButton = document.getElementById("footer-capture-debug-state-btn") as HTMLButtonElement | null;
@@ -420,6 +508,7 @@ export function renderDemoAudioControls(): string {
     return "";
   }
   const options = renderDemoAudioOptions();
+  const sampleRateOptions = renderDemoRenderSampleRateOptions();
 
   return `
     <div class="signal-chain-section">
@@ -449,6 +538,12 @@ export function renderDemoAudioControls(): string {
             <span aria-hidden="true">...</span>
           </button>
           <div class="demo-audio-actions-menu" id="demo-audio-actions-menu" role="menu" aria-hidden="true">
+            <label class="demo-render-rate-control" title="Render sample rate">
+              <span>Rate</span>
+              <select id="demo-render-sample-rate" class="demo-render-rate-select themed-select" aria-label="Render sample rate">
+                ${sampleRateOptions}
+              </select>
+            </label>
             <button
               id="render-demo-audio"
               class="demo-audio-action-item"
@@ -482,6 +577,8 @@ export function bindDemoAudioControls(): void {
     actionsButtonId: "demo-audio-actions-button",
     actionsMenuId: "demo-audio-actions-menu",
     renderActionId: "render-demo-audio",
+    renderSampleRateId: "demo-render-sample-rate",
+    syncRenderSampleRateId: "footer-demo-render-sample-rate",
   });
 }
 
@@ -494,15 +591,19 @@ export async function renderSelectedDemoAudio(): Promise<void> {
 
   try {
     const suggestedName = buildDemoRenderSuggestedName(sample);
+    const renderSampleRate = getDemoRenderSampleRate();
+    const renderRatePayload = renderSampleRate > 0 ? { renderSampleRate } : {};
+    const renderRateLabel = formatDemoRenderSampleRate(renderSampleRate);
 
     if (sample.kind === "riff") {
       renderDemoAudio({
         takeId: sample.takeId,
         title: sample.title.replace(/^★\s*/, ""),
         suggestedName,
+        ...renderRatePayload,
       });
       showNotification("Choose export location", sample.title.replace(/^★\s*/, ""));
-      appendLog(`render demo audio requested → ${sample.takeId}`);
+      appendLog(`render demo audio requested → ${sample.takeId} @ ${renderRateLabel}`);
       return;
     }
 
@@ -511,9 +612,10 @@ export async function renderSelectedDemoAudio(): Promise<void> {
       audio: audioPayload,
       title: sample.title,
       suggestedName,
+      ...renderRatePayload,
     });
     showNotification("Choose export location", sample.title);
-    appendLog(`render demo audio requested → ${sample.title}`);
+    appendLog(`render demo audio requested → ${sample.title} @ ${renderRateLabel}`);
   } catch (error) {
     console.error("Failed to render demo audio", error);
     appendLog(`render error ← ${sample.title}: ${error instanceof Error ? error.message : String(error)}`);
@@ -611,12 +713,12 @@ export function stopDemoAudio(): void {
 
 export function applyStoredDemoAudioSelection(): void {
   const storedSelection = getStoredDemoAudioSelectionId();
-  if (!storedSelection) {
-    return;
+  if (storedSelection) {
+    uiState.demoAudioSelectedId = storedSelection;
+    refreshDemoAudioSelectors();
   }
 
-  uiState.demoAudioSelectedId = storedSelection;
-  refreshDemoAudioSelectors();
+  refreshDemoRenderSampleRateSelectors();
 }
 
 /**

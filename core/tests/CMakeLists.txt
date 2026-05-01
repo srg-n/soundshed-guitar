@@ -12,6 +12,7 @@ set(TEST_SOURCES
     PresetManagementWorkflowTests.cpp
     PresetStorageTests.cpp
     ResourcePreviewWorkflowTests.cpp
+    SampleRateConverterTests.cpp
     SignalGraphExecutorTests.cpp
     StereoProcessingTests.cpp
     SynthSawEffectTests.cpp

@@ -4,8 +4,8 @@
 
 The sample rate handling in the signal chain and effects appears **architecturally sound** with proper propagation through the call chain. However, there are **several potential issues** that could cause audible differences when changing ASIO sample rate:
 
-1. **NAM Model Sample Rate Mismatch** - Needs resampling path (no warning-based UX)
-2. **Potential IR Resampling Edge Cases** - Different resampling quality for different effect types
+1. **NAM Model Sample Rate Mismatch** - Resamples transparently at highest quality (no warning-based UX)
+2. **Potential IR Resampling Edge Cases** - Cabinet and reverb now use the same high-quality sinc path
 3. **Convolver Partition Size Changes** - Could create transients if block size changes
 4. **Filter State Not Cleared** - Filter state might contain transients from old SR
 5. **Wasm Module Reconfiguration** - Complete runtime rebuild might cause pops/clicks
@@ -141,13 +141,15 @@ NAMAmpEffect::Prepare(newSampleRate, newBlockSize)
 **Problem**: NAM models are trained at a **specific sample rate** (usually 44.1 or 48 kHz). When the plugin runs at a different SR, the model's learned characteristics don't match the actual signal path.
 
 **Current Behavior**:
-- Processing continues at mismatched SR
-- Output quality **silently degrades** (~-3 to -6 dB THD increase)
+- Standard NAM, optimized NAM, optimized NAM FX, and multi-model NAM process models at the model's expected sample rate when available.
+- Optimized NAM recognizes the upstream NAM top-level `sample_rate` field as well as newer metadata/config locations.
+- NAM files with no usable expected-rate metadata process at a stable 48 kHz fallback instead of tracking the current host/device rate.
+- Inputs are converted from the current global/host sample rate to the model rate using the high-quality block sinc converter.
+- Model outputs are converted back to the current global/host sample rate before downstream processing.
+- No mismatch warnings are emitted.
 
-**Recommendation**:
-1. Do not warn users for mismatch conditions.
-2. Add a transparent resampling path so NAM processing is aligned to the current global audio sample rate with highest-quality conversion.
-3. Preferred strategy: run a high-quality bidirectional resampler around NAM when the model's expected SR differs from host SR.
+**Status**:
+Implemented with `BlockSincResampler` and wired into the registered NAM effects.
 
 ---
 
@@ -237,10 +239,11 @@ MultiPresetMixer::Prepare() {
    - **Impact**: Eliminates potential pop/click on sample rate change
 
 ### **HIGH**
-2. ⚠️ Implement transparent high-quality NAM resampling path (no warning UX)
+2. ✅ Implement transparent high-quality NAM resampling path (no warning UX)
   - **File**: core/src/dsp/effects/NAMAmpEffect.h
-  - **Impact**: Removes audible mismatch drift while keeping UX clean
-  - **Complexity**: Medium/High (stateful real-time-safe resampler around NAM process)
+  - **Files**: core/src/dsp/effects/OptimizedNAMAmpEffect.h, core/src/dsp/effects/MultiModelNAMAmpEffect.h
+  - **Utility**: core/src/dsp/BlockSincResampler.h
+  - **Impact**: Removes mismatch warning UX and converts NAM audio to/from the model processing rate transparently
 
 ### **MEDIUM**
 3. 🟡 (Optional) Defer WasmEffect runtime rebuild to non-critical path
@@ -257,7 +260,8 @@ MultiPresetMixer::Prepare() {
 - [ ] Check latency reported to host after SR change
 - [ ] Monitor CPU usage during SR change
 - [ ] Test with various IR types (mono, stereo, short, long)
-- [ ] Test NAM model SR mismatch scenarios (44.1→48, 48→44.1)
+- [x] Add automated converter tests for 44.1/48/96-style fixed-output resampling
+- [ ] Test NAM model SR mismatch scenarios (44.1→48, 48→44.1) with real .nam resources
 - [ ] Test with active Wasm modules
 - [ ] Verify preset state preserved after SR change
 
@@ -265,7 +269,7 @@ MultiPresetMixer::Prepare() {
 
 ## Conclusion
 
-The sample rate propagation **architecture is solid**. The primary issue is **filter state not being cleared** before coefficient updates in IRCabEffect, which could cause transients. NAM models degrade silently on SR mismatch (expected but should be communicated to user).
+The sample rate propagation **architecture is solid**. The primary issue was **filter state not being cleared** before coefficient updates in IRCabEffect, which could cause transients. NAM mismatch handling now uses transparent high-quality conversion instead of warnings.
 
-The different IR resampling quality (linear vs sinc) is intentional but contributes to perceived sound differences.
+IR cabinet and IR reverb resampling now share the high-quality sinc path, reducing sample-rate-dependent tone drift from IR conversion differences.
 

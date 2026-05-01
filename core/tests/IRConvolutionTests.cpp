@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -23,6 +24,7 @@
 
 #include "dsp/SignalGraphExecutor.h"
 #include "dsp/EffectRegistry.h"
+#include "dsp/BlockSincResampler.h"
 #include "dsp/effects/BuiltinEffects.h"
 #include "resources/ResourceLibrary.h"
 #include "presets/PresetTypes.h"
@@ -58,6 +60,118 @@ namespace
       sumSquares += sample * sample;
     }
     return std::sqrt(sumSquares / static_cast<double>(samples.size()));
+  }
+
+  double ComputeRmsFrom(const std::vector<double>& samples, std::size_t start)
+  {
+    if (start >= samples.size())
+    {
+      return 0.0;
+    }
+
+    double sumSquares = 0.0;
+    for (std::size_t i = start; i < samples.size(); ++i)
+    {
+      sumSquares += samples[i] * samples[i];
+    }
+
+    return std::sqrt(sumSquares / static_cast<double>(samples.size() - start));
+  }
+
+  std::vector<double> ConvertSampleRate(const std::vector<double>& samples,
+                                        double sourceRate,
+                                        double targetRate)
+  {
+    if (samples.empty() || sourceRate <= 0.0 || targetRate <= 0.0)
+    {
+      return {};
+    }
+
+    const int inputFrames = static_cast<int>(samples.size());
+    const int outputFrames = guitarfx::BlockSincResampler::ComputeOutputFrameCount(inputFrames, sourceRate, targetRate);
+    if (outputFrames <= 0)
+    {
+      return {};
+    }
+
+    std::vector<double> output(static_cast<std::size_t>(outputFrames), 0.0);
+    guitarfx::BlockSincResampler resampler;
+    resampler.Prepare(sourceRate, targetRate, inputFrames, guitarfx::SampleRateConversionQuality::Highest);
+    resampler.ProcessFixedOutput(samples.data(), inputFrames, output.data(), outputFrames);
+    return output;
+  }
+
+  int FindBestAlignedLag(const std::vector<double>& reference,
+                         const std::vector<double>& candidate,
+                         int maxLag,
+                         std::size_t start)
+  {
+    int bestLag = 0;
+    double bestError = std::numeric_limits<double>::max();
+
+    for (int lag = -maxLag; lag <= maxLag; ++lag)
+    {
+      double sumSquares = 0.0;
+      std::size_t count = 0;
+      for (std::size_t i = start; i < reference.size(); ++i)
+      {
+        const long long candidateIndex = static_cast<long long>(i) + static_cast<long long>(lag);
+        if (candidateIndex < 0 || candidateIndex >= static_cast<long long>(candidate.size()))
+        {
+          continue;
+        }
+
+        const double diff = reference[i] - candidate[static_cast<std::size_t>(candidateIndex)];
+        sumSquares += diff * diff;
+        ++count;
+      }
+
+      if (count == 0)
+      {
+        continue;
+      }
+
+      const double error = sumSquares / static_cast<double>(count);
+      if (error < bestError)
+      {
+        bestError = error;
+        bestLag = lag;
+      }
+    }
+
+    return bestLag;
+  }
+
+  double ComputeAlignedNormalizedRmsDifference(const std::vector<double>& reference,
+                                               const std::vector<double>& candidate,
+                                               int lag,
+                                               std::size_t start)
+  {
+    double diffSquares = 0.0;
+    double referenceSquares = 0.0;
+    std::size_t count = 0;
+
+    for (std::size_t i = start; i < reference.size(); ++i)
+    {
+      const long long candidateIndex = static_cast<long long>(i) + static_cast<long long>(lag);
+      if (candidateIndex < 0 || candidateIndex >= static_cast<long long>(candidate.size()))
+      {
+        continue;
+      }
+
+      const double ref = reference[i];
+      const double diff = ref - candidate[static_cast<std::size_t>(candidateIndex)];
+      diffSquares += diff * diff;
+      referenceSquares += ref * ref;
+      ++count;
+    }
+
+    if (count == 0 || referenceSquares <= 1.0e-20)
+    {
+      return 0.0;
+    }
+
+    return std::sqrt(diffSquares / referenceSquares);
   }
 
   /**
@@ -215,7 +329,8 @@ namespace
   class IRConvolutionTester
   {
   public:
-    IRConvolutionTester()
+    explicit IRConvolutionTester(double sampleRate = kSampleRate, int maxBlockSize = kBlockSize)
+      : mSampleRate(sampleRate), mMaxBlockSize(maxBlockSize)
     {
       RegisterEffectsOnce();
       BuildGraph();
@@ -235,7 +350,19 @@ namespace
         return;
       }
 
-      const auto path = WriteImpulseToWav(impulse, kSampleRate);
+      SetImpulseAtSampleRate(impulse, mSampleRate);
+    }
+
+    void SetImpulseAtSampleRate(const std::vector<float>& impulse, double impulseSampleRate)
+    {
+      if (impulse.empty())
+      {
+        mExecutor.SetNodeEnabled("cab", false);
+        mExecutor.Reset();
+        return;
+      }
+
+      const auto path = WriteImpulseToWav(impulse, impulseSampleRate);
       mTempFiles.push_back(path);
       LoadImpulse(path);
     }
@@ -259,7 +386,7 @@ namespace
         return;
       }
 
-      const auto path = WriteStereoImpulseToWav(left, right, kSampleRate);
+      const auto path = WriteStereoImpulseToWav(left, right, mSampleRate);
       mTempFiles.push_back(path);
       LoadImpulse(path);
     }
@@ -275,10 +402,10 @@ namespace
         return;
       }
 
-      const auto pathA = WriteImpulseToWav(impulseA, kSampleRate);
+      const auto pathA = WriteImpulseToWav(impulseA, mSampleRate);
       mTempFiles.push_back(pathA);
 
-      const auto pathB = WriteImpulseToWav(impulseB.empty() ? std::vector<float>{1.0f} : impulseB, kSampleRate);
+      const auto pathB = WriteImpulseToWav(impulseB.empty() ? std::vector<float>{1.0f} : impulseB, mSampleRate);
       mTempFiles.push_back(pathB);
 
       guitarfx::SignalGraph graph;
@@ -330,7 +457,7 @@ namespace
 
       mExecutor.SetResourceLibrary(&mResourceLibrary);
       mExecutor.SetGraph(graph);
-      mExecutor.Prepare(kSampleRate, mMaxBlockSize);
+      mExecutor.Prepare(mSampleRate, mMaxBlockSize);
       mExecutor.Reset();
     }
 
@@ -426,7 +553,7 @@ namespace
 
       mExecutor.SetResourceLibrary(&mResourceLibrary);
       mExecutor.SetGraph(graph);
-      mExecutor.Prepare(kSampleRate, mMaxBlockSize);
+      mExecutor.Prepare(mSampleRate, mMaxBlockSize);
     }
 
     void LoadImpulse(const fs::path& path)
@@ -462,8 +589,24 @@ namespace
     std::vector<float> mOutputBufferL;
     std::vector<float> mOutputBufferR;
     std::vector<fs::path> mTempFiles;
-    const int mMaxBlockSize = kBlockSize;
+    double mSampleRate = kSampleRate;
+    int mMaxBlockSize = kBlockSize;
   };
+
+  std::vector<double> RenderCabAtRate(const std::vector<double>& source,
+                                      double hostRate,
+                                      const std::vector<float>& impulse,
+                                      double impulseRate,
+                                      bool autoGain)
+  {
+    IRConvolutionTester tester(hostRate, kBlockSize);
+    tester.SetImpulseAtSampleRate(impulse, impulseRate);
+    tester.SetCabParam("autoGainComp", autoGain ? 1.0 : 0.0);
+
+    std::vector<double> rendered = source;
+    tester.Convolve(rendered);
+    return rendered;
+  }
 
   // Test 1: Simple identity IR [1.0] should pass through unchanged
   bool TestIdentityIR()
@@ -1302,6 +1445,132 @@ namespace
     }
   }
 
+  bool TestCabIR192kHzLevelMatches48kHz()
+  {
+    std::cout << "Test: IR cab 192kHz level matches 48kHz... ";
+
+    try
+    {
+      constexpr double sourceRate = 48000.0;
+      const std::size_t irLength = static_cast<std::size_t>(sourceRate * 0.120);
+      std::vector<float> impulse(irLength, 0.0f);
+
+      const double pole = std::exp(-2.0 * M_PI * 1800.0 / sourceRate);
+      for (std::size_t i = 0; i < impulse.size(); ++i)
+      {
+        const double t = static_cast<double>(i) / sourceRate;
+        const double earlyCabBody = (1.0 - pole) * std::pow(pole, static_cast<double>(i));
+        const double lateResonance = t > 0.050
+          ? 0.0008 * std::sin(2.0 * M_PI * 620.0 * t) * std::exp(-(t - 0.050) / 0.080)
+          : 0.0;
+        impulse[i] = static_cast<float>(earlyCabBody + lateResonance);
+      }
+
+      auto renderRms = [&](double hostRate, bool autoGain) {
+        IRConvolutionTester tester(hostRate, kBlockSize);
+        tester.SetImpulseAtSampleRate(impulse, sourceRate);
+        tester.SetCabParam("autoGainComp", autoGain ? 1.0 : 0.0);
+
+        const std::size_t sampleCount = static_cast<std::size_t>(hostRate * 0.75);
+        std::vector<double> samples(sampleCount, 0.0);
+        for (std::size_t i = 0; i < samples.size(); ++i)
+        {
+          samples[i] = 0.2 * std::sin(2.0 * M_PI * 440.0 * static_cast<double>(i) / hostRate);
+        }
+
+        tester.Convolve(samples);
+        return ComputeRmsFrom(samples, static_cast<std::size_t>(hostRate * 0.25));
+      };
+
+      const double rms48 = renderRms(48000.0, false);
+      const double rms192 = renderRms(192000.0, false);
+      const double ratio = rms192 / std::max(1e-12, rms48);
+
+      const double rms48Auto = renderRms(48000.0, true);
+      const double rms192Auto = renderRms(192000.0, true);
+      const double autoRatio = rms192Auto / std::max(1e-12, rms48Auto);
+
+      const bool ok = ratio > 0.75 && ratio < 1.25 && autoRatio > 0.75 && autoRatio < 1.25;
+      if (!ok)
+      {
+        std::cout << "FAILED (ratio=" << ratio << ", autoRatio=" << autoRatio
+                  << ", rms48=" << rms48 << ", rms192=" << rms192
+                  << ", rms48Auto=" << rms48Auto << ", rms192Auto=" << rms192Auto << ")\n";
+        return false;
+      }
+
+      std::cout << "OK (ratio=" << ratio << ", autoRatio=" << autoRatio << ")\n";
+      return true;
+    }
+    catch (const std::exception& e)
+    {
+      std::cout << "FAILED - Exception: " << e.what() << "\n";
+      return false;
+    }
+  }
+
+  bool TestDemoRenderCabIRRateEquivalence()
+  {
+    std::cout << "Test: Demo-style IR cab render matches across rates... ";
+
+    try
+    {
+      constexpr double sourceRate = 48000.0;
+      constexpr double highRate = 192000.0;
+
+      std::vector<double> source48(static_cast<std::size_t>(sourceRate * 0.75), 0.0);
+      for (std::size_t i = 0; i < source48.size(); ++i)
+      {
+        const double t = static_cast<double>(i) / sourceRate;
+        const double pickEnvelope = std::min(1.0, t / 0.015) * std::exp(-t / 1.2);
+        const double guitarLike = std::sin(2.0 * M_PI * 110.0 * t)
+          + 0.55 * std::sin(2.0 * M_PI * 220.0 * t + 0.2)
+          + 0.24 * std::sin(2.0 * M_PI * 770.0 * t + 0.6)
+          + 0.10 * std::sin(2.0 * M_PI * 2400.0 * t + 1.1);
+        source48[i] = 0.16 * std::tanh(2.2 * guitarLike) * pickEnvelope;
+      }
+
+      const std::size_t irLength = static_cast<std::size_t>(sourceRate * 0.120);
+      std::vector<float> impulse(irLength, 0.0f);
+      const double pole = std::exp(-2.0 * M_PI * 1500.0 / sourceRate);
+      for (std::size_t i = 0; i < impulse.size(); ++i)
+      {
+        const double t = static_cast<double>(i) / sourceRate;
+        const double directAndBody = (1.0 - pole) * std::pow(pole, static_cast<double>(i));
+        const double coneResonance = 0.0010 * std::sin(2.0 * M_PI * 720.0 * t) * std::exp(-t / 0.055);
+        const double lateRoom = t > 0.045
+          ? 0.00045 * std::sin(2.0 * M_PI * 310.0 * t + 0.4) * std::exp(-(t - 0.045) / 0.075)
+          : 0.0;
+        impulse[i] = static_cast<float>(directAndBody + coneResonance + lateRoom);
+      }
+
+      const auto rendered48 = RenderCabAtRate(source48, sourceRate, impulse, sourceRate, true);
+      const auto source192 = ConvertSampleRate(source48, sourceRate, highRate);
+      const auto rendered192 = RenderCabAtRate(source192, highRate, impulse, sourceRate, true);
+      const auto rendered192At48 = ConvertSampleRate(rendered192, highRate, sourceRate);
+
+      const std::size_t compareStart = static_cast<std::size_t>(sourceRate * 0.25);
+      const int lag = FindBestAlignedLag(rendered48, rendered192At48, 1024, compareStart);
+      const double normalizedError = ComputeAlignedNormalizedRmsDifference(rendered48, rendered192At48, lag, compareStart);
+      const double rmsRatio = ComputeRmsFrom(rendered192At48, compareStart) / std::max(1.0e-12, ComputeRmsFrom(rendered48, compareStart));
+
+      const bool ok = normalizedError < 0.18 && rmsRatio > 0.90 && rmsRatio < 1.10;
+      if (!ok)
+      {
+        std::cout << "FAILED (error=" << normalizedError << ", rmsRatio=" << rmsRatio << ", lag=" << lag << ")\n";
+        return false;
+      }
+
+      std::cout << "OK (error=" << normalizedError << ", rmsRatio=" << rmsRatio << ", lag=" << lag << ")\n";
+      return true;
+    }
+    catch (const std::exception& e)
+    {
+      std::cout << "FAILED - Exception: " << e.what() << "\n";
+      return false;
+    }
+  }
+
   // ==========================================================================
   // Long IR Tests - Tests using actual IR files from resources
   // ==========================================================================
@@ -1761,6 +2030,8 @@ int main()
   runTest(TestDualIRBlendEndpoints);
   runTest(TestAutoGainCompBoostsLowEnergyIR);
   runTest(TestHighCutAttenuatesHighFrequency);
+  runTest(TestCabIR192kHzLevelMatches48kHz);
+  runTest(TestDemoRenderCabIRRateEquivalence);
 
 #ifdef GUITARFX_TEST_RESOURCES_DIR
   // Long IR tests using actual IR files

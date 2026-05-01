@@ -551,7 +551,7 @@ namespace guitarfx
     }
 
     // Get processed (potentially truncated) IR based on quality setting
-    std::vector<float> GetProcessedImpulse(const std::vector<float> &samples) const
+    std::vector<float> GetProcessedImpulse(const std::vector<float> &samples, double impulseSampleRate) const
     {
       if (samples.empty())
         return {};
@@ -560,7 +560,8 @@ namespace guitarfx
       if (mQuality == IRQuality::Full)
         return samples;
 
-      const size_t maxSamples = GetMaxIRSamples(mQuality, mSampleRate);
+      const double qualitySampleRate = impulseSampleRate > 0.0 ? impulseSampleRate : mSampleRate;
+      const size_t maxSamples = GetMaxIRSamples(mQuality, qualitySampleRate);
       if (maxSamples == 0 || samples.size() <= maxSamples)
         return samples;
 
@@ -598,7 +599,7 @@ namespace guitarfx
         return;
       }
 
-      const size_t maxSamples = GetMaxIRSamples(mQuality, mSampleRate);
+      const size_t maxSamples = GetMaxIRSamples(mQuality, mIRSampleRate);
       const size_t length = std::min(mImpulseL.size(), mImpulseR.size());
       if (maxSamples == 0 || length <= maxSamples)
       {
@@ -623,6 +624,70 @@ namespace guitarfx
           right[truncLength - kFadeLength + i] *= fadeGain;
         }
       }
+    }
+
+    [[nodiscard]] static double Sinc(double value)
+    {
+      if (std::abs(value) < 1.0e-10)
+        return 1.0;
+
+      const double angle = kPi * value;
+      return std::sin(angle) / angle;
+    }
+
+    [[nodiscard]] static double BlackmanWindow(double distance)
+    {
+      constexpr int kHalfTaps = 64;
+      const double normalizedDistance = std::abs(distance) / static_cast<double>(kHalfTaps);
+      if (normalizedDistance >= 1.0)
+        return 0.0;
+
+      return 0.42 + 0.5 * std::cos(kPi * normalizedDistance)
+        + 0.08 * std::cos(2.0 * kPi * normalizedDistance);
+    }
+
+    static void ResampleImpulseForConvolution(std::vector<float> &samples, double sourceRate, double targetRate)
+    {
+      if (samples.empty() || sourceRate <= 0.0 || targetRate <= 0.0 || std::abs(sourceRate - targetRate) <= 1.0)
+      {
+        return;
+      }
+
+      constexpr int kHalfTaps = 64;
+      const double ratio = targetRate / sourceRate;
+      const double cutoff = std::min(ratio, 1.0);
+      const std::size_t newSize = static_cast<std::size_t>(std::ceil(static_cast<double>(samples.size()) * ratio));
+      if (newSize == 0)
+      {
+        samples.clear();
+        return;
+      }
+
+      std::vector<float> resampled(newSize, 0.0f);
+      const int sourceLength = static_cast<int>(samples.size());
+      const double coefficientScale = sourceRate / targetRate;
+
+      for (std::size_t outputIndex = 0; outputIndex < newSize; ++outputIndex)
+      {
+        const double sourcePosition = static_cast<double>(outputIndex) / ratio;
+        const int center = static_cast<int>(std::floor(sourcePosition));
+        double sum = 0.0;
+
+        for (int tapOffset = -kHalfTaps; tapOffset <= kHalfTaps; ++tapOffset)
+        {
+          const int sourceIndex = center + tapOffset;
+          if (sourceIndex < 0 || sourceIndex >= sourceLength)
+            continue;
+
+          const double distance = sourcePosition - static_cast<double>(sourceIndex);
+          const double tap = cutoff * Sinc(distance * cutoff) * BlackmanWindow(distance);
+          sum += static_cast<double>(samples[static_cast<std::size_t>(sourceIndex)]) * tap;
+        }
+
+        resampled[outputIndex] = static_cast<float>(sum * coefficientScale);
+      }
+
+      samples = std::move(resampled);
     }
 
     bool LoadWavFileInto(const std::filesystem::path &path,
@@ -687,8 +752,9 @@ namespace guitarfx
 
       if (isStereo && !impulseR.empty())
       {
-        std::vector<float> processedL = GetProcessedImpulse(impulseL);
-        std::vector<float> processedR = GetProcessedImpulse(impulseR);
+        const double sourceRate = impulseSampleRate > 0.0 ? impulseSampleRate : mSampleRate;
+        std::vector<float> processedL = GetProcessedImpulse(impulseL, sourceRate);
+        std::vector<float> processedR = GetProcessedImpulse(impulseR, sourceRate);
 
         if (processedL.empty() || processedR.empty())
           return false;
@@ -697,17 +763,17 @@ namespace guitarfx
         processedL.resize(length);
         processedR.resize(length);
 
-        if (std::abs(impulseSampleRate - mSampleRate) > 1.0)
-        {
-          // Use the highest-quality path for sample-rate conversion so cabinet
-          // tone remains consistent across host sample-rate changes.
-          irwav::ResampleSinc(processedL, impulseSampleRate, mSampleRate);
-          irwav::ResampleSinc(processedR, impulseSampleRate, mSampleRate);
-        }
-
         if (outEnergy)
         {
           *outEnergy = ComputeSignalEnergyStereo(processedL, processedR);
+        }
+
+        if (std::abs(sourceRate - mSampleRate) > 1.0)
+        {
+          // Cabinet IR samples are FIR coefficients, so resampling needs to
+          // preserve coefficient area rather than audio-waveform peak level.
+          ResampleImpulseForConvolution(processedL, sourceRate, mSampleRate);
+          ResampleImpulseForConvolution(processedR, sourceRate, mSampleRate);
         }
 
         if (!convolverL.SetImpulse(processedL, mMaxBlockSize) ||
@@ -721,20 +787,21 @@ namespace guitarfx
         return true;
       }
 
-      std::vector<float> processedIR = GetProcessedImpulse(impulseL);
+      const double sourceRate = impulseSampleRate > 0.0 ? impulseSampleRate : mSampleRate;
+      std::vector<float> processedIR = GetProcessedImpulse(impulseL, sourceRate);
       if (processedIR.empty())
         return false;
-
-      if (std::abs(impulseSampleRate - mSampleRate) > 1.0)
-      {
-        // Use the highest-quality path for sample-rate conversion so cabinet
-        // tone remains consistent across host sample-rate changes.
-        irwav::ResampleSinc(processedIR, impulseSampleRate, mSampleRate);
-      }
 
       if (outEnergy)
       {
         *outEnergy = ComputeSignalEnergy(processedIR);
+      }
+
+      if (std::abs(sourceRate - mSampleRate) > 1.0)
+      {
+        // Cabinet IR samples are FIR coefficients, so resampling needs to
+        // preserve coefficient area rather than audio-waveform peak level.
+        ResampleImpulseForConvolution(processedIR, sourceRate, mSampleRate);
       }
 
       if (!convolverL.SetImpulse(processedIR, mMaxBlockSize) ||

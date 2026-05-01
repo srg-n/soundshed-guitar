@@ -1,14 +1,18 @@
 #pragma once
 
 #include "dsp/EffectProcessor.h"
+#include "dsp/BlockSincResampler.h"
 #include "dsp/LevelTargets.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/EffectGuids.h"
+#include "dsp/effects/NAMSampleRate.h"
 #include "dsp/simd/SimdMath.h"
 #include "NAM/dsp.h"
 #include "NAM/get_dsp.h"
 #include <filesystem>
 #include <algorithm>
+#include <cstdint>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <string>
@@ -37,7 +41,6 @@ namespace guitarfx
     {
       mSampleRate = sampleRate;
       mMaxBlockSize = maxBlockSize;
-      mPrepared = true;
 
       mInputBufferL.resize(static_cast<size_t>(maxBlockSize));
       mInputBufferR.resize(static_cast<size_t>(maxBlockSize));
@@ -46,32 +49,28 @@ namespace guitarfx
       mDryBufferL.resize(static_cast<size_t>(maxBlockSize));
       mDryBufferR.resize(static_cast<size_t>(maxBlockSize));
 
-      if (mModelLeft)
-      {
-        mModelLeft->Reset(sampleRate, maxBlockSize);
-      }
-      if (mModelRight)
-      {
-        mModelRight->Reset(sampleRate, maxBlockSize);
-        CheckSampleRateMismatch();
-      }
+      ConfigureModelProcessing();
     }
 
     void Reset() override
     {
       if (mModelLeft)
       {
-        mModelLeft->Reset(mSampleRate, mMaxBlockSize);
+        mModelLeft->Reset(mModelSampleRate, mMaxModelBlockSize);
       }
       if (mModelRight)
       {
-        mModelRight->Reset(mSampleRate, mMaxBlockSize);
+        mModelRight->Reset(mModelSampleRate, mMaxModelBlockSize);
       }
 
       std::fill(mInputBufferL.begin(), mInputBufferL.end(), static_cast<NAM_SAMPLE>(0.0));
       std::fill(mInputBufferR.begin(), mInputBufferR.end(), static_cast<NAM_SAMPLE>(0.0));
       std::fill(mOutputBufferL.begin(), mOutputBufferL.end(), static_cast<NAM_SAMPLE>(0.0));
       std::fill(mOutputBufferR.begin(), mOutputBufferR.end(), static_cast<NAM_SAMPLE>(0.0));
+      std::fill(mModelInputBufferL.begin(), mModelInputBufferL.end(), static_cast<NAM_SAMPLE>(0.0));
+      std::fill(mModelInputBufferR.begin(), mModelInputBufferR.end(), static_cast<NAM_SAMPLE>(0.0));
+      std::fill(mModelOutputBufferL.begin(), mModelOutputBufferL.end(), static_cast<NAM_SAMPLE>(0.0));
+      std::fill(mModelOutputBufferR.begin(), mModelOutputBufferR.end(), static_cast<NAM_SAMPLE>(0.0));
       std::fill(mDryBufferL.begin(), mDryBufferL.end(), 0.0f);
       std::fill(mDryBufferR.begin(), mDryBufferR.end(), 0.0f);
     }
@@ -107,17 +106,7 @@ namespace guitarfx
         const float wetMix = static_cast<float>(mMix);
         const float dryMix = 1.0f - wetMix;
 
-        NAM_SAMPLE* inputPtrL = mInputBufferL.data();
-        NAM_SAMPLE* outputPtrL = mOutputBufferL.data();
-        NAM_SAMPLE* inputPtrsL[1] = { inputPtrL };
-        NAM_SAMPLE* outputPtrsL[1] = { outputPtrL };
-        mModelLeft->process(inputPtrsL, outputPtrsL, numSamples);
-
-        NAM_SAMPLE* inputPtrR = mInputBufferR.data();
-        NAM_SAMPLE* outputPtrR = mOutputBufferR.data();
-        NAM_SAMPLE* inputPtrsR[1] = { inputPtrR };
-        NAM_SAMPLE* outputPtrsR[1] = { outputPtrR };
-        mModelRight->process(inputPtrsR, outputPtrsR, numSamples);
+        ProcessModels(numSamples);
 
         for (int i = 0; i < numSamples; ++i)
         {
@@ -279,16 +268,14 @@ namespace guitarfx
           return false;
         }
 
-        modelLeft->Reset(mSampleRate, mMaxBlockSize);
-        modelRight->Reset(mSampleRate, mMaxBlockSize);
         mModelLeft = std::move(modelLeft);
         mModelRight = std::move(modelRight);
         mModelPath = resourcePath;
         mResourceNormalizationGainDb = ReadResourceMetadataDouble(ref, "normalizationGainDb");
+        ConfigureModelProcessing();
 
         if (mModelLeft)
         {
-          CheckSampleRateMismatch();
           mModelInputLevel = mModelLeft->HasInputLevel() ? std::optional<double>(mModelLeft->GetInputLevel()) : std::nullopt;
           mModelOutputLevel = mModelLeft->HasOutputLevel() ? std::optional<double>(mModelLeft->GetOutputLevel()) : std::nullopt;
           mModelLoudness = mModelLeft->HasLoudness() ? std::optional<double>(mModelLeft->GetLoudness()) : std::nullopt;
@@ -311,15 +298,23 @@ namespace guitarfx
     std::unique_ptr<nam::DSP> mModelLeft;
     std::unique_ptr<nam::DSP> mModelRight;
     std::filesystem::path mModelPath;
-    bool mSampleRateMismatch = false;
-    bool mPrepared = false;
+    bool mResamplingActive = false;
+    double mModelSampleRate = 44100.0;
+    int mMaxModelBlockSize = 512;
 
     std::vector<NAM_SAMPLE> mInputBufferL;
     std::vector<NAM_SAMPLE> mInputBufferR;
     std::vector<NAM_SAMPLE> mOutputBufferL;
     std::vector<NAM_SAMPLE> mOutputBufferR;
+    std::vector<NAM_SAMPLE> mModelInputBufferL;
+    std::vector<NAM_SAMPLE> mModelInputBufferR;
+    std::vector<NAM_SAMPLE> mModelOutputBufferL;
+    std::vector<NAM_SAMPLE> mModelOutputBufferR;
     std::vector<float> mDryBufferL;
     std::vector<float> mDryBufferR;
+
+    BlockSincResampler mInputResampler;
+    BlockSincResampler mOutputResampler;
 
     double mUserInputGain = 1.0;
     double mUserOutputGain = 1.0;
@@ -375,12 +370,76 @@ namespace guitarfx
         RecalculateAutoGains();
     }
 
-    void CheckSampleRateMismatch()
+    [[nodiscard]] double ResolveModelSampleRate() const
     {
       if (!mModelLeft)
-        return;
+        return mSampleRate;
+
       const double expectedSR = mModelLeft->GetExpectedSampleRate();
-      mSampleRateMismatch = (expectedSR > 0.0 && std::abs(expectedSR - mSampleRate) > 1.0);
+      return ResolveNamModelProcessingSampleRate(expectedSR, mSampleRate);
+    }
+
+    void ConfigureModelProcessing()
+    {
+      mModelSampleRate = ResolveModelSampleRate();
+      mResamplingActive = std::abs(mModelSampleRate - mSampleRate) > 1.0;
+      mMaxModelBlockSize = mResamplingActive
+        ? BlockSincResampler::ComputeMaxOutputFrameCount(mMaxBlockSize, mSampleRate, mModelSampleRate)
+        : mMaxBlockSize;
+      mMaxModelBlockSize = std::max(1, mMaxModelBlockSize);
+
+      mModelInputBufferL.resize(static_cast<size_t>(mMaxModelBlockSize));
+      mModelInputBufferR.resize(static_cast<size_t>(mMaxModelBlockSize));
+      mModelOutputBufferL.resize(static_cast<size_t>(mMaxModelBlockSize));
+      mModelOutputBufferR.resize(static_cast<size_t>(mMaxModelBlockSize));
+
+      mInputResampler.Prepare(mSampleRate, mModelSampleRate, mMaxBlockSize);
+      mOutputResampler.Prepare(mModelSampleRate, mSampleRate, mMaxModelBlockSize);
+
+      if (mModelLeft)
+        mModelLeft->Reset(mModelSampleRate, mMaxModelBlockSize);
+      if (mModelRight)
+        mModelRight->Reset(mModelSampleRate, mMaxModelBlockSize);
+    }
+
+    void ProcessModels(int numSamples)
+    {
+      if (!mResamplingActive)
+      {
+        NAM_SAMPLE* inputPtrL = mInputBufferL.data();
+        NAM_SAMPLE* outputPtrL = mOutputBufferL.data();
+        NAM_SAMPLE* inputPtrsL[1] = { inputPtrL };
+        NAM_SAMPLE* outputPtrsL[1] = { outputPtrL };
+        mModelLeft->process(inputPtrsL, outputPtrsL, numSamples);
+
+        NAM_SAMPLE* inputPtrR = mInputBufferR.data();
+        NAM_SAMPLE* outputPtrR = mOutputBufferR.data();
+        NAM_SAMPLE* inputPtrsR[1] = { inputPtrR };
+        NAM_SAMPLE* outputPtrsR[1] = { outputPtrR };
+        mModelRight->process(inputPtrsR, outputPtrsR, numSamples);
+        return;
+      }
+
+      int modelFrames = BlockSincResampler::ComputeOutputFrameCount(numSamples, mSampleRate, mModelSampleRate);
+      modelFrames = std::clamp(modelFrames, 1, mMaxModelBlockSize);
+
+      mInputResampler.ProcessFixedOutput(mInputBufferL.data(), numSamples, mModelInputBufferL.data(), modelFrames);
+      mInputResampler.ProcessFixedOutput(mInputBufferR.data(), numSamples, mModelInputBufferR.data(), modelFrames);
+
+      NAM_SAMPLE* inputPtrL = mModelInputBufferL.data();
+      NAM_SAMPLE* outputPtrL = mModelOutputBufferL.data();
+      NAM_SAMPLE* inputPtrsL[1] = { inputPtrL };
+      NAM_SAMPLE* outputPtrsL[1] = { outputPtrL };
+      mModelLeft->process(inputPtrsL, outputPtrsL, modelFrames);
+
+      NAM_SAMPLE* inputPtrR = mModelInputBufferR.data();
+      NAM_SAMPLE* outputPtrR = mModelOutputBufferR.data();
+      NAM_SAMPLE* inputPtrsR[1] = { inputPtrR };
+      NAM_SAMPLE* outputPtrsR[1] = { outputPtrR };
+      mModelRight->process(inputPtrsR, outputPtrsR, modelFrames);
+
+      mOutputResampler.ProcessFixedOutput(mModelOutputBufferL.data(), modelFrames, mOutputBufferL.data(), numSamples);
+      mOutputResampler.ProcessFixedOutput(mModelOutputBufferR.data(), modelFrames, mOutputBufferR.data(), numSamples);
     }
 
     static bool ParseBool(const std::string &value)

@@ -601,7 +601,7 @@ body:not(.is-standalone) .main-content .metronome-only {
 
 .footer-demo-audio-actions-menu {
   right: 0;
-  min-width: 148px;
+  min-width: 180px;
   z-index: 60;
 }
 
