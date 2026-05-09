@@ -11,6 +11,7 @@ import { renderRiffLibraryPanel } from "./riffLibrary.js";
 
 const API_KEY_SETTING = "jam.youtubeApiKey";
 const FAVORITES_SETTING = "jam.favorites";
+const SEARCH_CACHE_SETTING = "jam.searchCache";
 const PLAYER_UI_SETTING = "jam.playerUi";
 const PLAYER_WIDTH = 420;
 const PLAYER_MINIMIZED_WIDTH = 280;
@@ -26,6 +27,11 @@ let initialSearchTriggered = false;
 type JamSectionId = "backingTracks" | "scales" | "riffs";
 type BackingTracksTabId = "search" | "favorites";
 type LegacyJamState = JamState & { activeSection?: JamSectionId; activeTab?: BackingTracksTabId | "riffs" };
+type JamSearchCache = {
+  query: string;
+  normalizedQuery: string;
+  results: JamVideoSummary[];
+};
 
 function ensureJamState(): JamState {
   if (!uiState.jam) {
@@ -80,6 +86,30 @@ function normalizeFavorites(value: unknown): JamVideoSummary[] {
     return [];
   }
   return value.filter(isJamVideoSummary);
+}
+
+function normalizeSearchCache(value: unknown): JamSearchCache | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const normalizedQuery = typeof record.normalizedQuery === "string"
+    ? normalizeSearchQuery(record.normalizedQuery)
+    : "";
+  if (!normalizedQuery) {
+    return null;
+  }
+
+  const query = typeof record.query === "string" && record.query.trim()
+    ? record.query.trim()
+    : normalizedQuery;
+
+  return {
+    query,
+    normalizedQuery,
+    results: normalizeFavorites(record.results),
+  };
 }
 
 function normalizePlayerState(value: unknown, current: JamPlayerState): JamPlayerState {
@@ -144,6 +174,40 @@ function persistFavorites(): void {
   setAppSetting(FAVORITES_SETTING, payload);
 }
 
+function persistSearchCache(query: string, results: JamVideoSummary[]): void {
+  const normalizedQuery = normalizeSearchQuery(query);
+  if (!normalizedQuery) {
+    return;
+  }
+
+  const payload = {
+    query: query.trim() || normalizedQuery,
+    normalizedQuery,
+    results: results.map((result) => ({
+      videoId: result.videoId,
+      title: result.title,
+      channelTitle: result.channelTitle,
+      thumbnailUrl: result.thumbnailUrl,
+    })),
+  };
+  uiState.appSettings[SEARCH_CACHE_SETTING] = payload as unknown as AppSettingValue;
+  setAppSetting(SEARCH_CACHE_SETTING, payload);
+}
+
+function getCachedSearch(query: string): JamSearchCache | null {
+  const normalizedQuery = normalizeSearchQuery(query);
+  if (!normalizedQuery) {
+    return null;
+  }
+
+  const cached = normalizeSearchCache(uiState.appSettings?.[SEARCH_CACHE_SETTING]);
+  if (!cached || cached.normalizedQuery !== normalizedQuery) {
+    return null;
+  }
+
+  return cached;
+}
+
 function persistPlayerUi(): void {
   const jam = ensureJamState();
   const payload = {
@@ -206,7 +270,7 @@ function maybeRunInitialSearch(): void {
   }
 
   jam.apiKeyAvailable = getApiKey().length > 0;
-  if (!jam.apiKeyAvailable || jam.results.length > 0 || jam.loading || initialSearchTriggered) {
+  if (!jam.apiKeyAvailable || getCachedSearch(jam.query) || jam.results.length > 0 || jam.favorites.length > 0 || jam.loading || initialSearchTriggered) {
     return;
   }
 
@@ -314,6 +378,16 @@ async function runSearch(): Promise<void> {
     return;
   }
 
+  const cached = getCachedSearch(jam.query);
+  if (cached) {
+    jam.results = cached.results;
+    jam.loading = false;
+    jam.error = jam.results.length === 0 ? "No matching backing tracks found." : "";
+    appendLog(`jam search cache hit → ${cached.normalizedQuery}`);
+    renderJamPanel();
+    return;
+  }
+
   const apiKey = getApiKey();
   if (!apiKey) {
     jam.error = "Jam search is unavailable in this build.";
@@ -349,6 +423,7 @@ async function runSearch(): Promise<void> {
     jam.results = normalizeSearchResults(payload);
     jam.loading = false;
     jam.error = jam.results.length === 0 ? "No matching backing tracks found." : "";
+    persistSearchCache(jam.query, jam.results);
     appendLog(`jam search → ${query}`);
   } catch (error) {
     if (requestId !== searchRequestId) {
@@ -716,6 +791,15 @@ export function applyJamAppSettings(): void {
   }
   jam.apiKeyAvailable = getApiKey().length > 0;
   jam.favorites = normalizeFavorites(uiState.appSettings?.[FAVORITES_SETTING]);
+  const searchCache = normalizeSearchCache(uiState.appSettings?.[SEARCH_CACHE_SETTING]);
+  const currentNormalizedQuery = normalizeSearchQuery(jam.query);
+  if (searchCache && !jam.loading && (jam.results.length === 0 || searchCache.normalizedQuery === currentNormalizedQuery)) {
+    if (!jam.query.trim() || jam.query === DEFAULT_JAM_QUERY || searchCache.normalizedQuery === currentNormalizedQuery) {
+      jam.query = searchCache.query;
+    }
+    jam.results = searchCache.results;
+    jam.error = jam.results.length === 0 ? "No matching backing tracks found." : "";
+  }
   jam.player = normalizePlayerState(uiState.appSettings?.[PLAYER_UI_SETTING], jam.player);
   jam.player.width = PLAYER_WIDTH;
   clampPlayerPosition(jam.player);
