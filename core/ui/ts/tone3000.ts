@@ -1,15 +1,16 @@
 import { uiState } from "./state.js";
 import { appendLog } from "./logging.js";
-import { showNotification } from "./notifications.js";
 import { setAppSetting } from "./bridge.js";
 import type { AppSettingValue, Tone3000Session } from "./types.js";
 
 const TONE3000_API_KEY_SETTING = "tone3000.apiKey";
 const TONE3000_API_BASE = "https://www.tone3000.com/api/v1";
 const TONE3000_SESSION_URL = "https://www.tone3000.com/api/v1/auth/session";
+const SESSION_REFRESH_LEAD_MS = 60_000;
+const SESSION_REFRESH_RETRY_MS = 60_000;
 
-let sessionInitialized = false;
 let sessionRequest: Promise<void> | null = null;
+let sessionRefreshTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
 
 function getApiKeyFromSettings(): string {
   const value: AppSettingValue = uiState.appSettings?.[TONE3000_API_KEY_SETTING] ?? null;
@@ -21,6 +22,47 @@ function maskApiKey(apiKey: string): string {
     return "***";
   }
   return `${apiKey.slice(0, 3)}***${apiKey.slice(-3)}`;
+}
+
+function clearSessionRefreshTimer(): void {
+  if (!sessionRefreshTimer) {
+    return;
+  }
+  globalThis.clearTimeout(sessionRefreshTimer);
+  sessionRefreshTimer = null;
+}
+
+function scheduleSessionRefresh(apiKey: string): void {
+  clearSessionRefreshTimer();
+
+  const session = uiState.tone3000Session;
+  if (!session?.expiresAt) {
+    return;
+  }
+
+  const msUntilRefresh = Math.max(5_000, session.expiresAt - Date.now() - SESSION_REFRESH_LEAD_MS);
+  sessionRefreshTimer = globalThis.setTimeout(() => {
+    void refreshSession(apiKey);
+  }, msUntilRefresh);
+}
+
+async function refreshSession(apiKey: string): Promise<void> {
+  const normalized = apiKey.trim();
+  if (!normalized) {
+    clearSessionRefreshTimer();
+    return;
+  }
+
+  await startSession(normalized);
+  if (uiState.tone3000Session?.accessToken) {
+    scheduleSessionRefresh(normalized);
+    return;
+  }
+
+  clearSessionRefreshTimer();
+  sessionRefreshTimer = globalThis.setTimeout(() => {
+    void refreshSession(normalized);
+  }, SESSION_REFRESH_RETRY_MS);
 }
 
 async function startSession(apiKey: string): Promise<void> {
@@ -61,12 +103,12 @@ async function startSession(apiKey: string): Promise<void> {
 
       uiState.tone3000Session = session;
       appendLog(`tone3000 session started (${maskApiKey(apiKey)})`);
-      showNotification("Tone3000 session ready");
+      scheduleSessionRefresh(apiKey);
     } catch (error) {
       uiState.tone3000Session = null;
       const message = error instanceof Error ? error.message : String(error);
       appendLog(`tone3000 session failed (${maskApiKey(apiKey)}): ${message}`);
-      showNotification("Tone3000 auth failed", message);
+      clearSessionRefreshTimer();
     } finally {
       sessionRequest = null;
     }
@@ -76,13 +118,16 @@ async function startSession(apiKey: string): Promise<void> {
 }
 
 export async function ensureTone3000Session(): Promise<void> {
-  if (sessionInitialized) {
+  const apiKey = getApiKeyFromSettings();
+  if (!apiKey) {
+    clearSessionRefreshTimer();
+    uiState.tone3000Session = null;
     return;
   }
-  sessionInitialized = true;
 
-  let apiKey = getApiKeyFromSettings();
-  if (!apiKey) {
+  const session = uiState.tone3000Session;
+  if (session?.accessToken && (session.expiresAt - Date.now()) > SESSION_REFRESH_LEAD_MS) {
+    scheduleSessionRefresh(apiKey);
     return;
   }
 
@@ -191,6 +236,7 @@ export async function handleAppSettingUpdate(key: string, value: AppSettingValue
   const normalized = typeof value === "string" ? value.trim() : "";
   if (!normalized) {
     uiState.tone3000Session = null;
+    clearSessionRefreshTimer();
     appendLog("tone3000 api key cleared");
     return;
   }
