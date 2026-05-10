@@ -95,8 +95,8 @@ const NODE_BYPASS_DRAG_DISTANCE_PX = 36;
 const NODE_BYPASS_DRAG_DIRECTION_RATIO = 1.2;
 
 const EFFECT_VISUAL_BACKGROUNDS: Record<string, string> = {
-  amp: "url('../images/equipment/amps/amp-04.png')",
-  cab: "url('../images/equipment/cabs/cab-02.png')",
+  amp: "linear-gradient(145deg, rgba(44, 62, 94, 0.92) 0%, rgba(15, 20, 32, 0.96) 100%)",
+  cab: "linear-gradient(145deg, rgba(62, 76, 96, 0.92) 0%, rgba(16, 20, 30, 0.96) 100%)",
   eq: "linear-gradient(145deg, rgba(56, 96, 132, 0.95) 0%, rgba(18, 24, 44, 0.95) 100%)",
   dynamics: "linear-gradient(145deg, rgba(132, 64, 64, 0.95) 0%, rgba(38, 18, 24, 0.95) 100%)",
   modulation: "linear-gradient(145deg, rgba(88, 64, 132, 0.95) 0%, rgba(26, 18, 44, 0.95) 100%)",
@@ -105,6 +105,30 @@ const EFFECT_VISUAL_BACKGROUNDS: Record<string, string> = {
   channel: "linear-gradient(145deg, rgba(148, 108, 48, 0.95) 0%, rgba(38, 28, 12, 0.95) 100%)",
   utility: "linear-gradient(145deg, rgba(86, 86, 96, 0.95) 0%, rgba(26, 26, 30, 0.95) 100%)",
 };
+
+const EFFECT_VISUAL_EQUIPMENT_IMAGES: Record<string, string> = {
+  amp: "../images/equipment/amps/amp-04.png",
+  cab: "../images/equipment/cabs/cab-02.png",
+  neural: "../images/equipment/pedals/colourful-pedal2.png",
+};
+
+const EFFECT_VISUAL_EQUIPMENT_IMAGES_BY_TYPE: Record<string, string> = {
+  [EffectGuids.kFxNam]: "../images/equipment/pedals/basic-pedal.png",
+  fx_nam: "../images/equipment/pedals/basic-pedal.png",
+  [EffectGuids.kWasmHost]: "../images/equipment/pedals/basic-pedal.png",
+  wasm_host: "../images/equipment/pedals/basic-pedal.png",
+};
+
+function getEffectVisualizationEquipmentImage(node: GraphNode): string {
+  const resolvedType = EffectTypeRegistry.resolve(node.type);
+  const directTypeMatch = EFFECT_VISUAL_EQUIPMENT_IMAGES_BY_TYPE[resolvedType]
+    || EFFECT_VISUAL_EQUIPMENT_IMAGES_BY_TYPE[node.type];
+  if (directTypeMatch) {
+    return directTypeMatch;
+  }
+  const category = getNodeCategory(node);
+  return EFFECT_VISUAL_EQUIPMENT_IMAGES[category] || "";
+}
 
 layoutDesigner.onClose(() => {
   refreshSelectedNodeParams();
@@ -118,6 +142,7 @@ function updateEffectVisualization(node?: GraphNode): void {
 
   if (!node) {
     effectVisualizationElement.classList.remove("has-selection");
+    effectVisualizationElement.classList.remove("has-equipment-image");
     effectVisualizationElement.style.removeProperty("--effect-visual-bg");
     effectVisualizationElement.dataset.effectType = "";
     effectVisualizationElement.dataset.effectCategory = "";
@@ -126,8 +151,10 @@ function updateEffectVisualization(node?: GraphNode): void {
 
   const category = getNodeCategory(node);
   const background = EFFECT_VISUAL_BACKGROUNDS[category] || EFFECT_VISUAL_BACKGROUNDS.utility;
+  const hasEquipmentImage = Boolean(getEffectVisualizationEquipmentImage(node));
 
   effectVisualizationElement.classList.add("has-selection");
+  effectVisualizationElement.classList.toggle("has-equipment-image", hasEquipmentImage);
   effectVisualizationElement.style.setProperty("--effect-visual-bg", background);
   effectVisualizationElement.dataset.effectType = node.type;
   effectVisualizationElement.dataset.effectCategory = category;
@@ -2511,6 +2538,12 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
       ${renderIcon("gear", "effect-visualization-toolbar-icon customize-layout-icon")}
     </button>
   ` : "";
+  const equipmentImage = getEffectVisualizationEquipmentImage(node);
+  const shellEquipmentPanel = equipmentImage ? `
+    <aside class="default-effect-shell-equipment-panel" aria-hidden="true">
+      <img class="default-effect-shell-equipment-image" src="${equipmentImage}" alt="" loading="lazy" decoding="async" />
+    </aside>
+  ` : "";
   const shellMainContent = customLayoutHtml ? `
     ${layoutIncludesResourceControls ? "" : resourceSelector}
     ${customEffectActions}
@@ -2585,8 +2618,11 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
         <div class="default-effect-shell-rail" aria-hidden="true">
           <span class="default-effect-shell-meter" style="--meter-fill: 0%"></span>
         </div>
-        <div class="default-effect-shell-content">
-          ${shellMainContent}
+        <div class="default-effect-shell-content${equipmentImage ? " has-equipment-image" : ""}">
+          ${shellEquipmentPanel}
+          <div class="default-effect-shell-main">
+            ${shellMainContent}
+          </div>
         </div>
       </section>
     </div>
