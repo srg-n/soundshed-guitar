@@ -720,6 +720,26 @@ body:not(.is-standalone) .main-content .metronome-only {
   gap: 12px;
 }
 
+.footer-zoom-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.footer-zoom-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dark-dimmed);
+}
+
+.zoom-level-select {
+  min-width: 84px;
+  padding: 4px 8px;
+  font-size: 10px;
+}
+
 .footer-theme-select {
   display: flex;
   align-items: center;

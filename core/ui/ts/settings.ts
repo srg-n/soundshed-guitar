@@ -17,6 +17,7 @@ import { initCompositeEditor, renderCompositeList } from "./compositeEditor.js";
 import { initLayoutManager, renderLayoutList } from "./layoutManager.js";
 import { initBlendManager, renderBlendList } from "./blendManager.js";
 import { updateSelectedNodePeakMeter } from "./signalPath.js";
+import { updateUiSettings } from "./windowSettings.js";
 import {
   FEATURE_DEFINITIONS,
   FEATURE_FLAGS_CHANGED_EVENT,
@@ -45,11 +46,23 @@ const DSP_NOMINAL_LEVEL_MAX = -6.0;
 const DSP_PROTECTION_CEILING_DEFAULT = -1.0;
 const DSP_PROTECTION_CEILING_MIN = -6.0;
 const DSP_PROTECTION_CEILING_MAX = 0.0;
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 2.0;
+const ZOOM_DEFAULT = 1.0;
+const ZOOM_LEVEL_OPTIONS = [
+  0.75,
+  0.9,
+  1.0,
+  1.1,
+  1.25,
+  1.5,
+  1.75,
+  2.0,
+];
 
 const apiKeyInput = document.getElementById("tone3000-api-key-input") as HTMLInputElement | null;
 const saveButton = document.getElementById("tone3000-api-key-save");
 const clearButton = document.getElementById("tone3000-api-key-clear");
-const sessionStatus = document.getElementById("tone3000-session-status");
 const openAudioPreferencesButton = document.getElementById("open-audio-preferences");
 const openAudioPreferencesRow = document.getElementById("open-audio-preferences-row");
 const openAudioPreferencesHint = document.getElementById("open-audio-preferences-hint");
@@ -74,6 +87,7 @@ const equipmentTabButtons = Array.from(document.querySelectorAll(".equipment-tab
 const equipmentTabPanels = Array.from(document.querySelectorAll(".equipment-tab-panel"));
 const equipmentLibraryTabButton = document.querySelector('.equipment-tab-btn[data-equipment-tab="library"]') as HTMLElement | null;
 const themeSelect = document.getElementById("theme-select") as HTMLSelectElement | null;
+const zoomLevelSelect = document.getElementById("zoom-level-select") as HTMLSelectElement | null;
 const librarySearchInput = document.getElementById("equipment-library-search") as HTMLInputElement | null;
 const libraryTypeSelect = document.getElementById("equipment-library-type") as HTMLSelectElement | null;
 const librarySourceSelect = document.getElementById("equipment-library-source") as HTMLSelectElement | null;
@@ -119,6 +133,7 @@ let settingsInitialized = false;
 let libraryFiltersInitialized = false;
 let equipmentTabsInitialized = false;
 let themeSelectInitialized = false;
+let zoomControlsInitialized = false;
 let libraryTabsInitialized = false;
 let userInputCalibrationControlsInitialized = false;
 let dspLevelTargetsInitialized = false;
@@ -149,6 +164,7 @@ export function initSettingsPanel(): void {
   initLibraryFilters();
   initLibraryCleanup();
   initThemeSelect();
+  initZoomControls();
   initLibraryTabs();
   initLibraryExport();
 
@@ -509,6 +525,83 @@ export function initThemeSelect(): void {
   }) as EventListener);
 }
 
+export function initZoomControls(): void {
+  if (!zoomLevelSelect || zoomControlsInitialized) {
+    return;
+  }
+  zoomControlsInitialized = true;
+
+  const select = zoomLevelSelect;
+
+  function getCurrentZoom(): number {
+    const stateZoom = uiState.uiSettings?.zoom;
+    if (typeof stateZoom === "number" && Number.isFinite(stateZoom)) {
+      return stateZoom;
+    }
+    const inlineZoom = Number.parseFloat(document.body.style.zoom || "");
+    if (Number.isFinite(inlineZoom)) {
+      return inlineZoom;
+    }
+    return ZOOM_DEFAULT;
+  }
+
+  function findClosestZoomOption(zoomLevel: number): number {
+    let closest = ZOOM_LEVEL_OPTIONS[0];
+    let minDistance = Number.POSITIVE_INFINITY;
+    for (const option of ZOOM_LEVEL_OPTIONS) {
+      const distance = Math.abs(option - zoomLevel);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closest = option;
+      }
+    }
+    return closest;
+  }
+
+  function populateZoomSelect(): void {
+    if (!select) {
+      return;
+    }
+    select.innerHTML = ZOOM_LEVEL_OPTIONS
+      .map((option) => {
+        const percentage = Math.round(option * 100);
+        return `<option value="${option.toFixed(2)}">${percentage}%</option>`;
+      })
+      .join("");
+  }
+
+  function syncZoomSelect(zoomLevel: number): void {
+    const closestOption = findClosestZoomOption(zoomLevel);
+    select.value = closestOption.toFixed(2);
+  }
+
+  function setZoomLevel(zoomLevel: number): void {
+    const clampedZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomLevel));
+    uiState.uiSettings = {
+      ...(uiState.uiSettings ?? { zoom: clampedZoom }),
+      zoom: clampedZoom,
+    };
+    syncZoomSelect(clampedZoom);
+    updateUiSettings({ zoom: clampedZoom });
+  }
+
+  populateZoomSelect();
+  select.addEventListener("change", () => {
+    const selected = Number.parseFloat(select.value);
+    if (Number.isFinite(selected)) {
+      setZoomLevel(selected);
+    }
+  });
+
+  window.addEventListener("uiSettingsApplied", () => {
+    const current = getCurrentZoom();
+    syncZoomSelect(current);
+  });
+
+  const currentZoom = getCurrentZoom();
+  syncZoomSelect(currentZoom);
+}
+
 export function activateEquipmentTab(tabId: string): void {
   const resolvedTabId = resolveEquipmentTabId(tabId);
 
@@ -825,7 +918,6 @@ export function refreshSettingsView(): void {
   openAudioPreferencesRow?.toggleAttribute("hidden", !showAudioPreferences);
   openAudioPreferencesHint?.toggleAttribute("hidden", !showAudioPreferences);
   syncFeatureVisibility();
-  updateSessionStatus();
   updateSignalDiagnosticsView();
   updateCurrentVersionDisplay();
   renderLibraryView();
@@ -844,7 +936,6 @@ async function saveApiKey(): Promise<void> {
   appendLog("tone3000 api key saved");
 
   await handleAppSettingUpdate(API_KEY_SETTING, apiKey);
-  updateSessionStatus();
 }
 
 async function clearApiKey(): Promise<void> {
@@ -855,7 +946,6 @@ async function clearApiKey(): Promise<void> {
   }
 
   await handleAppSettingUpdate(API_KEY_SETTING, null);
-  updateSessionStatus();
 }
 
 function readUserInputCalibrationProfiles(): UserInputCalibrationProfile[] {
@@ -1476,24 +1566,6 @@ export function handleUserInputCalibrationDiagnosticsUpdate(): void {
   }
 
   refreshUserInputCalibrationTrainingView();
-}
-
-function updateSessionStatus(): void {
-  if (!sessionStatus) return;
-
-  if (!uiState.appSettings[API_KEY_SETTING]) {
-    sessionStatus.textContent = "No API key saved.";
-    return;
-  }
-
-  const session = uiState.tone3000Session;
-  if (!session) {
-    sessionStatus.textContent = "Session not started.";
-    return;
-  }
-
-  const remainingSeconds = Math.max(0, Math.floor((session.expiresAt - Date.now()) / 1000));
-  sessionStatus.textContent = `Session active. Expires in ${remainingSeconds}s.`;
 }
 
 type LibraryArchiveResource = {
@@ -2581,7 +2653,7 @@ function updateCurrentVersionDisplay(): void {
 }
 
 export function updateSettingsSessionStatus(): void {
-  updateSessionStatus();
+  // Session lifecycle is managed silently in tone3000.ts.
 }
 
 export function refreshSettingsUpdateBanner(): void {

@@ -4,6 +4,46 @@ import type { UiSettings } from "./types.js";
 let currentSettings: UiSettings = { zoom: 1 };
 let pendingSend = false;
 const sendDelayMs = 250;
+const DEFAULT_ZOOM = 1;
+
+function clampZoom(value: number): number {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_ZOOM;
+  }
+  return Math.max(0.5, Math.min(2.0, value));
+}
+
+function readAppliedZoom(): number {
+  const inlineZoom = (document.body.style.zoom || "").trim();
+  if (inlineZoom.length > 0) {
+    const parsedInline = Number.parseFloat(inlineZoom);
+    if (Number.isFinite(parsedInline)) {
+      return clampZoom(parsedInline);
+    }
+  }
+
+  const computedZoom = window.getComputedStyle(document.body).zoom;
+  if (computedZoom && computedZoom !== "normal") {
+    const parsedComputed = Number.parseFloat(computedZoom);
+    if (Number.isFinite(parsedComputed)) {
+      return clampZoom(parsedComputed);
+    }
+  }
+
+  return DEFAULT_ZOOM;
+}
+
+function applyZoomToDocument(zoom: number): number {
+  const clampedZoom = clampZoom(zoom);
+  document.body.style.zoom = `${clampedZoom}`;
+  return clampedZoom;
+}
+
+function notifyUiSettingsApplied(): void {
+  window.dispatchEvent(new CustomEvent("uiSettingsApplied", {
+    detail: { settings: currentSettings },
+  }));
+}
 
 function captureBounds() {
   return {
@@ -15,13 +55,7 @@ function captureBounds() {
 }
 
 function captureZoom(): number {
-  const viewport = window.visualViewport;
-  if (viewport && typeof viewport.scale === "number") {
-    return viewport.scale;
-  }
-  const zoomStyle = (document.body.style.zoom || "").trim();
-  const parsed = zoomStyle ? parseFloat(zoomStyle) : NaN;
-  return Number.isFinite(parsed) ? parsed : 1;
+  return readAppliedZoom();
 }
 
 function scheduleSend() {
@@ -35,6 +69,10 @@ function scheduleSend() {
 
 export function updateUiSettings(patch: Partial<UiSettings>): void {
   currentSettings = { ...currentSettings, ...patch };
+  if (typeof patch.zoom === "number") {
+    currentSettings.zoom = applyZoomToDocument(patch.zoom);
+    notifyUiSettingsApplied();
+  }
   scheduleSend();
 }
 
@@ -42,8 +80,9 @@ export function applyUiSettings(settings?: UiSettings): void {
   if (!settings) return;
   currentSettings = { ...currentSettings, ...settings };
 
-  const zoom = settings.zoom ?? currentSettings.zoom ?? 1;
-  document.body.style.zoom = `${zoom}`;
+  const zoom = settings.zoom ?? currentSettings.zoom ?? DEFAULT_ZOOM;
+  currentSettings.zoom = applyZoomToDocument(zoom);
+  notifyUiSettingsApplied();
 
   const bounds = settings.bounds;
   if (bounds && typeof window.resizeTo === "function") {
@@ -82,7 +121,6 @@ export function startUiSettingsTracking(): void {
   };
 
   updateMetrics();
-  scheduleSend();
 
   const onResize = () => {
     updateMetrics();

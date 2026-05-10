@@ -17,7 +17,7 @@ import { initFxSelector, refreshFxSelector } from "./fxSelector.js";
 import { themeSwitcher } from "./theme-switcher.js";
 import { startUiSettingsTracking } from "./windowSettings.js";
 import { renderFooterDemoAudioControls, bindFooterDemoAudioControls } from "./demoAudio.js";
-import { initDiagnosticsToggle, initThemeSelect, initUserInputCalibrationControls } from "./settings.js";
+import { initDiagnosticsToggle, initThemeSelect, initZoomControls, initUserInputCalibrationControls } from "./settings.js";
 import { postMessage } from "./bridge.js";
 import { initializeMetronome } from "./metronome.js";
 import { initializeBlendEditorModal } from "./signalPath.js";
@@ -112,6 +112,7 @@ async function bootstrap(): Promise<void> {
   themeSwitcher; // Ensure singleton is created
   console.log("[JS] Theme switcher initialized:", themeSwitcher.getCurrentTheme());
   initThemeSelect();
+  initZoomControls();
   
   // Add theme switcher UI to icon bar
 
