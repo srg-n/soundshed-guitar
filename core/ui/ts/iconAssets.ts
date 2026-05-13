@@ -8,7 +8,7 @@ export type IconKey =
   | "sliders"
   | "wave"
   | "clock"
-  | "hall"
+  | "reverb"
   | "wrench"
   | "door"
   | "meter"
@@ -42,7 +42,7 @@ const categoryIcons: Record<string, IconKey> = {
   modulation: "wave",
   pitch:      "note",
   delay:      "clock",
-  reverb:     "hall",
+  reverb:     "reverb",
   synth:      "note",
   utility:    "wrench",
 };
@@ -85,11 +85,11 @@ const effectIcons: Record<string, IconKey> = {
   [EffectGuids.kDelayDoubler]:     "clock",
 
   // Reverb
-  [EffectGuids.kReverbRoom]:       "hall",
-  [EffectGuids.kReverbChamber]:    "hall",
-  [EffectGuids.kReverbSpring]:     "hall",
+  [EffectGuids.kReverbRoom]:       "reverb",
+  [EffectGuids.kReverbChamber]:    "reverb",
+  [EffectGuids.kReverbSpring]:     "reverb",
   [EffectGuids.kReverbAdvanced]:   "sparkle",
-  [EffectGuids.kReverbIr]:         "hall",
+  [EffectGuids.kReverbIr]:         "reverb",
   [EffectGuids.kReverbAmbient]:    "sparkle",
 
   // Synth
