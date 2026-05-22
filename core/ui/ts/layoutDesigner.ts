@@ -1173,15 +1173,34 @@ export class LayoutDesignerModal {
     const offsetY = this.layout.defaultControlsOffset?.y ?? 0;
     const scaleX = this.layout.defaultControlsScale?.x ?? 1;
     const scaleY = this.layout.defaultControlsScale?.y ?? 1;
-    const hasTransformOrOffset = offsetX !== 0 || offsetY !== 0 || scaleX !== 1 || scaleY !== 1;
+
+    // Second-pass runtime parity: in the live panel, the custom layout sits inside a
+    // padded section and may be auto-scaled down to fit narrower widths. Mirror that
+    // fit behavior in the designer preview so default-controls wrapping/overflow is
+    // closer to what users will see at runtime.
+    const canvasViewport = document.getElementById("layout-designer-canvas-container") as HTMLElement | null;
+    const viewportWidth = canvasViewport?.clientWidth ?? this.layout.dimensions.width;
+    const runtimeSectionHorizontalPadding = 36; // 18px left + 18px right in .default-effect-section-controls
+    const runtimeAvailableWidth = Math.max(1, viewportWidth - runtimeSectionHorizontalPadding);
+    const runtimeFitScale = Math.min(1, runtimeAvailableWidth / this.layout.dimensions.width);
+
+    const effectiveOffsetX = Math.round(offsetX * runtimeFitScale);
+    const effectiveOffsetY = Math.round(offsetY * runtimeFitScale);
+    const effectiveScaleX = scaleX * runtimeFitScale;
+    const effectiveScaleY = scaleY * runtimeFitScale;
+    const hasTransformOrOffset = effectiveOffsetX !== 0 || effectiveOffsetY !== 0 || effectiveScaleX !== 1 || effectiveScaleY !== 1;
     // Pin wrapper to canvas width so flex-wrap break points are identical in the runtime panel.
     const wrapperWidth = `width: ${this.layout.dimensions.width}px;`;
     const wrapperStyle = hasTransformOrOffset
-      ? `position: absolute; left: ${offsetX}px; top: ${offsetY}px; transform: scale(${scaleX}, ${scaleY}); transform-origin: top left; ${wrapperWidth}`
-      : `position: relative; ${wrapperWidth}`;
+      ? `position: absolute; left: ${effectiveOffsetX}px; top: ${effectiveOffsetY}px; transform: scale(${effectiveScaleX}, ${effectiveScaleY}); transform-origin: top left; z-index: 2; ${wrapperWidth}`
+      : `position: relative; z-index: 2; ${wrapperWidth}`;
+
+    // Use the same class structure as runtime (custom-layout-backdrop + theme) so that
+    // .custom-layout-backdrop.theme-* CSS rules apply identically in designer and runtime.
+    const themeClass = this.layout.containerTheme ? ` theme-${this.layout.containerTheme}` : '';
 
     this.controlsLayer.innerHTML = `
-      <div class="layout-default-controls-preview" style="${wrapperStyle} pointer-events: none;">
+      <div class="layout-default-controls-preview custom-layout-backdrop${themeClass}" style="${wrapperStyle} pointer-events: none;">
         ${innerHtml}
       </div>
     `;

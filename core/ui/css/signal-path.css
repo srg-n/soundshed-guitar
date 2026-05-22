@@ -1539,7 +1539,9 @@
 }
 
 .effect-visualization .node-params-panel {
-  position: absolute;
+  position: fixed;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 200px);
   
   overflow-y: auto;
   border-radius: 14px;
@@ -3271,6 +3273,116 @@
   box-sizing: border-box;
   isolation: isolate;
   /* transform-origin: top left is set inline by renderCustomLayout */
+}
+
+/* Sizing rules for controls rendered inside a custom backdrop layout.
+   These apply both at runtime (custom-layout-backdrop wraps controls inside the
+   outer .default-effect-shell) and in the designer preview (wrapper uses this
+   class directly), ensuring identical control spacing in both contexts. */
+.custom-layout-backdrop .params-controls {
+  gap: 18px;
+}
+
+.custom-layout-backdrop .node-param-group-block {
+  min-width: 220px;
+  gap: 14px;
+}
+
+.custom-layout-backdrop .node-param-group-items {
+  gap: 16px;
+}
+
+.custom-layout-backdrop .node-param-group-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(220, 227, 243, 0.68);
+}
+
+.custom-layout-backdrop .node-param-tabs {
+  padding: 5px;
+}
+
+.custom-layout-backdrop .node-param-tab {
+  min-height: 34px;
+  letter-spacing: 0.08em;
+}
+
+.custom-layout-backdrop .node-param-group {
+  gap: 8px;
+  min-width: 86px;
+}
+
+.custom-layout-backdrop .node-param-label {
+  letter-spacing: 0.12em;
+}
+
+.custom-layout-backdrop .node-param-value {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Theme-light controls inside a custom backdrop */
+.custom-layout-backdrop.theme-light .node-param-label,
+.custom-layout-backdrop.theme-light .node-param-group-title {
+  color: rgba(69, 83, 110, 0.72);
+}
+
+.custom-layout-backdrop.theme-light .node-param-tabs,
+.custom-layout-backdrop.theme-light .resource-picker-btn,
+.custom-layout-backdrop.theme-light .resource-browse-btn {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(229, 236, 246, 0.96) 100%);
+  border-color: rgba(120, 138, 172, 0.2);
+  color: #32435f;
+}
+
+.custom-layout-backdrop.theme-light .node-param-group-block,
+.custom-layout-backdrop.theme-light .eq-visualizer,
+.custom-layout-backdrop.theme-light .mixer-inputs-section,
+.custom-layout-backdrop.theme-light .node-resource-selector {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(237, 242, 249, 0.95) 100%);
+  border-color: rgba(120, 138, 172, 0.16);
+}
+
+.custom-layout-backdrop.theme-light .node-param-knob {
+  border-width: 2px;
+  border-color: var(--border-light);
+  background: var(--control-bg);
+  box-shadow:
+    0 2px 4px var(--overlay-dark),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.custom-layout-backdrop.theme-light .node-param-knob::after {
+  content: none;
+}
+
+.custom-layout-backdrop.theme-light .node-param-knob .knob-indicator {
+  width: 3px;
+  height: 10px;
+  top: 5px;
+  border-radius: 2px;
+  background: var(--control-indicator);
+  box-shadow: none;
+}
+
+/* Theme-classic controls inside a custom backdrop */
+.custom-layout-backdrop.theme-classic .node-param-label,
+.custom-layout-backdrop.theme-classic .node-param-group-title {
+  color: rgba(249, 228, 187, 0.68);
+}
+
+.custom-layout-backdrop.theme-classic .node-param-tabs,
+.custom-layout-backdrop.theme-classic .resource-picker-btn,
+.custom-layout-backdrop.theme-classic .resource-browse-btn,
+.custom-layout-backdrop.theme-classic .node-param-group-block,
+.custom-layout-backdrop.theme-classic .eq-visualizer,
+.custom-layout-backdrop.theme-classic .mixer-inputs-section,
+.custom-layout-backdrop.theme-classic .node-resource-selector {
+  border-color: rgba(255, 232, 187, 0.16);
+  background: linear-gradient(180deg, rgba(72, 46, 27, 0.82) 0%, rgba(49, 30, 18, 0.94) 100%);
+  color: var(--text-dark-primary);
 }
 
 .custom-layout-control {

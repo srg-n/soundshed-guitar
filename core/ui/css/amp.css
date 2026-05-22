@@ -16,6 +16,11 @@
 .visualization-panel {
   width: 100%;
   position: relative;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  padding: 16px;
 }
 
 .effect-visualization-header {
@@ -75,7 +80,7 @@
 }
 
 .effect-visualization {
-  height: 800px;
+  min-height: 400px;
   padding: 16px;
   background: var(--bg-dark-primary);
   background-image: var(--effect-visual-bg, none);
@@ -83,7 +88,7 @@
   background-repeat: no-repeat;
   border-radius: 14px;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: var(--shadow-md);
   display: flex;
   align-items: start;
