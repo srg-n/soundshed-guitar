@@ -1552,11 +1552,12 @@
 }
 
 .effect-visualization .node-params-panel {
-  position: fixed;
-  max-width: calc(100vw - 32px);
-  max-height: calc(100vh - 200px);
-  
-  overflow-y: auto;
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  max-height: none;
+  overflow: visible;
+  margin: 0 auto;
   border-radius: 14px;
   background: rgba(28, 28, 38, 0);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);

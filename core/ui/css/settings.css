@@ -178,10 +178,11 @@
   grid-template-columns: auto 1fr auto;
   gap: 10px;
   align-items: center;
+  max-width: 400px;
 }
 
 .nam-quality-slider-row input[type="range"] {
-  width: 400px;
+  width: 100%;
   max-width: 300px;
   accent-color: var(--color-primary);
 }

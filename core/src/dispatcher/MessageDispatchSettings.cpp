@@ -47,10 +47,7 @@ bool MessageDispatcher::DispatchSettings(PluginController& c,
                     c.mPendingStateBroadcast = true;
                 }
                 if (affectsNamSlimmable)
-                {
                     c.ApplyNamSlimmableSettingsFromAppSettings();
-                    c.mPendingStateBroadcast = true;
-                }
                 c.SaveAppSettings();
                 return true;
             }
@@ -63,10 +60,7 @@ bool MessageDispatcher::DispatchSettings(PluginController& c,
                 c.mPendingStateBroadcast = true;
             }
             if (affectsNamSlimmable)
-            {
                 c.ApplyNamSlimmableSettingsFromAppSettings();
-                c.mPendingStateBroadcast = true;
-            }
             c.SaveAppSettings();
         }
         return true;
