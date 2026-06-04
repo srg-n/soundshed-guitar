@@ -9,13 +9,19 @@
 
 import { uiState } from "./state.js";
 import { postMessage } from "./bridge.js";
-import { ensureTone3000Session } from "./tone3000.js";
+import { ensureTone3000Session, tone3000AuthenticatedFetch } from "./tone3000.js";
 import { showNotification } from "./notifications.js";
 import { arrayBufferToBase64, escapeHtml } from "./utils.js";
 import { FEATURE_FLAGS_CHANGED_EVENT, Features, isFeatureEnabled } from "./featureFlags.js";
 import type { LibraryResource } from "./types.js";
-
-const API_BASE = "https://www.tone3000.com/api/v1";
+import type { Tone3000Architecture, Tone3000Model, Tone3000Tone } from "./tone3000ApiTypes.js";
+import {
+  buildTone3000ModelsUrl,
+  buildTone3000SearchUrl,
+  extractTone3000Models,
+  extractTone3000Tones,
+  parseTone3000Pagination,
+} from "./tone3000Api.js";
 
 type ResourceBrowserOptions = {
   resourceType: "nam" | "ir";
@@ -28,29 +34,6 @@ type ResourceBrowserOptions = {
   onPreview?: (filePath: string, tempResourceId: string) => void;
   onConfirmImport?: (resourceId: string) => void;
 };
-
-interface Tone3000Tone {
-  id: string;
-  title: string;
-  name?: string;
-  slug?: string;
-  description?: string;
-  gear?: string;
-  platform?: string;
-  models_count?: number;
-  downloads_count?: number;
-  user?: { id?: string | number; username?: string; name?: string; display_name?: string };
-  images?: string[];
-  equipment_image_url?: string;
-  image_url?: string;
-  thumbnail_url?: string;
-}
-
-interface Tone3000Model {
-  id: string | number;
-  name: string;
-  model_url: string;
-}
 
 interface PreviewState {
   active: boolean;
@@ -96,6 +79,7 @@ export class ResourceBrowserModal {
   private tone3000SearchBtn: HTMLButtonElement | null = null;
   private tone3000Category: HTMLSelectElement | null = null;
   private tone3000Sort: HTMLSelectElement | null = null;
+  private tone3000Architecture: HTMLSelectElement | null = null;
   private tone3000List: HTMLElement | null = null;
   private tone3000Pagination: HTMLElement | null = null;
   private tone3000PrevBtn: HTMLButtonElement | null = null;
@@ -145,6 +129,7 @@ export class ResourceBrowserModal {
     this.tone3000SearchBtn = document.getElementById("resource-browser-tone3000-search-btn") as HTMLButtonElement | null;
     this.tone3000Category = document.getElementById("resource-browser-tone3000-category") as HTMLSelectElement | null;
     this.tone3000Sort = document.getElementById("resource-browser-tone3000-sort") as HTMLSelectElement | null;
+    this.tone3000Architecture = document.getElementById("resource-browser-tone3000-architecture") as HTMLSelectElement | null;
     this.tone3000List = document.getElementById("resource-browser-tone3000-list");
     this.tone3000Pagination = document.getElementById("resource-browser-tone3000-pagination");
     this.tone3000PrevBtn = document.getElementById("resource-browser-tone3000-prev") as HTMLButtonElement | null;
@@ -189,6 +174,11 @@ export class ResourceBrowserModal {
     this.tone3000SearchBtn?.addEventListener("click", () => void this.runTone3000Search());
     this.tone3000Category?.addEventListener("change", () => void this.runTone3000Search());
     this.tone3000Sort?.addEventListener("change", () => void this.runTone3000Search());
+    this.tone3000Architecture?.addEventListener("change", () => {
+      this.expandedToneId = null;
+      this.toneModelsCache.clear();
+      void this.runTone3000Search();
+    });
     
     // Pagination
     this.tone3000PrevBtn?.addEventListener("click", () => {
@@ -242,6 +232,10 @@ export class ResourceBrowserModal {
       this.tone3000Search.placeholder = options.resourceType === "ir"
         ? "Search Cab IRs..."
         : "Search amps and pedals...";
+    }
+
+    if (this.tone3000Architecture) {
+      this.tone3000Architecture.value = options.resourceType === "ir" ? "all" : "2";
     }
     
     // Update category options
@@ -394,6 +388,23 @@ export class ResourceBrowserModal {
         `;
       }
     }
+
+    if (this.tone3000Architecture) {
+      const isIr = resourceType === "ir";
+      this.tone3000Architecture.disabled = isIr;
+      this.tone3000Architecture.value = isIr ? "all" : "2";
+    }
+  }
+
+  private getSelectedArchitecture(): Tone3000Architecture | null {
+    if (!this.tone3000Architecture || this.options?.resourceType === "ir") {
+      return null;
+    }
+    const selected = this.tone3000Architecture.value;
+    if (selected === "1" || selected === "2" || selected === "custom") {
+      return selected;
+    }
+    return null;
   }
   
   private renderLibraryList(): void {
@@ -567,19 +578,20 @@ export class ResourceBrowserModal {
       } else if (sortValue === "trending") {
         params.set("sort", "trending");
       }
+
+      const architecture = this.getSelectedArchitecture();
+      if (architecture) {
+        params.set("architecture", architecture);
+      }
       
-      const response = await fetch(`${API_BASE}/tones/search?${params.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-        },
-      });
+      const response = await tone3000AuthenticatedFetch(buildTone3000SearchUrl(params));
       
       if (!response.ok) {
         throw new Error(`Search failed: ${response.status}`);
       }
       
       const data = await response.json();
-      const tones: Tone3000Tone[] = this.extractTones(data);
+      const tones = extractTone3000Tones(data);
       
       // No client-side filtering needed - the API gear param already filters
       this.tone3000Tones = tones;
@@ -590,16 +602,6 @@ export class ResourceBrowserModal {
       this.tone3000List.innerHTML = `<div class="resource-browser-empty">Error: ${escapeHtml(message)}</div>`;
       this.updateTone3000Pagination(false);
     }
-  }
-  
-  private extractTones(data: unknown): Tone3000Tone[] {
-    if (Array.isArray(data)) return data;
-    const obj = data as Record<string, unknown>;
-    if (Array.isArray(obj.tones)) return obj.tones;
-    if (Array.isArray(obj.results)) return obj.results;
-    if (Array.isArray(obj.items)) return obj.items;
-    if (Array.isArray(obj.data)) return obj.data;
-    return [];
   }
   
   private updateTone3000Pagination(loading: boolean): void {
@@ -614,17 +616,9 @@ export class ResourceBrowserModal {
   }
   
   private updateTone3000PaginationFromData(data: Record<string, unknown>, pageSize: number): void {
-    const total = typeof data.total === "number" ? data.total
-      : typeof data.total_count === "number" ? data.total_count
-        : typeof data.count === "number" ? data.count
-          : null;
-    
-    const totalPages = typeof data.total_pages === "number" ? data.total_pages
-      : typeof data.pages === "number" ? data.pages
-        : total ? Math.max(1, Math.ceil(total / 20))
-          : pageSize < 20 ? this.tone3000Page : this.tone3000Page;
-    
-    this.tone3000TotalPages = totalPages;
+    const parsed = parseTone3000Pagination(data, this.tone3000Page, 20);
+    this.tone3000Page = parsed.page;
+    this.tone3000TotalPages = parsed.total ? parsed.totalPages : this.tone3000Page;
     
     if (this.tone3000PageLabel) {
       this.tone3000PageLabel.textContent = `Page ${this.tone3000Page} of ${this.tone3000TotalPages}`;
@@ -839,27 +833,14 @@ export class ResourceBrowserModal {
       throw new Error("No session");
     }
     
-    const response = await fetch(`${API_BASE}/models?tone_id=${encodeURIComponent(tone.id)}&page=1&page_size=100`, {
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-      },
-    });
+    const response = await tone3000AuthenticatedFetch(buildTone3000ModelsUrl(tone.id, 1, 100, this.getSelectedArchitecture() ?? undefined));
     
     if (!response.ok) {
       throw new Error(`Failed: ${response.status}`);
     }
     
     const data = await response.json();
-    return this.extractModels(data);
-  }
-  
-  private extractModels(data: unknown): Tone3000Model[] {
-    if (Array.isArray(data)) return data;
-    const obj = data as Record<string, unknown>;
-    if (Array.isArray(obj.models)) return obj.models;
-    if (Array.isArray(obj.data)) return obj.data;
-    if (Array.isArray(obj.results)) return obj.results;
-    return [];
+    return extractTone3000Models(data);
   }
   
   private async startPreview(toneId: string, modelId: string, modelUrl: string): Promise<void> {
@@ -887,11 +868,7 @@ export class ResourceBrowserModal {
     
     try {
       // Download the model
-      const response = await fetch(modelUrl, {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-        },
-      });
+      const response = await tone3000AuthenticatedFetch(modelUrl);
       
       if (!response.ok) {
         throw new Error(`Download failed: ${response.status}`);
@@ -995,11 +972,7 @@ export class ResourceBrowserModal {
     
     try {
       // Download the model
-      const response = await fetch(modelUrl, {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-        },
-      });
+      const response = await tone3000AuthenticatedFetch(modelUrl);
       
       if (!response.ok) {
         throw new Error(`Download failed: ${response.status}`);

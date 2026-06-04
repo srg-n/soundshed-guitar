@@ -2,12 +2,19 @@ import { uiState } from "./state.js";
 import { appendLog } from "./logging.js";
 import { showNotification } from "./notifications.js";
 import { postMessage } from "./bridge.js";
-import { ensureTone3000Session } from "./tone3000.js";
+import { ensureTone3000Session, tone3000AuthenticatedFetch } from "./tone3000.js";
 import { buildBlendModelMappingsFromIds } from "./blendUtils.js";
 import { arrayBufferToBase64, escapeHtml } from "./utils.js";
 import { openBlendEditorWithDefinition } from "./signalPath.js";
+import type { Tone3000Gear, Tone3000Model, Tone3000Platform, Tone3000Tone } from "./tone3000ApiTypes.js";
+import {
+  buildTone3000ModelsUrl,
+  buildTone3000SearchUrl,
+  extractTone3000Models,
+  extractTone3000Tones,
+  parseTone3000Pagination,
+} from "./tone3000Api.js";
 
-const API_BASE = "https://www.tone3000.com/api/v1";
 const PAGE_SIZE = 25;
 
 const categoryListEl = document.getElementById("tone3000-category-list");
@@ -34,37 +41,11 @@ const detailsImportSelectedEl = document.getElementById("tone3000-details-import
 const detailsImportBlendEl = document.getElementById("tone3000-details-import-blend") as HTMLButtonElement | null;
 const detailsProgressEl = document.getElementById("tone3000-details-progress");
 
-interface Tone3000Tone {
-  id: string;
-  title: string;
-  name?: string;
-  slug?: string;
-  description?: string;
-  gear?: string;
-  platform?: string;
-  models_count?: number;
-  downloads_count?: number;
-  user?: { id?: string | number; username?: string; name?: string; display_name?: string };
-  images?: string[];
-  tags?: Array<{ name?: string }>;
-  equipment_image_url?: string;
-  equipment_image?: string;
-  gear_image_url?: string;
-  image_url?: string;
-  thumbnail_url?: string;
-}
-
-interface Tone3000Model {
-  id: string | number;
-  name: string;
-  model_url: string;
-}
-
 interface CategoryConfig {
   id: string;
   label: string;
-  gear?: string;
-  platform?: string;
+  gear?: Tone3000Gear;
+  platform?: Tone3000Platform;
 }
 
 const CATEGORIES: CategoryConfig[] = [
@@ -275,28 +256,14 @@ async function runSearch(page = 1): Promise<void> {
       params.set("sort", "best-match");
     }
 
-    const response = await fetch(`${API_BASE}/tones/search?${params.toString()}`, {
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-      },
-    });
+    const response = await tone3000AuthenticatedFetch(buildTone3000SearchUrl(params));
 
     if (!response.ok) {
       throw new Error(`Search failed: ${response.status}`);
     }
 
     const data = await response.json();
-    const tones: Tone3000Tone[] = Array.isArray(data?.tones)
-      ? data.tones
-      : Array.isArray(data?.results)
-        ? data.results
-        : Array.isArray(data?.items)
-          ? data.items
-          : Array.isArray(data?.data)
-            ? data.data
-            : Array.isArray(data)
-              ? data
-              : [];
+    const tones = extractTone3000Tones(data);
 
     const filtered = activeCategory.platform
       ? tones.filter((tone) => {
@@ -334,32 +301,9 @@ function updatePagination(loading: boolean, data?: Record<string, unknown>, page
     paginationEl.style.opacity = "1";
   }
 
-  const pageValue = typeof data?.page === "number" ? data.page
-    : typeof data?.current_page === "number" ? data.current_page
-      : currentPage;
-  currentPage = pageValue;
-
-  const total = typeof data?.total === "number"
-    ? data.total
-    : typeof data?.total_count === "number"
-      ? data.total_count
-      : typeof data?.count === "number"
-        ? data.count
-        : null;
-
-  const totalPagesValue = typeof data?.total_pages === "number"
-    ? data.total_pages
-    : typeof data?.totalPages === "number"
-      ? data.totalPages
-      : typeof data?.pages === "number"
-        ? data.pages
-        : total
-          ? Math.max(1, Math.ceil(total / PAGE_SIZE))
-          : pageSize && pageSize < PAGE_SIZE
-            ? currentPage
-            : currentPage;
-
-  totalPages = totalPagesValue || currentPage;
+  const parsed = parseTone3000Pagination(data, currentPage, PAGE_SIZE);
+  currentPage = parsed.page;
+  totalPages = parsed.total ? parsed.totalPages : currentPage;
 
   pageLabelEl.textContent = `Page ${currentPage}${totalPages ? ` of ${totalPages}` : ""}`;
   prevButtonEl.disabled = loading || currentPage <= 1;
@@ -500,7 +444,7 @@ async function openToneDetails(tone: Tone3000Tone): Promise<void> {
   }
 
   try {
-    const models = await fetchToneModels(tone, session.accessToken);
+    const models = await fetchToneModels(tone);
     currentDetailsModels = models;
     if (!models.length) {
       detailsModelsStatusEl.textContent = "No models found for this tone.";
@@ -652,29 +596,15 @@ async function importSelectedDetailsModels(createBlend: boolean): Promise<void> 
   }
 }
 
-async function fetchToneModels(tone: Tone3000Tone, accessToken: string): Promise<Tone3000Model[]> {
-  const response = await fetch(`${API_BASE}/models?tone_id=${encodeURIComponent(tone.id)}&page=1&page_size=100`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
+async function fetchToneModels(tone: Tone3000Tone): Promise<Tone3000Model[]> {
+  const response = await tone3000AuthenticatedFetch(buildTone3000ModelsUrl(tone.id));
 
   if (!response.ok) {
     throw new Error(`Model fetch failed: ${response.status}`);
   }
 
   const data = await response.json();
-  const models: Tone3000Model[] = Array.isArray(data?.models)
-    ? data.models
-    : Array.isArray(data?.data)
-      ? data.data
-      : Array.isArray(data?.results)
-        ? data.results
-        : Array.isArray(data)
-          ? data
-          : [];
-
-  return models;
+  return extractTone3000Models(data);
 }
 
 async function importToneModels(button: HTMLButtonElement, tone: Tone3000Tone): Promise<void> {
@@ -688,7 +618,7 @@ async function importToneModels(button: HTMLButtonElement, tone: Tone3000Tone): 
   button.textContent = "Importing...";
 
   try {
-    const models = await fetchToneModels(tone, session.accessToken);
+    const models = await fetchToneModels(tone);
     if (!models.length) {
       throw new Error("No models found for tone");
     }
@@ -801,11 +731,7 @@ async function importToneModelsList(
   const total = models.length;
 
   for (const model of models) {
-    const modelResponse = await fetch(model.model_url, {
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-      },
-    });
+    const modelResponse = await tone3000AuthenticatedFetch(model.model_url);
 
     if (!modelResponse.ok) {
       throw new Error(`Model download failed: ${modelResponse.status}`);
