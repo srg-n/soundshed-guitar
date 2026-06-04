@@ -406,6 +406,23 @@ export class ResourceBrowserModal {
     }
     return null;
   }
+
+  private normalizeArchitectureBadge(raw: string): string {
+    const normalized = raw.trim().toLowerCase();
+    if (!normalized) {
+      return "";
+    }
+    if (normalized === "2" || normalized === "a2") {
+      return "A2";
+    }
+    if (normalized === "1" || normalized === "a1") {
+      return "A1";
+    }
+    if (normalized === "custom") {
+      return "Custom";
+    }
+    return "";
+  }
   
   private renderLibraryList(): void {
     if (!this.libraryList || !this.options) {
@@ -454,6 +471,17 @@ export class ResourceBrowserModal {
         const sourceUrl = metadata.sourceUrl ?? "";
         const authorBadge = authorUsername ? `<span class="resource-browser-author">by: ${escapeHtml(authorUsername)}</span>` : "";
         const sourceLinkBadge = sourceUrl.startsWith("https://www.tone3000.com/") ? `<a class="resource-browser-attribution-link" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">↗ tone3000</a>` : "";
+        const architecture = resourceType === "nam"
+          ? this.normalizeArchitectureBadge(
+            metadata.architectureVersion
+            || metadata.architecture_version
+            || metadata.architecture
+            || "",
+          )
+          : "";
+        const architectureBadge = architecture
+          ? `<span class="resource-browser-architecture-badge" title="Model architecture">${escapeHtml(architecture)}</span>`
+          : "";
         
         return `
           <div class="${selectedClass}" data-resource-id="${escapeHtml(res.id)}" data-source="library">
@@ -461,7 +489,7 @@ export class ResourceBrowserModal {
               <div class="results-item-title resource-browser-item-title">${escapeHtml(title)}</div>
               <div class="results-item-meta resource-browser-item-meta">
                 <span>${escapeHtml(categoryLabel)}</span>
-                ${providerBadge}${authorBadge}${sourceLinkBadge}
+                ${architectureBadge}${providerBadge}${authorBadge}${sourceLinkBadge}
               </div>
             </div>
             <button class="resource-browser-item-select" type="button">${isSelected ? "✓ Selected" : "Select"}</button>

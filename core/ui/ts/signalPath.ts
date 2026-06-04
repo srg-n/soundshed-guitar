@@ -12,7 +12,8 @@ import type {
   CustomEffectLibraryEntry,
 } from "./types.js";
 import { postMessage, setPresetMix, setPresetPan, setPresetMute, setPresetSolo, setMasterGain, setLimiterEnabled, removeActivePreset } from "./bridge.js";
-import { escapeHtml, idAccentColor } from "./utils.js";
+import { requestResourceData } from "./archiveUtils.js";
+import { escapeHtml, idAccentColor, base64ToArrayBuffer } from "./utils.js";
 import { showNotification } from "./notifications.js";
 import { EffectTypeRegistry, getNodeEffectInfo, type EffectTypeInfo } from "./presetV2.js";
 import { EffectGuids } from "./effectGuids.js";
@@ -78,6 +79,9 @@ let dragOverNodeId: string | null = null;
 let selectedNodeId: string | null = null;
 let lastSelectedNodeType: string | null = null;
 let lastSelectedNodeCategory: string | null = null;
+const inferredNamArchitectureByResourceId = new Map<string, string>();
+const pendingNamArchitectureResourceIds = new Set<string>();
+const unavailableNamArchitectureResourceIds = new Set<string>();
 let lastRenderedPresetId: string | null = null;
 let overlayBypassClickCleanup: (() => void) | null = null;
 let layoutScaleObserverCleanups: (() => void)[] = [];
@@ -622,6 +626,108 @@ function normalizeArchitectureBadge(raw: string): string {
   return "";
 }
 
+function mapNamArchitectureTokenToBadge(raw: string): string {
+  const normalized = raw.trim().toLowerCase();
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.includes("slimmablecontainer") || normalized.includes("slimmable")) {
+    return "A2";
+  }
+  if (normalized.includes("wavenet")) {
+    return "A1";
+  }
+
+  return "";
+}
+
+function inferNamArchitectureBadgeFromData(base64Data: string): string {
+  let text = "";
+  try {
+    text = new TextDecoder().decode(base64ToArrayBuffer(base64Data));
+  } catch {
+    return "";
+  }
+
+  const architectureMatch = text.match(/"architecture(?:_version|Version)?"\s*:\s*(?:"([^"]+)"|(\d+(?:\.\d+)?))/i);
+  const explicitToken = (architectureMatch?.[1] || architectureMatch?.[2] || "").trim();
+  const explicitBadge = normalizeArchitectureBadge(explicitToken) || mapNamArchitectureTokenToBadge(explicitToken);
+  if (explicitBadge) {
+    return explicitBadge;
+  }
+
+  if (/"architecture"\s*:\s*"slimmablecontainer"/i.test(text) || /"submodels"\s*:/i.test(text)) {
+    return "A2";
+  }
+  if (/"architecture"\s*:\s*"wavenet"/i.test(text)) {
+    return "A1";
+  }
+
+  return "";
+}
+
+function requestNamArchitectureInference(resource: LibraryResource): void {
+  const resourceId = resource.id;
+  if (!resourceId
+      || inferredNamArchitectureByResourceId.has(resourceId)
+      || pendingNamArchitectureResourceIds.has(resourceId)
+      || unavailableNamArchitectureResourceIds.has(resourceId)) {
+    return;
+  }
+
+  pendingNamArchitectureResourceIds.add(resourceId);
+
+  void (async () => {
+    try {
+      const data = await requestResourceData("nam", resourceId);
+      if (!data) {
+        unavailableNamArchitectureResourceIds.add(resourceId);
+        return;
+      }
+
+      const badge = inferNamArchitectureBadgeFromData(data);
+      if (!badge) {
+        unavailableNamArchitectureResourceIds.add(resourceId);
+        return;
+      }
+
+      inferredNamArchitectureByResourceId.set(resourceId, badge);
+
+      const existingBadge = normalizeArchitectureBadge(
+        resource.metadata?.architectureVersion
+        || resource.metadata?.architecture_version
+        || resource.metadata?.architecture
+        || "",
+      );
+
+      if (!existingBadge) {
+        const metadata = {
+          ...(resource.metadata ?? {}),
+          architectureVersion: badge,
+        };
+        resource.metadata = metadata;
+
+        postMessage({
+          type: "updateLibraryResource",
+          resourceType: "nam",
+          resourceId,
+          name: resource.name,
+          category: resource.category,
+          description: resource.description,
+          metadata,
+        });
+      }
+
+      renderSignalPathBar();
+    } catch {
+      unavailableNamArchitectureResourceIds.add(resourceId);
+    } finally {
+      pendingNamArchitectureResourceIds.delete(resourceId);
+    }
+  })();
+}
+
 function getNodeArchitectureBadge(node: GraphNode): string {
   if (!isNeuralModelNode(node)) {
     return "";
@@ -647,6 +753,17 @@ function getNodeArchitectureBadge(node: GraphNode): string {
     );
     if (label) {
       return label;
+    }
+
+    if (resource?.id && inferredNamArchitectureByResourceId.has(resource.id)) {
+      const inferred = inferredNamArchitectureByResourceId.get(resource.id);
+      if (inferred) {
+        return inferred;
+      }
+    }
+
+    if (resource) {
+      requestNamArchitectureInference(resource);
     }
   }
 

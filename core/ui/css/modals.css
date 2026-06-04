@@ -1118,6 +1118,19 @@
   text-transform: uppercase;
 }
 
+.resource-browser-architecture-badge {
+  font-size: 9px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, #a2ffd8 74%, #ffffff 26%);
+  border: 1px solid rgba(128, 230, 188, 0.36);
+  background: rgba(56, 118, 98, 0.28);
+  border-radius: 999px;
+  padding: 2px 6px;
+}
+
 .resource-browser-item-select {
   padding: 6px 12px;
   border-radius: 6px;
