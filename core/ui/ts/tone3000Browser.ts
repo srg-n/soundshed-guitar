@@ -641,7 +641,14 @@ async function importToneModels(button: HTMLButtonElement, tone: Tone3000Tone): 
 
 async function importZipBuffer(
   buffer: ArrayBuffer,
-  options: { tone: Tone3000Tone; modelId: string; modelUrl: string; nameHint: string; subfolder: string },
+  options: {
+    tone: Tone3000Tone;
+    modelId: string;
+    modelUrl: string;
+    nameHint: string;
+    subfolder: string;
+    architectureVersion?: string;
+  },
 ): Promise<string[]> {
   const zipLib = window.JSZip;
   if (!zipLib) {
@@ -688,6 +695,7 @@ async function importZipBuffer(
         modelId: String(options.modelId),
         modelName: options.nameHint ?? "",
         modelUrl: options.modelUrl,
+        architectureVersion: options.architectureVersion ?? "",
         entryName: entry.name,
         sourceUrl: `https://www.tone3000.com/tones/${tone.slug ?? tone.id}`,
         creatorId: tone.user?.id != null ? String(tone.user.id) : "",
@@ -748,6 +756,7 @@ async function importToneModelsList(
         modelUrl: model.model_url,
         nameHint: fileNameHint,
         subfolder,
+        architectureVersion: model.architecture_version ?? "",
       });
       importedNamIds.push(...imported);
     } else {
@@ -777,6 +786,7 @@ async function importToneModelsList(
           modelId: String(model.id),
           modelName: model.name ?? "",
           modelUrl: model.model_url,
+          architectureVersion: model.architecture_version ?? "",
           sourceUrl: `https://www.tone3000.com/tones/${tone.slug ?? tone.id}`,
           creatorId: tone.user?.id != null ? String(tone.user.id) : "",
           creatorName: tone.user?.display_name ?? tone.user?.name ?? tone.user?.username ?? "",

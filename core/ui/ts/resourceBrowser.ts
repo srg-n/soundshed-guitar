@@ -965,6 +965,11 @@ export class ResourceBrowserModal {
       showNotification("Import failed", "Tone not found");
       return;
     }
+
+    const modelArchitecture = this.toneModelsCache
+      .get(toneId)
+      ?.find((model) => String(model.id) === modelId)
+      ?.architecture_version;
     
     if (this.tone3000Status) {
       this.tone3000Status.textContent = "Importing...";
@@ -988,6 +993,7 @@ export class ResourceBrowserModal {
         tone,
         modelId,
         modelName,
+        modelArchitecture ?? "",
         buffer,
         isZip,
         resourceType
@@ -1015,6 +1021,7 @@ export class ResourceBrowserModal {
     tone: Tone3000Tone,
     modelId: string,
     modelName: string,
+    architectureVersion: string,
     buffer: ArrayBuffer,
     isZip: boolean,
     resourceType: "nam" | "ir"
@@ -1069,6 +1076,7 @@ export class ResourceBrowserModal {
             platform: tone.platform ?? "",
             modelId: String(modelId),
             modelName: modelName ?? "",
+            architectureVersion: architectureVersion ?? "",
             entryName: entry.name,
             sourceUrl: `https://www.tone3000.com/tones/${tone.slug ?? tone.id}`,
             creatorId: tone.user?.id != null ? String(tone.user.id) : "",
@@ -1115,6 +1123,7 @@ export class ResourceBrowserModal {
           platform: tone.platform ?? "",
           modelId: String(modelId),
           modelName: modelName ?? "",
+          architectureVersion: architectureVersion ?? "",
           sourceUrl: `https://www.tone3000.com/tones/${tone.slug ?? tone.id}`,
           creatorId: tone.user?.id != null ? String(tone.user.id) : "",
           creatorName: tone.user?.display_name ?? tone.user?.name ?? tone.user?.username ?? "",

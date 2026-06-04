@@ -704,6 +704,19 @@
   max-width: 140px;
 }
 
+.node-architecture-badge {
+  font-size: 8px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, #a2ffd8 74%, #ffffff 26%);
+  border: 1px solid rgba(128, 230, 188, 0.36);
+  background: rgba(56, 118, 98, 0.28);
+  border-radius: 999px;
+  padding: 2px 6px;
+}
+
 .node-bypass-badge {
   position: absolute;
   top: 2px;
@@ -1762,6 +1775,12 @@
   color: #ffd5b3;
   cursor: pointer;
   transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.default-effect-shell-chip-architecture {
+  border-color: rgba(128, 230, 188, 0.32);
+  color: #c8f5e6;
+  background: linear-gradient(180deg, rgba(22, 64, 54, 0.68) 0%, rgba(10, 30, 24, 0.88) 100%);
 }
 
 .default-effect-shell-chip-status:hover {

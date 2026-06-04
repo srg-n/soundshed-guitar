@@ -598,6 +598,61 @@ function getNodeResourceSummary(node: GraphNode): string {
   return getNodeResourceDisplayName(node, 0);
 }
 
+function isNeuralModelNode(node: GraphNode): boolean {
+  const resolvedType = EffectTypeRegistry.resolve(node.type);
+  return resolvedType === EffectGuids.kAmpNam
+    || resolvedType === EffectGuids.kAmpNamOptimized
+    || resolvedType === EffectGuids.kFxNam;
+}
+
+function normalizeArchitectureBadge(raw: string): string {
+  const normalized = raw.trim().toLowerCase();
+  if (!normalized) {
+    return "";
+  }
+  if (normalized === "2" || normalized === "a2") {
+    return "A2";
+  }
+  if (normalized === "1" || normalized === "a1") {
+    return "A1";
+  }
+  if (normalized === "custom") {
+    return "Custom";
+  }
+  return "";
+}
+
+function getNodeArchitectureBadge(node: GraphNode): string {
+  if (!isNeuralModelNode(node)) {
+    return "";
+  }
+
+  const resources = Array.isArray((node as unknown as { resources?: unknown[] }).resources)
+    ? (node as unknown as { resources?: unknown[] }).resources ?? []
+    : [];
+
+  for (let index = 0; index < Math.max(1, resources.length); index += 1) {
+    const current = getNodeResourceAtIndex(node, index);
+    if (!current.id) {
+      continue;
+    }
+
+    const resource = getLibraryResource("nam", current.id);
+    const metadata = resource?.metadata ?? {};
+    const label = normalizeArchitectureBadge(
+      metadata.architectureVersion
+      || metadata.architecture_version
+      || metadata.architecture
+      || "",
+    );
+    if (label) {
+      return label;
+    }
+  }
+
+  return "";
+}
+
 function getMissingResourceEntries(node: GraphNode): Array<{ resourceType?: string; resourceId?: string; filePath?: string }> {
   const typeInfo = getNodeEffectInfo(node);
   const backendMissing = (uiState.missingNodeResources ?? []).filter((entry) => entry.nodeId === node.id);
@@ -1526,6 +1581,7 @@ function renderNodeElement(node: GraphNode): string {
       ? nodeTypeInfo.displayName
       : "");
   const missingTooltip = buildMissingResourceTooltip(missingEntries);
+  const architectureBadge = getNodeArchitectureBadge(node);
   const missingBadge = missingEntries.length
     ? `<div class="node-missing-badge" title="${escapeHtml(missingTooltip)}" aria-label="Missing resource">⚠</div>`
     : "";
@@ -1555,6 +1611,7 @@ function renderNodeElement(node: GraphNode): string {
       <div class="node-info">
         <div class="node-name">${displayName}</div>
         ${effectTypeName ? `<div class="node-type">${effectTypeName}</div>` : ""}
+        ${architectureBadge ? `<div class="node-architecture-badge" aria-label="Model architecture">${architectureBadge}</div>` : ""}
       </div>
       <span class="node-clip-indicator clip-inactive" aria-hidden="true"></span>
       ${isNodeBypassed(node) ? '<div class="node-bypass-badge">OFF</div>' : ""}
@@ -2530,6 +2587,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
   const shellTypeLabel = escapeHtml(typeInfo?.displayName || shellCategoryLabel);
   const shellStatusLabel = isNodeBypassed(node) ? "BYPASSED" : "ENABLED";
   const shellBypassTitle = isNodeBypassed(node) ? "Enable effect" : "Bypass effect";
+  const architectureBadge = getNodeArchitectureBadge(node);
   const shellBlendId = getBlendState(node)?.blend?.id || "";
   const shellLayoutButton = isFeatureEnabled(Features.EffectLayout) ? `
     <button
@@ -2610,6 +2668,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
             </div>
           </div>
           <div class="default-effect-shell-meta" aria-label="Module status">
+            ${architectureBadge ? `<span class="default-effect-shell-chip default-effect-shell-chip-architecture" title="Loaded model architecture">${architectureBadge}</span>` : ""}
             <button
               class="default-effect-shell-chip default-effect-shell-chip-status node-bypass-btn ${isNodeBypassed(node) ? "bypassed" : ""}"
               data-node-id="${node.id}"
