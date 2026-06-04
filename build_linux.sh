@@ -51,6 +51,7 @@ LV2_BUILD_JOBS="${GUITARFX_LV2_BUILD_JOBS:-1}"
 PRODUCT="Soundshed Guitar"
 LINUX_STANDALONE_DIR_NAME="soundshed-guitar"
 LINUX_STANDALONE_EXECUTABLE_NAME="soundshed-guitar"
+CLAP_BUNDLE_DIR_NAME="${PRODUCT// /}.clap"
 VERSION="$(cat "${SCRIPT_DIR}/juce/VERSION" 2>/dev/null || echo "1.0.0")"
 UI_DIR="${SCRIPT_DIR}/core/ui"
 JUCE_SUBMODULE_DIR="${SCRIPT_DIR}/juce/JUCE"
@@ -261,6 +262,36 @@ copy_artifact() {
     else
         echo "  ⚠ Not found, skipping: ${src#"$SCRIPT_DIR/"}"
     fi
+}
+
+stage_clap_bundle() {
+    local clap_src="$1"
+    local clap_src_dir="$2"
+    local clap_dst_root="$3"
+
+    local bundle_dir="${clap_dst_root}/${CLAP_BUNDLE_DIR_NAME}"
+    local bundle_binary_path="${bundle_dir}/${CLAP_BUNDLE_DIR_NAME}"
+
+    if [[ -z "$clap_src" || ! -e "$clap_src" ]]; then
+        echo "  ⚠ Not found, skipping CLAP bundle staging"
+        return
+    fi
+
+    rm -rf "$bundle_dir"
+    mkdir -p "$bundle_dir"
+
+    if [[ -d "$clap_src" ]]; then
+        cp -R "${clap_src}/." "$bundle_dir/"
+    else
+        cp "$clap_src" "$bundle_binary_path"
+    fi
+
+    # Keep UI/resources next to the CLAP binary so plugin runtime lookup works.
+    if [[ -d "${clap_src_dir}/resources" ]]; then
+        cp -R "${clap_src_dir}/resources" "$bundle_dir/"
+    fi
+
+    echo "  ✓ CLAP bundle → ${bundle_dir#"$SCRIPT_DIR/"}"
 }
 
 find_first_match() {
@@ -504,7 +535,7 @@ build_for_arch() {
     rename_staged_linux_executable "$app_dst" "$PRODUCT" "$LINUX_STANDALONE_EXECUTABLE_NAME"
 
     copy_artifact "$vst3_src" "$vst3_dst"
-    copy_artifact "$clap_src" "$clap_dst"
+    stage_clap_bundle "$clap_src" "${artefacts_dir}/CLAP" "$clap_dst"
 
     if [[ "$BUILD_LV2" == true ]]; then
         copy_artifact "$lv2_src" "$lv2_dst"
