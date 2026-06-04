@@ -364,6 +364,7 @@ if(GUITARFX_CORE_FETCH_DEPS AND NOT TARGET NeuralAmpModelerCore AND NOT TARGET n
         add_library(NeuralAmpModelerCore STATIC ${NAM_SOURCES})
         set_target_properties(NeuralAmpModelerCore PROPERTIES
             POSITION_INDEPENDENT_CODE ON)
+        target_compile_definitions(NeuralAmpModelerCore PUBLIC NAM_ENABLE_A2_FAST=1)
         guitarfx_disable_linux_gnu_unique(NeuralAmpModelerCore)
         target_compile_features(NeuralAmpModelerCore PUBLIC cxx_std_17)
         guitarfx_apply_release_optimizations(NeuralAmpModelerCore)
