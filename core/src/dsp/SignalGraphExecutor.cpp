@@ -115,6 +115,40 @@ namespace guitarfx
       return std::nullopt;
     }
 
+    bool BuffersAreEffectivelyMono(const float *left, const float *right, int numSamples)
+    {
+      if (!left || !right)
+      {
+        return true;
+      }
+      if (left == right)
+      {
+        return true;
+      }
+
+      // Tight epsilon keeps this focused on true mono/dual-mono blocks.
+      constexpr float kEpsilon = 1.0e-8f;
+      for (int i = 0; i < numSamples; ++i)
+      {
+        if (std::abs(left[i] - right[i]) > kEpsilon)
+        {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    bool NodeMayProduceStereo(const std::string &type, const std::string &category)
+    {
+      if (type == kNodeTypeInput || type == kNodeTypeOutput ||
+          type == kNodeTypeSplitter || type == kNodeTypeMixer)
+      {
+        return false;
+      }
+
+      return category == "mod" || category == "delay" || category == "reverb";
+    }
+
   }
 
   SignalGraphExecutor::SignalGraphExecutor() = default;
@@ -292,6 +326,7 @@ namespace guitarfx
       NodeState &state = it->second;
       state.id = node.id;
       state.type = node.type;
+      state.category = node.category;
 
       // Create processor based on type
       if (node.type == kNodeTypeInput || node.type == kNodeTypeOutput)
@@ -470,6 +505,7 @@ namespace guitarfx
       std::fill(state.bufferLeft.begin(), state.bufferLeft.begin() + numSamples, 0.0f);
       std::fill(state.bufferRight.begin(), state.bufferRight.begin() + numSamples, 0.0f);
       state.hasInput = false;
+      state.hasStereoSignal = false;
       if (diagnosticsEnabled)
       {
         state.peak.store(0.0, std::memory_order_relaxed);
@@ -507,6 +543,9 @@ namespace guitarfx
           }
         }
         state.hasInput = true;
+        const bool leftLive = (inputs[0] != nullptr);
+        const bool rightLive = (inputs[1] != nullptr);
+        state.hasStereoSignal = leftLive && rightLive && !BuffersAreEffectivelyMono(inputs[0], inputs[1], numSamples);
         if (diagnosticsEnabled)
         {
           const auto stats = ComputeLevelStats(state.bufferLeft.data(), state.bufferRight.data(), numSamples);
@@ -541,6 +580,7 @@ namespace guitarfx
         ? static_cast<int>(inEdgesIt->second.size()) : 0;
       const bool isMixer = (nodeType == kNodeTypeMixer);
       const bool shouldAccumulate = isMixer || (incomingCount > 1);
+      bool incomingStereoSignal = false;
 
       // Get MixerEffect if this is a mixer node
       MixerEffect *mixerEffect = nullptr;
@@ -559,6 +599,7 @@ namespace guitarfx
           {
             const float edgeGain = static_cast<float>(edge.gain);
             const int inputPort = edge.toPort;
+            incomingStereoSignal = incomingStereoSignal || sourceState->hasStereoSignal;
 
             // Handle mixer with per-input processing
             if (isMixer && mixerEffect)
@@ -612,15 +653,23 @@ namespace guitarfx
         }
       }
 
+      if (state->hasInput)
+      {
+        state->hasStereoSignal = incomingStereoSignal;
+      }
+
       // Process the node
       if (state->processor && state->hasInput)
       {
+        const bool nodeCanMono = !incomingStereoSignal && state->processor->SupportsMonoProcessing() && !NodeMayProduceStereo(state->type, state->category);
+
         if (nodeType == kNodeTypeSplitter || nodeType == kNodeTypeOutput)
         {
           if (nodeType == kNodeTypeOutput && !state->processor->IsEnabled())
           {
             std::fill(state->bufferLeft.begin(), state->bufferLeft.begin() + numSamples, 0.0f);
             std::fill(state->bufferRight.begin(), state->bufferRight.begin() + numSamples, 0.0f);
+            state->hasStereoSignal = false;
           }
           // These nodes just pass through (routing handled above)
         }
@@ -639,7 +688,29 @@ namespace guitarfx
             localStats.scopedNodeProcessingTimesUs[nodeId] = nodeDuration.count();
             std::copy(mTempLeftBuffer.begin(), mTempLeftBuffer.begin() + numSamples, state->bufferLeft.begin());
             std::copy(mTempRightBuffer.begin(), mTempRightBuffer.begin() + numSamples, state->bufferRight.begin());
+            if (!incomingStereoSignal && !NodeMayProduceStereo(state->type, state->category))
+            {
+              std::copy(state->bufferLeft.begin(), state->bufferLeft.begin() + numSamples, state->bufferRight.begin());
+              state->hasStereoSignal = false;
+            }
+            else
+            {
+              state->hasStereoSignal = incomingStereoSignal || NodeMayProduceStereo(state->type, state->category);
+            }
           }
+        }
+        else if (state->processor->IsEnabled() && nodeCanMono)
+        {
+          auto nodeStart = std::chrono::high_resolution_clock::now();
+          state->processor->ProcessMono(state->bufferLeft.data(), mTempLeftBuffer.data(), numSamples);
+          auto nodeEnd = std::chrono::high_resolution_clock::now();
+          const std::chrono::duration<double, std::micro> nodeDuration(nodeEnd - nodeStart);
+          localStats.nodeProcessingTimesUs[nodeId] = nodeDuration.count();
+          localStats.scopedNodeProcessingTimesUs[nodeId] = nodeDuration.count();
+
+          std::copy(mTempLeftBuffer.begin(), mTempLeftBuffer.begin() + numSamples, state->bufferLeft.begin());
+          std::copy(state->bufferLeft.begin(), state->bufferLeft.begin() + numSamples, state->bufferRight.begin());
+          state->hasStereoSignal = false;
         }
         else if (state->processor->IsEnabled())
         {
@@ -657,6 +728,11 @@ namespace guitarfx
           // Copy back
           std::copy(mTempLeftBuffer.begin(), mTempLeftBuffer.begin() + numSamples, state->bufferLeft.begin());
           std::copy(mTempRightBuffer.begin(), mTempRightBuffer.begin() + numSamples, state->bufferRight.begin());
+          state->hasStereoSignal = incomingStereoSignal || NodeMayProduceStereo(state->type, state->category);
+        }
+        else
+        {
+          state->hasStereoSignal = incomingStereoSignal;
         }
       }
 
@@ -690,9 +766,19 @@ namespace guitarfx
         }
         if (outputs[1])
         {
-          for (int i = 0; i < numSamples; ++i)
+          if (outputEnabled && !state.hasStereoSignal && outputs[0])
           {
-            outputs[1][i] = outputEnabled ? (state.bufferRight[static_cast<size_t>(i)] * outputGain) : 0.0f;
+            for (int i = 0; i < numSamples; ++i)
+            {
+              outputs[1][i] = outputs[0][i];
+            }
+          }
+          else
+          {
+            for (int i = 0; i < numSamples; ++i)
+            {
+              outputs[1][i] = outputEnabled ? (state.bufferRight[static_cast<size_t>(i)] * outputGain) : 0.0f;
+            }
           }
         }
         break;
@@ -778,6 +864,7 @@ namespace guitarfx
       entry.peak = state.peak.load(std::memory_order_relaxed);
       entry.rms = state.rms.load(std::memory_order_relaxed);
       entry.clipCount = state.clipCount.load(std::memory_order_relaxed);
+      entry.stereoActive = state.hasStereoSignal;
       result.push_back(std::move(entry));
     }
 

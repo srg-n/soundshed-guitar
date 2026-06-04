@@ -30,6 +30,24 @@ namespace guitarfx
     // Processing (stereo in/out)
     virtual void Process(float **inputs, float **outputs, int numSamples) = 0;
 
+    // Optional mono processing fast path. Effects should override both methods
+    // when they can process a single channel without running stereo code.
+    [[nodiscard]] virtual bool SupportsMonoProcessing() const { return false; }
+    virtual void ProcessMono(float *input, float *output, int numSamples)
+    {
+      if (!output || numSamples <= 0)
+        return;
+      if (!input)
+      {
+        std::fill_n(output, numSamples, 0.0f);
+        return;
+      }
+
+      float *inPtrs[2] = {input, input};
+      float *outPtrs[2] = {output, output};
+      Process(inPtrs, outPtrs, numSamples);
+    }
+
     // Parameters
     virtual void SetParam(const std::string &key, double value) = 0;
     virtual void SetConfig(const std::string &key, const std::string &value) = 0;

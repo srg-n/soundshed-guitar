@@ -235,6 +235,59 @@ public:
     }
   }
 
+  [[nodiscard]] bool SupportsMonoProcessing() const override { return true; }
+
+  void ProcessMono(float *input, float *output, int numSamples) override
+  {
+    EnsureLevelTargetsCurrent();
+
+    numSamples = std::min(numSamples, mMaxBlockSize);
+    if (!output || numSamples <= 0)
+      return;
+
+    if (!input)
+    {
+      std::fill_n(output, numSamples, 0.0f);
+      return;
+    }
+
+    const float inputGainF = static_cast<float>(mInputGain);
+    for (int i = 0; i < numSamples; ++i)
+    {
+      const float in = input[i];
+      mDryBufferL[i] = in;
+      mInputBufferL[i] = in * inputGainF;
+    }
+
+    const bool hasFallback = static_cast<bool>(mFallbackModelLeft);
+    if (hasFallback && mEnabled)
+    {
+      const float wetMix = static_cast<float>(mMix);
+      const float dryMix = 1.0f - wetMix;
+
+      ProcessFallbackModelMono(numSamples);
+
+      const float outputGainF = static_cast<float>(mOutputGain);
+      for (int i = 0; i < numSamples; ++i)
+      {
+        float out = mOutputBufferL[i];
+        out = mBassFilter[0].Process(out);
+        out = mMidFilter[0].Process(out);
+        out = mTrebleFilter[0].Process(out);
+        out = mPresenceFilter[0].Process(out);
+        out *= outputGainF;
+        output[i] = mDryBufferL[i] * dryMix + out * wetMix;
+      }
+    }
+    else
+    {
+      for (int i = 0; i < numSamples; ++i)
+      {
+        output[i] = mInputBufferL[i];
+      }
+    }
+  }
+
   void SetParam(const std::string& key, double value) override
   {
     if (key == "inputGain")
@@ -616,6 +669,41 @@ private:
       {
         mOutputBufferL[sampleIndex] = static_cast<float>(mFallbackOutputBufferL[sampleIndex]);
         mOutputBufferR[sampleIndex] = static_cast<float>(mFallbackOutputBufferR[sampleIndex]);
+      }
+    }
+  }
+
+  void ProcessFallbackModelMono(int numSamples)
+  {
+    int modelFrames = numSamples;
+    if (mResamplingActive)
+    {
+      modelFrames = GetModelFrameCount(numSamples);
+      mInputResampler.ProcessFixedOutput(mInputBufferL.data(), numSamples, mFallbackInputBufferL.data(), modelFrames);
+    }
+    else
+    {
+      for (int sampleIndex = 0; sampleIndex < numSamples; ++sampleIndex)
+      {
+        mFallbackInputBufferL[sampleIndex] = static_cast<NAM_SAMPLE>(mInputBufferL[sampleIndex]);
+      }
+    }
+
+    NAM_SAMPLE* inputPtr = mFallbackInputBufferL.data();
+    NAM_SAMPLE* outputPtr = mFallbackOutputBufferL.data();
+    NAM_SAMPLE* inputPtrs[1] = { inputPtr };
+    NAM_SAMPLE* outputPtrs[1] = { outputPtr };
+    mFallbackModelLeft->process(inputPtrs, outputPtrs, modelFrames);
+
+    if (mResamplingActive)
+    {
+      mOutputResampler.ProcessFixedOutput(mFallbackOutputBufferL.data(), modelFrames, mOutputBufferL.data(), numSamples);
+    }
+    else
+    {
+      for (int sampleIndex = 0; sampleIndex < numSamples; ++sampleIndex)
+      {
+        mOutputBufferL[sampleIndex] = static_cast<float>(mFallbackOutputBufferL[sampleIndex]);
       }
     }
   }

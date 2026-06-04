@@ -154,6 +154,78 @@ public:
     }
   }
 
+  [[nodiscard]] bool SupportsMonoProcessing() const override { return true; }
+
+  void ProcessMono(float *input, float *output, int numSamples) override
+  {
+    EnsureLevelTargetsCurrent();
+
+    numSamples = std::min(numSamples, mMaxBlockSize);
+    if (!output || numSamples <= 0)
+      return;
+
+    if (!input)
+    {
+      std::fill_n(output, numSamples, 0.0f);
+      return;
+    }
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+      const float in = input[i];
+      mDryBufferL[i] = in;
+      mInputBufferL[i] = in;
+    }
+
+    if (mModels.empty() || !mEnabled)
+    {
+      for (int i = 0; i < numSamples; ++i)
+      {
+        output[i] = mInputBufferL[i];
+      }
+      return;
+    }
+
+    const BlendSelection selection = SelectBlendModels();
+    UpdateAutoGains(selection);
+
+    const float inputGain = static_cast<float>(mInputGain);
+    const float outputGain = static_cast<float>(mOutputGain);
+    const float wetMix = static_cast<float>(mMix);
+    const float dryMix = 1.0f - wetMix;
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+      mInputBufferL[i] *= inputGain;
+    }
+
+    if (selection.upperIndex == selection.lowerIndex)
+    {
+      auto &model = mModels[selection.lowerIndex];
+      ProcessModel(model, mInputBufferL.data(), model.outputBufferL.data(), numSamples, 0);
+      for (int i = 0; i < numSamples; ++i)
+      {
+        output[i] = mDryBufferL[i] * dryMix + model.outputBufferL[i] * outputGain * wetMix;
+      }
+      return;
+    }
+
+    auto &modelA = mModels[selection.lowerIndex];
+    auto &modelB = mModels[selection.upperIndex];
+
+    ProcessModel(modelA, mInputBufferL.data(), modelA.outputBufferL.data(), numSamples, 0);
+    ProcessModel(modelB, mInputBufferL.data(), modelB.outputBufferL.data(), numSamples, 0);
+
+    const float weightA = static_cast<float>(selection.weightLower);
+    const float weightB = static_cast<float>(selection.weightUpper);
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+      const float mixed = modelA.outputBufferL[i] * weightA + modelB.outputBufferL[i] * weightB;
+      output[i] = mDryBufferL[i] * dryMix + mixed * outputGain * wetMix;
+    }
+  }
+
   void SetParam(const std::string& key, double value) override
   {
     if (key == "inputGain")

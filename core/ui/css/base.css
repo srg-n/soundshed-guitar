@@ -1013,7 +1013,7 @@ body.fx-dragging .signal-connector {
 .signal-diagnostics-header,
 .signal-diagnostics-item {
   display: grid;
-  grid-template-columns: 90px minmax(240px, 1.6fr) 150px 150px 110px 120px 140px;
+  grid-template-columns: 90px minmax(220px, 1.4fr) 90px 140px 140px 100px 110px 130px;
   gap: 8px;
   align-items: center;
 }
@@ -1065,6 +1065,23 @@ body.fx-dragging .signal-connector {
 .signal-diagnostics-cell.node {
   color: var(--text-primary);
   flex-wrap: wrap;
+}
+
+.signal-diagnostics-cell.stereo {
+  font-weight: 600;
+}
+
+.stereo-on {
+  color: #7ec8ff;
+}
+
+.stereo-off {
+  color: var(--text-secondary);
+}
+
+.stereo-unknown {
+  color: var(--text-secondary);
+  opacity: 0.8;
 }
 
 .critical-path-badge {

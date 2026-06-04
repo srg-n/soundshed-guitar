@@ -38,6 +38,7 @@ namespace guitarfx
       double peak = 0.0;
       double rms = 0.0;
       int clipCount = 0;
+      bool stereoActive = false;
     };
 
     SignalGraphExecutor();
@@ -97,10 +98,12 @@ namespace guitarfx
     {
       std::string id;
       std::string type;
+      std::string category;
       std::unique_ptr<EffectProcessor> processor;
       std::vector<float> bufferLeft;
       std::vector<float> bufferRight;
       bool hasInput = false;
+      bool hasStereoSignal = false;
       std::atomic<double> peak{0.0};
       std::atomic<double> rms{0.0};
       std::atomic<int> clipCount{0};

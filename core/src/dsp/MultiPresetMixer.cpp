@@ -1279,6 +1279,7 @@ namespace guitarfx
       node.scope = "pre";
       node.nodeId = entry.nodeId;
       node.nodeType = entry.nodeType;
+      node.stereoActive = entry.stereoActive;
       node.levels.peak = entry.peak;
       node.levels.rms = entry.rms;
       node.levels.clipCount = entry.clipCount;
@@ -1295,6 +1296,7 @@ namespace guitarfx
         node.presetId = inst.cfg.id;
         node.nodeId = entry.nodeId;
         node.nodeType = entry.nodeType;
+        node.stereoActive = entry.stereoActive;
         node.levels.peak = entry.peak;
         node.levels.rms = entry.rms;
         node.levels.clipCount = entry.clipCount;
@@ -1308,6 +1310,7 @@ namespace guitarfx
       node.scope = "post";
       node.nodeId = entry.nodeId;
       node.nodeType = entry.nodeType;
+      node.stereoActive = entry.stereoActive;
       node.levels.peak = entry.peak;
       node.levels.rms = entry.rms;
       node.levels.clipCount = entry.clipCount;
