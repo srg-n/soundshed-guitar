@@ -1,9 +1,11 @@
-# C
-## 1.2.0 (June 04, 2026)
+# Changelog
+
+## 1.2.0 (June 05, 2026)
 * Support for NAM A2 architecture, including option to adjust NAM processing quality (Settings > DSP Performance). 
-* Updated Tone 300 integration
+* Updated Tone 3000 integration, default to A2 nam models
 * Mono/Stereo path DSP optimizations
 * Combined performance work drops single-thread/core DSP usage from 30% to 5-10% when using mono path with NAM A2 in "slim" (min) quality mode.
+* Clap plugin available on all platforms
 
 ## 1.1.0 (May 23, 2026)
 
