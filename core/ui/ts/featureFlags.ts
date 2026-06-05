@@ -7,6 +7,7 @@ export const Features = {
   ResourceLibrary: "resourceLibrary",
   RiffLibrary: "riffLibrary",
   ToneSharing: "toneSharing",
+  AiToneSearch: "aiToneSearch",
   Jam: "jam",
   ExperimentalEffects: "experimentalEffects",
   CustomEffects: "customEffects",
@@ -67,6 +68,13 @@ export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     label: "Tone Sharing",
     description: "Shows the tone-sharing panel and publishing workflows.",
     defaultEnabled: true,
+  },
+  {
+    id: Features.AiToneSearch,
+    key: "features.aiToneSearch.enabled",
+    label: "AI Tone Search",
+    description: "Shows the AI Tone Search tab and tools under Tone Sharing.",
+    defaultEnabled: false,
   },
   {
     id: Features.Jam,
@@ -153,14 +161,14 @@ export const FEATURE_GROUPS: FeatureGroupDefinition[] = [
   {
     id: "core",
     title: "Core Features",
-    description: "Primary user-facing workflows stay enabled by default.",
+    description: "These are the default features enabled in the app which you can optionally switch off.",
     featureIds: [Features.Tone3000, Features.ResourceLibrary, Features.RiffLibrary, Features.ToneSharing, Features.Jam],
   },
   {
     id: "power",
     title: "Power Features",
-    description: "These replace the old Advanced Options toggle and default to off unless you previously enabled it.",
-    featureIds: [Features.ExperimentalEffects, Features.CustomEffects, Features.MultiRig, Features.CompositeEffects, Features.BlendTools, Features.EffectLayout, Features.ResourceCleanup, Features.FactoryPresetArchives, Features.DebugStateCapture],
+    description: "These features are optional and may be under development or designed for advanced users.",
+    featureIds: [Features.AiToneSearch, Features.ExperimentalEffects, Features.CustomEffects, Features.MultiRig, Features.CompositeEffects, Features.BlendTools, Features.EffectLayout, Features.ResourceCleanup, Features.FactoryPresetArchives, Features.DebugStateCapture],
   },
 ];
 

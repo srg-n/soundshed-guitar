@@ -8,7 +8,7 @@ import { arrayBufferToBase64, generateResourceId } from "./archiveUtils.js";
 import { switchMainPanel } from "./navigation.js";
 import { activateEquipmentTab, activateLibraryTab } from "./settings.js";
 import { setTone3000Search } from "./tone3000Browser.js";
-import { Features, isFeatureEnabled } from "./featureFlags.js";
+import { FEATURE_FLAGS_CHANGED_EVENT, Features, isFeatureEnabled } from "./featureFlags.js";
 import { showNotification } from "./notifications.js";
 
 type ToneSharingUser = {
@@ -192,6 +192,11 @@ const aiSearchState = {
   loading: false,
   error: ""
 };
+
+function isAiToneSearchEnabled(): boolean {
+  return isFeatureEnabled(Features.AiToneSearch);
+}
+
 let editingPackId: string | null = null;
 let previewingItemId: string | null = null;
 let previewingItemTitle = "";
@@ -2256,6 +2261,9 @@ async function loadBrowse(): Promise<void> {
   if (!feed) {
     return;
   }
+  if (browseMode === "ai-search" && !isAiToneSearchEnabled()) {
+    browseMode = "featured";
+  }
   clearPackDetail();
   feed.innerHTML = `<div class="tone-sharing-status">Loading...</div>`;
   resetBrowseCollections();
@@ -2949,7 +2957,18 @@ function bindBrowseModeButtons(): void {
     { id: "tone-sharing-browse-mine", mode: "mine" }
   ];
 
+  const syncAiSearchButtonVisibility = () => {
+    const aiSearchButton = element<HTMLButtonElement>("tone-sharing-browse-ai-search");
+    if (aiSearchButton) {
+      aiSearchButton.style.display = isAiToneSearchEnabled() ? "" : "none";
+    }
+    if (browseMode === "ai-search" && !isAiToneSearchEnabled()) {
+      browseMode = "featured";
+    }
+  };
+
   const setActive = () => {
+    syncAiSearchButtonVisibility();
     for (const entry of modes) {
       const button = element<HTMLButtonElement>(entry.id);
       if (button) {
@@ -2964,6 +2983,9 @@ function bindBrowseModeButtons(): void {
       continue;
     }
     button.addEventListener("click", async () => {
+      if (entry.mode === "ai-search" && !isAiToneSearchEnabled()) {
+        return;
+      }
       activeSharedTarget = null;
       updateActiveSharedFilter();
       browseMode = entry.mode;
@@ -3296,6 +3318,17 @@ export function initializeToneSharingPanel(): void {
   bindTopControls();
   bindBrowseModeButtons();
   bindBrowseActions();
+  document.addEventListener(FEATURE_FLAGS_CHANGED_EVENT, (event) => {
+    const detail = (event as CustomEvent<{ featureId?: string }>).detail;
+    if (detail?.featureId !== Features.AiToneSearch) {
+      return;
+    }
+    if (browseMode === "mine") {
+      void loadMine();
+      return;
+    }
+    void loadBrowse();
+  });
 
   void (async () => {
     await loadAuthSession();
