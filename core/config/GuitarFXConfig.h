@@ -43,7 +43,7 @@
 // Leave empty to disable automatic startup preset loading.
 // When set, the title is matched after initialization and factory preset imports
 // if no previous preset selection is stored.
-#define GUITARFX_DEFAULT_STARTUP_PRESET_TITLE "Big Metal Rhythm"
+#define GUITARFX_DEFAULT_STARTUP_PRESET_TITLE "Black Album (Full Rig)"
 
 #define PLUG_BG_COLOR 0x202020FF
 
