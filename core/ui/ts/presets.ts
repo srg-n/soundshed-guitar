@@ -13,7 +13,12 @@ import { renderSignalPathBar } from "./signalPath.js";
 import { showConfirm } from "./dialogs.js";
 import { isToneSharingSignedIn, openToneSharingPublishPresetModal, openToneSharingSignInModal, registerInstalledToneSharingPack, syncToneSharingFavoriteForPreset, syncToneSharingRatingForPreset } from "./toneSharingPanel.js";
 import type { InstalledPackMetadata } from "./toneSharingPanel.js";
-import { downloadTone3000ResourceByReference, isTone3000AuthReady, saveTone3000ApiKey } from "./tone3000.js";
+import {
+  downloadTone3000ResourceByReference,
+  isTone3000AuthReady,
+  isTone3000ProxyModeEnabled,
+  saveTone3000ApiKey,
+} from "./tone3000.js";
 import { switchMainPanel } from "./navigation.js";
 import { activateLibraryTab } from "./settings.js";
 import { updateUiSettings } from "./windowSettings.js";
@@ -2505,6 +2510,7 @@ type ImportPackSummary = {
 };
 
 function buildImportSummaryMessage(summary: ImportPackSummary): string {
+  const proxyModeEnabled = isTone3000ProxyModeEnabled();
   const lines = [
     `Import pack \"${summary.title}\"?`,
     `Format: ${summary.format === "generatedPack" ? "Generated Pack" : "Preset Archive"}`,
@@ -2513,7 +2519,11 @@ function buildImportSummaryMessage(summary: ImportPackSummary): string {
     `Blends: ${summary.blendCount}`,
   ];
   if (summary.tone3000ResourceCount > 0) {
-    lines.push(`Tone3000 resources: ${summary.tone3000ResourceCount} (requires your Tone3000 API key)`);
+    if (proxyModeEnabled) {
+      lines.push(`Tone3000 resources: ${summary.tone3000ResourceCount}`);
+    } else {
+      lines.push(`Tone3000 resources: ${summary.tone3000ResourceCount} (requires your Tone3000 API key)`);
+    }
   }
   if (summary.packId) {
     lines.push(`Pack ID: ${summary.packId}`);
@@ -3212,7 +3222,8 @@ async function importTone3000ArchiveResources(
   idMap: Map<string, string>,
   importedResources: Array<{ type: string; id: string }>,
 ): Promise<void> {
-  if (!isTone3000AuthReady()) {
+  const proxyModeEnabled = isTone3000ProxyModeEnabled();
+  if (!proxyModeEnabled && !isTone3000AuthReady()) {
     const storedApiKey = typeof uiState.appSettings["tone3000.apiKey"] === "string"
       ? (uiState.appSettings["tone3000.apiKey"] as string).trim()
       : "";

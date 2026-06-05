@@ -35,6 +35,10 @@ function isProxyModeActive(): boolean {
   return getTone3000ApiClientConfig().usingProxy || isSoundshedToneSearchApiEnabled();
 }
 
+export function isTone3000ProxyModeEnabled(): boolean {
+  return isProxyModeActive();
+}
+
 export function isTone3000AuthReady(): boolean {
   if (isProxyModeActive()) {
     return true;
