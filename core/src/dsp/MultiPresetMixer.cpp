@@ -1145,6 +1145,10 @@ namespace guitarfx
       totalWorkUnits,
       !mWorkerThreads.empty());
 
+    // Avoid nested parallelism: if mixer-level fan-out is active, run each preset graph serially.
+    for (auto &inst : mInstances)
+      inst.executor.SetParallelLevelsEnabled(!useParallel);
+
     if (useParallel)
     {
       // Pack work items (up to kMaxWorkItems); any extras fall through to serial below.
@@ -1374,7 +1378,7 @@ namespace guitarfx
       node.scope = "pre";
       node.nodeId = entry.nodeId;
       node.nodeType = entry.nodeType;
-      node.stereoActive = entry.stereoActive;
+      node.channelCount = entry.channelCount;
       node.levels.peak = entry.peak;
       node.levels.rms = entry.rms;
       node.levels.clipCount = entry.clipCount;
@@ -1391,7 +1395,7 @@ namespace guitarfx
         node.presetId = inst.cfg.id;
         node.nodeId = entry.nodeId;
         node.nodeType = entry.nodeType;
-        node.stereoActive = entry.stereoActive;
+        node.channelCount = entry.channelCount;
         node.levels.peak = entry.peak;
         node.levels.rms = entry.rms;
         node.levels.clipCount = entry.clipCount;
@@ -1405,7 +1409,7 @@ namespace guitarfx
       node.scope = "post";
       node.nodeId = entry.nodeId;
       node.nodeType = entry.nodeType;
-      node.stereoActive = entry.stereoActive;
+      node.channelCount = entry.channelCount;
       node.levels.peak = entry.peak;
       node.levels.rms = entry.rms;
       node.levels.clipCount = entry.clipCount;

@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
+#include <vector>
 
 namespace guitarfx
 {
@@ -26,6 +28,10 @@ namespace guitarfx
       mMaxInputFrames = std::max(0, maxInputFrames);
       mMaxOutputFrames = ComputeMaxOutputFrameCount(mMaxInputFrames, mSourceRate, mTargetRate);
       mQuality = quality;
+
+      const int halfTaps = GetHalfTapsForQuality();
+      const double cutoff = std::min(mTargetRate / std::max(mSourceRate, 1.0e-12), 1.0);
+      EnsureKernelTable(halfTaps, cutoff);
     }
 
     [[nodiscard]] int GetMaxOutputFrames() const noexcept { return mMaxOutputFrames; }
@@ -78,12 +84,16 @@ namespace guitarfx
     static constexpr int kHighPerformanceHalfTaps = 12;
     static constexpr int kGuardFrames = 8;
     static constexpr double kPi = 3.14159265358979323846;
+    static constexpr int kKernelPhaseCount = 1024;
 
     double mSourceRate = 44100.0;
     double mTargetRate = 44100.0;
     int mMaxInputFrames = 0;
     int mMaxOutputFrames = 0;
     SampleRateConversionQuality mQuality = SampleRateConversionQuality::Highest;
+    mutable int mKernelHalfTaps = -1;
+    mutable double mKernelCutoff = -1.0;
+    mutable std::vector<double> mKernelTable;
 
     [[nodiscard]] static bool RatesMatch(double sourceRate, double targetRate)
     {
@@ -114,6 +124,47 @@ namespace guitarfx
 
       return 0.42 + 0.5 * std::cos(kPi * normalizedDistance)
         + 0.08 * std::cos(2.0 * kPi * normalizedDistance);
+    }
+
+    void EnsureKernelTable(int halfTaps, double cutoff) const
+    {
+      if (halfTaps <= 0)
+        return;
+
+      if (mKernelHalfTaps == halfTaps
+          && std::abs(mKernelCutoff - cutoff) <= std::numeric_limits<double>::epsilon())
+      {
+        return;
+      }
+
+      const int tapCount = 2 * halfTaps + 1;
+      mKernelTable.assign(static_cast<std::size_t>(kKernelPhaseCount) * static_cast<std::size_t>(tapCount), 0.0);
+
+      for (int phaseIndex = 0; phaseIndex < kKernelPhaseCount; ++phaseIndex)
+      {
+        const double phase = static_cast<double>(phaseIndex) / static_cast<double>(kKernelPhaseCount);
+        double coeffSum = 0.0;
+
+        for (int tapOffset = -halfTaps; tapOffset <= halfTaps; ++tapOffset)
+        {
+          const double distance = phase - static_cast<double>(tapOffset);
+          const double coefficient = cutoff * Sinc(distance * cutoff) * Blackman(distance, halfTaps);
+          const std::size_t tableIndex = static_cast<std::size_t>(phaseIndex) * static_cast<std::size_t>(tapCount)
+            + static_cast<std::size_t>(tapOffset + halfTaps);
+          mKernelTable[tableIndex] = coefficient;
+          coeffSum += coefficient;
+        }
+
+        if (std::abs(coeffSum) > 1.0e-12)
+        {
+          const std::size_t rowStart = static_cast<std::size_t>(phaseIndex) * static_cast<std::size_t>(tapCount);
+          for (int tapIndex = 0; tapIndex < tapCount; ++tapIndex)
+            mKernelTable[rowStart + static_cast<std::size_t>(tapIndex)] /= coeffSum;
+        }
+      }
+
+      mKernelHalfTaps = halfTaps;
+      mKernelCutoff = cutoff;
     }
 
     template <typename InputSample>
@@ -150,27 +201,28 @@ namespace guitarfx
                     int outputFrames) const
     {
       const int halfTaps = GetHalfTapsForQuality();
+      const int tapCount = 2 * halfTaps + 1;
       const double sourceStep = static_cast<double>(inputFrames) / static_cast<double>(outputFrames);
       const double cutoff = std::min(static_cast<double>(outputFrames) / static_cast<double>(inputFrames), 1.0);
+      EnsureKernelTable(halfTaps, cutoff);
 
       for (int outputIndex = 0; outputIndex < outputFrames; ++outputIndex)
       {
         const double sourcePosition = (static_cast<double>(outputIndex) + 0.5) * sourceStep - 0.5;
         const int centerIndex = static_cast<int>(std::floor(sourcePosition));
+        const double fractional = sourcePosition - static_cast<double>(centerIndex);
+        int phaseIndex = static_cast<int>(fractional * static_cast<double>(kKernelPhaseCount));
+        phaseIndex = std::clamp(phaseIndex, 0, kKernelPhaseCount - 1);
+        const std::size_t kernelRow = static_cast<std::size_t>(phaseIndex) * static_cast<std::size_t>(tapCount);
         double weightedSum = 0.0;
-        double coefficientSum = 0.0;
 
         for (int tapOffset = -halfTaps; tapOffset <= halfTaps; ++tapOffset)
         {
           const int sourceIndex = centerIndex + tapOffset;
-          const double distance = sourcePosition - static_cast<double>(sourceIndex);
-          const double coefficient = cutoff * Sinc(distance * cutoff) * Blackman(distance, halfTaps);
+          const double coefficient = mKernelTable[kernelRow + static_cast<std::size_t>(tapOffset + halfTaps)];
           weightedSum += ReadClampedSample(input, inputFrames, sourceIndex) * coefficient;
-          coefficientSum += coefficient;
         }
 
-        if (std::abs(coefficientSum) > 1.0e-12)
-          weightedSum /= coefficientSum;
         output[outputIndex] = static_cast<OutputSample>(weightedSum);
       }
 

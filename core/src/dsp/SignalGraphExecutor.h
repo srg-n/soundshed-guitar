@@ -41,7 +41,7 @@ namespace guitarfx
       double peak = 0.0;
       double rms = 0.0;
       int clipCount = 0;
-      bool stereoActive = false;
+      int channelCount = 0;
     };
 
     SignalGraphExecutor();
@@ -88,6 +88,10 @@ namespace guitarfx
     void SetSignalDiagnosticsEnabled(bool enabled) { mSignalDiagnosticsEnabled.store(enabled, std::memory_order_release); }
     [[nodiscard]] bool IsSignalDiagnosticsEnabled() const { return mSignalDiagnosticsEnabled.load(std::memory_order_acquire); }
     [[nodiscard]] std::vector<NodeSignalLevel> GetNodeSignalLevels() const;
+
+    // Runtime control for intra-graph parallel processing.
+    void SetParallelLevelsEnabled(bool enabled) { mParallelLevelsEnabled.store(enabled, std::memory_order_release); }
+    [[nodiscard]] bool IsParallelLevelsEnabled() const { return mParallelLevelsEnabled.load(std::memory_order_acquire); }
 
     // Queries
     [[nodiscard]] bool IsValid() const { return mIsValid; }
@@ -149,6 +153,7 @@ namespace guitarfx
     mutable std::mutex mPerformanceStatsMutex;
 
     std::atomic<bool> mSignalDiagnosticsEnabled{true};
+    std::atomic<bool> mParallelLevelsEnabled{true};
 
     // Parallel node processing within one graph level.
     static constexpr int kMaxParallelWorkers = 7;

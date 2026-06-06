@@ -11007,7 +11007,7 @@ void PluginController::SendSignalDiagnosticsToUI()
         node["presetId"] = n.presetId;
         node["nodeId"] = n.nodeId;
         node["nodeType"] = n.nodeType;
-        node["stereoActive"] = n.stereoActive;
+        node["channelCount"] = n.channelCount;
         node["levels"] = buildLevelJson(n.levels);
         nodes.push_back(node);
     }

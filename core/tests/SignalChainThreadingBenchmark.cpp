@@ -59,6 +59,7 @@ struct BenchmarkSettings
 {
     std::string profile = kProfileBaseline;
     double sampleRate = kDefaultSampleRate;
+    bool monoInput = false;
     std::string csvPath;
 };
 
@@ -316,7 +317,9 @@ BenchmarkResult RunBenchmark(const BenchmarkSettings& settings, int presetCount,
     {
         const double phase = static_cast<double>(i) * 2.0 * 3.14159265358979323846 / 64.0;
         inL[static_cast<std::size_t>(i)] = static_cast<float>(0.35 * std::sin(phase));
-        inR[static_cast<std::size_t>(i)] = static_cast<float>(0.35 * std::cos(phase));
+        inR[static_cast<std::size_t>(i)] = settings.monoInput
+            ? inL[static_cast<std::size_t>(i)]
+            : static_cast<float>(0.35 * std::cos(phase));
     }
 
     float* inputs[2] = { inL.data(), inR.data() };
@@ -328,20 +331,20 @@ BenchmarkResult RunBenchmark(const BenchmarkSettings& settings, int presetCount,
     }
 
     const auto startSnapshot = CaptureProcessSnapshot();
-    const auto start = std::chrono::steady_clock::now();
+    const auto startTime = std::chrono::steady_clock::now();
 
     for (int i = 0; i < kMeasureBlocks; ++i)
     {
         const float mod = static_cast<float>(0.001 * std::sin(static_cast<double>(i) * 0.01));
         inL[0] += mod;
-        inR[0] -= mod;
+        inR[0] += settings.monoInput ? mod : -mod;
         mixer.Process(inputs, outputs, kBlockSize);
     }
 
-    const auto end = std::chrono::steady_clock::now();
+    const auto endTime = std::chrono::steady_clock::now();
     const auto endSnapshot = CaptureProcessSnapshot();
 
-    const auto wallNs = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+    const auto wallNs = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count();
     const double wallMs = static_cast<double>(wallNs) / 1.0e6;
     const double avgBlockUs = static_cast<double>(wallNs) / static_cast<double>(kMeasureBlocks) / 1.0e3;
 
@@ -386,6 +389,7 @@ bool ParseArgs(int argc, char* argv[], BenchmarkSettings& settings, bool& showHe
     showHelp = false;
     settings.profile = kProfileBaseline;
     settings.sampleRate = kDefaultSampleRate;
+    settings.monoInput = false;
     settings.csvPath.clear();
 
     for (int i = 1; i < argc; ++i)
@@ -446,18 +450,41 @@ bool ParseArgs(int argc, char* argv[], BenchmarkSettings& settings, bool& showHe
             continue;
         }
 
+        if (arg == "--input-mode")
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "Missing value after --input-mode\n";
+                return false;
+            }
+
+            const std::string mode = argv[++i];
+            if (mode == "mono")
+                settings.monoInput = true;
+            else if (mode == "stereo")
+                settings.monoInput = false;
+            else
+            {
+                std::cerr << "Unsupported input mode: " << mode << "\n";
+                std::cerr << "Supported: mono, stereo\n";
+                return false;
+            }
+            continue;
+        }
+
         if (arg == "-h" || arg == "--help")
         {
-            std::cout << "Usage: SignalChainThreadingBenchmark [--profile baseline|namconv] [--sample-rate <hz>] [--csv <path>]\n";
+            std::cout << "Usage: SignalChainThreadingBenchmark [--profile baseline|namconv] [--sample-rate <hz>] [--input-mode mono|stereo] [--csv <path>]\n";
             std::cout << "  --profile <name>  Benchmark profile to run (default: baseline).\n";
             std::cout << "  --sample-rate <hz>  Processing sample rate for benchmark run (default: 48000).\n";
+            std::cout << "  --input-mode <mode>  Input signal mode: mono or stereo (default: stereo).\n";
             std::cout << "  --csv <path>  Write results table as CSV to the given file path.\n";
             showHelp = true;
             return false;
         }
 
         std::cerr << "Unknown argument: " << arg << '\n';
-        std::cerr << "Usage: SignalChainThreadingBenchmark [--profile baseline|namconv] [--sample-rate <hz>] [--csv <path>]\n";
+        std::cerr << "Usage: SignalChainThreadingBenchmark [--profile baseline|namconv] [--sample-rate <hz>] [--input-mode mono|stereo] [--csv <path>]\n";
         return false;
     }
 
@@ -467,6 +494,7 @@ bool ParseArgs(int argc, char* argv[], BenchmarkSettings& settings, bool& showHe
 bool WriteCsv(const std::string& csvPath,
               const std::vector<BenchmarkResult>& rows,
               double sampleRate,
+              bool monoInput,
               double onePresetSpeedup,
               double fourPresetSpeedup)
 {
@@ -477,11 +505,12 @@ bool WriteCsv(const std::string& csvPath,
         return false;
     }
 
-    out << "profile,sample_rate,block_size,warmup_blocks,measure_blocks,mode,presets,wall_ms,avg_block_us,cpu_pct,working_set_mb,private_mb\n";
+    out << "profile,sample_rate,input_mode,block_size,warmup_blocks,measure_blocks,mode,presets,wall_ms,avg_block_us,cpu_pct,working_set_mb,private_mb\n";
     for (const auto& row : rows)
     {
         out << row.profile << ','
             << static_cast<int>(std::lround(sampleRate)) << ','
+            << (monoInput ? "mono" : "stereo") << ','
             << kBlockSize << ','
             << kWarmupBlocks << ','
             << kMeasureBlocks << ','
@@ -520,6 +549,7 @@ int main(int argc, char* argv[])
         std::cout << "Signal Chain Threading Benchmark\n";
         std::cout << "Profile=" << settings.profile << "\n";
         std::cout << "SampleRate=" << settings.sampleRate << ", BlockSize=" << kBlockSize
+                  << ", InputMode=" << (settings.monoInput ? "mono" : "stereo")
                   << ", WarmupBlocks=" << kWarmupBlocks
                   << ", MeasureBlocks=" << kMeasureBlocks << "\n";
         std::cout << "==============================================\n\n";
@@ -568,7 +598,7 @@ int main(int argc, char* argv[])
 
         if (!settings.csvPath.empty())
         {
-            if (!WriteCsv(settings.csvPath, rows, settings.sampleRate, onePresetSpeedup, fourPresetSpeedup))
+            if (!WriteCsv(settings.csvPath, rows, settings.sampleRate, settings.monoInput, onePresetSpeedup, fourPresetSpeedup))
             {
                 return 1;
             }

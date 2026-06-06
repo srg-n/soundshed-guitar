@@ -64,7 +64,7 @@ namespace guitarfx
       std::string presetId;
       std::string nodeId;
       std::string nodeType;
-      bool stereoActive = false;
+      int channelCount = 0;
       SignalLevelStats levels;
     };
 

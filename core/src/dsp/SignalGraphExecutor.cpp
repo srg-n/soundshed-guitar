@@ -127,8 +127,8 @@ namespace guitarfx
         return true;
       }
 
-      // Tight epsilon keeps this focused on true mono/dual-mono blocks.
-      constexpr float kEpsilon = 1.0e-8f;
+      // Treat near-identical channels as dual-mono so mono-capable effects can run once.
+      constexpr float kEpsilon = 1.0e-6f;
       for (int i = 0; i < numSamples; ++i)
       {
         if (std::abs(left[i] - right[i]) > kEpsilon)
@@ -572,7 +572,9 @@ namespace guitarfx
     }
 
     const unsigned int hw = std::thread::hardware_concurrency();
-    const int workerCount = static_cast<int>(hw > 1 ? hw - 1 : 0);
+    const int hardwareWorkerBudget = static_cast<int>(hw > 1 ? hw - 1 : 0);
+    const int graphWorkerLimit = std::max(0, static_cast<int>(maxLevelWidth) - 1);
+    const int workerCount = std::min({hardwareWorkerBudget, graphWorkerLimit, kMaxParallelWorkers});
     constexpr int kMinLevelParallelWorkUnits = 1800;
     const bool graphHasMeaningfulParallelLevel = (maxLevelScore * maxBlockSize) >= kMinLevelParallelWorkUnits;
     mUseParallelLevels = maxLevelWidth > 1 && workerCount > 0 && graphHasMeaningfulParallelLevel;
@@ -702,7 +704,7 @@ namespace guitarfx
         levelCount,
         levelScore,
         numSamples,
-        mUseParallelLevels,
+        mUseParallelLevels && mParallelLevelsEnabled.load(std::memory_order_acquire),
         !mWorkerThreads.empty());
 
       if (useParallelLevel)
@@ -903,7 +905,9 @@ namespace guitarfx
 
     if (state->processor && state->hasInput)
     {
-      const bool nodeCanMono = !incomingStereoSignal && state->processor->SupportsMonoProcessing() && !NodeMayProduceStereo(state->type, state->category);
+      const bool nodeCanMono = state->processor->SupportsMonoProcessing()
+        && !NodeMayProduceStereo(state->type, state->category)
+        && !incomingStereoSignal;
 
       if (nodeType == kNodeTypeSplitter || nodeType == kNodeTypeOutput)
       {
@@ -1140,7 +1144,7 @@ namespace guitarfx
       entry.peak = state.peak.load(std::memory_order_relaxed);
       entry.rms = state.rms.load(std::memory_order_relaxed);
       entry.clipCount = state.clipCount.load(std::memory_order_relaxed);
-      entry.stereoActive = state.hasStereoSignal;
+      entry.channelCount = state.hasInput ? (state.hasStereoSignal ? 2 : 1) : 0;
       result.push_back(std::move(entry));
     }
 
