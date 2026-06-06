@@ -110,6 +110,20 @@ function(guitarfx_disable_linux_gnu_unique target_name)
     endif()
 endfunction()
 
+function(guitarfx_enforce_nam_a2_fast target_name)
+    if(NOT TARGET ${target_name})
+        return()
+    endif()
+
+    get_target_property(_guitarfx_nam_imported ${target_name} IMPORTED)
+    if(_guitarfx_nam_imported)
+        set_property(TARGET ${target_name} APPEND PROPERTY
+            INTERFACE_COMPILE_DEFINITIONS NAM_ENABLE_A2_FAST=1)
+    else()
+        target_compile_definitions(${target_name} PUBLIC NAM_ENABLE_A2_FAST=1)
+    endif()
+endfunction()
+
 function(guitarfx_get_wasmtime_bundle out_platform out_archive_ext out_static_lib)
     if(WIN32)
         set(_guitarfx_wasmtime_arch "${CMAKE_GENERATOR_PLATFORM}")
@@ -372,7 +386,7 @@ if(GUITARFX_CORE_FETCH_DEPS AND NOT TARGET NeuralAmpModelerCore AND NOT TARGET n
         add_library(NeuralAmpModelerCore STATIC ${NAM_SOURCES})
         set_target_properties(NeuralAmpModelerCore PROPERTIES
             POSITION_INDEPENDENT_CODE ON)
-        target_compile_definitions(NeuralAmpModelerCore PUBLIC NAM_ENABLE_A2_FAST=1)
+        guitarfx_enforce_nam_a2_fast(NeuralAmpModelerCore)
         guitarfx_disable_linux_gnu_unique(NeuralAmpModelerCore)
         target_compile_features(NeuralAmpModelerCore PUBLIC cxx_std_17)
         guitarfx_apply_release_optimizations(NeuralAmpModelerCore)
@@ -388,6 +402,10 @@ if(GUITARFX_CORE_FETCH_DEPS AND NOT TARGET NeuralAmpModelerCore AND NOT TARGET n
         endif()
     endif()
 endif()
+
+# Ensure fast A2 WaveNet path is always enabled for whichever NAM core target is present.
+guitarfx_enforce_nam_a2_fast(NeuralAmpModelerCore)
+guitarfx_enforce_nam_a2_fast(nam)
 
 # ---------------------------------------------------------------------------
 # Source files
