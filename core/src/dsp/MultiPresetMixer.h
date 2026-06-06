@@ -103,6 +103,11 @@ namespace guitarfx
     void SetLimiterEnabled(bool enabled) { mLimiterEnabled = enabled; }
     [[nodiscard]] double GetMasterGain() const { return mMasterGain; }
     [[nodiscard]] bool IsLimiterEnabled() const { return mLimiterEnabled; }
+    void SetMultiThreadedProcessingEnabled(bool enabled);
+    [[nodiscard]] bool IsMultiThreadedProcessingEnabled() const noexcept
+    {
+      return mMultiThreadedProcessingEnabled.load(std::memory_order_acquire);
+    }
 
     // Global input/output settings
     void SetAutoLevelInput(bool enabled) { mAutoLevelInput = enabled; }
@@ -241,6 +246,7 @@ namespace guitarfx
     bool mPrepared = false;
     double mMasterGain = 1.0;
     bool mLimiterEnabled = false;
+    std::atomic<bool> mMultiThreadedProcessingEnabled{true};
 
     // Global settings
     bool mAutoLevelInput = false;

@@ -278,6 +278,27 @@ namespace guitarfx
     }
   }
 
+  void MultiPresetMixer::SetMultiThreadedProcessingEnabled(bool enabled)
+  {
+    const bool previous = mMultiThreadedProcessingEnabled.exchange(enabled, std::memory_order_acq_rel);
+    if (previous == enabled)
+      return;
+
+    if (!enabled)
+    {
+      StopWorkers();
+      return;
+    }
+
+    if (!mPrepared)
+      return;
+
+    const unsigned int hw = std::thread::hardware_concurrency();
+    const int workerCount = static_cast<int>(hw > 1 ? hw - 1 : 0);
+    if (workerCount > 0)
+      StartWorkers(workerCount);
+  }
+
   void MultiPresetMixer::SetInputTrim(double dB)
   {
     for (auto &inst : mInstances)
@@ -875,10 +896,17 @@ namespace guitarfx
 
     // Start worker threads for parallel preset processing.
     // Reserve hw_concurrency-1 threads so the audio thread's core is not contested.
-    const unsigned int hw = std::thread::hardware_concurrency();
-    const int workerCount = static_cast<int>(hw > 1 ? hw - 1 : 0);
-    if (workerCount > 0)
-      StartWorkers(workerCount);
+    if (mMultiThreadedProcessingEnabled.load(std::memory_order_acquire))
+    {
+      const unsigned int hw = std::thread::hardware_concurrency();
+      const int workerCount = static_cast<int>(hw > 1 ? hw - 1 : 0);
+      if (workerCount > 0)
+        StartWorkers(workerCount);
+    }
+    else
+    {
+      StopWorkers();
+    }
   }
 
   void MultiPresetMixer::Reset()
@@ -1059,7 +1087,9 @@ namespace guitarfx
       if (!inst.cfg.mute && (!anySolo || inst.cfg.solo))
         ++activeCount;
 
-    const bool useParallel = (activeCount >= 2) && !mWorkerThreads.empty();
+    const bool useParallel = mMultiThreadedProcessingEnabled.load(std::memory_order_acquire)
+      && (activeCount >= 2)
+      && !mWorkerThreads.empty();
 
     if (useParallel)
     {

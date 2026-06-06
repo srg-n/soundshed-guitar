@@ -22,6 +22,13 @@ endif()
 option(GUITARFX_CORE_FETCH_DEPS "Fetch third-party dependencies automatically" OFF)
 option(GUITARFX_CORE_BUILD_TESTS "Build core unit tests" OFF)
 option(GUITARFX_CORE_ENABLE_WASM_EFFECTS "Build the generic WASM effect host" ON)
+option(GUITARFX_CORE_ENABLE_AVX2 "Enable AVX2 compile flags for x64 Release/RelWithDebInfo builds" ON)
+
+if(GUITARFX_CORE_ENABLE_AVX2)
+    message(STATUS "Core AVX2 release flags: ON (applies to x64/x86_64 targets only)")
+else()
+    message(STATUS "Core AVX2 release flags: OFF")
+endif()
 
 if(MSVC)
     include(CheckCXXCompilerFlag)
@@ -43,7 +50,7 @@ function(guitarfx_apply_release_optimizations target_name)
         endif()
         string(TOLOWER "${_guitarfx_windows_arch}" _guitarfx_windows_arch)
 
-        if(_guitarfx_windows_arch MATCHES "^(x64|amd64|x86_64)$" AND GUITARFX_MSVC_HAS_ARCH_AVX2)
+        if(GUITARFX_CORE_ENABLE_AVX2 AND _guitarfx_windows_arch MATCHES "^(x64|amd64|x86_64)$" AND GUITARFX_MSVC_HAS_ARCH_AVX2)
             target_compile_options(${target_name} PRIVATE
                 $<$<CONFIG:Release>:/arch:AVX2>
                 $<$<CONFIG:RelWithDebInfo>:/arch:AVX2>)
@@ -70,7 +77,7 @@ function(guitarfx_apply_release_optimizations target_name)
             set(_guitarfx_osx_arches "${CMAKE_SYSTEM_PROCESSOR}")
         endif()
 
-        if(_guitarfx_osx_arches MATCHES "x86_64")
+        if(GUITARFX_CORE_ENABLE_AVX2 AND _guitarfx_osx_arches MATCHES "x86_64")
             if(CMAKE_CONFIGURATION_TYPES)
                 target_compile_options(${target_name} PRIVATE
                     $<$<CONFIG:Release>:-Xarch_x86_64>
@@ -88,7 +95,7 @@ function(guitarfx_apply_release_optimizations target_name)
             $<$<CONFIG:RelWithDebInfo>:-O3>
             $<$<CONFIG:Release>:-ffast-math>
             $<$<CONFIG:RelWithDebInfo>:-ffast-math>)
-        if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|x86_64)$")
+        if(GUITARFX_CORE_ENABLE_AVX2 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|x86_64)$")
             target_compile_options(${target_name} PRIVATE
                 $<$<CONFIG:Release>:-mavx2>
                 $<$<CONFIG:RelWithDebInfo>:-mavx2>)
