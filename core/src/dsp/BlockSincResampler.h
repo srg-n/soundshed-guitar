@@ -1,5 +1,55 @@
 #pragma once
 
+/*
+  BlockSincResampler algorithm summary
+  ====================================
+
+  Purpose
+  - Convert one non-interleaved mono block from source sample-rate domain to
+    target sample-rate domain with fixed output frame count.
+  - Support three runtime quality modes with identical API:
+    1) Linear              : minimal CPU, lowest quality
+    2) HighPerformance     : windowed-sinc with fewer taps
+    3) Highest             : windowed-sinc with wider kernel
+
+  High-level flow
+  1) Prepare(sourceRate, targetRate, maxInputFrames, quality)
+     - Stores rates and limits.
+     - Computes max output frame capacity for worst-case ratio (+guard).
+     - For sinc modes, precomputes a fractional-phase kernel table so the
+       real-time loop avoids per-sample trig/window evaluation.
+
+  2) ProcessFixedOutput(input, inputFrames, output, outputFrames)
+     - Fast passthrough when rates match (or frame counts match).
+     - Uses linear interpolation if quality == Linear.
+     - Uses table-driven windowed-sinc convolution otherwise.
+
+  Sinc path details (table-driven)
+  - Kernel shape: sinc(distance * cutoff) * Blackman(distance)
+  - Kernel support: tap offsets in [-halfTaps, +halfTaps]
+  - Fractional-phase discretization: kKernelPhaseCount rows in [0, 1)
+  - Each row is normalized at build time so runtime avoids coefficient-sum
+    normalization/division.
+  - Per output sample:
+    a) Map output index to source position
+       sourcePos = (outIndex + 0.5) * (inputFrames / outputFrames) - 0.5
+    b) Split into center integer index + fractional phase
+    c) Select nearest precomputed kernel row for the phase
+    d) Convolve taps against clamped source samples
+
+  Edge handling
+  - Out-of-range reads are clamped to [0, inputFrames - 1].
+  - In passthrough mode, any extra output frames are padded using last input
+    sample.
+
+  Complexity and tradeoffs
+  - Linear mode: O(outputFrames)
+  - Sinc mode  : O(outputFrames * tapCount)
+  - Precomputation cost is paid in Prepare() and amortized across blocks.
+  - Design favors deterministic, allocation-free hot-loop behavior after table
+    build, while preserving a simple fixed-block API for DSP call sites.
+*/
+
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -18,6 +68,9 @@ namespace guitarfx
   class BlockSincResampler
   {
   public:
+    // Configure one resampling lane for repeated fixed-output block conversion.
+    // This precomputes phase kernels for sinc modes so the real-time loop only
+    // performs table lookup + MAC, not trig/window evaluation.
     void Prepare(double sourceRate,
                  double targetRate,
                  int maxInputFrames,
@@ -65,6 +118,7 @@ namespace guitarfx
 
       if (inputFrames == outputFrames || RatesMatch(mSourceRate, mTargetRate))
       {
+        // Fast pass-through path used when SRC is effectively disabled.
         const int framesToCopy = std::min(inputFrames, outputFrames);
         for (int sampleIndex = 0; sampleIndex < framesToCopy; ++sampleIndex)
           output[sampleIndex] = static_cast<OutputSample>(input[sampleIndex]);
@@ -80,10 +134,13 @@ namespace guitarfx
     }
 
   private:
+    // Highest quality uses a wide sinc kernel; high-performance uses a narrow
+    // kernel with lower CPU cost.
     static constexpr int kHalfTaps = 64;
     static constexpr int kHighPerformanceHalfTaps = 12;
     static constexpr int kGuardFrames = 8;
     static constexpr double kPi = 3.14159265358979323846;
+    // Number of fractional positions in [0, 1) with precomputed coefficient rows.
     static constexpr int kKernelPhaseCount = 1024;
 
     double mSourceRate = 44100.0;
@@ -131,6 +188,7 @@ namespace guitarfx
       if (halfTaps <= 0)
         return;
 
+      // If setup didn't change, keep the existing table to avoid rebuild cost.
       if (mKernelHalfTaps == halfTaps
           && std::abs(mKernelCutoff - cutoff) <= std::numeric_limits<double>::epsilon())
       {
@@ -142,6 +200,7 @@ namespace guitarfx
 
       for (int phaseIndex = 0; phaseIndex < kKernelPhaseCount; ++phaseIndex)
       {
+        // Precompute one tap row for a fractional offset in [0, 1).
         const double phase = static_cast<double>(phaseIndex) / static_cast<double>(kKernelPhaseCount);
         double coeffSum = 0.0;
 
@@ -157,6 +216,7 @@ namespace guitarfx
 
         if (std::abs(coeffSum) > 1.0e-12)
         {
+          // Normalize each row once so runtime path can skip coefficient-sum division.
           const std::size_t rowStart = static_cast<std::size_t>(phaseIndex) * static_cast<std::size_t>(tapCount);
           for (int tapIndex = 0; tapIndex < tapCount; ++tapIndex)
             mKernelTable[rowStart + static_cast<std::size_t>(tapIndex)] /= coeffSum;
@@ -208,6 +268,7 @@ namespace guitarfx
 
       for (int outputIndex = 0; outputIndex < outputFrames; ++outputIndex)
       {
+        // Map one output sample to a fractional source position.
         const double sourcePosition = (static_cast<double>(outputIndex) + 0.5) * sourceStep - 0.5;
         const int centerIndex = static_cast<int>(std::floor(sourcePosition));
         const double fractional = sourcePosition - static_cast<double>(centerIndex);
