@@ -365,6 +365,11 @@ public:
       mAutoLevelInput = value > 0.5;
       RecalculateAutoGains();
     }
+    else if (key == "useNamInputMetadata")
+    {
+      mUseNamInputMetadata = value > 0.5;
+      RecalculateAutoGains();
+    }
     else if (key == "autoLevelOutput")
     {
       mAutoLevelOutput = value > 0.5;
@@ -417,6 +422,11 @@ public:
     if (key == "autoLevelInput")
     {
       mAutoLevelInput = ParseBool(value);
+      RecalculateAutoGains();
+    }
+    else if (key == "useNamInputMetadata")
+    {
+      mUseNamInputMetadata = ParseBool(value);
       RecalculateAutoGains();
     }
     else if (key == "autoLevelOutput")
@@ -605,6 +615,7 @@ private:
   double mMix = 1.0;
   bool mAutoLevelInput = false;
   bool mAutoLevelOutput = true;
+  bool mUseNamInputMetadata = false;
   std::optional<double> mModelInputLevel;
   std::optional<double> mModelOutputLevel;
   std::optional<double> mModelLoudness;
@@ -661,6 +672,12 @@ private:
   {
     mAutoInputGain = 1.0;
     mAutoOutputGain = 1.0;
+
+    if (mAutoLevelInput && mUseNamInputMetadata && mModelInputLevel.has_value())
+    {
+      const double deltaDb = std::clamp(-*mModelInputLevel, -24.0, 24.0);
+      mAutoInputGain = std::pow(10.0, deltaDb / 20.0);
+    }
 
     if (mAutoLevelOutput)
     {
@@ -963,6 +980,7 @@ inline void RegisterOptimizedNAMAmpEffect()
   info.resourceFilterHint = {"amp", "full-rig"};
   info.parameters = {
     {"inputGain",             "Input",              0.0,   -24.0, 24.0,  "dB",  "Level"},
+    {"useNamInputMetadata",   "Use NAM Input Metadata", 0.0, 0.0,   1.0,  "toggle", "Advanced", true},
     {"bass",                  "Bass",               0.0,   -10.0, 10.0,  "dB",  "Tone"},
     {"mid",                   "Mid",                0.0,   -10.0, 10.0,  "dB",  "Tone"},
     {"treble",                "Treble",             0.0,   -10.0, 10.0,  "dB",  "Tone"},
