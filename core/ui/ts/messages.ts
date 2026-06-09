@@ -832,9 +832,17 @@ export function handleIncomingMessage(message: string): void {
       break;
     }
     case "resourceImported": {
-      const info = payload as { name?: string; resourceType?: string; filePath?: string };
+      const info = payload as { id?: string; name?: string; resourceType?: string; filePath?: string };
       appendLog(`resource imported ← ${info.name ?? "unknown"}`);
       showNotification("Resource imported", info.name ?? info.filePath ?? "");
+      document.dispatchEvent(new CustomEvent("resource-browser:resource-imported", {
+        detail: {
+          id: info.id ?? "",
+          name: info.name ?? "",
+          resourceType: info.resourceType ?? "",
+          filePath: info.filePath ?? "",
+        },
+      }));
       break;
     }
     case "resourceImportFailed": {

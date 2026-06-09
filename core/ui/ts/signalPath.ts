@@ -2630,6 +2630,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
         const displayName = current.id
           ? getNodeResourceDisplayName(node, resourceIndex, resourceType)
           : emptyDisplayName;
+        const hasCurrentSelection = Boolean(current.id || current.filePath);
         const isMissing = Boolean(current.id)
           && !current.filePath
           && !getLibraryResource(resourceType, current.id);
@@ -2682,6 +2683,16 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
                   data-exposed-resource-id="${escapeHtml(exposedResource.resourceId)}"
                   title="${escapeHtml(displayName)}"
                 >${escapeHtml(displayName)}</div>
+                <button
+                  class="resource-clear-btn"
+                  data-node-id="${node.id}"
+                  data-resource-type="${resourceType}"
+                  data-resource-index="${resourceIndex}"
+                  data-exposed-resource-id="${escapeHtml(exposedResource.resourceId)}"
+                  data-empty-label="${escapeHtml(emptyDisplayName)}"
+                  title="Clear selected resource"
+                  ${hasCurrentSelection ? "" : "disabled"}
+                >${renderIcon("close", "resource-clear-icon")}</button>
               ` : `
                 <select
                   class="resource-selector resource-dropdown"
@@ -2694,8 +2705,18 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
                   ${resourceOptions}
                   ${customOption}
                 </select>
+                <button
+                  class="resource-clear-btn"
+                  data-node-id="${node.id}"
+                  data-resource-type="${resourceType}"
+                  data-resource-index="${resourceIndex}"
+                  data-exposed-resource-id="${escapeHtml(exposedResource.resourceId)}"
+                  data-empty-label="${escapeHtml(emptyDisplayName)}"
+                  title="Clear selected resource"
+                  ${hasCurrentSelection ? "" : "disabled"}
+                >${renderIcon("close", "resource-clear-icon")}</button>
               `}
-              ${canBrowseFile ? `
+              ${canBrowseFile && !isLibraryPicker ? `
                 <button
                   class="resource-browse-btn"
                   data-node-id="${node.id}"
@@ -2749,6 +2770,8 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
       const displayName = current.id
         ? getNodeResourceDisplayName(node, index)
         : resourceType === "ir" ? "No IR selected" : "No model selected";
+      const emptyDisplayName = resourceType === "ir" ? "No IR selected" : "No model selected";
+      const hasCurrentSelection = Boolean(current.id || current.filePath);
       const isMissing = Boolean(current.id)
         && !current.filePath
         && !getLibraryResource(resourceType, current.id);
@@ -2789,6 +2812,15 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
                 ${indexAttr}
                 title="${escapeHtml(displayName)}"
               >${escapeHtml(displayName)}</div>
+              <button
+                class="resource-clear-btn"
+                data-node-id="${node.id}"
+                data-resource-type="${resourceType}"
+                ${indexAttr}
+                data-empty-label="${escapeHtml(emptyDisplayName)}"
+                title="Clear selected resource"
+                ${hasCurrentSelection ? "" : "disabled"}
+              >${renderIcon("close", "resource-clear-icon")}</button>
             ` : `
               <select
                 class="resource-dropdown"
@@ -2800,15 +2832,26 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
                 ${resourceOptions}
                 ${customOption}
               </select>
+              <button
+                class="resource-clear-btn"
+                data-node-id="${node.id}"
+                data-resource-type="${resourceType}"
+                ${indexAttr}
+                data-empty-label="${escapeHtml(emptyDisplayName)}"
+                title="Clear selected resource"
+                ${hasCurrentSelection ? "" : "disabled"}
+              >${renderIcon("close", "resource-clear-icon")}</button>
             `}
-            <button
-              class="resource-browse-btn"
-              data-node-id="${node.id}"
-              data-resource-type="${resourceType}"
-              ${indexAttr}
-              data-accept="${browseAccept}"
-              title="Browse for file..."
-            >${renderIcon("folder", "resource-browse-icon")}</button>
+            ${!isLibraryPicker ? `
+              <button
+                class="resource-browse-btn"
+                data-node-id="${node.id}"
+                data-resource-type="${resourceType}"
+                ${indexAttr}
+                data-accept="${browseAccept}"
+                title="Browse for file..."
+              >${renderIcon("folder", "resource-browse-icon")}</button>
+            ` : ""}
             ${hostedPluginOpenButton}
           </div>
           ${hostedPluginLoadError}
@@ -3607,6 +3650,7 @@ function bindResourceControls(node: GraphNode, preset: Preset): void {
         currentId: current.id,
         nodeId,
         resourceIndex,
+        exposedResourceId,
         tone3000CategoryFilter,
         onSelect: (resourceId) => {
           sendNodeResourceUpdate(nodeId, resourceType, resourceId, "", resourceIndex, undefined, exposedResourceId);
@@ -3653,6 +3697,67 @@ function bindResourceControls(node: GraphNode, preset: Preset): void {
       if (nodeId && resourceType) {
         sendBrowseNodeResource(nodeId, resourceType, resourceIndex, exposedResourceId);
       }
+    });
+  });
+
+  // Bind clear buttons
+  const clearBtns = nodeParamsPanelElement?.querySelectorAll(".resource-clear-btn") as NodeListOf<HTMLButtonElement> | null;
+  clearBtns?.forEach((clearBtn) => {
+    clearBtn.addEventListener("click", () => {
+      if (clearBtn.disabled) {
+        return;
+      }
+
+      const nodeId = clearBtn.dataset.nodeId;
+      const resourceType = clearBtn.dataset.resourceType;
+      const resourceIndex = clearBtn.dataset.resourceIndex ? parseInt(clearBtn.dataset.resourceIndex, 10) : undefined;
+      const exposedResourceId = clearBtn.dataset.exposedResourceId;
+      const emptyLabel = clearBtn.dataset.emptyLabel || "No resource selected";
+
+      if (!nodeId || !resourceType) {
+        return;
+      }
+
+      if (resourceType === "plugin") {
+        hostedPluginLoadFailures.delete(nodeId);
+        clearInlineHostedPluginLoadError(clearBtn);
+      }
+
+      sendNodeResourceUpdate(nodeId, resourceType, "", "", resourceIndex, undefined, exposedResourceId);
+
+      const dropdowns = nodeParamsPanelElement?.querySelectorAll<HTMLSelectElement>(
+        `.resource-dropdown[data-node-id="${nodeId}"][data-resource-type="${resourceType}"]`,
+      ) ?? [];
+      dropdowns.forEach((dropdown) => {
+        const controlResourceIndex = dropdown.dataset.resourceIndex ? parseInt(dropdown.dataset.resourceIndex, 10) : 0;
+        const clearResourceIndex = resourceIndex ?? 0;
+        const dropdownExposedResourceId = dropdown.dataset.exposedResourceId;
+        if (controlResourceIndex === clearResourceIndex && (dropdownExposedResourceId ?? "") === (exposedResourceId ?? "")) {
+          dropdown.value = "";
+        }
+      });
+
+      const labelCandidates = nodeParamsPanelElement?.querySelectorAll<HTMLElement>(
+        `.resource-picker-label[data-node-id="${nodeId}"]`,
+      ) as NodeListOf<HTMLElement> | null;
+      const pickerResourceType = resourceType === "nam" || resourceType === "ir" ? resourceType : null;
+      const labelEl = pickerResourceType
+        ? findMatchingResourcePickerLabel(
+          labelCandidates,
+          nodeId,
+          pickerResourceType,
+          resourceIndex ?? 0,
+          exposedResourceId,
+        )
+        : null;
+
+      if (labelEl) {
+        labelEl.textContent = emptyLabel;
+        labelEl.title = emptyLabel;
+        labelEl.classList.remove("is-missing");
+      }
+
+      clearBtn.disabled = true;
     });
   });
 

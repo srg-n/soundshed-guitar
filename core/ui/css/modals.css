@@ -1280,6 +1280,97 @@
   gap: 6px;
 }
 
+.resource-browser-tone-sections {
+  border-top: 1px solid var(--border-browser);
+  background: var(--bg-browser-shell);
+}
+
+.resource-browser-tone-section-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px 0;
+}
+
+.resource-browser-tone-section-tab {
+  border: 1px solid var(--border-browser);
+  background: var(--bg-browser-card);
+  color: var(--modal-text-muted);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.resource-browser-tone-section-tab.is-active {
+  border-color: var(--color-primary);
+  color: var(--modal-text);
+  background: rgba(87, 121, 255, 0.12);
+}
+
+.resource-browser-tone-section-panel {
+  padding-top: 8px;
+}
+
+.resource-browser-tone-details-panel {
+  padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.resource-browser-tone-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.resource-browser-tone-metadata-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-browser);
+  background: var(--bg-browser-card);
+}
+
+.resource-browser-tone-metadata-label {
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  color: var(--modal-text-muted);
+}
+
+.resource-browser-tone-metadata-value {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--modal-text);
+}
+
+.resource-browser-tone-details-description {
+  font-size: 11px;
+  color: var(--modal-text);
+  line-height: 1.45;
+}
+
+.resource-browser-tone-details-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.resource-browser-tone-details-tag {
+  border: 1px solid var(--border-browser);
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 10px;
+  color: var(--modal-text-muted);
+}
+
+.resource-browser-tone-details-tag.is-empty {
+  opacity: 0.8;
+}
+
 .resource-browser-model {
   display: flex;
   justify-content: space-between;
@@ -1435,6 +1526,17 @@
 .resource-browser-author {
   color: var(--modal-text-secondary);
   font-style: italic;
+}
+
+.resource-browser-local-path {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace);
+  color: var(--modal-text-secondary);
+  opacity: 0.9;
 }
 
 .blend-model-row button {

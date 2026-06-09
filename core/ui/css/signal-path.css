@@ -2048,6 +2048,7 @@
 }
 
 .default-effect-shell .resource-picker-btn,
+.default-effect-shell .resource-clear-btn,
 .default-effect-shell .resource-browse-btn,
 .default-effect-shell .blend-open-btn {
   border-radius: 10px;
@@ -2057,6 +2058,7 @@
 }
 
 .default-effect-shell .resource-picker-btn:hover,
+.default-effect-shell .resource-clear-btn:hover,
 .default-effect-shell .resource-browse-btn:hover,
 .default-effect-shell .blend-open-btn:hover {
   border-color: rgba(255, 190, 120, 0.36);
@@ -2280,6 +2282,7 @@
 .theme-light .default-effect-shell .close-params-btn,
 .theme-light .default-effect-shell .node-param-tabs,
 .theme-light .default-effect-shell .resource-picker-btn,
+.theme-light .default-effect-shell .resource-clear-btn,
 .theme-light .default-effect-shell .resource-browse-btn,
 .theme-light .default-effect-shell .blend-open-btn {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(229, 236, 246, 0.96) 100%);
@@ -2448,6 +2451,7 @@
 .theme-classic .default-effect-shell .close-params-btn,
 .theme-classic .default-effect-shell .node-param-tabs,
 .theme-classic .default-effect-shell .resource-picker-btn,
+.theme-classic .default-effect-shell .resource-clear-btn,
 .theme-classic .default-effect-shell .resource-browse-btn,
 .theme-classic .default-effect-shell .blend-open-btn,
 .theme-classic .default-effect-shell .default-effect-section,
@@ -2877,6 +2881,45 @@
   color: #e0e0f0;
   cursor: pointer;
   transition: all 0.2s;
+}
+
+.resource-clear-btn {
+  min-width: 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid #5a5a6a;
+  background: #4a4a5a;
+  color: #e0e0f0;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.resource-clear-btn .resource-clear-icon {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
+
+.resource-clear-btn:hover {
+  background: #5a5a6a;
+  border-color: #be6f66;
+  color: #ffe2de;
+}
+
+.resource-clear-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.resource-clear-btn:disabled:hover {
+  background: #4a4a5a;
+  border-color: #5a5a6a;
+  color: #e0e0f0;
 }
 
 .resource-browse-btn .resource-browse-icon {
@@ -3368,6 +3411,7 @@
 
 .custom-layout-backdrop.theme-light .node-param-tabs,
 .custom-layout-backdrop.theme-light .resource-picker-btn,
+.custom-layout-backdrop.theme-light .resource-clear-btn,
 .custom-layout-backdrop.theme-light .resource-browse-btn {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(229, 236, 246, 0.96) 100%);
   border-color: rgba(120, 138, 172, 0.2);
@@ -3412,6 +3456,7 @@
 
 .custom-layout-backdrop.theme-classic .node-param-tabs,
 .custom-layout-backdrop.theme-classic .resource-picker-btn,
+.custom-layout-backdrop.theme-classic .resource-clear-btn,
 .custom-layout-backdrop.theme-classic .resource-browse-btn,
 .custom-layout-backdrop.theme-classic .node-param-group-block,
 .custom-layout-backdrop.theme-classic .eq-visualizer,
@@ -3465,9 +3510,28 @@
   justify-content: center;
 }
 
+.custom-layout-resource-selector .resource-clear-btn {
+  min-width: 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid var(--border-dark-medium);
+  background: var(--bg-dark-tertiary);
+  color: var(--text-dark-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .custom-layout-resource-selector .resource-browse-btn:hover {
   color: var(--text-dark-primary);
   border-color: var(--accent-primary);
+}
+
+.custom-layout-resource-selector .resource-clear-btn:hover {
+  color: var(--text-dark-primary);
+  border-color: #be6f66;
 }
 
 .custom-layout-resource-selector .resource-path-info {

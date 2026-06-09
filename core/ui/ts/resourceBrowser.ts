@@ -16,18 +16,18 @@ import { FEATURE_FLAGS_CHANGED_EVENT, Features, isFeatureEnabled } from "./featu
 import type { LibraryResource } from "./types.js";
 import type { Tone3000Architecture, Tone3000Model, Tone3000Tone } from "./tone3000ApiTypes.js";
 import {
-  buildTone3000ModelsUrl,
   buildTone3000SearchUrl,
-  extractTone3000Models,
   extractTone3000Tones,
   parseTone3000Pagination,
 } from "./tone3000Api.js";
+import { fetchTone3000Models, getTone3000ImageUrl } from "./tone3000Shared.js";
 
 type ResourceBrowserOptions = {
   resourceType: "nam" | "ir";
   currentId?: string;
   nodeId?: string;
   resourceIndex?: number;
+  exposedResourceId?: string;
   tone3000CategoryFilter?: "pedal" | "amp" | "full-rig";
   toneGroupId?: string | null;
   toneGroupTitle?: string | null;
@@ -47,6 +47,29 @@ interface PreviewState {
 interface PreviewLoadingState {
   toneId: string;
   modelId: string;
+}
+
+type ResourceType = "nam" | "ir";
+
+interface PersistedResourceBrowserState {
+  activeTab: "library" | "tone3000";
+  librarySearch: string;
+  libraryCategory: string;
+  tone3000Search: string;
+  tone3000Category: string;
+  tone3000Sort: string;
+  tone3000Architecture: string;
+  tone3000Page: number;
+  tone3000TotalPages: number;
+  tone3000Tones: Tone3000Tone[];
+  expandedToneId: string | null;
+  toneModelsCache: Array<[string, Tone3000Model[]]>;
+}
+
+interface ResourceImportedDetail {
+  id?: string;
+  resourceType?: string;
+  filePath?: string;
 }
 
 export class ResourceBrowserModal {
@@ -72,6 +95,7 @@ export class ResourceBrowserModal {
   // Library tab elements
   private librarySearch: HTMLInputElement | null = null;
   private libraryCategory: HTMLSelectElement | null = null;
+  private libraryBrowseBtn: HTMLButtonElement | null = null;
   private libraryList: HTMLElement | null = null;
   private selectedResourceId: string = "";
   
@@ -94,8 +118,50 @@ export class ResourceBrowserModal {
   private tone3000Page = 1;
   private tone3000TotalPages = 1;
   private expandedToneId: string | null = null;
+  private expandedToneSection: "models" | "details" = "models";
   private toneModelsCache: Map<string, Tone3000Model[]> = new Map();
   private previewLoading: PreviewLoadingState | null = null;
+  private persistedStateByType: Partial<Record<ResourceType, PersistedResourceBrowserState>> = {};
+
+  private handleResourceImportedEvent = (event: Event): void => {
+    const detail = (event as CustomEvent<ResourceImportedDetail>).detail;
+    if (!this.options || !this.modal || this.modal.style.display !== "flex") {
+      return;
+    }
+
+    const importedType = detail?.resourceType;
+    if (!importedType || importedType !== this.options.resourceType) {
+      return;
+    }
+
+    const resources = uiState.resourceLibrary[importedType] ?? [];
+    const importedId = (detail?.id ?? "").trim();
+    const normalizedPath = (detail?.filePath ?? "").trim().replace(/\\/g, "/").toLowerCase();
+    const matchedId = importedId
+      || resources.find((resource) => {
+        const resourcePath = (resource.filePath ?? "").trim().replace(/\\/g, "/").toLowerCase();
+        return normalizedPath.length > 0 && resourcePath === normalizedPath;
+      })?.id
+      || "";
+
+    // Ensure freshly imported local resources are visible even when a category filter is active.
+    if (this.libraryCategory) {
+      const hasAllOption = Array.from(this.libraryCategory.options).some((option) => option.value === "all");
+      if (hasAllOption) {
+        this.libraryCategory.value = "all";
+      }
+    }
+
+    this.renderLibraryList();
+
+    if (matchedId) {
+      this.selectedResourceId = matchedId;
+      this.renderLibraryList();
+      this.scrollSelectedLibraryItemIntoView();
+      this.updateSelectButtonState();
+      this.saveCurrentStateForResourceType();
+    }
+  };
   
   initialize(): void {
     if (this.initialized) {
@@ -123,6 +189,7 @@ export class ResourceBrowserModal {
     // Library tab elements
     this.librarySearch = document.getElementById("resource-browser-library-search") as HTMLInputElement | null;
     this.libraryCategory = document.getElementById("resource-browser-library-category") as HTMLSelectElement | null;
+    this.libraryBrowseBtn = document.getElementById("resource-browser-library-browse") as HTMLButtonElement | null;
     this.libraryList = document.getElementById("resource-browser-library-list");
     
     // Tone3000 tab elements
@@ -156,12 +223,19 @@ export class ResourceBrowserModal {
         if (tab) {
           this.setActiveTab(tab);
         }
-      });
+    });
     });
     
     // Library search
-    this.librarySearch?.addEventListener("input", () => this.renderLibraryList());
-    this.libraryCategory?.addEventListener("change", () => this.renderLibraryList());
+    this.librarySearch?.addEventListener("input", () => {
+      this.renderLibraryList();
+      this.saveCurrentStateForResourceType();
+    });
+    this.libraryCategory?.addEventListener("change", () => {
+      this.renderLibraryList();
+      this.saveCurrentStateForResourceType();
+    });
+    this.libraryBrowseBtn?.addEventListener("click", () => this.browseForLibraryFile());
     
     // Library item click
     this.libraryList?.addEventListener("click", (event) => this.handleLibraryClick(event));
@@ -178,6 +252,7 @@ export class ResourceBrowserModal {
     this.tone3000Architecture?.addEventListener("change", () => {
       this.expandedToneId = null;
       this.toneModelsCache.clear();
+      this.saveCurrentStateForResourceType();
       void this.runTone3000Search();
     });
     
@@ -197,7 +272,125 @@ export class ResourceBrowserModal {
     this.tone3000List?.addEventListener("click", (event) => this.handleTone3000Click(event));
 
     document.addEventListener(FEATURE_FLAGS_CHANGED_EVENT, () => this.handleFeatureFlagsChanged());
+    document.addEventListener("resource-browser:resource-imported", this.handleResourceImportedEvent as EventListener);
     this.syncAvailableTabs();
+  }
+
+  private createDefaultPersistedState(resourceType: ResourceType): PersistedResourceBrowserState {
+    const isIr = resourceType === "ir";
+    return {
+      activeTab: "library",
+      librarySearch: "",
+      libraryCategory: "all",
+      tone3000Search: "",
+      tone3000Category: isIr ? "ir" : "amp",
+      tone3000Sort: "popular",
+      tone3000Architecture: isIr ? "all" : "2",
+      tone3000Page: 1,
+      tone3000TotalPages: 1,
+      tone3000Tones: [],
+      expandedToneId: null,
+      toneModelsCache: [],
+    };
+  }
+
+  private getOrCreatePersistedState(resourceType: ResourceType): PersistedResourceBrowserState {
+    const existing = this.persistedStateByType[resourceType];
+    if (existing) {
+      return existing;
+    }
+    const created = this.createDefaultPersistedState(resourceType);
+    this.persistedStateByType[resourceType] = created;
+    return created;
+  }
+
+  private saveCurrentStateForResourceType(): void {
+    const resourceType = this.options?.resourceType;
+    if (!resourceType) {
+      return;
+    }
+
+    const persisted = this.getOrCreatePersistedState(resourceType);
+    persisted.activeTab = this.activeTab;
+    persisted.librarySearch = this.librarySearch?.value ?? "";
+    persisted.libraryCategory = this.libraryCategory?.value ?? "all";
+    persisted.tone3000Search = this.tone3000Search?.value ?? "";
+    persisted.tone3000Category = this.tone3000Category?.value ?? (resourceType === "ir" ? "ir" : "amp");
+    persisted.tone3000Sort = this.tone3000Sort?.value ?? "popular";
+    persisted.tone3000Architecture = this.tone3000Architecture?.value ?? (resourceType === "ir" ? "all" : "2");
+    persisted.tone3000Page = this.tone3000Page;
+    persisted.tone3000TotalPages = this.tone3000TotalPages;
+    persisted.tone3000Tones = [...this.tone3000Tones];
+    persisted.expandedToneId = this.expandedToneId;
+    persisted.toneModelsCache = Array.from(this.toneModelsCache.entries());
+  }
+
+  private restoreStateForResourceType(resourceType: ResourceType): void {
+    const persisted = this.getOrCreatePersistedState(resourceType);
+
+    if (this.librarySearch) {
+      this.librarySearch.value = persisted.librarySearch;
+      this.librarySearch.placeholder = resourceType === "ir"
+        ? "Search IRs..."
+        : "Search models...";
+    }
+
+    if (this.tone3000Search) {
+      this.tone3000Search.value = persisted.tone3000Search;
+      this.tone3000Search.placeholder = resourceType === "ir"
+        ? "Search Cab IRs..."
+        : "Search amps and pedals...";
+    }
+
+    if (this.tone3000Category) {
+      this.tone3000Category.value = persisted.tone3000Category;
+    }
+
+    if (this.tone3000Sort) {
+      this.tone3000Sort.value = persisted.tone3000Sort;
+    }
+
+    if (this.tone3000Architecture) {
+      this.tone3000Architecture.value = persisted.tone3000Architecture;
+    }
+
+    if (this.libraryCategory) {
+      const hasOption = Array.from(this.libraryCategory.options).some((option) => option.value === persisted.libraryCategory);
+      this.libraryCategory.value = hasOption ? persisted.libraryCategory : "all";
+    }
+
+    this.activeTab = persisted.activeTab;
+    this.tone3000Query = persisted.tone3000Search;
+    this.tone3000Page = persisted.tone3000Page;
+    this.tone3000TotalPages = persisted.tone3000TotalPages;
+    this.tone3000Tones = [...persisted.tone3000Tones];
+    this.expandedToneId = persisted.expandedToneId;
+    this.toneModelsCache = new Map(persisted.toneModelsCache);
+  }
+
+  private browseForLibraryFile(): void {
+    if (!this.options?.nodeId) {
+      return;
+    }
+
+    postMessage({
+      type: "browseNodeResource",
+      nodeId: this.options.nodeId,
+      resourceType: this.options.resourceType,
+      resourceIndex: this.options.resourceIndex,
+      exposedResourceId: this.options.exposedResourceId,
+    });
+  }
+
+  private scrollSelectedLibraryItemIntoView(): void {
+    if (!this.libraryList || !this.selectedResourceId) {
+      return;
+    }
+
+    const selectedItem = this.libraryList.querySelector(
+      `.resource-browser-item[data-resource-id="${CSS.escape(this.selectedResourceId)}"]`,
+    ) as HTMLElement | null;
+    selectedItem?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
   
   open(options: ResourceBrowserOptions): void {
@@ -220,47 +413,33 @@ export class ResourceBrowserModal {
         : "Select Amp Model";
     }
     
-    // Update search placeholders
-    if (this.librarySearch) {
-      this.librarySearch.value = "";
-      this.librarySearch.placeholder = options.resourceType === "ir"
-        ? "Search IRs..."
-        : "Search models...";
-    }
-    
-    if (this.tone3000Search) {
-      this.tone3000Search.value = "";
-      this.tone3000Search.placeholder = options.resourceType === "ir"
-        ? "Search Cab IRs..."
-        : "Search amps and pedals...";
-    }
-
-    if (this.tone3000Architecture) {
-      this.tone3000Architecture.value = options.resourceType === "ir" ? "all" : "2";
-    }
-    
     // Update category options
     this.updateCategoryOptions();
+    this.restoreStateForResourceType(options.resourceType);
     
     // Render library list
     this.renderLibraryList();
-    
-    // Reset tone3000 state
-    this.tone3000Tones = [];
-    this.tone3000Page = 1;
-    this.expandedToneId = null;
-    this.toneModelsCache.clear();
+
     if (this.tone3000List) {
-      this.tone3000List.innerHTML = `<div class="resource-browser-empty">Enter a search query to browse Tone3000.</div>`;
+      if (this.tone3000Tones.length > 0) {
+        this.renderTone3000List();
+      } else {
+        this.tone3000List.innerHTML = `<div class="resource-browser-empty">Enter a search query to browse Tone3000.</div>`;
+      }
     }
-    this.updateTone3000Pagination(true);
+    this.updateTone3000Pagination(false);
+    if (this.tone3000PageLabel) {
+      this.tone3000PageLabel.textContent = this.tone3000TotalPages > 1
+        ? `Page ${this.tone3000Page} of ${this.tone3000TotalPages}`
+        : `Page ${this.tone3000Page}`;
+    }
     this.syncAvailableTabs();
     
-    // Show library tab by default
-    this.setActiveTab("library");
+    this.setActiveTab(this.activeTab);
     
     // Update select button state
     this.updateSelectButtonState();
+    this.saveCurrentStateForResourceType();
     
     this.modal.style.display = "flex";
   }
@@ -290,6 +469,7 @@ export class ResourceBrowserModal {
     
     this.libraryPreviewActive = false;
     this.modal.style.display = "none";
+    this.saveCurrentStateForResourceType();
     this.options = null;
   }
 
@@ -355,6 +535,7 @@ export class ResourceBrowserModal {
     }
 
     this.updateSelectButtonState();
+    this.saveCurrentStateForResourceType();
   }
   
   private updateCategoryOptions(): void {
@@ -512,7 +693,15 @@ export class ResourceBrowserModal {
       });
     }
     
-    filtered.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+    filtered.sort((a, b) => {
+      const leftName = (a.name || a.id);
+      const rightName = (b.name || b.id);
+      const byName = leftName.localeCompare(rightName);
+      if (byName !== 0) {
+        return byName;
+      }
+      return (a.filePath ?? "").localeCompare(b.filePath ?? "");
+    });
     
     if (!filtered.length) {
       this.libraryList.innerHTML = `<div class="results-empty resource-browser-empty">No ${resourceType === "ir" ? "IRs" : "models"} match the current filters.</div>`;
@@ -532,6 +721,10 @@ export class ResourceBrowserModal {
         const sourceUrl = metadata.sourceUrl ?? "";
         const authorBadge = authorUsername ? `<span class="resource-browser-author">by: ${escapeHtml(authorUsername)}</span>` : "";
         const sourceLinkBadge = sourceUrl.startsWith("https://www.tone3000.com/") ? `<a class="resource-browser-attribution-link" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">↗ tone3000</a>` : "";
+        const localPath = (res.filePath ?? "").trim();
+        const localPathBadge = localPath
+          ? `<span class="resource-browser-local-path" title="${escapeHtml(localPath)}">${escapeHtml(localPath)}</span>`
+          : "";
         const architecture = resourceType === "nam"
           ? this.normalizeArchitectureBadge(
             metadata.architectureVersion
@@ -555,7 +748,7 @@ export class ResourceBrowserModal {
               <div class="results-item-title resource-browser-item-title">${escapeHtml(title)}</div>
               <div class="results-item-meta resource-browser-item-meta">
                 <span>${escapeHtml(categoryLabel)}</span>
-                ${architectureBadge}${providerBadge}${authorBadge}${sourceLinkBadge}
+                ${architectureBadge}${providerBadge}${authorBadge}${sourceLinkBadge}${localPathBadge}
               </div>
             </div>
             <div class="resource-browser-item-actions">
@@ -762,7 +955,7 @@ export class ResourceBrowserModal {
           : `<div class="resource-browser-tone-image-placeholder"></div>`;
         
         const expandedClass = isExpanded ? "resource-browser-tone is-expanded" : "resource-browser-tone";
-        const modelsHtml = isExpanded ? this.renderToneModels(tone) : "";
+        const expandedContentHtml = isExpanded ? this.renderToneExpandedContent(tone) : "";
         const displayTitle = tone.title || tone.name || "Untitled Tone";
         const username = tone.user?.username ?? "";
         
@@ -781,14 +974,43 @@ export class ResourceBrowserModal {
                 </div>
               </div>
               <button class="resource-browser-tone-expand" type="button" data-tone-id="${String(tone.id)}">
-                ${isExpanded ? "▲ Hide" : "▼ Show Models"}
+                ${isExpanded ? "▲ Hide" : "▼ Show"}
               </button>
             </div>
-            ${modelsHtml}
+            ${expandedContentHtml}
           </div>
         `;
       })
       .join("");
+  }
+
+  private renderToneExpandedContent(tone: Tone3000Tone): string {
+    const modelsActive = this.expandedToneSection === "models";
+    return `
+      <div class="resource-browser-tone-sections" data-tone-id="${String(tone.id)}">
+        <div class="resource-browser-tone-section-tabs" role="tablist" aria-label="Tone sections">
+          <button
+            class="resource-browser-tone-section-tab ${modelsActive ? "is-active" : ""}"
+            type="button"
+            role="tab"
+            aria-selected="${modelsActive ? "true" : "false"}"
+            data-tone-id="${String(tone.id)}"
+            data-tone-section="models"
+          >Models</button>
+          <button
+            class="resource-browser-tone-section-tab ${!modelsActive ? "is-active" : ""}"
+            type="button"
+            role="tab"
+            aria-selected="${!modelsActive ? "true" : "false"}"
+            data-tone-id="${String(tone.id)}"
+            data-tone-section="details"
+          >Details</button>
+        </div>
+        <div class="resource-browser-tone-section-panel" role="tabpanel">
+          ${modelsActive ? this.renderToneModels(tone) : this.renderToneDetails(tone)}
+        </div>
+      </div>
+    `;
   }
   
   private renderToneModels(tone: Tone3000Tone): string {
@@ -842,25 +1064,42 @@ export class ResourceBrowserModal {
       </div>
     `;
   }
+
+  private renderToneDetails(tone: Tone3000Tone): string {
+    const description = tone.description?.trim() || "No description provided.";
+    const tags = Array.isArray(tone.tags)
+      ? tone.tags.map((tag) => tag?.name?.trim()).filter((name): name is string => Boolean(name))
+      : [];
+    const infoRows = [
+      ["Gear", tone.gear ?? "Unknown"],
+      ["Platform", tone.platform ?? "Unknown"],
+      ["Models", String(tone.models_count ?? 0)],
+      ["Downloads", String(tone.downloads_count ?? 0)],
+      ["Author", tone.user?.username ?? "Unknown"],
+    ];
+
+    return `
+      <div class="resource-browser-tone-details-panel">
+        <div class="resource-browser-tone-metadata">
+          ${infoRows.map(([label, value]) => `
+            <span class="resource-browser-tone-metadata-badge">
+              <span class="resource-browser-tone-metadata-label">${escapeHtml(label)}</span>
+              <span class="resource-browser-tone-metadata-value">${escapeHtml(value)}</span>
+            </span>
+          `).join("")}
+        </div>
+        <div class="resource-browser-tone-details-description">${escapeHtml(description)}</div>
+        <div class="resource-browser-tone-details-tags">
+          ${tags.length
+            ? tags.map((tag) => `<span class="resource-browser-tone-details-tag">${escapeHtml(tag)}</span>`).join("")
+            : `<span class="resource-browser-tone-details-tag is-empty">No tags</span>`}
+        </div>
+      </div>
+    `;
+  }
   
   private getToneImageUrl(tone: Tone3000Tone): string | null {
-    const candidates = [
-      Array.isArray(tone.images) ? tone.images[0] : undefined,
-      tone.equipment_image_url,
-      tone.image_url,
-      tone.thumbnail_url,
-    ];
-    
-    for (const candidate of candidates) {
-      if (typeof candidate === "string" && candidate.trim()) {
-        const value = candidate.trim();
-        if (value.startsWith("http://") || value.startsWith("https://") || value.startsWith("data:")) {
-          return value;
-        }
-      }
-    }
-    
-    return null;
+    return getTone3000ImageUrl(tone);
   }
   
   private async handleTone3000Click(event: Event): Promise<void> {
@@ -875,6 +1114,20 @@ export class ResourceBrowserModal {
       const toneId = expandBtn.dataset.toneId;
       if (toneId) {
         await this.toggleToneExpanded(toneId);
+      }
+      return;
+    }
+
+    const sectionTabBtn = target.closest(".resource-browser-tone-section-tab") as HTMLButtonElement | null;
+    if (sectionTabBtn) {
+      const toneId = sectionTabBtn.dataset.toneId;
+      const section = sectionTabBtn.dataset.toneSection;
+      if (!toneId || this.expandedToneId !== toneId) {
+        return;
+      }
+      if (section === "models" || section === "details") {
+        this.expandedToneSection = section;
+        this.renderTone3000List();
       }
       return;
     }
@@ -921,11 +1174,13 @@ export class ResourceBrowserModal {
   private async toggleToneExpanded(toneId: string): Promise<void> {
     if (this.expandedToneId === toneId) {
       this.expandedToneId = null;
+      this.expandedToneSection = "models";
       this.renderTone3000List();
       return;
     }
     
     this.expandedToneId = toneId;
+    this.expandedToneSection = "models";
     this.renderTone3000List();
     
     // Load models if not cached
@@ -949,15 +1204,8 @@ export class ResourceBrowserModal {
     if (!isTone3000AuthReady()) {
       throw new Error("No session");
     }
-    
-    const response = await tone3000AuthenticatedFetch(buildTone3000ModelsUrl(tone.id, 1, 100, this.getSelectedArchitecture() ?? undefined));
-    
-    if (!response.ok) {
-      throw new Error(`Failed: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return extractTone3000Models(data);
+
+    return fetchTone3000Models(tone, this.getSelectedArchitecture() ?? undefined);
   }
   
   private async startPreview(toneId: string, modelId: string, modelUrl: string): Promise<void> {

@@ -45,7 +45,9 @@ p {
 
 .fx-category-icon,
 .fx-effect-icon,
-.fx-badge-icon {
+.fx-badge-icon,
+.resource-browse-icon,
+.resource-clear-icon {
   display: inline-block;
   vertical-align: middle;
   background-color: currentColor;

@@ -26,7 +26,8 @@ export type IconKey =
   | "microscope"
   | "link"
   | "package"
-  | "mute";
+  | "mute"
+  | "close";
 
 export function renderIcon(icon: IconKey, className: string, title?: string): string {
   const titleAttr = title ? ` title=\"${title}\"` : "";

@@ -5011,6 +5011,25 @@ std::optional<LibraryResource> PluginController::SaveLocalLibraryResource(const 
             resolvedName += defaultExtensionForType(resourceType);
 
         resolvedPath = targetDir / resolvedName;
+
+        if (std::filesystem::exists(resolvedPath) && !resolvedHash.empty())
+        {
+            const std::string existingHash = mHasher.HashFile(resolvedPath);
+            if (!existingHash.empty() && existingHash != resolvedHash)
+            {
+                const std::filesystem::path stem = resolvedPath.stem();
+                const std::filesystem::path ext = resolvedPath.extension();
+                const std::string hashSuffix = resolvedHash.substr(0, std::min<std::size_t>(12, resolvedHash.size()));
+                std::filesystem::path candidate = targetDir / (stem.string() + "-" + hashSuffix + ext.string());
+                std::size_t suffix = 2;
+                while (std::filesystem::exists(candidate))
+                {
+                    candidate = targetDir / (stem.string() + "-" + hashSuffix + "-" + std::to_string(suffix++) + ext.string());
+                }
+                resolvedPath = candidate;
+            }
+        }
+
         if (!WriteFile(resolvedPath, decodedBytes))
         {
             error = "Failed to write local resource file";
@@ -5030,9 +5049,17 @@ std::optional<LibraryResource> PluginController::SaveLocalLibraryResource(const 
         });
 
     if (resourceId.empty() && existingByPath != allResources.end())
-        resourceId = existingByPath->id;
+    {
+        const bool canCompareHash = !resolvedHash.empty() && !existingByPath->hash.empty();
+        const bool sameHash = canCompareHash && existingByPath->hash == resolvedHash;
+        const bool unknownHash = !canCompareHash;
+        if (sameHash || unknownHash)
+            resourceId = existingByPath->id;
+    }
 
-    if (resourceId.empty() && !resolvedHash.empty())
+    // For direct local file imports, keep entries path-specific to avoid mutating
+    // an existing library item that happens to share a content hash.
+    if (resourceId.empty() && !resolvedHash.empty() && !hasFilePath)
     {
         auto existingByHash = std::find_if(allResources.begin(), allResources.end(),
             [&](const LibraryResource& resource)

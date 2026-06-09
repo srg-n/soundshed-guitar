@@ -104,7 +104,7 @@
   display: flex;
   gap: 8px;
   align-items: center;
-  flex: 1 1 260px;
+  flex: 0 0 auto;
 }
 
 .preset-library-close-btn {
@@ -158,29 +158,62 @@
   transform: none;
 }
 
+.preset-folder-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 #preset-folder-name {
-  flex: 1 1 180px;
+  flex: 1 1 220px;
+  min-width: 140px;
 }
 
-#preset-folder-add {
-  padding: 8px 12px;
+.preset-folder-toolbar-btn {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 6px;
-  border: none;
-  background: var(--color-primary);
-  color: #fff;
-  font-size: 11px;
+  border: 1px solid var(--border-dark);
+  background: var(--overlay-light);
+  color: var(--text-primary);
   cursor: pointer;
-  transition: transform 0.2s ease, background 0.2s ease;
+  transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease;
 }
 
-#preset-folder-add:hover {
+.preset-folder-toolbar-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.preset-folder-toolbar-btn:hover {
   transform: translateY(-1px);
+  background: var(--overlay-medium);
+}
+
+.preset-folder-toolbar-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.preset-folder-toolbar-btn-danger {
+  color: var(--status-error, #d86a6a);
 }
 
 .preset-library-body {
   display: grid;
   grid-template-columns: 220px 1fr;
   gap: 12px;
+}
+
+.preset-list-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
 }
 
 .setlist-header {
