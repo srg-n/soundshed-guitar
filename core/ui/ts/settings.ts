@@ -237,14 +237,14 @@ function initFeatureToggles(): void {
         }
 
         return `
-          <div class="settings-row">
+          <div class="settings-row" data-feature-row="${feature.id}">
             <label for="feature-toggle-${feature.id}">${escapeHtml(feature.label)}</label>
             <label class="toggle-switch">
               <input type="checkbox" id="feature-toggle-${feature.id}" data-feature-id="${feature.id}" />
               <span class="toggle-slider"></span>
             </label>
           </div>
-          <div class="settings-hint">${escapeHtml(feature.description)}</div>
+          <div class="settings-hint" data-feature-hint="${feature.id}">${escapeHtml(feature.description)}</div>
         `;
       }).join("");
 
@@ -305,6 +305,21 @@ function refreshFeatureToggleStates(): void {
 
     input.checked = feature ? Boolean(getFeatureSettingValue(featureId)) : false;
   });
+
+  updateResourceLibraryFeatureVisibility();
+}
+
+function updateResourceLibraryFeatureVisibility(): void {
+  if (!featureGroupsContainer) {
+    return;
+  }
+
+  const resourceLibraryRow = featureGroupsContainer.querySelector<HTMLElement>(`[data-feature-row="${Features.ResourceLibrary}"]`);
+  const resourceLibraryHint = featureGroupsContainer.querySelector<HTMLElement>(`[data-feature-hint="${Features.ResourceLibrary}"]`);
+  const shouldHide = !isFeatureEnabled(Features.BlendTools);
+
+  resourceLibraryRow?.toggleAttribute("hidden", shouldHide);
+  resourceLibraryHint?.toggleAttribute("hidden", shouldHide);
 }
 
 function getFeatureSettingValue(featureId: FeatureId): boolean {
@@ -365,7 +380,7 @@ function resolveLibraryTabId(preferredTabId: string): string | null {
 function isEquipmentTabEnabled(tabId: string): boolean {
   switch (tabId) {
     case "library":
-      return isLibraryExperienceEnabled();
+      return isFeatureEnabled(Features.BlendTools);
     default:
       return true;
   }
@@ -414,7 +429,7 @@ function syncFeatureVisibility(): void {
   const resourceCleanupEnabled = isFeatureEnabled(Features.ResourceCleanup);
   const factoryPresetArchivesEnabled = isFeatureEnabled(Features.FactoryPresetArchives);
   const debugStateCaptureEnabled = isFeatureEnabled(Features.DebugStateCapture);
-  const libraryEnabled = isLibraryExperienceEnabled();
+  const libraryEnabled = isFeatureEnabled(Features.BlendTools);
   const advancedLibraryEnabled = areAdvancedLibraryFeaturesEnabled();
   const footerDebugCaptureButton = document.getElementById("footer-capture-debug-state-btn") as HTMLElement | null;
 
