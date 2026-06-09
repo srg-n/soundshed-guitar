@@ -89,6 +89,10 @@ namespace
 
     constexpr double kMinLinear = 1e-6;
 
+    /// Maximum number of DSP performance stats messages sent to the UI per second.
+    /// Adjust this to trade display update rate against IPC overhead.
+    constexpr int kDspStatsRateHz = 5;
+
     // ── Metronome constants ─────────────────────────────────────────
 
     constexpr const char* kMetronomeEnabledSettingKey = "metronome.enabled";
@@ -2938,21 +2942,25 @@ void PluginController::OnIdle()
 
     // Periodic updates
     mDSPPerformanceUpdateCounter++;
-    if (mDSPPerformanceUpdateCounter >= 30) // ~every 500ms at 60fps idle
+    if (mDSPPerformanceUpdateCounter >= 60 / kDspStatsRateHz) // fire at kDspStatsRateHz; actual sends are rate-limited below
     {
         mDSPPerformanceUpdateCounter = 0;
-        SendPerformanceStatsToUI();
+        RequestPerformanceStatsToUI();
     }
+
+    TrySendPendingPerformanceStatsToUI();
 
     if (mSignalDiagnosticsEnabled.load(std::memory_order_acquire))
     {
         mSignalDiagnosticsUpdateCounter++;
-        if (mSignalDiagnosticsUpdateCounter >= 6) // ~10fps
+        if (mSignalDiagnosticsUpdateCounter >= 60 / kDspStatsRateHz)
         {
             mSignalDiagnosticsUpdateCounter = 0;
-            SendSignalDiagnosticsToUI();
+            RequestSignalDiagnosticsToUI();
         }
     }
+
+    TrySendPendingSignalDiagnosticsToUI();
 
     if (mDemoPreview)
         mDemoPreview->OnIdle();
@@ -8150,12 +8158,12 @@ void PluginController::HandlePreviewCapturedRiffRequest(const nlohmann::json& pa
 
 void PluginController::HandleGetSignalDiagnosticsRequest()
 {
-    SendSignalDiagnosticsToUI();
+    RequestSignalDiagnosticsToUI();
 }
 
 void PluginController::HandleGetPerformanceStatsRequest()
 {
-    SendPerformanceStatsToUI();
+    RequestPerformanceStatsToUI();
 }
 
 void PluginController::HandleSetSignalDiagnosticsEnabledRequest(const nlohmann::json& payload)
@@ -10999,6 +11007,30 @@ void PluginController::SendPresetListToUI()
     SendMessageToUI(msg.dump());
 }
 
+void PluginController::RequestSignalDiagnosticsToUI()
+{
+    mPendingSignalDiagnosticsUpdate = true;
+    TrySendPendingSignalDiagnosticsToUI();
+}
+
+void PluginController::TrySendPendingSignalDiagnosticsToUI()
+{
+    if (!mPendingSignalDiagnosticsUpdate)
+        return;
+
+    constexpr auto kMinSignalDiagnosticsInterval = std::chrono::milliseconds(1000 / kDspStatsRateHz);
+    const auto now = std::chrono::steady_clock::now();
+    if (mLastSignalDiagnosticsUpdateSentAt.time_since_epoch().count() != 0
+        && (now - mLastSignalDiagnosticsUpdateSentAt) < kMinSignalDiagnosticsInterval)
+    {
+        return;
+    }
+
+    mPendingSignalDiagnosticsUpdate = false;
+    mLastSignalDiagnosticsUpdateSentAt = now;
+    SendSignalDiagnosticsToUI();
+}
+
 void PluginController::SendSignalDiagnosticsToUI()
 {
     auto snapshot = mPresetMixer.GetSignalDiagnosticsSnapshot();
@@ -11040,6 +11072,30 @@ void PluginController::SendSignalDiagnosticsToUI()
     }
     msg["nodes"] = nodes;
     SendMessageToUI(msg.dump());
+}
+
+void PluginController::RequestPerformanceStatsToUI()
+{
+    mPendingPerformanceStatsUpdate = true;
+    TrySendPendingPerformanceStatsToUI();
+}
+
+void PluginController::TrySendPendingPerformanceStatsToUI()
+{
+    if (!mPendingPerformanceStatsUpdate)
+        return;
+
+    constexpr auto kMinPerformanceStatsInterval = std::chrono::milliseconds(1000 / kDspStatsRateHz);
+    const auto now = std::chrono::steady_clock::now();
+    if (mLastPerformanceStatsUpdateSentAt.time_since_epoch().count() != 0
+        && (now - mLastPerformanceStatsUpdateSentAt) < kMinPerformanceStatsInterval)
+    {
+        return;
+    }
+
+    mPendingPerformanceStatsUpdate = false;
+    mLastPerformanceStatsUpdateSentAt = now;
+    SendPerformanceStatsToUI();
 }
 
 void PluginController::SendPerformanceStatsToUI()

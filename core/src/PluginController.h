@@ -318,7 +318,11 @@ private:
     void SendEffectCatalogToUI();
     void SendPresetListToUI();
     void SendCompositePresetListToUI();
+    void RequestSignalDiagnosticsToUI();
+    void TrySendPendingSignalDiagnosticsToUI();
     void SendSignalDiagnosticsToUI();
+    void RequestPerformanceStatsToUI();
+    void TrySendPendingPerformanceStatsToUI();
     void SendPerformanceStatsToUI();
     void SendMetronomeStateToUI();
     void SendRiffLibraryStateToUI();
@@ -586,6 +590,10 @@ private:
     std::atomic<bool> mSignalDiagnosticsEnabled{true};
     int mDSPPerformanceUpdateCounter = 0;
     int mSignalDiagnosticsUpdateCounter = 0;
+    bool mPendingSignalDiagnosticsUpdate = false;
+    std::chrono::steady_clock::time_point mLastSignalDiagnosticsUpdateSentAt{};
+    bool mPendingPerformanceStatsUpdate = false;
+    std::chrono::steady_clock::time_point mLastPerformanceStatsUpdateSentAt{};
 
     // UI state
     bool mUIReady = false;
