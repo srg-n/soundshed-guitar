@@ -1270,7 +1270,7 @@ namespace guitarfx
     bool mEnabled = true;
     IRQuality mQuality = IRQuality::Standard;
     std::atomic<int> mPendingQuality{-1};
-    bool mAutoGainCompEnabled = true;
+    bool mAutoGainCompEnabled = false;
     double mIRSlotEnergyA = 1.0;
     double mIRSlotEnergyB = 1.0;
     bool mHasLoadedResource = false;
@@ -1332,7 +1332,7 @@ namespace guitarfx
         {"outputGain",    "Output",         0.0,  -24.0, 24.0,    "dB",     "Level"},
         {"lowCutHz",      "Low Cut",        20.0, 20.0,  1000.0,  "Hz",     "Tone"},
         {"highCutHz",     "High Cut",    20000.0, 1000.0,20000.0, "Hz",     "Tone"},
-        {"autoGainComp",  "Auto Gain",      1.0,  0.0,   1.0,     "toggle", "Level", true},
+        {"autoGainComp",  "Auto Gain",      0.0,  0.0,   1.0,     "toggle", "Level", true},
         {"air",           "Air",            0.0,  0.0,   1.0,     "amount", "Tone"},
         {"airMode",       "Air Mode",       0.0,  0.0,   2.0,     "enum",   "Tone",  true, 1.0, {"Shelf", "Presence", "Both"}},
         {"micEmulation",  "Mic Emulation",  0.0,  0.0,   1.0,     "toggle", "Tone",      true},
