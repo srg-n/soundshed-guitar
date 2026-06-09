@@ -509,7 +509,7 @@ function renderControls(
       }
 
       if (!isResourceControl && showValue) {
-        controlHtml += `<span class="node-param-value" style="font-size: 9px; color: var(--text-dark-muted); margin-top: 2px;">${displayValue}</span>`;
+        controlHtml += `<span class="node-param-value" style="font-size: 9px; color: var(--text-tertiary); margin-top: 2px;">${displayValue}</span>`;
       }
 
       return `<div class="custom-layout-control" style="${controlStyle}">${controlHtml}</div>`;

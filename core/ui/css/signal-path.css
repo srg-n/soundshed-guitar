@@ -538,7 +538,7 @@
   border-color: var(--node-accent-border);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 5%, var(--node-accent-soft)),
-    0 8px 16px color-mix(in srgb, black 85%, var(--node-accent-strong) 15%);
+    0 8px 16px color-mix(in srgb, rgb(0, 0, 0) 25%, var(--node-accent-strong) 15%);
 }
 
 .signal-node.selected, .signal-node:focus {
@@ -548,6 +548,15 @@
     0 0 0 1px color-mix(in srgb, var(--node-accent-strong) 36%, transparent),
     0 0 18px var(--node-accent-glow);
   outline: none;
+}
+
+
+.theme-light .signal-node.selected,
+.theme-light .signal-node:focus {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 7%, var(--node-accent-soft)),
+    0 0 0 1px color-mix(in srgb, var(--node-accent-strong) 28%, transparent),
+    0 0 12px color-mix(in srgb, var(--node-accent-strong) 22%, transparent);
 }
 
 .signal-node.amp {
@@ -685,6 +694,7 @@
 
 .node-name {
   font-size: 10px;
+  font-weight: 500;
   color: var(--text-primary);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -1990,9 +2000,9 @@
 .default-effect-shell .node-param-knob:hover {
   border-color: rgba(255, 190, 120, 0.48);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 -7px 10px rgba(0, 0, 0, 0.34),
-    0 12px 20px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.068),
+    inset 0 -7px 10px rgba(0, 0, 0, 0.168),
+    0 12px 20px rgba(0, 0, 0, 0.065),
     0 0 0 3px rgba(255, 190, 120, 0.08);
 }
 
@@ -2262,7 +2272,7 @@
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0%, rgba(242, 246, 252, 0.84) 100%),
     linear-gradient(160deg, rgba(228, 234, 244, 0.98) 0%, rgba(214, 222, 235, 0.98) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 22px 44px rgba(100, 114, 140, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 12px 24px rgba(100, 114, 140, 0.12);
 }
 
 .theme-light .default-effect-shell-title {
@@ -2313,6 +2323,11 @@
 
 .theme-light .default-effect-shell .plugin-host-load-error-detail {
   color: rgba(78, 55, 23, 0.82);
+}
+
+.theme-light .effect-visualization .node-param-value,
+.theme-light .default-effect-shell .node-param-value {
+  color: rgba(45, 61, 90, 0.92);
 }
 
 .theme-light .default-effect-shell .node-param-knob {
@@ -3144,6 +3159,7 @@
   background: linear-gradient(180deg, #f8f9fb 0%, #edf0f4 100%);
   border: 1px solid var(--border-light);
   box-shadow: 0 8px 24px rgba(80, 92, 112, 0.2);
+  color: var(--text-primary);
   scrollbar-color: var(--border-medium) var(--bg-secondary);
 }
 
@@ -3158,7 +3174,12 @@
 }
 
 .theme-light .effect-dropdown-category-name {
-  color: var(--text-muted);
+  color: var(--text-secondary);
+}
+
+.theme-light .effect-dropdown-item,
+.theme-light .effect-dropdown-name {
+  color: var(--text-primary);
 }
 
 .theme-light .effect-dropdown-item:hover {
@@ -3407,6 +3428,10 @@
 .custom-layout-backdrop.theme-light .node-param-label,
 .custom-layout-backdrop.theme-light .node-param-group-title {
   color: rgba(69, 83, 110, 0.72);
+}
+
+.custom-layout-backdrop.theme-light .node-param-value {
+  color: rgba(45, 61, 90, 0.92);
 }
 
 .custom-layout-backdrop.theme-light .node-param-tabs,
