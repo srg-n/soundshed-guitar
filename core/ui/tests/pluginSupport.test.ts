@@ -27,6 +27,16 @@ describe("plugin support detection", () => {
       .toBeNull();
   });
 
+  it("allows LV2 on Windows", () => {
+    expect(getUnsupportedPluginSelection({ filePath: "C:/Plugins/Amp.lv2" }, "windows"))
+      .toBeNull();
+  });
+
+  it("allows LV2 on macOS", () => {
+    expect(getUnsupportedPluginSelection({ filePath: "/Library/Audio/Plug-Ins/LV2/Amp.lv2" }, "mac"))
+      .toBeNull();
+  });
+
   it("warns for plugin formats that the hosted plugin effect cannot load", () => {
     expect(getUnsupportedPluginSelection({ filePath: "C:/Plugins/Amp.clap" }, "windows"))
       .toEqual({ format: "clap", label: "CLAP" });

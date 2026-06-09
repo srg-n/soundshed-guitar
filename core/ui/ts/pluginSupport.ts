@@ -11,8 +11,8 @@ export type UnsupportedPluginSelection = {
 
 const UNIVERSALLY_UNSUPPORTED_FORMATS = new Set(["aax", "clap", "vst2"]);
 const SUPPORTED_FORMATS_BY_PLATFORM: Record<Exclude<PluginSupportPlatform, "unknown">, Set<string>> = {
-  windows: new Set(["vst3"]),
-  mac: new Set(["vst3", "au"]),
+  windows: new Set(["vst3", "lv2"]),
+  mac: new Set(["vst3", "au", "lv2"]),
   linux: new Set(["vst3", "lv2"]),
 };
 
