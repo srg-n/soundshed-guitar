@@ -75,6 +75,13 @@ Edit `core/config/GuitarFXConfig.h` to customize plugin name and manufacturer. R
 - **Build UI**: `cd core/ui && npm run build`
 - **Core tests**: Enable with `GUITARFX_CORE_BUILD_TESTS=ON`, run via CTest
 
+## Prerequisites
+`git submodule update --init --recursive `
+- node/npm, ts (`npm install -f typescript`)
+```
+cd /core/ui/ 
+npm install
+```
 ## JUCE Linux Release Build
 
 The JUCE target can be built and staged on Linux with the root helper script:
