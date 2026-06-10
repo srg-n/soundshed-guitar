@@ -1,6 +1,8 @@
 # Soundshed Guitar
 
-Soundshed Guitar is a JUCE-based guitar processing plugin combining Neural Amp Modeler (NAM) with a modern web-driven UI. Targets VST3, AU, and AAX formats with an extensible signal graph architecture.
+Soundshed Guitar is a guitar/bass effects app and plugin combining Neural Amp Modeler (NAM) with a modern UI. It targets VST3, AU, CLAP and AAX formats with an extensible signal graph architecture.
+
+Downloads: https://guitar.soundshed.com
 
 ![Screenshot](https://guitar.soundshed.com/img/site/amp.png)
 
@@ -26,7 +28,6 @@ See [docs/](docs/) for architecture and reference documentation:
 | [User Interface](docs/user-interface.md) | WebView architecture, message protocol |
 | [Network API](docs/network-api.md) | REST API, client, plugin formats |
 | [Theme System](docs/theme-system.md) | CSS theming |
-| [PRD](docs/prd/PRD.md) | Product requirements |
 
 ## Agent Context Bundle
 
@@ -138,6 +139,18 @@ cmake --build build --config Debug --target VST3DebugHost
 ./VST3DebugHost.exe --windowed
 ```
 Testing plugin builds with external resources can be done with pluginval against the generated VST3.
+
+## Third-party Libraries and Components
+
+This repository depends on or vendors the following third-party libraries and SDK components:
+
+- JUCE and the CLAP JUCE extensions in `juce/`
+- Microsoft WebView2 for the Windows WebView host path
+- NeuralAmpModelerCore and Eigen used by the NAM DSP stack in `core/`
+- nlohmann/json, Signalsmith Audio linear/stretch, stftPitchShift, miniz, and the Wasmtime C API in the core CMake dependency setup
+- jszip, TypeScript, and Vitest in `core/ui/`
+
+Refer to the upstream LICENSE files and package manifests for the exact license terms of each dependency.
 
 ## License
 
