@@ -18,6 +18,8 @@ namespace guitarfx
 {
     namespace
     {
+        JuceHostedPluginEffect* sActiveHostedPluginEditorOwner = nullptr;
+
         constexpr const char* kPluginStateBase64ConfigKey = "pluginStateBase64";
         constexpr const char* kPluginStableIdConfigKey = "pluginStableId";
         constexpr const char* kPluginIdentifierConfigKey = "pluginIdentifier";
@@ -688,7 +690,9 @@ namespace guitarfx
 
         if (key == "showPluginEditor" || key == "openPluginEditor")
         {
-            if (value != "0" && value != "false")
+            if (value == "0" || value == "false")
+                ClosePluginEditor();
+            else
                 OpenPluginEditor();
             return;
         }
@@ -1294,11 +1298,15 @@ namespace guitarfx
             if (!mPlugin)
                 return;
 
+            if (sActiveHostedPluginEditorOwner != nullptr && sActiveHostedPluginEditorOwner != this)
+                sActiveHostedPluginEditorOwner->ClosePluginEditor();
+
             if (mEditorWindow)
             {
                 EnsurePluginStateBaseline();
                 mEditorWindow->setVisible (true);
                 mEditorWindow->toFront (true);
+                sActiveHostedPluginEditorOwner = this;
                 return;
             }
 
@@ -1321,8 +1329,11 @@ namespace guitarfx
                                    : mPlugin->getName();
             EnsurePluginStateBaseline();
             mEditorWindow = std::make_unique<HostedPluginEditorWindow> (title, editor, [this]() {
+                if (sActiveHostedPluginEditorOwner == this)
+                    sActiveHostedPluginEditorOwner = nullptr;
                 ScheduleAutoCapture (false);
             });
+            sActiveHostedPluginEditorOwner = this;
         };
 
         if (juce::MessageManager::getInstance()->isThisTheMessageThread())
@@ -1334,18 +1345,26 @@ namespace guitarfx
     bool JuceHostedPluginEffect::ClosePluginEditor()
     {
         if (!mEditorWindow)
+        {
+            if (sActiveHostedPluginEditorOwner == this)
+                sActiveHostedPluginEditorOwner = nullptr;
             return true;
+        }
 
         if (juce::MessageManager::getInstance()->isThisTheMessageThread())
         {
             const juce::SpinLock::ScopedLockType lock (mPluginProcessLock);
             mEditorWindow.reset();
+            if (sActiveHostedPluginEditorOwner == this)
+                sActiveHostedPluginEditorOwner = nullptr;
             return true;
         }
 
         if (auto closed = juce::MessageManager::callSync ([this]() {
                 const juce::SpinLock::ScopedLockType lock (mPluginProcessLock);
                 mEditorWindow.reset();
+                if (sActiveHostedPluginEditorOwner == this)
+                    sActiveHostedPluginEditorOwner = nullptr;
                 return true;
             }))
         {

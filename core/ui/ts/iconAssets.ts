@@ -27,7 +27,8 @@ export type IconKey =
   | "link"
   | "package"
   | "mute"
-  | "close";
+  | "close"
+  | "plus";
 
 export function renderIcon(icon: IconKey, className: string, title?: string): string {
   const titleAttr = title ? ` title=\"${title}\"` : "";

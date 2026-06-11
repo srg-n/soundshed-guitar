@@ -10,7 +10,7 @@ import { updateDSPPerformancePlot, updateSignalDiagnosticsView } from "./views.j
 import { refreshSettingsView, handleUserInputCalibrationDiagnosticsUpdate } from "./settings.js";
 import { applyRiffCaptureProgress, applyRiffCaptureState, applyRiffLibraryState, handleCapturedPreviewComplete, handleRiffPreviewPlayback, handleSavedRiffPreviewComplete, renderRiffLibraryPanel } from "./riffLibrary.js";
 import { getRiffLibrary, postMessage } from "./bridge.js";
-import { handleHostedPluginResourceLoadFailed, refreshSelectedNodeParams, renderSignalPathBar, updateSelectedNodePeakMeter } from "./signalPath.js";
+import { handleHostedPluginResourceLoadFailed, handleHostedPluginResourceLoadCompleted, handleNodeResourceBrowseCancelled, refreshSelectedNodeParams, renderSignalPathBar, updateSelectedNodePeakMeter } from "./signalPath.js";
 import { refreshFxSelector } from "./fxSelector.js";
 import { applyEnvironmentState, applyMetronomeState } from "./metronome.js";
 import { applyToneSharingAppSettings, registerInstalledToneSharingPackFromImport, handleToneSharingDeepLink } from "./toneSharingPanel.js";
@@ -859,6 +859,20 @@ export function handleIncomingMessage(message: string): void {
         filePath?: string;
         resourceIndex?: number;
         message?: string;
+      });
+      break;
+    }
+    case "hostedPluginResourceLoadCompleted": {
+      handleHostedPluginResourceLoadCompleted(payload as {
+        nodeId?: string;
+        resourceType?: string;
+      });
+      break;
+    }
+    case "nodeResourceBrowseCancelled": {
+      handleNodeResourceBrowseCancelled(payload as {
+        nodeId?: string;
+        resourceType?: string;
       });
       break;
     }

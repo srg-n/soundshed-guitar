@@ -2920,6 +2920,13 @@
   display: block;
 }
 
+.resource-clear-btn.plugin-resource-clear-btn {
+  min-width: 66px;
+  width: auto;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
 .resource-clear-btn:hover {
   background: #5a5a6a;
   border-color: #be6f66;
@@ -2962,6 +2969,199 @@
 .blend-open-btn:hover {
   background: #5a5a6a;
   border-color: var(--color-primary);
+}
+
+/* ===== Plugin Host Resource List ===== */
+
+.plugin-host-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #3a3a48;
+  border-radius: 6px;
+  background: rgba(20, 20, 28, 0.55);
+  padding: 4px;
+}
+
+.plugin-host-list.is-loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.plugin-host-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.plugin-host-item:hover {
+  background: rgba(74, 74, 90, 0.45);
+}
+
+.plugin-host-item.is-selected {
+  background: rgba(74, 90, 122, 0.4);
+  border-color: var(--color-primary, #5a8adb);
+}
+
+.plugin-host-item.is-custom {
+  cursor: default;
+}
+
+.plugin-host-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.plugin-host-item-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.plugin-host-item-title {
+  font-size: 12px;
+  color: #e0e0f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugin-host-item-format {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #a8b4d0;
+  background: rgba(90, 106, 138, 0.32);
+  border: 1px solid rgba(120, 138, 172, 0.35);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.plugin-host-item-path {
+  font-size: 9px;
+  color: #8888a0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugin-host-remove-btn {
+  flex-shrink: 0;
+  min-width: 22px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #e0e0f0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.55;
+  transition: all 0.2s;
+}
+
+.plugin-host-item:hover .plugin-host-remove-btn {
+  opacity: 1;
+}
+
+.plugin-host-remove-btn:hover {
+  background: #4a4a5a;
+  border-color: #be6f66;
+}
+
+.plugin-host-remove-btn .plugin-host-remove-icon {
+  width: 10px;
+  height: 10px;
+  display: block;
+}
+
+.plugin-host-list-empty {
+  font-size: 11px;
+  font-style: italic;
+  color: #8888a0;
+  padding: 8px;
+}
+
+.plugin-host-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #a8b4d0;
+}
+
+.plugin-host-loading[hidden] {
+  display: none;
+}
+
+.plugin-host-loading-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(120, 138, 172, 0.35);
+  border-top-color: var(--color-primary, #5a8adb);
+  border-radius: 50%;
+  animation: plugin-host-loading-spin 0.8s linear infinite;
+}
+
+@keyframes plugin-host-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.theme-light .default-effect-shell .plugin-host-list {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(120, 138, 172, 0.25);
+}
+
+.theme-light .default-effect-shell .plugin-host-item:hover {
+  background: rgba(120, 138, 172, 0.16);
+}
+
+.theme-light .default-effect-shell .plugin-host-item.is-selected {
+  background: rgba(90, 138, 219, 0.16);
+}
+
+.theme-light .default-effect-shell .plugin-host-item-title {
+  color: #32435f;
+}
+
+.theme-light .default-effect-shell .plugin-host-item-path,
+.theme-light .default-effect-shell .plugin-host-list-empty,
+.theme-light .default-effect-shell .plugin-host-loading {
+  color: rgba(69, 83, 110, 0.72);
+}
+
+.theme-light .default-effect-shell .plugin-host-remove-btn {
+  color: #32435f;
+}
+
+.theme-light .default-effect-shell .plugin-host-remove-btn:hover {
+  background: rgba(190, 111, 102, 0.16);
+}
+
+.theme-classic .default-effect-shell .plugin-host-list {
+  background: rgba(24, 22, 18, 0.55);
+  border-color: rgba(150, 130, 90, 0.3);
+}
+
+.theme-classic .default-effect-shell .plugin-host-item.is-selected {
+  background: rgba(150, 130, 90, 0.25);
+  border-color: rgba(196, 168, 110, 0.6);
 }
 
 /* ===== Signal Add Button (+ between nodes) ===== */
@@ -3547,6 +3747,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.custom-layout-resource-selector .resource-clear-btn.plugin-resource-clear-btn {
+  min-width: 66px;
+  width: auto;
+  padding: 0 10px;
 }
 
 .custom-layout-resource-selector .resource-browse-btn:hover {

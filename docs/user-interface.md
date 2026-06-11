@@ -71,6 +71,9 @@ The UI is a web-based single-page application (SPA) hosted in a native WebView. 
 | `tunerStopped` | `{}` | Tuner deactivated |
 | `modelLoaded` | `{path}` | NAM model loaded |
 | `irLoaded` | `{path}` | IR cab loaded |
+| `hostedPluginResourceLoadFailed` | `{nodeId, resourceType, resourceId?, filePath?, resourceIndex?, message}` | Hosted plugin failed to load; UI shows inline error and clears loading indicator |
+| `hostedPluginResourceLoadCompleted` | `{nodeId, resourceType, resourceId?, resourceIndex?}` | Hosted plugin resource selection finished loading; UI clears loading indicator |
+| `nodeResourceBrowseCancelled` | `{nodeId, resourceType, resourceIndex?, exposedResourceId?}` | Node resource browse dialog dismissed without a selection |
 | `resourceImported` | `{...}` | Remote resource imported |
 | `resourceImportFailed` | `{message}` | Remote resource import failed |
 | `globalChain` | `{config}` | Global signal chain configuration |

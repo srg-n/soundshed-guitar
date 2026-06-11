@@ -4203,6 +4203,7 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
 {
     std::string nodeId = payload.value("nodeId", "");
     if (nodeId.empty()) return;
+    const bool openPluginEditorAfterLoad = payload.value("openPluginEditorAfterLoad", false);
 
     int resourceIndex = payload.value("resourceIndex", -1);
     const std::string exposedResourceId = payload.value("exposedResourceId", "");
@@ -4253,6 +4254,20 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
 
     if (!ref.parameterId.empty() && ref.parameterValue.has_value())
         ref.parameters[ref.parameterId] = *ref.parameterValue;
+
+    const auto requestHostedPluginEditorOpen = [this, openPluginEditorAfterLoad](const std::string& targetNodeId,
+                                                                                  const ResourceRef& selectedRef)
+    {
+        if (!openPluginEditorAfterLoad || selectedRef.resourceType != "plugin")
+            return;
+
+        HandleUpdateSignalPathNodeConfigRequest(nlohmann::json{
+            {"nodeId", targetNodeId},
+            {"key", "showPluginEditor"},
+            {"value", "1"},
+            {"persist", false}
+        });
+    };
 
     if (resourceIndex >= 0)
     {
@@ -4315,6 +4330,11 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
         }
         if (appliedPreset && ReportHostedPluginResourceLoadFailure(nodeId, selectedRef, resourceIndex))
             DiscardFailedHostedPluginResourceSelection(nodeId, selectedRef, resourceIndex);
+        else if (appliedPreset)
+        {
+            NotifyHostedPluginResourceLoadCompleted(nodeId, selectedRef, resourceIndex);
+            requestHostedPluginEditorOpen(nodeId, selectedRef);
+        }
         return;
     }
 
@@ -4351,6 +4371,11 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
             }
             if (appliedPreset && ReportHostedPluginResourceLoadFailure(nodeId, selectedRef))
                 DiscardFailedHostedPluginResourceSelection(nodeId, selectedRef);
+            else if (appliedPreset)
+            {
+                NotifyHostedPluginResourceLoadCompleted(nodeId, selectedRef);
+                requestHostedPluginEditorOpen(nodeId, selectedRef);
+            }
             return;
         }
     }
@@ -4374,6 +4399,11 @@ void PluginController::HandleUpdateNodeResourceRequest(const nlohmann::json& pay
     }
     if (updatedResource && ReportHostedPluginResourceLoadFailure(nodeId, ref))
         DiscardFailedHostedPluginResourceSelection(nodeId, ref);
+    else if (updatedResource)
+    {
+        NotifyHostedPluginResourceLoadCompleted(nodeId, ref);
+        requestHostedPluginEditorOpen(nodeId, ref);
+    }
 }
 
 void PluginController::HandleBrowseNodeResourceRequest(const nlohmann::json& payload)
@@ -4382,6 +4412,7 @@ void PluginController::HandleBrowseNodeResourceRequest(const nlohmann::json& pay
     std::string resourceType = payload.value("resourceType", "nam");
     const int resourceIndex = payload.value("resourceIndex", -1);
     const std::string exposedResourceId = payload.value("exposedResourceId", "");
+    const bool openPluginEditorAfterLoad = payload.value("openPluginEditorAfterLoad", false);
 
     BrowseFileType fileType = BrowseFileType::Any;
     if (resourceType == "nam") fileType = BrowseFileType::NAMModel;
@@ -4389,7 +4420,7 @@ void PluginController::HandleBrowseNodeResourceRequest(const nlohmann::json& pay
     else if (resourceType == "plugin") fileType = BrowseFileType::PluginFile;
 
     mHost.BrowseFileAsync(fileType, "Select Resource",
-        [this, nodeId, resourceType, resourceIndex, exposedResourceId](const BrowseFileResult& result)
+        [this, nodeId, resourceType, resourceIndex, exposedResourceId, openPluginEditorAfterLoad](const BrowseFileResult& result)
         {
             if (result.success)
             {
@@ -4404,7 +4435,24 @@ void PluginController::HandleBrowseNodeResourceRequest(const nlohmann::json& pay
                     payload["resourceIndex"] = resourceIndex;
                 if (!exposedResourceId.empty())
                     payload["exposedResourceId"] = exposedResourceId;
+                if (openPluginEditorAfterLoad)
+                    payload["openPluginEditorAfterLoad"] = true;
                 HandleSaveLocalLibraryResourceRequest(payload);
+            }
+            else
+            {
+                // Let the UI know the browse dialog was dismissed so it can
+                // clear any pending loading indicators.
+                nlohmann::json cancelMsg{
+                    {"type", "nodeResourceBrowseCancelled"},
+                    {"nodeId", nodeId},
+                    {"resourceType", resourceType}
+                };
+                if (resourceIndex >= 0)
+                    cancelMsg["resourceIndex"] = resourceIndex;
+                if (!exposedResourceId.empty())
+                    cancelMsg["exposedResourceId"] = exposedResourceId;
+                SendMessageToUI(cancelMsg.dump());
             }
         });
 }
@@ -8397,6 +8445,8 @@ void PluginController::HandleLoadNodeResourceRequest(const nlohmann::json& paylo
     const bool loaded = mPresetMixer.LoadNodeResource(presetId, nodeId, ref);
     if (!loaded && ReportHostedPluginResourceLoadFailure(nodeId, ref))
         DiscardFailedHostedPluginResourceSelection(nodeId, ref);
+    else if (loaded)
+        NotifyHostedPluginResourceLoadCompleted(nodeId, ref);
     UpdateHostLatency();
 }
 
@@ -8648,6 +8698,26 @@ bool PluginController::ReportHostedPluginResourceLoadFailure(const std::string& 
 
     SendMessageToUI(message.dump());
     return true;
+}
+
+void PluginController::NotifyHostedPluginResourceLoadCompleted(const std::string& nodeId,
+                                                               const ResourceRef& ref,
+                                                               int resourceIndex)
+{
+    if (nodeId.empty() || ref.resourceType != "plugin")
+        return;
+
+    nlohmann::json message{
+        {"type", "hostedPluginResourceLoadCompleted"},
+        {"nodeId", nodeId},
+        {"resourceType", "plugin"}
+    };
+    if (resourceIndex >= 0)
+        message["resourceIndex"] = resourceIndex;
+    if (!ref.resourceId.empty())
+        message["resourceId"] = ref.resourceId;
+
+    SendMessageToUI(message.dump());
 }
 
 void PluginController::DiscardFailedHostedPluginResourceSelection(const std::string& nodeId,

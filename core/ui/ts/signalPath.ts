@@ -15,6 +15,7 @@ import { postMessage, setPresetMix, setPresetPan, setPresetMute, setPresetSolo, 
 import { requestResourceData } from "./archiveUtils.js";
 import { escapeHtml, idAccentColor, base64ToArrayBuffer } from "./utils.js";
 import { showNotification } from "./notifications.js";
+import { showConfirm } from "./dialogs.js";
 import { EffectTypeRegistry, getNodeEffectInfo, type EffectTypeInfo } from "./presetV2.js";
 import { EffectGuids } from "./effectGuids.js";
 import { getBadgeIcon, getFxCategoryIcon, getFxEffectIcon, renderIcon } from "./iconAssets.js";
@@ -30,7 +31,7 @@ import {
   type SignalPathNodeOptions,
 } from "./fxSelector.js";
 import { GenericKnob, enhanceRangeInput } from "./controls.js";
-import { getUnsupportedPluginSelection, type PluginResourceSupportInfo } from "./pluginSupport.js";
+import { getUnsupportedPluginSelection, inferPluginFormat, type PluginResourceSupportInfo } from "./pluginSupport.js";
 import {
   EqCurveInteraction,
   buildEqBandConfigsFromParams,
@@ -95,6 +96,15 @@ type HostedPluginLoadFailure = {
   message: string;
 };
 const hostedPluginLoadFailures = new Map<string, HostedPluginLoadFailure>();
+
+type HostedPluginPendingLoad = {
+  resourceIndex: number;
+  startedAt: number;
+};
+/** Hosted-plugin loads in flight, keyed by node id. Drives the inline loading indicator. */
+const hostedPluginPendingLoads = new Map<string, HostedPluginPendingLoad>();
+/** Safety valve: never keep a loading indicator around longer than this. */
+const HOSTED_PLUGIN_PENDING_LOAD_MAX_AGE_MS = 120000;
 
 const NODE_BYPASS_DRAG_DISTANCE_PX = 36;
 const NODE_BYPASS_DRAG_DIRECTION_RATIO = 1.2;
@@ -186,6 +196,8 @@ export function handleHostedPluginResourceLoadFailed(payload: {
   if (!nodeId) {
     return;
   }
+
+  clearHostedPluginLoadPending(nodeId);
 
   const resource = (payload.resourceId ? getLibraryResource("plugin", payload.resourceId) : undefined)
     ?? ({ filePath: payload.filePath ?? "" } satisfies PluginResourceSupportInfo);
@@ -548,7 +560,7 @@ function renderHostedPluginWarningIntoOpenPanel(nodeId: string, resourceIndex: n
   }
 
   const pluginControls = Array.from(
-    nodeParamsPanelElement.querySelectorAll<HTMLElement>(`.resource-dropdown[data-resource-type="plugin"], .resource-picker-btn[data-resource-type="plugin"]`),
+    nodeParamsPanelElement.querySelectorAll<HTMLElement>(`.resource-dropdown[data-resource-type="plugin"], .resource-picker-btn[data-resource-type="plugin"], .plugin-host-list[data-resource-type="plugin"]`),
   );
   const targetControl = pluginControls.find((control) => {
     if (control.dataset.nodeId !== nodeId) {
@@ -566,14 +578,171 @@ function renderHostedPluginWarningIntoOpenPanel(nodeId: string, resourceIndex: n
   }
 
   container.querySelector(".plugin-host-load-error")?.remove();
-  const controlsRow = container.querySelector(".resource-controls");
+  const anchorRow = container.querySelector(".plugin-host-list") ?? container.querySelector(".resource-controls");
   if (warningHtml) {
-    controlsRow?.insertAdjacentHTML("afterend", warningHtml);
+    anchorRow?.insertAdjacentHTML("afterend", warningHtml);
   }
 }
 
 function clearInlineHostedPluginLoadError(source: Element): void {
   source.closest(".node-resource-selector")?.querySelector(".plugin-host-load-error")?.remove();
+}
+
+function getHostedPluginPendingLoad(nodeId: string, resourceIndex: number): HostedPluginPendingLoad | null {
+  const pending = hostedPluginPendingLoads.get(nodeId);
+  if (!pending || pending.resourceIndex !== resourceIndex) {
+    return null;
+  }
+  if (Date.now() - pending.startedAt > HOSTED_PLUGIN_PENDING_LOAD_MAX_AGE_MS) {
+    hostedPluginPendingLoads.delete(nodeId);
+    return null;
+  }
+  return pending;
+}
+
+function setHostedPluginLoadingIndicatorVisible(nodeId: string, resourceIndex: number, visible: boolean): void {
+  const indicators = nodeParamsPanelElement?.querySelectorAll<HTMLElement>(
+    `.plugin-host-loading[data-node-id="${nodeId}"]`,
+  );
+  indicators?.forEach((indicator) => {
+    const indicatorIndex = indicator.dataset.resourceIndex ? parseInt(indicator.dataset.resourceIndex, 10) : 0;
+    if (indicatorIndex !== resourceIndex) {
+      return;
+    }
+    indicator.hidden = !visible;
+    indicator.closest(".node-resource-selector")
+      ?.querySelector(".plugin-host-list")
+      ?.classList.toggle("is-loading", visible);
+  });
+}
+
+function markHostedPluginLoadPending(nodeId: string, resourceIndex: number): void {
+  hostedPluginPendingLoads.set(nodeId, { resourceIndex, startedAt: Date.now() });
+  setHostedPluginLoadingIndicatorVisible(nodeId, resourceIndex, true);
+}
+
+function clearHostedPluginLoadPending(nodeId: string): void {
+  const pending = hostedPluginPendingLoads.get(nodeId);
+  if (!pending) {
+    return;
+  }
+  hostedPluginPendingLoads.delete(nodeId);
+  setHostedPluginLoadingIndicatorVisible(nodeId, pending.resourceIndex, false);
+}
+
+export function handleHostedPluginResourceLoadCompleted(payload: {
+  nodeId?: string;
+  resourceType?: string;
+}): void {
+  if (payload.resourceType && payload.resourceType !== "plugin") {
+    return;
+  }
+  if (payload.nodeId) {
+    clearHostedPluginLoadPending(payload.nodeId);
+  }
+}
+
+export function handleNodeResourceBrowseCancelled(payload: {
+  nodeId?: string;
+  resourceType?: string;
+}): void {
+  if (payload.resourceType !== "plugin") {
+    return;
+  }
+  if (payload.nodeId) {
+    clearHostedPluginLoadPending(payload.nodeId);
+  }
+}
+
+function buildHostedPluginLoadingIndicatorHtml(node: GraphNode, resourceIndex: number): string {
+  const pending = getHostedPluginPendingLoad(node.id, resourceIndex);
+  return `
+    <div
+      class="plugin-host-loading"
+      data-node-id="${node.id}"
+      data-resource-index="${resourceIndex}"
+      role="status"
+      aria-live="polite"
+      ${pending ? "" : "hidden"}
+    >
+      <span class="plugin-host-loading-spinner" aria-hidden="true"></span>
+      <span class="plugin-host-loading-label">Loading plugin…</span>
+    </div>
+  `;
+}
+
+function buildHostedPluginListHtml(node: GraphNode, resourceIndex: number, exposedResourceId?: string): string {
+  const resources = uiState.resourceLibrary["plugin"] || [];
+  const current = getNodeResourceAtIndex(node, resourceIndex);
+  const isLoading = Boolean(getHostedPluginPendingLoad(node.id, resourceIndex));
+  const exposedAttr = exposedResourceId ? ` data-exposed-resource-id="${escapeHtml(exposedResourceId)}"` : "";
+
+  const rows = resources.map((res: LibraryResource) => {
+    const isSelected = current.id === res.id && !current.filePath;
+    const format = inferPluginFormat(res);
+    const formatLabel = format ? format.toUpperCase() : "";
+    const path = res.filePath || "";
+    return `
+      <div
+        class="plugin-host-item${isSelected ? " is-selected" : ""}"
+        data-node-id="${node.id}"
+        data-resource-id="${escapeHtml(res.id)}"
+        data-resource-index="${resourceIndex}"
+        ${exposedAttr}
+        role="button"
+        tabindex="0"
+        title="${escapeHtml(path || res.name)}"
+      >
+        <div class="plugin-host-item-info">
+          <div class="plugin-host-item-name">
+            <span class="plugin-host-item-title">${escapeHtml(res.name)}</span>
+            ${formatLabel ? `<span class="plugin-host-item-format">${escapeHtml(formatLabel)}</span>` : ""}
+          </div>
+          ${path ? `<div class="plugin-host-item-path">${escapeHtml(path)}</div>` : ""}
+        </div>
+        <button
+          type="button"
+          class="plugin-host-remove-btn"
+          data-node-id="${node.id}"
+          data-resource-id="${escapeHtml(res.id)}"
+          data-resource-name="${escapeHtml(res.name)}"
+          title="Remove plugin from library"
+          aria-label="Remove ${escapeHtml(res.name)} from library"
+        >${renderIcon("close", "plugin-host-remove-icon")}</button>
+      </div>
+    `;
+  }).join("");
+
+  const customRow = current.filePath ? `
+    <div class="plugin-host-item is-selected is-custom" title="${escapeHtml(current.filePath)}">
+      <div class="plugin-host-item-info">
+        <div class="plugin-host-item-name">
+          <span class="plugin-host-item-title">${escapeHtml(getResourceBaseName(current.filePath))}</span>
+          ${(() => {
+            const format = inferPluginFormat({ filePath: current.filePath });
+            return format ? `<span class="plugin-host-item-format">${escapeHtml(format.toUpperCase())}</span>` : "";
+          })()}
+        </div>
+        <div class="plugin-host-item-path">${escapeHtml(current.filePath)}</div>
+      </div>
+    </div>
+  ` : "";
+
+  const emptyRow = !rows && !customRow
+    ? `<div class="plugin-host-list-empty">No plugins added yet. Use the folder button to browse for a plugin.</div>`
+    : "";
+
+  return `
+    <div
+      class="plugin-host-list${isLoading ? " is-loading" : ""}"
+      data-node-id="${node.id}"
+      data-resource-type="plugin"
+      data-resource-index="${resourceIndex}"
+      ${exposedAttr}
+    >
+      ${rows}${customRow}${emptyRow}
+    </div>
+  `;
 }
 
 function getNodeResourceDisplayName(node: GraphNode, index = 0, overrideResourceType?: string): string {
@@ -2637,6 +2806,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
         const missingClass = isMissing ? "resource-picker-label is-missing" : "resource-picker-label";
         const canBrowseFile = exposedResource.allowBrowseFile ?? true;
         const isLibraryPicker = resourceType === "nam" || resourceType === "ir";
+        const isPluginPicker = resourceType === "plugin";
         const resourceOptions = resources.map((res: LibraryResource) => {
           const selected = current.id === res.id && !current.filePath ? "selected" : "";
           return `<option value="${res.id}" ${selected}>${res.name}</option>`;
@@ -2645,7 +2815,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
           ? `<option value="__custom__" selected>Custom: ${current.filePath.split("/").pop()}</option>`
           : "";
         const hostedPluginOpenButton = resourceType === "plugin"
-          ? `<button type="button" class="resource-picker-btn plugin-host-open-btn" data-node-id="${node.id}">Open Plugin UI</button>`
+          ? `<button type="button" class="resource-picker-btn plugin-host-open-btn" data-node-id="${node.id}" ${hasCurrentSelection ? "" : "disabled"}>Open Selected PLugin</button>`
           : "";
         const hostedPluginLoadError = resourceType === "plugin"
           ? buildHostedPluginLoadErrorHtml(node, resourceIndex)
@@ -2693,7 +2863,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
                   title="Clear selected resource"
                   ${hasCurrentSelection ? "" : "disabled"}
                 >${renderIcon("close", "resource-clear-icon")}</button>
-              ` : `
+              ` : isPluginPicker ? `` : `
                 <select
                   class="resource-selector resource-dropdown"
                   data-node-id="${node.id}"
@@ -2725,12 +2895,26 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
                   data-exposed-resource-id="${escapeHtml(exposedResource.resourceId)}"
                   data-accept="${browseAccept}"
                   title="Browse for file..."
-                >${renderIcon("folder", "resource-browse-icon")}</button>
+                >${renderIcon(isPluginPicker ? "plus" : "folder", "resource-browse-icon")}</button>
               ` : ""}
               ${hostedPluginOpenButton}
+              ${isPluginPicker ? `
+                <button
+                  class="resource-clear-btn plugin-resource-clear-btn"
+                  data-node-id="${node.id}"
+                  data-resource-type="${resourceType}"
+                  data-resource-index="${resourceIndex}"
+                  data-exposed-resource-id="${escapeHtml(exposedResource.resourceId)}"
+                  data-empty-label="${escapeHtml(emptyDisplayName)}"
+                  title="Remove selected plugin"
+                  ${hasCurrentSelection ? "" : "disabled"}
+                >Remove</button>
+              ` : ""}
+              ${isPluginPicker ? buildHostedPluginLoadingIndicatorHtml(node, resourceIndex) : ""}
             </div>
+            ${isPluginPicker ? buildHostedPluginListHtml(node, resourceIndex, exposedResource.resourceId) : ""}
             ${hostedPluginLoadError}
-            ${current.filePath ? `<div class="resource-path-info" title="${current.filePath}">${current.filePath}</div>` : ""}
+            ${current.filePath && !isPluginPicker ? `<div class="resource-path-info" title="${current.filePath}">${current.filePath}</div>` : ""}
           </div>
         `;
       })
@@ -2767,6 +2951,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
         : "";
       const indexAttr = includeIndexAttr ? `data-resource-index="${index}"` : "";
       const isLibraryPicker = resourceType === "nam" || resourceType === "ir";
+      const isPluginPicker = resourceType === "plugin";
       const displayName = current.id
         ? getNodeResourceDisplayName(node, index)
         : resourceType === "ir" ? "No IR selected" : "No model selected";
@@ -2777,7 +2962,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
         && !getLibraryResource(resourceType, current.id);
       const missingClass = isMissing ? "resource-picker-label is-missing" : "resource-picker-label";
       const hostedPluginOpenButton = resourceType === "plugin"
-        ? `<button type="button" class="resource-picker-btn plugin-host-open-btn" data-node-id="${node.id}">Open Plugin UI</button>`
+        ? `<button type="button" class="resource-picker-btn plugin-host-open-btn" data-node-id="${node.id}" ${hasCurrentSelection ? "" : "disabled"}>Open Selected PLugin</button>`
         : "";
       const hostedPluginLoadError = resourceType === "plugin"
         ? buildHostedPluginLoadErrorHtml(node, index)
@@ -2821,7 +3006,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
                 title="Clear selected resource"
                 ${hasCurrentSelection ? "" : "disabled"}
               >${renderIcon("close", "resource-clear-icon")}</button>
-            ` : `
+            ` : isPluginPicker ? `` : `
               <select
                 class="resource-dropdown"
                 data-node-id="${node.id}"
@@ -2850,12 +3035,25 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
                 ${indexAttr}
                 data-accept="${browseAccept}"
                 title="Browse for file..."
-              >${renderIcon("folder", "resource-browse-icon")}</button>
+              >${renderIcon(isPluginPicker ? "plus" : "folder", "resource-browse-icon")}</button>
             ` : ""}
             ${hostedPluginOpenButton}
+            ${isPluginPicker ? `
+              <button
+                class="resource-clear-btn plugin-resource-clear-btn"
+                data-node-id="${node.id}"
+                data-resource-type="${resourceType}"
+                ${indexAttr}
+                data-empty-label="${escapeHtml(emptyDisplayName)}"
+                title="Remove selected plugin"
+                ${hasCurrentSelection ? "" : "disabled"}
+              >Remove</button>
+            ` : ""}
+            ${isPluginPicker ? buildHostedPluginLoadingIndicatorHtml(node, index) : ""}
           </div>
+          ${isPluginPicker ? buildHostedPluginListHtml(node, index) : ""}
           ${hostedPluginLoadError}
-          ${current.filePath ? `<div class="resource-path-info" title="${current.filePath}">${current.filePath}</div>` : ""}
+          ${current.filePath && !isPluginPicker ? `<div class="resource-path-info" title="${current.filePath}">${current.filePath}</div>` : ""}
         </div>
       `;
     };
@@ -3034,6 +3232,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
   bindLayoutOverlayBypassToggles(node, preset);
   bindResourceControls(node, preset);
   bindHostedPluginActionControls(node);
+  bindHostedPluginListControls(node);
   bindCustomEffectActionControls(node);
   bindBlendEditorControls(nodeParamsPanelElement, node);
   bindCloseButton();
@@ -3625,7 +3824,16 @@ function bindResourceControls(node: GraphNode, preset: Preset): void {
       }
       
       if (nodeId && resourceType && resourceId && resourceId !== "__custom__") {
-        sendNodeResourceUpdate(nodeId, resourceType, resourceId, "", resourceIndex);
+        sendNodeResourceUpdate(
+          nodeId,
+          resourceType,
+          resourceId,
+          "",
+          resourceIndex,
+          undefined,
+          undefined,
+          resourceType === "plugin",
+        );
       }
     });
   });
@@ -3690,12 +3898,19 @@ function bindResourceControls(node: GraphNode, preset: Preset): void {
       if (resourceType === "plugin") {
         if (nodeId) {
           hostedPluginLoadFailures.delete(nodeId);
+          markHostedPluginLoadPending(nodeId, resourceIndex ?? 0);
         }
         clearInlineHostedPluginLoadError(browseBtn);
       }
 
       if (nodeId && resourceType) {
-        sendBrowseNodeResource(nodeId, resourceType, resourceIndex, exposedResourceId);
+        sendBrowseNodeResource(
+          nodeId,
+          resourceType,
+          resourceIndex,
+          exposedResourceId,
+          resourceType === "plugin",
+        );
       }
     });
   });
@@ -3704,60 +3919,96 @@ function bindResourceControls(node: GraphNode, preset: Preset): void {
   const clearBtns = nodeParamsPanelElement?.querySelectorAll(".resource-clear-btn") as NodeListOf<HTMLButtonElement> | null;
   clearBtns?.forEach((clearBtn) => {
     clearBtn.addEventListener("click", () => {
-      if (clearBtn.disabled) {
-        return;
-      }
-
-      const nodeId = clearBtn.dataset.nodeId;
-      const resourceType = clearBtn.dataset.resourceType;
-      const resourceIndex = clearBtn.dataset.resourceIndex ? parseInt(clearBtn.dataset.resourceIndex, 10) : undefined;
-      const exposedResourceId = clearBtn.dataset.exposedResourceId;
-      const emptyLabel = clearBtn.dataset.emptyLabel || "No resource selected";
-
-      if (!nodeId || !resourceType) {
-        return;
-      }
-
-      if (resourceType === "plugin") {
-        hostedPluginLoadFailures.delete(nodeId);
-        clearInlineHostedPluginLoadError(clearBtn);
-      }
-
-      sendNodeResourceUpdate(nodeId, resourceType, "", "", resourceIndex, undefined, exposedResourceId);
-
-      const dropdowns = nodeParamsPanelElement?.querySelectorAll<HTMLSelectElement>(
-        `.resource-dropdown[data-node-id="${nodeId}"][data-resource-type="${resourceType}"]`,
-      ) ?? [];
-      dropdowns.forEach((dropdown) => {
-        const controlResourceIndex = dropdown.dataset.resourceIndex ? parseInt(dropdown.dataset.resourceIndex, 10) : 0;
-        const clearResourceIndex = resourceIndex ?? 0;
-        const dropdownExposedResourceId = dropdown.dataset.exposedResourceId;
-        if (controlResourceIndex === clearResourceIndex && (dropdownExposedResourceId ?? "") === (exposedResourceId ?? "")) {
-          dropdown.value = "";
+      void (async () => {
+        if (clearBtn.disabled) {
+          return;
         }
-      });
 
-      const labelCandidates = nodeParamsPanelElement?.querySelectorAll<HTMLElement>(
-        `.resource-picker-label[data-node-id="${nodeId}"]`,
-      ) as NodeListOf<HTMLElement> | null;
-      const pickerResourceType = resourceType === "nam" || resourceType === "ir" ? resourceType : null;
-      const labelEl = pickerResourceType
-        ? findMatchingResourcePickerLabel(
-          labelCandidates,
-          nodeId,
-          pickerResourceType,
-          resourceIndex ?? 0,
-          exposedResourceId,
-        )
-        : null;
+        const nodeId = clearBtn.dataset.nodeId;
+        const resourceType = clearBtn.dataset.resourceType;
+        const resourceIndex = clearBtn.dataset.resourceIndex ? parseInt(clearBtn.dataset.resourceIndex, 10) : undefined;
+        const exposedResourceId = clearBtn.dataset.exposedResourceId;
+        const emptyLabel = clearBtn.dataset.emptyLabel || "No resource selected";
 
-      if (labelEl) {
-        labelEl.textContent = emptyLabel;
-        labelEl.title = emptyLabel;
-        labelEl.classList.remove("is-missing");
-      }
+        if (!nodeId || !resourceType) {
+          return;
+        }
 
-      clearBtn.disabled = true;
+        let selectedPluginResourceId = "";
+        if (resourceType === "plugin") {
+          const current = getNodeResourceAtIndex(node, resourceIndex ?? 0);
+          selectedPluginResourceId = current.id || "";
+          if (selectedPluginResourceId) {
+            const selectedPluginName = getLibraryResourceName("plugin", selectedPluginResourceId) || selectedPluginResourceId;
+            const confirmed = await showConfirm(
+              `Remove "${selectedPluginName}" from your plugin library? The plugin file on disk will not be deleted.`,
+              "Remove Plugin",
+            );
+            if (!confirmed) {
+              return;
+            }
+          }
+
+          hostedPluginLoadFailures.delete(nodeId);
+          clearInlineHostedPluginLoadError(clearBtn);
+          clearHostedPluginLoadPending(nodeId);
+          const listItems = nodeParamsPanelElement?.querySelectorAll<HTMLElement>(
+            `.plugin-host-list[data-node-id="${nodeId}"] .plugin-host-item`,
+          );
+          listItems?.forEach((item) => item.classList.remove("is-selected"));
+          const openButtons = nodeParamsPanelElement?.querySelectorAll<HTMLButtonElement>(
+            `.plugin-host-open-btn[data-node-id="${nodeId}"]`,
+          );
+          openButtons?.forEach((button) => {
+            button.disabled = true;
+          });
+        }
+
+        sendNodeResourceUpdate(nodeId, resourceType, "", "", resourceIndex, undefined, exposedResourceId);
+
+        if (resourceType === "plugin" && selectedPluginResourceId) {
+          postMessage({
+            type: "cleanupResourceLibrary",
+            scope: "plugin",
+            removeFiles: false,
+            resources: [{ type: "plugin", id: selectedPluginResourceId }],
+          });
+        }
+
+        const dropdowns = nodeParamsPanelElement?.querySelectorAll<HTMLSelectElement>(
+          `.resource-dropdown[data-node-id="${nodeId}"][data-resource-type="${resourceType}"]`,
+        ) ?? [];
+        dropdowns.forEach((dropdown) => {
+          const controlResourceIndex = dropdown.dataset.resourceIndex ? parseInt(dropdown.dataset.resourceIndex, 10) : 0;
+          const clearResourceIndex = resourceIndex ?? 0;
+          const dropdownExposedResourceId = dropdown.dataset.exposedResourceId;
+          if (controlResourceIndex === clearResourceIndex && (dropdownExposedResourceId ?? "") === (exposedResourceId ?? "")) {
+            dropdown.value = "";
+          }
+        });
+
+        const labelCandidates = nodeParamsPanelElement?.querySelectorAll<HTMLElement>(
+          `.resource-picker-label[data-node-id="${nodeId}"]`,
+        ) as NodeListOf<HTMLElement> | null;
+        const pickerResourceType = resourceType === "nam" || resourceType === "ir" ? resourceType : null;
+        const labelEl = pickerResourceType
+          ? findMatchingResourcePickerLabel(
+            labelCandidates,
+            nodeId,
+            pickerResourceType,
+            resourceIndex ?? 0,
+            exposedResourceId,
+          )
+          : null;
+
+        if (labelEl) {
+          labelEl.textContent = emptyLabel;
+          labelEl.title = emptyLabel;
+          labelEl.classList.remove("is-missing");
+        }
+
+        clearBtn.disabled = true;
+      })();
     });
   });
 
@@ -3797,6 +4048,94 @@ function bindHostedPluginActionControls(node: GraphNode): void {
   openButtons?.forEach((openButton) => openButton.addEventListener("click", () => {
     sendSignalPathNodeConfigUpdate(node.id, "showPluginEditor", "1", false);
   }));
+}
+
+function bindHostedPluginListControls(node: GraphNode): void {
+  const lists = nodeParamsPanelElement?.querySelectorAll<HTMLElement>(".plugin-host-list");
+  lists?.forEach((list) => {
+    const nodeId = list.dataset.nodeId;
+    const resourceIndex = list.dataset.resourceIndex ? parseInt(list.dataset.resourceIndex, 10) : 0;
+    const exposedResourceId = list.dataset.exposedResourceId;
+    if (!nodeId) {
+      return;
+    }
+
+    const selectedItem = list.querySelector<HTMLElement>(".plugin-host-item.is-selected");
+    selectedItem?.scrollIntoView({ block: "nearest" });
+
+    list.querySelectorAll<HTMLElement>(".plugin-host-item[data-resource-id]").forEach((item) => {
+      item.addEventListener("click", () => {
+        if (list.classList.contains("is-loading")) {
+          return;
+        }
+        const resourceId = item.dataset.resourceId;
+        if (!resourceId || item.classList.contains("is-selected")) {
+          return;
+        }
+
+        hostedPluginLoadFailures.delete(nodeId);
+        clearInlineHostedPluginLoadError(list);
+        renderHostedPluginWarningIntoOpenPanel(
+          nodeId,
+          resourceIndex,
+          buildUnsupportedPluginWarningMarkup(getLibraryResource("plugin", resourceId)),
+        );
+
+        list.querySelectorAll(".plugin-host-item").forEach((el) => el.classList.toggle("is-selected", el === item));
+        const openButtons = nodeParamsPanelElement?.querySelectorAll<HTMLButtonElement>(
+          `.plugin-host-open-btn[data-node-id="${nodeId}"]`,
+        );
+        openButtons?.forEach((button) => {
+          button.disabled = false;
+        });
+        item.scrollIntoView({ block: "nearest" });
+        markHostedPluginLoadPending(nodeId, resourceIndex);
+        sendNodeResourceUpdate(nodeId, "plugin", resourceId, "", resourceIndex, undefined, exposedResourceId, true);
+      });
+      item.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          item.click();
+        }
+      });
+    });
+
+    list.querySelectorAll<HTMLButtonElement>(".plugin-host-remove-btn").forEach((removeBtn) => {
+      removeBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const resourceId = removeBtn.dataset.resourceId;
+        const resourceName = removeBtn.dataset.resourceName || "this plugin";
+        if (!resourceId) {
+          return;
+        }
+        void (async () => {
+          const confirmed = await showConfirm(
+            `Remove "${resourceName}" from your plugin library? The plugin file on disk will not be deleted.`,
+            "Remove Plugin",
+          );
+          if (!confirmed) {
+            return;
+          }
+
+          const current = getNodeResourceAtIndex(node, resourceIndex);
+          if (current.id === resourceId) {
+            // Clear the node's selection first so the library entry is no
+            // longer in use by the active preset when the cleanup runs.
+            hostedPluginLoadFailures.delete(nodeId);
+            clearInlineHostedPluginLoadError(list);
+            sendNodeResourceUpdate(nodeId, "plugin", "", "", resourceIndex, undefined, exposedResourceId);
+          }
+
+          postMessage({
+            type: "cleanupResourceLibrary",
+            scope: "plugin",
+            removeFiles: false,
+            resources: [{ type: "plugin", id: resourceId }],
+          });
+        })();
+      });
+    });
+  });
 }
 
 function getNodeResourceIds(node: GraphNode): string[] {
@@ -3941,6 +4280,7 @@ function sendNodeResourceUpdate(
   resourceIndex?: number,
   parameterValue?: number,
   exposedResourceId?: string,
+  openPluginEditorAfterLoad?: boolean,
 ): void {
   postMessage({
     type: "updateNodeResource",
@@ -3951,6 +4291,7 @@ function sendNodeResourceUpdate(
     resourceIndex,
     parameterValue,
     exposedResourceId,
+    openPluginEditorAfterLoad,
   });
   setPresetDirty(true);
 }
@@ -3960,6 +4301,7 @@ function sendBrowseNodeResource(
   resourceType: string,
   resourceIndex?: number,
   exposedResourceId?: string,
+  openPluginEditorAfterLoad?: boolean,
 ): void {
   postMessage({
     type: "browseNodeResource",
@@ -3967,6 +4309,7 @@ function sendBrowseNodeResource(
     resourceType,
     resourceIndex,
     exposedResourceId,
+    openPluginEditorAfterLoad,
   });
 }
 

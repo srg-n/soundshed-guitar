@@ -295,6 +295,9 @@ private:
     bool ReportHostedPluginResourceLoadFailure(const std::string& nodeId,
                                                const ResourceRef& ref,
                                                int resourceIndex = -1);
+    void NotifyHostedPluginResourceLoadCompleted(const std::string& nodeId,
+                                                 const ResourceRef& ref,
+                                                 int resourceIndex = -1);
     void DiscardFailedHostedPluginResourceSelection(const std::string& nodeId,
                                                     const ResourceRef& ref,
                                                     int resourceIndex = -1);

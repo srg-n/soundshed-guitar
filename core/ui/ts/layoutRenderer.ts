@@ -418,6 +418,22 @@ function renderControls(
           ? `data-exposed-resource-id="${escapeHtml(resourceDef.exposedResourceId)}"`
           : "";
         const resourceIndex = resourceDef?.resourceIndex ?? 0;
+        const isPluginResource = resourceDef?.resourceType === "plugin";
+        const pluginLoadingIndicator = isPluginResource
+          ? `
+              <div
+                class="plugin-host-loading"
+                data-node-id="${node.id}"
+                data-resource-index="${resourceIndex}"
+                role="status"
+                aria-live="polite"
+                hidden
+              >
+                <span class="plugin-host-loading-spinner" aria-hidden="true"></span>
+                <span class="plugin-host-loading-label">Loading plugin...</span>
+              </div>
+            `
+          : "";
 
         controlHtml += `
           <div class="node-resource-selector custom-layout-resource-selector" data-node-id="${node.id}">
@@ -446,8 +462,9 @@ function renderControls(
                   ${exposedResourceAttr}
                   data-accept="${browseAccept}"
                   title="Browse for file..."
-                >${renderIcon("folder", "resource-browse-icon")}</button>
+                >${renderIcon(isPluginResource ? "plus" : "folder", "resource-browse-icon")}</button>
               ` : ""}
+              ${pluginLoadingIndicator}
             </div>
             ${resourceDef?.currentFilePath ? `<div class="resource-path-info" title="${escapeHtml(resourceDef.currentFilePath)}">${escapeHtml(resourceDef.currentFilePath)}</div>` : ""}
           </div>
