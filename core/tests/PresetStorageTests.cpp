@@ -181,11 +181,13 @@ bool TestSerializeDeserialize()
     return false;
   }
 
-  // Verify global settings
-  if (deserialized->global.inputTrim != original.global.inputTrim ||
-      deserialized->global.outputTrim != original.global.outputTrim)
+  // Global/globalSignalChain settings are intentionally discarded on load.
+  if (deserialized->global.inputTrim != 0.0 ||
+      deserialized->global.outputTrim != 0.0 ||
+      deserialized->global.transpose != 0 ||
+      deserialized->globalSignalChain.has_value())
   {
-    std::cout << "FAIL (global settings mismatch)" << std::endl;
+    std::cout << "FAIL (global settings should be discarded on load)" << std::endl;
     return false;
   }
 
@@ -247,6 +249,65 @@ bool TestSaveLoadFile()
   if (loaded->id != original.id || loaded->name != original.name)
   {
     std::cout << "FAIL (loaded preset does not match)" << std::endl;
+    return false;
+  }
+
+  std::cout << "PASS" << std::endl;
+  return true;
+}
+
+bool TestSerializedPresetDropsGlobalChainSettings()
+{
+  std::cout << "Test: SerializedPresetDropsGlobalChainSettings... ";
+
+  auto preset = CreateTestPreset("global-chain-drop", "Global Chain Drop");
+  preset.globalSignalChain = guitarfx::GlobalSignalChainConfig::CreateDefault();
+
+  const std::string json = guitarfx::PresetStorage::SerializeToJson(preset);
+  const auto parsed = nlohmann::json::parse(json);
+
+  if (parsed.contains("global") || parsed.contains("globalSignalChain"))
+  {
+    std::cout << "FAIL (serialized preset should not contain global or globalSignalChain)" << std::endl;
+    return false;
+  }
+
+  const auto loaded = guitarfx::PresetStorage::DeserializeFromJson(R"JSON({
+    "id": "legacy-global-test",
+    "name": "Legacy Global Test",
+    "version": 2,
+    "global": {
+      "inputTrim": -7.0,
+      "outputTrim": 3.5,
+      "outputVolume": 0.75,
+      "autoLevelInput": true,
+      "autoLevelOutput": true,
+      "transpose": 4
+    },
+    "globalSignalChain": {
+      "inputGain": -7.0,
+      "outputGain": 3.5,
+      "preChainGraph": {"nodes": [], "edges": []},
+      "postChainGraph": {"nodes": [], "edges": []}
+    },
+    "graph": {"nodes": [], "edges": []}
+  })JSON");
+
+  if (!loaded)
+  {
+    std::cout << "FAIL (deserialization failed)" << std::endl;
+    return false;
+  }
+
+  if (loaded->globalSignalChain.has_value())
+  {
+    std::cout << "FAIL (loaded preset should discard saved globalSignalChain)" << std::endl;
+    return false;
+  }
+
+  if (loaded->global.inputTrim != 0.0 || loaded->global.outputTrim != 0.0 || loaded->global.transpose != 0)
+  {
+    std::cout << "FAIL (loaded preset should discard saved global settings)" << std::endl;
     return false;
   }
 
@@ -933,6 +994,7 @@ int main()
 
   runTest(TestSerializeDeserialize);
   runTest(TestSaveLoadFile);
+  runTest(TestSerializedPresetDropsGlobalChainSettings);
   runTest(TestLegacyGraphCreatesSingleScene);
   runTest(TestSerializeDeserializeScenes);
   runTest(TestSingleSceneNormalizationPreservesSceneGraph);

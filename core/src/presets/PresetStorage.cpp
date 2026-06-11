@@ -356,18 +356,8 @@ namespace guitarfx
     if (normalizedPreset.designedPeakInputDbfs.has_value())
       json["designedPeakInputDbfs"] = normalizedPreset.designedPeakInputDbfs.value();
 
-    // Global settings
-    nlohmann::json global;
-    global["inputTrim"] = normalizedPreset.global.inputTrim;
-    global["outputTrim"] = normalizedPreset.global.outputTrim;
-    global["outputVolume"] = normalizedPreset.global.outputVolume;
-    global["autoLevelInput"] = normalizedPreset.global.autoLevelInput;
-    global["autoLevelOutput"] = normalizedPreset.global.autoLevelOutput;
-    global["transpose"] = normalizedPreset.global.transpose;
-    json["global"] = global;
-
-    if (normalizedPreset.globalSignalChain.has_value())
-      json["globalSignalChain"] = *normalizedPreset.globalSignalChain;
+    // Global signal chain settings are intentionally not persisted.
+    // Presets should only store the signal graph / scenes.
 
     if (!normalizedPreset.scenes.empty())
     {
@@ -451,31 +441,11 @@ namespace guitarfx
       if (json.contains("designedPeakInputDbfs") && json["designedPeakInputDbfs"].is_number())
         preset.designedPeakInputDbfs = json["designedPeakInputDbfs"].get<double>();
 
-      // Global settings (support both "global" and "globals" for compatibility)
-      nlohmann::json globalJson;
-      if (json.contains("global") && json["global"].is_object())
-      {
-        globalJson = json["global"];
-      }
-      else if (json.contains("globals") && json["globals"].is_object())
-      {
-        globalJson = json["globals"];
-      }
-      
-      if (!globalJson.is_null())
-      {
-        preset.global.inputTrim = globalJson.value("inputTrim", 0.0);
-        preset.global.outputTrim = globalJson.value("outputTrim", 0.0);
-        preset.global.outputVolume = globalJson.value("outputVolume", 1.0);
-        preset.global.autoLevelInput = globalJson.value("autoLevelInput", false);
-        preset.global.autoLevelOutput = globalJson.value("autoLevelOutput", false);
-        preset.global.transpose = globalJson.value("transpose", 0);
-      }
-
-      if (json.contains("globalSignalChain") && json["globalSignalChain"].is_object())
-      {
-        preset.globalSignalChain = json["globalSignalChain"].get<GlobalSignalChainConfig>();
-      }
+      // Legacy global/globalSignalChain settings are intentionally ignored.
+      // Loaded presets should normalize to the graph-only model and discard any
+      // saved global chain state from older files.
+      preset.global = GlobalSettings{};
+      preset.globalSignalChain.reset();
 
       // Signal graph
       if (json.contains("graph") && json["graph"].is_object())
@@ -559,17 +529,8 @@ namespace guitarfx
       if (!normalizedPreset.tags.empty())
         json["tags"] = normalizedPreset.tags;
 
-      nlohmann::json global;
-      global["inputTrim"] = normalizedPreset.global.inputTrim;
-      global["outputTrim"] = normalizedPreset.global.outputTrim;
-      global["outputVolume"] = normalizedPreset.global.outputVolume;
-      global["autoLevelInput"] = normalizedPreset.global.autoLevelInput;
-      global["autoLevelOutput"] = normalizedPreset.global.autoLevelOutput;
-      global["transpose"] = normalizedPreset.global.transpose;
-      json["global"] = global;
-
-      if (normalizedPreset.globalSignalChain.has_value())
-        json["globalSignalChain"] = *normalizedPreset.globalSignalChain;
+      // Global signal chain settings are intentionally not persisted.
+      // Presets should only store the signal graph / scenes.
 
       if (!normalizedPreset.scenes.empty())
       {
@@ -657,30 +618,8 @@ namespace guitarfx
         }
       }
 
-      nlohmann::json globalJson;
-      if (json.contains("global") && json["global"].is_object())
-      {
-        globalJson = json["global"];
-      }
-      else if (json.contains("globals") && json["globals"].is_object())
-      {
-        globalJson = json["globals"];
-      }
-
-      if (!globalJson.is_null())
-      {
-        preset.global.inputTrim = globalJson.value("inputTrim", 0.0);
-        preset.global.outputTrim = globalJson.value("outputTrim", 0.0);
-        preset.global.outputVolume = globalJson.value("outputVolume", 1.0);
-        preset.global.autoLevelInput = globalJson.value("autoLevelInput", false);
-        preset.global.autoLevelOutput = globalJson.value("autoLevelOutput", false);
-        preset.global.transpose = globalJson.value("transpose", 0);
-      }
-
-      if (json.contains("globalSignalChain") && json["globalSignalChain"].is_object())
-      {
-        preset.globalSignalChain = json["globalSignalChain"].get<GlobalSignalChainConfig>();
-      }
+      preset.global = GlobalSettings{};
+      preset.globalSignalChain.reset();
 
       const std::optional<std::filesystem::path> baseDirectory = path.parent_path();
       if (json.contains("graph") && json["graph"].is_object())

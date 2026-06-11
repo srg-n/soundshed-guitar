@@ -179,9 +179,16 @@ function stripLegacyGlobals(preset: Preset): Preset {
   return cleaned;
 }
 
-function stripGlobalSignalChainForSave(preset: Preset): Preset {
+export function sanitizePresetForArchive(preset: Preset): Preset {
   const cleaned = clonePreset(preset);
+  delete (cleaned as Record<string, unknown>).globals;
+  delete (cleaned as Record<string, unknown>).global;
   delete (cleaned as Record<string, unknown>).globalSignalChain;
+  return cleaned;
+}
+
+function stripGlobalSignalChainForSave(preset: Preset): Preset {
+  const cleaned = sanitizePresetForArchive(preset);
   if (Array.isArray(cleaned.scenes) && cleaned.scenes.length > 0) {
     delete (cleaned as Record<string, unknown>).graph;
   }
@@ -2985,7 +2992,7 @@ async function exportPresetCollectionArchive(presets: Preset[], archiveName: str
     });
   }
 
-  const exportPresets = exportSourcePresets.map((preset) => clonePreset(preset));
+  const exportPresets = exportSourcePresets.map((preset) => sanitizePresetForArchive(preset));
   const presetFolders = buildArchivePresetFoldersForExport(sourceFolderId, exportPresets);
   const archive: PresetCollectionArchive = {
     formatVersion: 1,
@@ -3087,7 +3094,7 @@ export async function buildPresetArchiveBlob(preset: Preset): Promise<Blob> {
 
   const archive: PresetArchive = {
     formatVersion: 1,
-    preset: clonePreset(preset),
+    preset: sanitizePresetForArchive(preset),
     resources: exportResources,
     blends: blendDefs,
   };
@@ -3167,7 +3174,7 @@ export async function buildToneSharingPresetArchiveBlobs(preset: Preset): Promis
 
   const archive: PresetArchive = {
     formatVersion: 1,
-    preset: clonePreset(preset),
+    preset: sanitizePresetForArchive(preset),
     resources: exportResources,
     blends: blendDefs,
     ...(exportTone3000Resources.length > 0 ? { tone3000Resources: exportTone3000Resources } : {}),
@@ -3674,7 +3681,7 @@ export async function importPresetArchive(
 
   const importedPresets: Preset[] = [];
   for (const sourcePreset of presetsToImport) {
-    const importedPreset = clonePreset(sourcePreset);
+    const importedPreset = sanitizePresetForArchive(sourcePreset);
     migratePresetNodeTypes(importedPreset);
     const sourcePresetId = importedPreset.id || importedPreset.name || "preset";
     const archiveOrigin = getToneSharingOriginMetadata(importedPreset);
