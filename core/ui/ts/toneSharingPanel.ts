@@ -1,6 +1,6 @@
 import { postMessage, setAppSetting } from "./bridge.js";
 import { showConfirm } from "./dialogs.js";
-import { buildToneSharingPresetArchiveBlobs, importPackWithConfirmation, importPresetArchive } from "./presets.js";
+import { buildToneSharingPresetArchiveBlobs, importPackWithConfirmation, importPresetArchive, populatePresetDropdown, renderActivePreset } from "./presets.js";
 import { clonePreset, uiState } from "./state.js";
 import type { Preset, PresetFolder } from "./types.js";
 import { escapeHtml, idAccentColor } from "./utils.js";
@@ -15,12 +15,18 @@ type ToneSharingUser = {
   id: string;
   email: string;
   role: string;
+  displayName?: string | null;
+  bio?: string | null;
+  creatorProfileHandle?: string | null;
+  avatarAssetId?: string | null;
+  avatarUrl?: string | null;
 };
 
 type ToneSharingItem = {
   id: string;
   title: string;
   type: string;
+  featured?: boolean;
   creatorUserId?: string | null;
   moderationStatus?: string;
   creatorEmail?: string | null;
@@ -28,6 +34,8 @@ type ToneSharingItem = {
   creatorHandle?: string | null;
   creatorProfileHandle?: string | null;
   profileHandle?: string | null;
+  creatorBio?: string | null;
+  creatorAvatarUrl?: string | null;
   favoriteCount?: number;
   ratingCount?: number;
   averageRating?: number | null;
@@ -40,6 +48,7 @@ type ToneSharingItem = {
 type ToneSharingPack = {
   id: string;
   title: string;
+  featured?: boolean;
   creatorUserId?: string | null;
   moderationStatus?: string;
   creatorEmail?: string | null;
@@ -47,6 +56,8 @@ type ToneSharingPack = {
   creatorHandle?: string | null;
   creatorProfileHandle?: string | null;
   profileHandle?: string | null;
+  creatorBio?: string | null;
+  creatorAvatarUrl?: string | null;
   description?: string | null;
   thumbnailUrl?: string | null;
   thumbnailAssetId?: string | null;
@@ -111,9 +122,15 @@ type ToneSharingRow = {
     kind: "item" | "pack";
     title: string;
     type: string | null;
+    featured?: boolean;
     moderationStatus?: string;
     creatorEmail?: string | null;
     creatorDisplayName?: string | null;
+    creatorHandle?: string | null;
+    creatorProfileHandle?: string | null;
+    profileHandle?: string | null;
+    creatorBio?: string | null;
+    creatorAvatarUrl?: string | null;
     favoriteCount?: number;
     ratingCount?: number;
     averageRating?: number | null;
@@ -133,6 +150,15 @@ type InstalledPackResourceRef = {
   id: string;
 };
 
+type InstalledPackDeletionPlan = {
+  removablePresetIds: string[];
+  preservedPresetIds: string[];
+  missingPresetIds: string[];
+  removableResourceEntries: InstalledPackResourceRef[];
+  preservedResourceEntries: InstalledPackResourceRef[];
+  retainedPack: boolean;
+};
+
 export type InstalledPackMetadata = {
   id: string;
   title: string;
@@ -142,6 +168,7 @@ export type InstalledPackMetadata = {
   archivePath?: string;
   archiveFileName?: string;
   presetIds: string[];
+  presetSignatures?: Record<string, string>;
   resources: InstalledPackResourceRef[];
 };
 
@@ -152,6 +179,8 @@ const storageKeys = {
 };
 
 const TONE_SHARING_PUBLISH_CONSENT_VERSION = 1;
+const FEATURED_PRESET_MAX = 10;
+const SHOW_TONE_SHARING_STATS = false;
 
 const state = {
   apiBase: "https://api-guitar.soundshed.com/v1", //"http://127.0.0.1:8787/v1", 
@@ -162,6 +191,7 @@ const state = {
 };
 
 const packThumbnailObjectUrls = new Map<string, string>();
+let profileAvatarPreviewObjectUrl: string | null = null;
 
 let browseMode: "featured" | "items" | "packs" | "installed" | "mine" | "ai-search" | "review" = "featured";
 let publishItemInFlight = false;
@@ -226,6 +256,8 @@ const browseCollections: BrowseCollectionState = {
 };
 
 let activeSharedTarget: ToneSharingShareTarget | null = null;
+let featuredHiddenPresetCount = 0;
+let communityPresetSearchQuery = "";
 
 function element<T extends HTMLElement>(id: string): T | null {
   return document.getElementById(id) as T | null;
@@ -241,6 +273,241 @@ function setText(id: string, value: string): void {
 function setUploadStatus(value: string): void {
   setText("tone-sharing-upload-status", value);
   setText("tone-sharing-publish-modal-status", value);
+}
+
+function normalizeCommunityPresetSearchValue(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value.trim().toLowerCase();
+}
+
+function matchesCommunityPresetSearch(item: ToneSharingItem, query: string): boolean {
+  const normalizedQuery = normalizeCommunityPresetSearchValue(query);
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  const tags = Array.isArray(item.tags) ? item.tags : [];
+  const searchableFields: unknown[] = [
+    item.title,
+    item.description,
+    item.creatorDisplayName,
+    ...tags,
+  ];
+
+  return searchableFields.some((field) => normalizeCommunityPresetSearchValue(field).includes(normalizedQuery));
+}
+
+function filterCommunityPresetItems(items: ToneSharingItem[]): ToneSharingItem[] {
+  const normalizedQuery = normalizeCommunityPresetSearchValue(communityPresetSearchQuery);
+  if (!normalizedQuery) {
+    return items.slice();
+  }
+
+  return items.filter((item) => matchesCommunityPresetSearch(item, normalizedQuery));
+}
+
+function updateCommunityPresetSearchUi(): void {
+  const row = element<HTMLElement>("tone-sharing-community-search");
+  const input = element<HTMLInputElement>("tone-sharing-community-search-input");
+  const clearButton = element<HTMLButtonElement>("tone-sharing-community-search-clear");
+  if (!row || !input || !clearButton) {
+    return;
+  }
+
+  const shouldShow = browseMode === "items" && activeSharedTarget === null;
+  row.classList.toggle("tone-sharing-community-search--hidden", !shouldShow);
+
+  if (input.value !== communityPresetSearchQuery) {
+    input.value = communityPresetSearchQuery;
+  }
+
+  clearButton.disabled = communityPresetSearchQuery.length === 0;
+}
+
+type ToneActionIcon = "preview" | "download" | "share" | "view" | "approve" | "reject" | "edit" | "delete";
+
+function toneActionIconMarkup(icon: ToneActionIcon): string {
+  switch (icon) {
+    case "preview":
+      return `<svg class="tone-sharing-btn-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><polygon points="3,2 14,8 3,14"/></svg>`;
+    case "download":
+      return `<svg class="tone-sharing-btn-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1a1 1 0 011 1v6.172l1.586-1.586a1 1 0 111.414 1.414l-3.293 3.293a1 1 0 01-1.414 0L3.999 8.001a1 1 0 111.414-1.414L7.001 8.172V2A1 1 0 018 1z"/><rect x="2" y="12.5" width="12" height="2" rx="1"/></svg>`;
+    case "share":
+      return `<svg class="tone-sharing-btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12.5" cy="3.5" r="1.8"/><circle cx="3.5" cy="8" r="1.8"/><circle cx="12.5" cy="12.5" r="1.8"/><path d="M5.2 7l5.6-2.7M5.2 9l5.6 2.7"/></svg>`;
+    case "view":
+      return `<svg class="tone-sharing-btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1.3 8s2.3-4.2 6.7-4.2S14.7 8 14.7 8s-2.3 4.2-6.7 4.2S1.3 8 1.3 8z"/><circle cx="8" cy="8" r="2.1"/></svg>`;
+    case "approve":
+      return `<svg class="tone-sharing-btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.2 8.3 2.7 2.8 6-6.2"/></svg>`;
+    case "reject":
+      return `<svg class="tone-sharing-btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3.5 3.5 12.5 12.5M12.5 3.5l-9 9"/></svg>`;
+    case "edit":
+      return `<svg class="tone-sharing-btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.2 11.8V13.8h2l6.7-6.7-2-2z"/><path d="m9.7 3.1 2 2"/></svg>`;
+    case "delete":
+      return `<svg class="tone-sharing-btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.2h11"/><path d="M6 4.2V2.8h4v1.4"/><path d="M4.5 4.2l.7 8.5h5.6l.7-8.5"/></svg>`;
+  }
+}
+
+function renderToneIconButton(options: {
+  kind: "action" | "pack-action";
+  value: string;
+  icon: ToneActionIcon;
+  label: string;
+  primary?: boolean;
+  active?: boolean;
+  disabled?: boolean;
+  attrs?: Record<string, string>;
+}): string {
+  const className = [
+    "btn",
+    options.primary ? "btn-primary" : "btn-secondary",
+    "tone-sharing-card-btn",
+    "tone-sharing-card-btn--icon",
+    options.active ? "is-active" : "",
+  ].filter(Boolean).join(" ");
+  const dataName = options.kind === "action" ? "data-action" : "data-pack-action";
+  const attrs = options.attrs
+    ? Object.entries(options.attrs)
+      .map(([key, value]) => ` ${key}="${escapeHtml(value)}"`)
+      .join("")
+    : "";
+
+  const disabledAttr = options.disabled ? " disabled" : "";
+  return `<button class="${className}" type="button" ${dataName}="${escapeHtml(options.value)}" aria-label="${escapeHtml(options.label)}" title="${escapeHtml(options.label)}"${disabledAttr}${attrs}>${toneActionIconMarkup(options.icon)}</button>`;
+}
+
+function setActionButtonBusy(button: HTMLButtonElement, busyLabel: string): () => void {
+  const previousHtml = button.innerHTML;
+  const previousDisabled = button.disabled;
+  const previousMinWidth = button.style.minWidth;
+  const previousTitle = button.getAttribute("title");
+  const previousAriaLabel = button.getAttribute("aria-label");
+  const width = button.getBoundingClientRect().width;
+  const iconOnly = button.classList.contains("tone-sharing-card-btn--icon");
+
+  if (width > 0) {
+    button.style.minWidth = `${Math.ceil(width)}px`;
+  }
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  button.setAttribute("title", busyLabel);
+  button.setAttribute("aria-label", busyLabel);
+  button.classList.add("is-busy");
+  button.innerHTML = iconOnly
+    ? `<span class="tone-sharing-btn-busy-spinner" aria-hidden="true"></span>`
+    : `<span class="tone-sharing-btn-busy-spinner" aria-hidden="true"></span>${busyLabel}`;
+
+  return () => {
+    button.innerHTML = previousHtml;
+    button.disabled = previousDisabled;
+    button.style.minWidth = previousMinWidth;
+    if (previousTitle === null) {
+      button.removeAttribute("title");
+    } else {
+      button.setAttribute("title", previousTitle);
+    }
+    if (previousAriaLabel === null) {
+      button.removeAttribute("aria-label");
+    } else {
+      button.setAttribute("aria-label", previousAriaLabel);
+    }
+    button.removeAttribute("aria-busy");
+    button.classList.remove("is-busy");
+  };
+}
+
+function syncPackPreviewButtons(presetsEl: HTMLElement, previewingItemId: string): void {
+  presetsEl.querySelectorAll<HTMLElement>(".tone-sharing-pack-preset-row").forEach((row) => {
+    row.classList.toggle("is-previewing", row.dataset.itemId === previewingItemId);
+  });
+
+  presetsEl.querySelectorAll<HTMLButtonElement>("[data-pack-action='preview']").forEach((btn) => {
+    const isThis = btn.dataset.itemId === previewingItemId;
+    btn.innerHTML = toneActionIconMarkup("preview");
+    const label = isThis ? "Previewing preset" : "Preview preset";
+    btn.setAttribute("title", label);
+    btn.setAttribute("aria-label", label);
+    btn.classList.toggle("is-active", isThis);
+    btn.disabled = false;
+    btn.removeAttribute("aria-busy");
+    btn.classList.remove("is-busy");
+    btn.style.minWidth = "";
+  });
+}
+
+function syncFeedPreviewButton(card: HTMLElement, isPreviewing: boolean): void {
+  card.classList.toggle("is-previewing", isPreviewing);
+  const btn = card.querySelector<HTMLButtonElement>("[data-action='preview']");
+  if (!btn) {
+    return;
+  }
+  btn.innerHTML = toneActionIconMarkup("preview");
+  const label = isPreviewing ? "Previewing preset" : "Preview preset";
+  btn.setAttribute("title", label);
+  btn.setAttribute("aria-label", label);
+  btn.classList.toggle("is-active", isPreviewing);
+}
+
+function clearProfileAvatarPreviewObjectUrl(): void {
+  if (!profileAvatarPreviewObjectUrl) {
+    return;
+  }
+  URL.revokeObjectURL(profileAvatarPreviewObjectUrl);
+  profileAvatarPreviewObjectUrl = null;
+}
+
+function setProfileAvatarPreview(source: string | null): void {
+  const wrap = element<HTMLElement>("tone-sharing-avatar-preview-wrap");
+  const image = element<HTMLImageElement>("tone-sharing-avatar-preview");
+  if (!wrap || !image) {
+    return;
+  }
+
+  const resolved = source?.trim() ?? "";
+  if (!resolved) {
+    image.removeAttribute("src");
+    wrap.style.display = "none";
+    return;
+  }
+
+  image.src = resolved;
+  wrap.style.display = "";
+}
+
+function setProfileFieldsFromUser(user: ToneSharingUser | null): void {
+  const displayNameInput = element<HTMLInputElement>("tone-sharing-display-name");
+  const bioInput = element<HTMLTextAreaElement>("tone-sharing-bio");
+  const avatarInput = element<HTMLInputElement>("tone-sharing-avatar-image");
+
+  if (displayNameInput) {
+    displayNameInput.value = user?.displayName ?? "";
+  }
+  if (bioInput) {
+    bioInput.value = user?.bio ?? "";
+  }
+  if (avatarInput) {
+    avatarInput.value = "";
+  }
+
+  clearProfileAvatarPreviewObjectUrl();
+  setProfileAvatarPreview(user?.avatarUrl ? buildApiUrl(user.avatarUrl) : null);
+  setText("tone-sharing-profile-status", "");
+}
+
+function previewSelectedProfileAvatar(): void {
+  const avatarInput = element<HTMLInputElement>("tone-sharing-avatar-image");
+  const selectedFile = avatarInput?.files?.[0] ?? null;
+
+  clearProfileAvatarPreviewObjectUrl();
+  if (!selectedFile) {
+    setProfileAvatarPreview(state.user?.avatarUrl ? buildApiUrl(state.user.avatarUrl) : null);
+    return;
+  }
+
+  profileAvatarPreviewObjectUrl = URL.createObjectURL(selectedFile);
+  setProfileAvatarPreview(profileAvatarPreviewObjectUrl);
+  setText("tone-sharing-profile-status", "");
 }
 
 function getApiOrigin(): string {
@@ -310,6 +577,57 @@ function getPresetToneSharingOrigin(preset: Preset | null | undefined): { itemId
     itemId,
     republishBlocked: origin.republishBlocked !== false,
   };
+}
+
+function getPresetToneSharingPackId(preset: Preset | null | undefined): string | null {
+  if (!preset || !preset.toneSharingOrigin || typeof preset.toneSharingOrigin !== "object") {
+    return null;
+  }
+  const origin = preset.toneSharingOrigin;
+  if (origin.source !== "toneSharingApi") {
+    return null;
+  }
+  const packId = typeof origin.importedFromPackId === "string"
+    ? origin.importedFromPackId.trim()
+    : "";
+  return packId || null;
+}
+
+type InstalledToneSharingLookup = {
+  itemIds: Set<string>;
+  packIds: Set<string>;
+};
+
+function buildInstalledToneSharingLookup(): InstalledToneSharingLookup {
+  const itemIds = new Set<string>();
+  const packIds = new Set<string>();
+
+  for (const pack of state.installedPacks) {
+    const packId = typeof pack.packId === "string" ? pack.packId.trim() : "";
+    if (packId) {
+      packIds.add(packId);
+    }
+
+    if (pack.source === "toneSharingApi" && pack.id.startsWith("tone-sharing-api:item:")) {
+      const itemId = pack.id.slice("tone-sharing-api:item:".length).trim();
+      if (itemId) {
+        itemIds.add(itemId);
+      }
+    }
+  }
+
+  for (const preset of uiState.presets) {
+    const origin = getPresetToneSharingOrigin(preset);
+    if (origin) {
+      itemIds.add(origin.itemId);
+    }
+    const importedFromPackId = getPresetToneSharingPackId(preset);
+    if (importedFromPackId) {
+      packIds.add(importedFromPackId);
+    }
+  }
+
+  return { itemIds, packIds };
 }
 
 function setPublishItemBusy(busy: boolean, message?: string): void {
@@ -413,6 +731,13 @@ function normalizeInstalledPackMetadata(raw: unknown): InstalledPackMetadata | n
         })
         .filter((entry) => entry.type.length > 0 && entry.id.length > 0)
     : [];
+  const presetSignatures = value.presetSignatures && typeof value.presetSignatures === "object"
+    ? Object.fromEntries(
+        Object.entries(value.presetSignatures as Record<string, unknown>)
+          .filter(([presetId, signature]) => typeof presetId === "string" && presetId.trim().length > 0 && typeof signature === "string" && signature.trim().length > 0)
+          .map(([presetId, signature]) => [presetId.trim(), String(signature).trim()])
+      )
+    : {};
 
   if (!id || !title) {
     return null;
@@ -427,6 +752,7 @@ function normalizeInstalledPackMetadata(raw: unknown): InstalledPackMetadata | n
     archivePath: typeof value.archivePath === "string" && value.archivePath ? value.archivePath : undefined,
     archiveFileName: typeof value.archiveFileName === "string" && value.archiveFileName ? value.archiveFileName : undefined,
     presetIds: Array.from(new Set(presetIds)),
+    presetSignatures,
     resources,
   };
 }
@@ -435,6 +761,44 @@ function persistInstalledPacks(): void {
   const serialized = JSON.stringify(state.installedPacks);
   localStorage.setItem(storageKeys.installedPacks, serialized);
   setAppSetting(storageKeys.installedPacks, state.installedPacks);
+}
+
+function reconcileInstalledPacksWithPresetLibrary(persist = false): boolean {
+  if (!Array.isArray(state.installedPacks) || state.installedPacks.length === 0) {
+    return false;
+  }
+
+  const availablePresetIds = new Set(uiState.presets.map((preset) => preset.id));
+  const nextInstalled = state.installedPacks
+    .map((pack) => {
+      const nextPresetIds = pack.presetIds.filter((presetId) => availablePresetIds.has(presetId));
+      if (nextPresetIds.length === 0) {
+        return null;
+      }
+
+      const nextPresetSignatures = Object.fromEntries(
+        Object.entries(pack.presetSignatures ?? {}).filter(([presetId]) => nextPresetIds.includes(presetId))
+      );
+
+      return {
+        ...pack,
+        presetIds: nextPresetIds,
+        presetSignatures: nextPresetSignatures,
+      } as InstalledPackMetadata;
+    })
+    .filter((pack): pack is InstalledPackMetadata => pack !== null);
+
+  const currentSerialized = JSON.stringify(state.installedPacks);
+  const nextSerialized = JSON.stringify(nextInstalled);
+  if (currentSerialized === nextSerialized) {
+    return false;
+  }
+
+  state.installedPacks = nextInstalled;
+  if (persist) {
+    persistInstalledPacks();
+  }
+  return true;
 }
 
 function mergeInstalledPackMetadata(entry: InstalledPackMetadata): void {
@@ -478,6 +842,7 @@ export function registerInstalledToneSharingPackFromImport(info: {
     archivePath: info.path?.trim() || undefined,
     archiveFileName: fileName,
     presetIds: [],
+    presetSignatures: {},
     resources: [],
   });
 }
@@ -581,6 +946,7 @@ export function openToneSharingSignInModal(): void {
   const modal = element<HTMLElement>("tone-sharing-signin-modal");
   if (modal) {
     updateAuthButtonVisibility();
+    setProfileFieldsFromUser(state.user);
     modal.style.display = "flex";
   }
 }
@@ -794,8 +1160,11 @@ function updateAuthButtonVisibility(): void {
   const sendCodeButton = element<HTMLButtonElement>("tone-sharing-send-code");
   const signInButton = element<HTMLButtonElement>("tone-sharing-verify");
   const signOutButton = element<HTMLButtonElement>("tone-sharing-logout");
+  const saveProfileButton = element<HTMLButtonElement>("tone-sharing-save-profile");
   const accountChip = element<HTMLButtonElement>("tone-sharing-account-btn");
   const createPackButton = element<HTMLButtonElement>("tone-sharing-open-pack-modal");
+  const authFields = element<HTMLElement>("tone-sharing-auth-fields");
+  const profileFields = element<HTMLElement>("tone-sharing-profile-fields");
   const signedIn = !!state.user;
   const showVerifyActions = !signedIn && authCodeRequested;
 
@@ -810,8 +1179,18 @@ function updateAuthButtonVisibility(): void {
   if (signOutButton) {
     signOutButton.style.display = signedIn ? "" : "none";
   }
+  if (saveProfileButton) {
+    saveProfileButton.style.display = signedIn ? "" : "none";
+  }
+  if (authFields) {
+    authFields.style.display = signedIn ? "none" : "";
+  }
+  if (profileFields) {
+    profileFields.style.display = signedIn ? "" : "none";
+  }
   if (accountChip) {
-    accountChip.textContent = signedIn ? (state.user?.email ?? "Account") : "Sign In";
+    const chipLabel = signedIn ? (state.user?.displayName?.trim() || state.user?.email || "Account") : "Sign In";
+    accountChip.textContent = chipLabel;
     accountChip.classList.toggle("signed-in", signedIn);
   }
   if (createPackButton) {
@@ -826,6 +1205,7 @@ function updateAuthButtonVisibility(): void {
     browseMode = "featured";
   }
   if (!signedIn) {
+    setText("tone-sharing-profile-status", "");
     closeToneSharingPublishPresetModal();
     closePackModal();
   }
@@ -879,6 +1259,26 @@ function resolveCreatorProfileHandle(item: Record<string, unknown>): string | nu
   const displayName = typeof item.creatorDisplayName === "string" ? item.creatorDisplayName.trim() : "";
   if (displayName.startsWith("@")) {
     return normalizeCreatorHandle(displayName);
+  }
+
+  return null;
+}
+
+function resolveCreatorAvatarUrl(item: Record<string, unknown>): string | null {
+  const explicit = [
+    item.creatorAvatarUrl,
+    item.avatarUrl,
+  ];
+
+  for (const candidate of explicit) {
+    if (typeof candidate !== "string") {
+      continue;
+    }
+    const trimmed = candidate.trim();
+    if (!trimmed) {
+      continue;
+    }
+    return buildApiUrl(trimmed);
   }
 
   return null;
@@ -1153,6 +1553,7 @@ async function loadAuthSession(): Promise<void> {
   try {
     const data = await apiFetch<{ user: ToneSharingUser | null }>("/auth/me");
     state.user = data.user;
+    setProfileFieldsFromUser(data.user);
     authCodeRequested = false;
     updateAuthButtonVisibility();
     if (data.user) {
@@ -1162,6 +1563,7 @@ async function loadAuthSession(): Promise<void> {
       setText("tone-sharing-auth-status", "Signed out");
     }
   } catch (error) {
+    setProfileFieldsFromUser(null);
     setText("tone-sharing-auth-status", `Auth check failed: ${(error as Error).message}`);
   }
 }
@@ -1205,6 +1607,7 @@ async function verifyCode(): Promise<void> {
     });
 
     state.user = data.user;
+    setProfileFieldsFromUser(data.user);
     state.sessionId = data.sessionId ?? "";
     authCodeRequested = false;
     updateAuthButtonVisibility();
@@ -1225,12 +1628,150 @@ async function signOut(): Promise<void> {
 
   state.sessionId = "";
   state.user = null;
+  setProfileFieldsFromUser(null);
   authCodeRequested = false;
   updateAuthButtonVisibility();
   persistToneSharingSession("");
   setText("tone-sharing-auth-status", "Signed out");
   closeSignInModal();
   await loadBrowse();
+}
+
+async function uploadProfileAvatar(file: File): Promise<string> {
+  const resized = await resizeImageToMaxWidth(file, 512);
+  const avatarBlob = resized.blob;
+
+  const init = await apiFetch<{ uploadId: string }>("/uploads/init", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      kind: "thumbnail",
+      mimeType: avatarBlob.type || "application/octet-stream",
+      byteSize: avatarBlob.size,
+    })
+  });
+
+  const uploadResponse = await fetch(buildApiUrl(`/uploads/${init.uploadId}`), {
+    method: "PUT",
+    headers: {
+      "content-type": avatarBlob.type || "application/octet-stream",
+      ...(state.sessionId ? { "x-session-id": state.sessionId } : {}),
+    },
+    body: avatarBlob,
+    credentials: "include",
+  });
+
+  const uploadPayload = await uploadResponse.json().catch(() => null);
+  if (!uploadResponse.ok || uploadPayload?.ok === false) {
+    throw new Error(uploadPayload?.error?.message || `Avatar upload failed (${uploadResponse.status})`);
+  }
+
+  const complete = await apiFetch<{ assetId: string }>("/uploads/complete", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ uploadId: init.uploadId }),
+  });
+
+  return complete.assetId;
+}
+
+async function saveProfile(): Promise<void> {
+  if (!state.user) {
+    setText("tone-sharing-auth-status", "Sign in to edit your profile.");
+    return;
+  }
+
+  const saveButton = element<HTMLButtonElement>("tone-sharing-save-profile");
+  const displayNameInput = element<HTMLInputElement>("tone-sharing-display-name");
+  const bioInput = element<HTMLTextAreaElement>("tone-sharing-bio");
+  const avatarInput = element<HTMLInputElement>("tone-sharing-avatar-image");
+
+  const displayName = displayNameInput?.value.trim() ?? "";
+  const bio = bioInput?.value.trim() ?? "";
+  const avatarFile = avatarInput?.files?.[0] ?? null;
+
+  if (saveButton) {
+    saveButton.disabled = true;
+  }
+  setText("tone-sharing-profile-status", "Saving profile...");
+
+  try {
+    let avatarAssetId: string | null | undefined = undefined;
+    if (avatarFile) {
+      setText("tone-sharing-profile-status", "Uploading avatar...");
+      avatarAssetId = await uploadProfileAvatar(avatarFile);
+    }
+
+    const payload: {
+      displayName?: string;
+      bio?: string;
+      avatarAssetId?: string | null;
+    } = {
+      displayName,
+      bio,
+    };
+    if (avatarAssetId !== undefined) {
+      payload.avatarAssetId = avatarAssetId;
+    }
+
+    const result = await apiFetch<{ user: ToneSharingUser | null }>("/auth/profile", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!result.user) {
+      throw new Error("Profile response missing user.");
+    }
+
+    state.user = result.user;
+    setProfileFieldsFromUser(result.user);
+    updateAuthButtonVisibility();
+    setText("tone-sharing-auth-status", `Signed in as ${result.user.email}`);
+    setText("tone-sharing-profile-status", "Profile saved.");
+    await Promise.all([loadBrowse(), loadMine()]);
+  } catch (error) {
+    setText("tone-sharing-profile-status", `Profile save failed: ${(error as Error).message}`);
+  } finally {
+    if (saveButton) {
+      saveButton.disabled = false;
+    }
+  }
+}
+
+function formatCompactMetric(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return "0";
+  }
+
+  const whole = Math.floor(value);
+  if (whole >= 1_000_000) {
+    const scaled = whole / 1_000_000;
+    const formatted = scaled >= 10 ? scaled.toFixed(0) : scaled.toFixed(1);
+    return `${formatted.replace(/\.0$/, "")}M`;
+  }
+  if (whole >= 1_000) {
+    const scaled = whole / 1_000;
+    const formatted = scaled >= 10 ? scaled.toFixed(0) : scaled.toFixed(1);
+    return `${formatted.replace(/\.0$/, "")}K`;
+  }
+  return String(whole);
+}
+
+function buildModerationBadge(status: string | undefined): string {
+  if (typeof status !== "string") {
+    return "";
+  }
+  const normalized = status.trim().toLowerCase().replace(/\s+/g, "_");
+  if (normalized === "approved") {
+    return "";
+  }
+  const className = normalized.replace(/[^a-z0-9_-]/g, "");
+  if (!className) {
+    return "";
+  }
+  const label = normalized.replace(/_/g, " ");
+  return `<span class="tone-sharing-moderation-badge tone-sharing-moderation-badge--${escapeHtml(className)}">${escapeHtml(label)}</span>`;
 }
 
 async function renderFeedRows(rows: ToneSharingRow[]): Promise<void> {
@@ -1241,9 +1782,11 @@ async function renderFeedRows(rows: ToneSharingRow[]): Promise<void> {
 
   const useTiledLayout = browseMode === "featured" || browseMode === "items";
   feed.classList.toggle("tone-sharing-feed--tiled", useTiledLayout);
+  const installedLookup = buildInstalledToneSharingLookup();
 
   if (!rows.length) {
     feed.innerHTML = `<div class="tone-sharing-status">No content yet. Publish the first tone.</div>`;
+    updateBrowseFooter();
     return;
   }
 
@@ -1252,7 +1795,9 @@ async function renderFeedRows(rows: ToneSharingRow[]): Promise<void> {
       const itemHtml = await Promise.all(
         row.items.map(async (item) => {
           let cardClass = "tone-sharing-card-item";
-          let backgroundStyle = "";
+          const cardStyleFragments: string[] = [];
+          const itemAccent = item.kind === "item" ? idAccentColor(item.id) : "#8f77ff";
+          cardStyleFragments.push(`--tone-card-accent: ${itemAccent}`);
 
           if (item.kind === "pack") {
             cardClass += " tone-sharing-pack-hero";
@@ -1264,45 +1809,88 @@ async function renderFeedRows(rows: ToneSharingRow[]): Promise<void> {
             if (packForThumbnail.thumbnailUrl) {
               try {
                 const thumbnailObjectUrl = await resolvePackThumbnailUrl(packForThumbnail);
-                backgroundStyle = ` style=\"background-image: linear-gradient(180deg, rgba(5, 6, 12, 0.08) 0%, rgba(5, 6, 12, 0.9) 70%, rgba(5, 6, 12, 0.98) 100%), url('${thumbnailObjectUrl}')\"`;
+                cardStyleFragments.push(`--tone-pack-thumbnail: url('${thumbnailObjectUrl}')`);
               } catch {
-                backgroundStyle = "";
               }
             }
           }
 
           const isPreviewing = previewingItemId === item.id;
-          const accentStyleAttr = item.kind === "item"
-            ? ` style="border-left: 3px solid ${idAccentColor(item.id)}"`
+          const styleAttr = cardStyleFragments.length
+            ? ` style="${escapeHtml(cardStyleFragments.join("; "))}"`
             : "";
           const reviewMode = browseMode === "review";
-          const creatorHandle = resolveCreatorProfileHandle(item as unknown as Record<string, unknown>);
+          const isInstalled = item.kind === "item"
+            ? installedLookup.itemIds.has(item.id)
+            : installedLookup.packIds.has(item.id);
+          const creatorData = item as unknown as Record<string, unknown>;
+          const creatorHandle = resolveCreatorProfileHandle(creatorData);
+          const creatorAvatarUrl = resolveCreatorAvatarUrl(creatorData);
           const typeLabel = item.kind === "item" ? (item.type ?? "preset") : "pack";
-          const metaText = [typeLabel, creatorHandle].filter((value): value is string => Boolean(value)).join(" · ");
+          const itemId = escapeHtml(item.id);
+          const safeTitle = escapeHtml(item.title);
+          const safeTypeLabel = escapeHtml(typeLabel);
+          const creatorDisplayName = typeof item.creatorDisplayName === "string" ? item.creatorDisplayName.trim() : "";
+          const creatorLineLabel = creatorDisplayName && creatorHandle && creatorDisplayName !== creatorHandle
+            ? `${creatorDisplayName} (${creatorHandle})`
+            : (creatorDisplayName || creatorHandle || (creatorAvatarUrl ? "Creator" : ""));
+          const safeCreatorLineLabel = escapeHtml(creatorLineLabel);
+          const safeCreatorAvatarUrl = creatorAvatarUrl ? escapeHtml(creatorAvatarUrl) : "";
+          const showCreatorIdentity = Boolean(creatorLineLabel || creatorAvatarUrl);
+          const creatorIdentityMarkup = showCreatorIdentity
+            ? `<div class="tone-sharing-card-creator">`
+              + `${creatorAvatarUrl ? `<img class="tone-sharing-card-creator-avatar" src="${safeCreatorAvatarUrl}" alt="Creator avatar" loading="lazy" />` : ""}`
+              + `${creatorLineLabel ? `<span class="tone-sharing-card-creator-handle">${safeCreatorLineLabel}</span>` : ""}`
+              + `</div>`
+            : "";
+          const safeDescription = typeof item.description === "string" && item.description.trim().length > 0
+            ? escapeHtml(item.description.trim())
+            : "";
+          const descriptionClass = item.kind === "pack"
+            ? "tone-sharing-card-item-description tone-sharing-card-item-description--pack"
+            : "tone-sharing-card-item-description";
+          const moderationBadge = buildModerationBadge(item.moderationStatus);
+          const itemStats = SHOW_TONE_SHARING_STATS && item.kind === "item"
+            ? [
+                `<span class="tone-sharing-card-stat"><span class="tone-sharing-card-stat-label">Fav</span><strong>${formatCompactMetric(item.favoriteCount)}</strong></span>`,
+                `<span class="tone-sharing-card-stat"><span class="tone-sharing-card-stat-label">Rating</span><strong>${typeof item.averageRating === "number" && Number.isFinite(item.averageRating) ? `${item.averageRating.toFixed(1)}/5` : "--"}</strong></span>`,
+                `<span class="tone-sharing-card-stat"><span class="tone-sharing-card-stat-label">Votes</span><strong>${formatCompactMetric(item.ratingCount)}</strong></span>`,
+              ].join("")
+            : "";
+          const tagsMarkup = item.kind === "item" && item.tags && item.tags.length > 0
+            ? `<div class="tone-sharing-card-tags">${item.tags.map((tag) => `<span class="tone-sharing-tag-badge">${escapeHtml(tag)}</span>`).join("")}</div>`
+            : "";
+          const bottomMetaMarkup = (tagsMarkup || creatorIdentityMarkup)
+            ? `<div class="tone-sharing-card-bottom-meta">${tagsMarkup}${creatorIdentityMarkup}</div>`
+            : "";
+          const actionsMarkup = item.kind === "item"
+            ? `
+                        ${renderToneIconButton({ kind: "action", value: "preview", icon: "preview", label: isPreviewing ? "Previewing preset" : "Preview preset", active: isPreviewing })}
+                        ${renderToneIconButton({ kind: "action", value: "download", icon: "download", label: isInstalled ? "Preset already installed" : "Download preset", primary: true, disabled: isInstalled })}
+                        ${renderToneIconButton({ kind: "action", value: "share", icon: "share", label: "Share preset" })}`
+            : `
+                        ${renderToneIconButton({ kind: "action", value: "view", icon: "view", label: "Open pack" })}
+                        ${renderToneIconButton({ kind: "action", value: "download", icon: "download", label: isInstalled ? "Pack already installed" : "Download pack", primary: true, disabled: isInstalled })}
+                        ${renderToneIconButton({ kind: "action", value: "share", icon: "share", label: "Share pack" })}`;
           return `
-                  <div class=\"${cardClass}${isPreviewing ? " is-previewing" : ""}\" data-kind=\"${item.kind}\" data-id=\"${item.id}\" data-title=\"${item.title}\"${backgroundStyle}${accentStyleAttr}>
-                    <div class=\"tone-sharing-card-item-content\">
-                      <div class=\"tone-sharing-card-item-title\">${item.title}</div>
-                      <div class=\"tone-sharing-card-item-meta\">${escapeHtml(metaText)}</div>
-                      ${item.description ? `<div class=\"tone-sharing-card-item-description\">${item.description}</div>` : ""}
-                      ${item.kind === "item" && item.tags && item.tags.length > 0 ? `<div class=\"tone-sharing-card-tags\">${item.tags.map((t) => `<span class=\"tone-sharing-tag-badge\">${t}</span>`).join("")}</div>` : ""}
+                  <div class="${cardClass}${isPreviewing ? " is-previewing" : ""}" data-kind="${item.kind}" data-id="${itemId}" data-title="${safeTitle}"${styleAttr}>
+                    <div class="tone-sharing-card-item-content">
+                      <div class="tone-sharing-card-item-header">
+                        <div class="tone-sharing-card-item-title">${safeTitle}</div>
+                        ${moderationBadge}
+                      </div>
+                      <div class="tone-sharing-card-item-meta">
+                        <span class="tone-sharing-meta-chip">${safeTypeLabel}</span>
+                      </div>
+                      ${itemStats ? `<div class="tone-sharing-card-item-stats">${itemStats}</div>` : ""}
+                      ${safeDescription ? `<div class="${descriptionClass}">${safeDescription}</div>` : ""}
+                      ${bottomMetaMarkup}
                     </div>
-                    <div class=\"tone-sharing-card-item-actions\">
-                      ${item.kind === "item" ? `
-                        <button class=\"btn btn-secondary tone-sharing-card-btn\" type=\"button\" data-action=\"preview\">
-                          <svg class=\"tone-sharing-btn-icon\" viewBox=\"0 0 16 16\" fill=\"currentColor\" aria-hidden=\"true\"><polygon points=\"3,2 14,8 3,14\"/></svg>
-                          ${isPreviewing ? "Previewing" : "Preview"}
-                        </button>` : `
-                        <button class=\"btn btn-secondary tone-sharing-card-btn\" type=\"button\" data-action=\"view\">View</button>`}
-                      <button class=\"btn btn-primary tone-sharing-card-btn\" type=\"button\" data-action=\"download\">
-                        <svg class=\"tone-sharing-btn-icon\" viewBox=\"0 0 16 16\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M8 1a1 1 0 011 1v6.172l1.586-1.586a1 1 0 111.414 1.414l-3.293 3.293a1 1 0 01-1.414 0L3.999 8.001a1 1 0 111.414-1.414L7.001 8.172V2A1 1 0 018 1z\"/><rect x=\"2\" y=\"12.5\" width=\"12\" height=\"2\" rx=\"1\"/></svg>
-                        Download
-                      </button>
-                      <button class=\"btn btn-secondary tone-sharing-card-btn\" type=\"button\" data-action=\"share\">Share</button>
-                      ${reviewMode ? `<button class=\"btn btn-primary tone-sharing-card-btn\" type=\"button\" data-action=\"approve\">Approve</button>
-                      <button class=\"btn btn-secondary tone-sharing-card-btn\" type=\"button\" data-action=\"reject\">Reject</button>` : ""}
-                      ${browseMode === "mine" && item.kind === "pack" ? `<button class=\"btn btn-secondary tone-sharing-card-btn\" type=\"button\" data-action=\"edit-pack\">Edit</button>` : ""}
-                      ${browseMode === "mine" ? `<button class=\"btn btn-secondary tone-sharing-card-btn\" type=\"button\" data-action=\"delete\">Delete</button>` : ""}
+                    <div class="tone-sharing-card-item-actions">
+                      ${actionsMarkup}
+                      ${reviewMode ? `${renderToneIconButton({ kind: "action", value: "approve", icon: "approve", label: "Approve", primary: true })}${renderToneIconButton({ kind: "action", value: "reject", icon: "reject", label: "Reject" })}` : ""}
+                      ${browseMode === "mine" && item.kind === "pack" ? renderToneIconButton({ kind: "action", value: "edit-pack", icon: "edit", label: "Edit pack" }) : ""}
+                      ${browseMode === "mine" ? renderToneIconButton({ kind: "action", value: "delete", icon: "delete", label: "Delete" }) : ""}
                     </div>
                   </div>
                 `;
@@ -1365,6 +1953,17 @@ function updateBrowseFooter(): void {
   button.textContent = browseCollections.loadingMore ? "Loading..." : "Load More";
 
   const loadedCount = browseMode === "items" ? browseCollections.items.length : browseCollections.packs.length;
+  const normalizedSearch = normalizeCommunityPresetSearchValue(communityPresetSearchQuery);
+  if (browseMode === "items" && normalizedSearch) {
+    const shownCount = filterCommunityPresetItems(browseCollections.items).length;
+    label.textContent = browseCollections.hasMore
+      ? `${shownCount} shown of ${loadedCount} loaded`
+      : loadedCount > 0
+        ? `${shownCount} shown of ${loadedCount} loaded, end of results`
+        : "";
+    return;
+  }
+
   label.textContent = browseCollections.hasMore
     ? `${loadedCount} loaded`
     : loadedCount > 0
@@ -1383,7 +1982,19 @@ function resetBrowseCollections(): void {
 
 async function renderStandardBrowseCollection(): Promise<void> {
   if (browseMode === "items") {
-    await renderFeedRows([buildSingleRow("Latest Presets", browseCollections.items, "item")]);
+    const filteredItems = filterCommunityPresetItems(browseCollections.items);
+    if (!filteredItems.length && communityPresetSearchQuery.trim().length > 0) {
+      const feed = element<HTMLElement>("tone-sharing-feed");
+      if (feed) {
+        feed.innerHTML = `<div class="tone-sharing-status">No community presets match "${escapeHtml(communityPresetSearchQuery.trim())}".</div>`;
+      }
+      updateBrowseFooter();
+      return;
+    }
+
+    await renderFeedRows(filteredItems.length > 0
+      ? [buildSingleRow("Latest Presets", filteredItems, "item")]
+      : []);
     return;
   }
 
@@ -1436,12 +2047,14 @@ function buildSingleRow(title: string, entries: Array<{ id: string; title: strin
       kind,
       title: entry.title,
       type: entry.type ?? null,
+      featured: Boolean((entry as ToneSharingItem | ToneSharingPack).featured),
       moderationStatus: (entry as ToneSharingItem | ToneSharingPack).moderationStatus,
       creatorEmail: (entry as ToneSharingItem | ToneSharingPack).creatorEmail ?? null,
       creatorDisplayName: (entry as ToneSharingItem | ToneSharingPack).creatorDisplayName ?? null,
       creatorHandle: (entry as ToneSharingItem | ToneSharingPack).creatorHandle ?? null,
       creatorProfileHandle: (entry as ToneSharingItem | ToneSharingPack).creatorProfileHandle ?? null,
       profileHandle: (entry as ToneSharingItem | ToneSharingPack).profileHandle ?? null,
+      creatorAvatarUrl: (entry as ToneSharingItem | ToneSharingPack).creatorAvatarUrl ?? null,
       favoriteCount: kind === "item" ? (entry as ToneSharingItem).favoriteCount : undefined,
       ratingCount: kind === "item" ? (entry as ToneSharingItem).ratingCount : undefined,
       averageRating: kind === "item" ? (entry as ToneSharingItem).averageRating ?? null : undefined,
@@ -1454,6 +2067,55 @@ function buildSingleRow(title: string, entries: Array<{ id: string; title: strin
         : null
     }))
   };
+}
+
+function applyFeaturedLayout(rows: ToneSharingRow[]): { rows: ToneSharingRow[]; hiddenPresetCount: number } {
+  const packRows = rows.filter((row) => row.items.some((item) => item.kind === "pack"));
+  const presetRows = rows.filter((row) => row.items.some((item) => item.kind === "item"));
+  const ordered = [...packRows, ...presetRows];
+
+  let remainingPresets = FEATURED_PRESET_MAX;
+  let hiddenPresetCount = 0;
+
+  const nextRows = ordered
+    .map((row) => {
+      const packs = row.items.filter((item) => item.kind === "pack");
+      const presets = row.items.filter((item) => item.kind === "item");
+      const selectedPresets = presets.slice(0, Math.max(remainingPresets, 0));
+      remainingPresets -= selectedPresets.length;
+      hiddenPresetCount += Math.max(0, presets.length - selectedPresets.length);
+
+      const nextItems = [...packs, ...selectedPresets];
+      if (!nextItems.length) {
+        return null;
+      }
+      return {
+        ...row,
+        items: nextItems,
+      };
+    })
+    .filter((row): row is ToneSharingRow => row !== null);
+
+  return { rows: nextRows, hiddenPresetCount };
+}
+
+function updateFeaturedMoreLink(): void {
+  const ctaRow = element<HTMLElement>("tone-sharing-featured-more");
+  const ctaLabel = element<HTMLElement>("tone-sharing-featured-more-label");
+  if (!ctaRow || !ctaLabel) {
+    return;
+  }
+
+  const shouldShow = browseMode === "featured" && featuredHiddenPresetCount > 0;
+  ctaRow.style.display = shouldShow ? "flex" : "none";
+  if (!shouldShow) {
+    return;
+  }
+
+  const hiddenLabel = featuredHiddenPresetCount === 1
+    ? "1 preset hidden"
+    : `${featuredHiddenPresetCount} presets hidden`;
+  ctaLabel.textContent = `${hiddenLabel}. Browse Presets to see everything.`;
 }
 
 async function moderateTarget(kind: "item" | "pack", id: string, action: "approve" | "reject"): Promise<void> {
@@ -1634,23 +2296,21 @@ async function runAiLibrarySearch(query: string, resultsEl: HTMLElement): Promis
       resultsEl.innerHTML = `<div class="ai-tone-library-empty">No matching presets found in library.</div>`;
       return;
     }
-    const itemsHtml = data.items.slice(0, 8).map((item) => `
+    const installedLookup = buildInstalledToneSharingLookup();
+    const itemsHtml = data.items.slice(0, 8).map((item) => {
+      const isInstalled = installedLookup.itemIds.has(item.id);
+      return `
       <div class="ai-tone-library-item" style="border-left: 3px solid ${idAccentColor(item.id)}">
         <div class="ai-tone-library-item-info">
           <span class="ai-tone-library-item-title">${escapeHtml(item.title)}</span>
           <span class="ai-tone-library-item-type">${escapeHtml(item.type)}</span>
         </div>
         <div class="ai-tone-library-item-actions">
-          <button class="btn btn-secondary tone-sharing-card-btn" type="button" data-ai-preview="${escapeHtml(item.id)}" data-ai-preview-title="${escapeHtml(item.title)}">
-            <svg class="tone-sharing-btn-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><polygon points="3,2 14,8 3,14"/></svg>
-            Preview
-          </button>
-          <button class="btn btn-primary tone-sharing-card-btn" type="button" data-ai-download="${escapeHtml(item.id)}">
-            <svg class="tone-sharing-btn-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1a1 1 0 011 1v6.172l1.586-1.586a1 1 0 111.414 1.414l-3.293 3.293a1 1 0 01-1.414 0L3.999 8.001a1 1 0 111.414-1.414L7.001 8.172V2A1 1 0 018 1z"/><rect x="2" y="12.5" width="12" height="2" rx="1"/></svg>
-            Download
-          </button>
+          ${renderToneIconButton({ kind: "action", value: "ai-preview", icon: "preview", label: "Preview preset", attrs: { "data-ai-preview": item.id, "data-ai-preview-title": item.title } })}
+          ${renderToneIconButton({ kind: "action", value: "ai-download", icon: "download", label: isInstalled ? "Preset already installed" : "Download preset", primary: true, disabled: isInstalled, attrs: { "data-ai-download": item.id } })}
         </div>
-      </div>`).join("");
+      </div>`;
+    }).join("");
     resultsEl.innerHTML = `
       <div class="ai-tone-library-list">
         <div class="ai-tone-library-heading">Library matches for \u201c${escapeHtml(query)}\u201d</div>
@@ -1660,15 +2320,30 @@ async function runAiLibrarySearch(query: string, resultsEl: HTMLElement): Promis
       btn.addEventListener("click", async () => {
         const id = btn.dataset.aiPreview ?? "";
         const title = btn.dataset.aiPreviewTitle ?? "";
-        try { await previewPreset(id, title); }
-        catch (err) { setUploadStatus(`Preview failed: ${(err as Error).message}`); }
+        const restoreBusy = setActionButtonBusy(btn, "Previewing...");
+        try {
+          await previewPreset(id, title);
+          setUploadStatus("Preset preview applied (not installed).");
+        }
+        catch (err) {
+          setUploadStatus(`Preview failed: ${(err as Error).message}`);
+        } finally {
+          restoreBusy();
+        }
       });
     });
     resultsEl.querySelectorAll<HTMLButtonElement>("[data-ai-download]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         const id = btn.dataset.aiDownload ?? "";
-        try { await downloadAsset("item", id); }
-        catch (err) { setUploadStatus(`Download failed: ${(err as Error).message}`); }
+        const restoreBusy = setActionButtonBusy(btn, "Downloading...");
+        try {
+          await downloadAsset("item", id);
+        }
+        catch (err) {
+          setUploadStatus(`Download failed: ${(err as Error).message}`);
+        } finally {
+          restoreBusy();
+        }
       });
     });
   } catch (err) {
@@ -1684,6 +2359,8 @@ async function renderPackDetail(details: ToneSharingPackDetails): Promise<void> 
   modal.dataset.packId = details.pack.id;
 
   const pack = details.pack;
+  const installedLookup = buildInstalledToneSharingLookup();
+  const isPackInstalled = installedLookup.packIds.has(pack.id);
   const heroEl = element<HTMLElement>("tone-sharing-pack-view-hero");
   if (heroEl) {
     let imageUrl = "";
@@ -1708,13 +2385,8 @@ async function renderPackDetail(details: ToneSharingPackDetails): Promise<void> 
   const actionsEl = element<HTMLElement>("tone-sharing-pack-view-actions");
   if (actionsEl) {
     actionsEl.innerHTML = `
-      <button class="btn btn-secondary tone-sharing-card-btn" type="button" data-pack-action="share-pack">
-        Share Pack
-      </button>
-      <button class="btn btn-primary tone-sharing-card-btn" type="button" data-pack-action="download-pack">
-        <svg class="tone-sharing-btn-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1a1 1 0 011 1v6.172l1.586-1.586a1 1 0 111.414 1.414l-3.293 3.293a1 1 0 01-1.414 0L3.999 8.001a1 1 0 111.414-1.414L7.001 8.172V2A1 1 0 018 1z"/><rect x="2" y="12.5" width="12" height="2" rx="1"/></svg>
-        Download Pack
-      </button>
+      ${renderToneIconButton({ kind: "pack-action", value: "share-pack", icon: "share", label: "Share pack" })}
+      ${renderToneIconButton({ kind: "pack-action", value: "download-pack", icon: "download", label: isPackInstalled ? "Pack already installed" : "Download pack", primary: true, disabled: isPackInstalled })}
     `;
   }
 
@@ -1726,7 +2398,9 @@ async function renderPackDetail(details: ToneSharingPackDetails): Promise<void> 
       presetsEl.innerHTML = [...details.items]
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map(
-          (item) => `
+          (item) => {
+            const isItemInstalled = installedLookup.itemIds.has(item.itemId);
+            return `
           <div class=\"tone-sharing-pack-preset-row\" data-item-id=\"${escapeHtml(item.itemId)}\" style=\"border-left: 3px solid ${idAccentColor(item.itemId)}\">
             <div class=\"tone-sharing-pack-preset-info\">
               <div class=\"tone-sharing-pack-preset-title\">${escapeHtml(item.title)}</div>
@@ -1735,18 +2409,31 @@ async function renderPackDetail(details: ToneSharingPackDetails): Promise<void> 
               ${item.tags && item.tags.length > 0 ? `<div class=\"tone-sharing-pack-preset-tags\">${item.tags.map((t) => `<span class=\"tone-sharing-tag-badge\">${escapeHtml(t)}</span>`).join("")}</div>` : ""}
             </div>
             <div class=\"tone-sharing-pack-preset-actions\">
-              <button class=\"btn btn-secondary tone-sharing-card-btn\" type=\"button\"
-                data-pack-action=\"preview\" data-item-id=\"${escapeHtml(item.itemId)}\" data-item-title=\"${escapeHtml(item.title)}\">
-                <svg class=\"tone-sharing-btn-icon\" viewBox=\"0 0 16 16\" fill=\"currentColor\" aria-hidden=\"true\"><polygon points=\"3,2 14,8 3,14\"/></svg>
-                Preview
-              </button>
-              <button class=\"btn btn-primary tone-sharing-card-btn\" type=\"button\"
-                data-pack-action=\"download\" data-item-id=\"${escapeHtml(item.itemId)}\" data-item-title=\"${escapeHtml(item.title)}\">
-                <svg class=\"tone-sharing-btn-icon\" viewBox=\"0 0 16 16\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M8 1a1 1 0 011 1v6.172l1.586-1.586a1 1 0 111.414 1.414l-3.293 3.293a1 1 0 01-1.414 0L3.999 8.001a1 1 0 111.414-1.414L7.001 8.172V2A1 1 0 018 1z\"/><rect x=\"2\" y=\"12.5\" width=\"12\" height=\"2\" rx=\"1\"/></svg>
-                Download
-              </button>
+              ${renderToneIconButton({
+                kind: "pack-action",
+                value: "preview",
+                icon: "preview",
+                label: "Preview preset",
+                attrs: {
+                  "data-item-id": item.itemId,
+                  "data-item-title": item.title,
+                },
+              })}
+              ${renderToneIconButton({
+                kind: "pack-action",
+                value: "download",
+                icon: "download",
+                label: isItemInstalled ? "Preset already installed" : "Download preset",
+                primary: true,
+                disabled: isItemInstalled,
+                attrs: {
+                  "data-item-id": item.itemId,
+                  "data-item-title": item.title,
+                },
+              })}
             </div>
           </div>`
+          }
         )
         .join("");
     }
@@ -2024,14 +2711,7 @@ async function clearPreviewPreset(): Promise<void> {
   if (previewingItemId) {
     const card = feedEl?.querySelector(`.tone-sharing-card-item[data-id="${CSS.escape(previewingItemId)}"]`) as HTMLElement | null;
     if (card) {
-      card.classList.remove("is-previewing");
-      const btn = card.querySelector<HTMLButtonElement>("[data-action='preview']");
-      if (btn) {
-        const svg = btn.querySelector("svg")?.cloneNode(true) as SVGElement | null;
-        btn.textContent = "";
-        if (svg) btn.appendChild(svg);
-        btn.append(" Preview");
-      }
+      syncFeedPreviewButton(card, false);
     }
   }
   previewingItemId = null;
@@ -2049,8 +2729,8 @@ async function clearPreviewPreset(): Promise<void> {
 /**
  * Walk the preset JSON (as returned by readPresetFromArchive) and replace
  * every resource-id reference that appears in idMap with its mapped value.
- * This is needed so that previewed presets resolve to the resources that
- * were just imported from the tone-sharing archive.
+ * This is needed so previewed presets resolve to resources imported from
+ * the tone-sharing archive.
  */
 function remapPresetResourceIds(preset: Record<string, unknown>, idMap: Map<string, string>): void {
   const graph = preset.graph as {
@@ -2072,6 +2752,13 @@ function remapPresetResourceIds(preset: Record<string, unknown>, idMap: Map<stri
               res.id = mapped;
             }
           }
+        }
+      }
+      const blendId = node.config?.blendId;
+      if (blendId) {
+        const mappedBlend = idMap.get(blendId);
+        if (mappedBlend && node.config) {
+          node.config.blendId = mappedBlend;
         }
       }
     }
@@ -2230,14 +2917,7 @@ async function previewPreset(itemId: string, itemTitle: string): Promise<void> {
   if (previewingItemId && previewingItemId !== itemId) {
     const prevCard = feedEl?.querySelector(`.tone-sharing-card-item[data-id="${CSS.escape(previewingItemId)}"]`) as HTMLElement | null;
     if (prevCard) {
-      prevCard.classList.remove("is-previewing");
-      const prevBtn = prevCard.querySelector<HTMLButtonElement>("[data-action='preview']");
-      if (prevBtn) {
-        const svg = prevBtn.querySelector("svg")?.cloneNode(true) as SVGElement | null;
-        prevBtn.textContent = "";
-        if (svg) prevBtn.appendChild(svg);
-        prevBtn.append(" Preview");
-      }
+      syncFeedPreviewButton(prevCard, false);
     }
   }
 
@@ -2246,14 +2926,7 @@ async function previewPreset(itemId: string, itemTitle: string): Promise<void> {
 
   const newCard = feedEl?.querySelector(`.tone-sharing-card-item[data-id="${CSS.escape(itemId)}"]`) as HTMLElement | null;
   if (newCard) {
-    newCard.classList.add("is-previewing");
-    const newBtn = newCard.querySelector<HTMLButtonElement>("[data-action='preview']");
-    if (newBtn) {
-      const svg = newBtn.querySelector("svg")?.cloneNode(true) as SVGElement | null;
-      newBtn.textContent = "";
-      if (svg) newBtn.appendChild(svg);
-      newBtn.append(" Previewing");
-    }
+    syncFeedPreviewButton(newCard, true);
   }
 
   showPreviewIndicator(itemTitle);
@@ -2270,7 +2943,10 @@ async function loadBrowse(): Promise<void> {
   clearPackDetail();
   feed.innerHTML = `<div class="tone-sharing-status">Loading...</div>`;
   resetBrowseCollections();
+  featuredHiddenPresetCount = 0;
   updateActiveSharedFilter();
+  updateCommunityPresetSearchUi();
+  updateFeaturedMoreLink();
   updateBrowseFooter();
 
   try {
@@ -2278,6 +2954,7 @@ async function loadBrowse(): Promise<void> {
       if (activeSharedTarget.kind === "item") {
         const itemResult = await apiFetch<{ item: ToneSharingItem }>(`/items/${activeSharedTarget.id}`);
         await renderFeedRows([buildSingleRow("Shared Preset", [itemResult.item], "item")]);
+        updateFeaturedMoreLink();
         setUploadStatus(`Opened shared preset: ${itemResult.item.title}`);
         return;
       }
@@ -2285,13 +2962,17 @@ async function loadBrowse(): Promise<void> {
       const packResult = await apiFetch<{ pack: ToneSharingPack }>(`/packs/${activeSharedTarget.id}`);
       await renderFeedRows([buildSingleRow("Shared Pack", [packResult.pack], "pack")]);
       await viewPack(activeSharedTarget.id);
+      updateFeaturedMoreLink();
       setUploadStatus(`Opened shared pack: ${packResult.pack.title}`);
       return;
     }
 
     if (browseMode === "featured") {
       const home = await apiFetch<{ rows: ToneSharingRow[] }>("/home");
-      await renderFeedRows(home.rows);
+      const featured = applyFeaturedLayout(home.rows);
+      featuredHiddenPresetCount = featured.hiddenPresetCount;
+      await renderFeedRows(featured.rows);
+      updateFeaturedMoreLink();
       return;
     }
 
@@ -2333,6 +3014,8 @@ async function loadBrowse(): Promise<void> {
 
     await loadMine();
   } catch (error) {
+    featuredHiddenPresetCount = 0;
+    updateFeaturedMoreLink();
     feed.innerHTML = `<div class="tone-sharing-status">Load failed: ${(error as Error).message}</div>`;
   }
 }
@@ -2361,6 +3044,8 @@ async function renderInstalledPacks(): Promise<void> {
     return;
   }
 
+  reconcileInstalledPacksWithPresetLibrary(true);
+
   clearPackDetail();
   if (!state.installedPacks.length) {
     feed.innerHTML = `<div class="tone-sharing-status">No installed packs yet. Import a zip or Tone Sharing pack first.</div>`;
@@ -2383,7 +3068,7 @@ async function renderInstalledPacks(): Promise<void> {
           ${archiveDetail}
         </div>
         <div class="tone-sharing-card-item-actions">
-          <button class="btn btn-secondary tone-sharing-card-btn" type="button" data-action="delete-installed">Delete</button>
+          ${renderToneIconButton({ kind: "action", value: "delete-installed", icon: "delete", label: "Delete installed pack" })}
         </div>
       </div>
     `;
@@ -2666,7 +3351,34 @@ async function createAndPublishPack(): Promise<void> {
   return savePack(true);
 }
 
+function hasInstallStateChanged(beforeInstalledSnapshot: string, beforePresetCount: number): boolean {
+  return beforePresetCount !== uiState.presets.length || beforeInstalledSnapshot !== JSON.stringify(state.installedPacks);
+}
+
+async function refreshBrowseResultsAfterInstall(): Promise<void> {
+  try {
+    if (browseMode === "featured" || browseMode === "items" || browseMode === "packs") {
+      await loadBrowse();
+    } else if (browseMode === "installed") {
+      await renderInstalledPacks();
+    } else if (browseMode === "mine") {
+      await loadMine();
+    }
+
+    const packViewModal = element<HTMLElement>("tone-sharing-pack-view-modal");
+    if (packViewModal && packViewModal.style.display === "flex") {
+      const activePackId = (packViewModal.dataset.packId ?? "").trim();
+      if (activePackId) {
+        await viewPack(activePackId);
+      }
+    }
+  } catch {
+  }
+}
+
 async function downloadAsset(kind: "item" | "pack", id: string): Promise<void> {
+  const installedSnapshotBefore = JSON.stringify(state.installedPacks);
+  const presetCountBefore = uiState.presets.length;
   const path = kind === "item" ? `/items/${id}/download` : `/packs/${id}/download`;
   const response = await fetch(buildApiUrl(path), {
     headers: state.sessionId ? { "x-session-id": state.sessionId } : {},
@@ -2710,6 +3422,10 @@ async function downloadAsset(kind: "item" | "pack", id: string): Promise<void> {
       creatorHandle: resolveCreatorProfileHandle((packMeta ?? {}) as unknown as Record<string, unknown>) ?? undefined,
       titleHint: packMeta?.title ?? importFileName.replace(/\.zip$/i, ""),
     });
+
+    if (hasInstallStateChanged(installedSnapshotBefore, presetCountBefore)) {
+      await refreshBrowseResultsAfterInstall();
+    }
     return;
   }
 
@@ -2737,6 +3453,10 @@ async function downloadAsset(kind: "item" | "pack", id: string): Promise<void> {
   if (importedPresets.length === 0) {
     throw new Error("Downloaded preset archive contained no importable presets");
   }
+
+  if (hasInstallStateChanged(installedSnapshotBefore, presetCountBefore)) {
+    await refreshBrowseResultsAfterInstall();
+  }
 }
 
 async function deleteAsset(kind: "item" | "pack", id: string): Promise<void> {
@@ -2753,14 +3473,143 @@ function removePresetIdsFromFolders(folder: PresetFolder, toRemove: Set<string>)
   }
 }
 
-async function deleteInstalledPackById(id: string): Promise<void> {
+function pruneEmptyPresetFolders(folders: PresetFolder[]): PresetFolder[] {
+  return folders
+    .map((folder) => {
+      const nextChildren = pruneEmptyPresetFolders(folder.children ?? []);
+      const nextPresetIds = folder.presetIds ?? [];
+      return {
+        ...folder,
+        children: nextChildren,
+        presetIds: nextPresetIds,
+      };
+    })
+    .filter((folder) => (folder.presetIds?.length ?? 0) > 0 || (folder.children?.length ?? 0) > 0);
+}
+
+function presetFolderExistsById(folders: PresetFolder[], folderId: string): boolean {
+  for (const folder of folders) {
+    if (folder.id === folderId) {
+      return true;
+    }
+    if (presetFolderExistsById(folder.children ?? [], folderId)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function buildPresetContentSignature(preset: Preset): string {
+  const json = JSON.stringify(preset ?? null);
+  let hash = 5381;
+  for (let i = 0; i < json.length; i += 1) {
+    hash = (((hash << 5) + hash) ^ json.charCodeAt(i)) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+function collectPresetResourceKeys(preset: Preset): Set<string> {
+  const keys = new Set<string>();
+  const addKey = (type: unknown, id: unknown): void => {
+    if (typeof type !== "string" || typeof id !== "string") {
+      return;
+    }
+    const resolvedType = type.trim();
+    const resolvedId = id.trim();
+    if (!resolvedType || !resolvedId) {
+      return;
+    }
+    keys.add(`${resolvedType}:${resolvedId}`);
+  };
+
+  const graphs = [preset.graph, ...(Array.isArray(preset.scenes) ? preset.scenes.map((scene) => scene.graph) : [])]
+    .filter((graph): graph is NonNullable<typeof preset.graph> => Boolean(graph));
+
+  for (const graph of graphs) {
+    for (const node of graph.nodes ?? []) {
+      for (const res of node.resources ?? []) {
+        addKey(res.resourceType ?? res.type, res.resourceId ?? res.id);
+      }
+    }
+  }
+
+  addKey("nam", preset.audioFxModelId);
+  addKey("ir", preset.irId);
+
+  for (const attachment of preset.attachments ?? []) {
+    const attachmentType = attachment.type === "audiofx"
+      ? "nam"
+      : attachment.type === "ir"
+        ? "ir"
+        : attachment.type;
+    addKey(attachmentType, attachment.id);
+  }
+
+  return keys;
+}
+
+function buildInstalledPackDeletionPlan(pack: InstalledPackMetadata): InstalledPackDeletionPlan {
+  const removablePresetIds: string[] = [];
+  const preservedPresetIds: string[] = [];
+  const missingPresetIds: string[] = [];
+  const removablePresetResourceKeys = new Set<string>();
+
+  const uniquePackPresetIds = Array.from(new Set(pack.presetIds));
+  for (const presetId of uniquePackPresetIds) {
+    const preset = uiState.presetCache.get(presetId) ?? uiState.presets.find((entry) => entry.id === presetId) ?? null;
+    if (!preset) {
+      missingPresetIds.push(presetId);
+      continue;
+    }
+
+    const expectedSignature = pack.presetSignatures?.[presetId] ?? "";
+    const currentSignature = buildPresetContentSignature(preset);
+    if (!expectedSignature || expectedSignature !== currentSignature) {
+      preservedPresetIds.push(presetId);
+      continue;
+    }
+
+    removablePresetIds.push(presetId);
+    const resourceKeys = collectPresetResourceKeys(preset);
+    resourceKeys.forEach((key) => removablePresetResourceKeys.add(key));
+  }
+
+  const toRemove = new Set(removablePresetIds);
+  const remainingResourceKeys = new Set<string>();
+  uiState.presets.forEach((preset) => {
+    if (toRemove.has(preset.id)) {
+      return;
+    }
+    collectPresetResourceKeys(preset).forEach((key) => remainingResourceKeys.add(key));
+  });
+
+  const uniquePackResources = Array.from(new Map(pack.resources.map((entry) => [`${entry.type}:${entry.id}`, entry])).values());
+  const removableResourceEntries = uniquePackResources.filter((entry) => {
+    const key = `${entry.type}:${entry.id}`;
+    return removablePresetResourceKeys.has(key) && !remainingResourceKeys.has(key);
+  });
+  const removableResourceKeys = new Set(removableResourceEntries.map((entry) => `${entry.type}:${entry.id}`));
+  const preservedResourceEntries = uniquePackResources.filter((entry) => !removableResourceKeys.has(`${entry.type}:${entry.id}`));
+
+  return {
+    removablePresetIds,
+    preservedPresetIds,
+    missingPresetIds,
+    removableResourceEntries,
+    preservedResourceEntries,
+    retainedPack: preservedPresetIds.length > 0,
+  };
+}
+
+async function deleteInstalledPackById(id: string, planned?: InstalledPackDeletionPlan): Promise<InstalledPackDeletionPlan> {
   const pack = state.installedPacks.find((entry) => entry.id === id);
   if (!pack) {
     throw new Error("Installed pack not found");
   }
 
-  const presetIds = Array.from(new Set(pack.presetIds));
-  const resourceEntries = Array.from(new Map(pack.resources.map((entry) => [`${entry.type}:${entry.id}`, entry])).values());
+  const plan = planned ?? buildInstalledPackDeletionPlan(pack);
+  const presetIds = plan.removablePresetIds;
+  const resourceEntries = plan.removableResourceEntries;
 
   for (const presetId of presetIds) {
     postMessage({ type: "deletePreset", presetId });
@@ -2776,10 +3625,19 @@ async function deleteInstalledPackById(id: string): Promise<void> {
 
     if (Array.isArray(uiState.presetFolders)) {
       uiState.presetFolders.forEach((folder) => removePresetIdsFromFolders(folder, toRemove));
+      uiState.presetFolders = pruneEmptyPresetFolders(uiState.presetFolders);
+
+      const activeFolderId = uiState.activePresetFolderId ?? "__all__";
+      const isVirtualFolder = activeFolderId === "__all__" || activeFolderId === "__favorites__" || activeFolderId === "__recents__";
+      const resolvedActiveFolderId = isVirtualFolder || presetFolderExistsById(uiState.presetFolders, activeFolderId)
+        ? activeFolderId
+        : "__all__";
+      uiState.activePresetFolderId = resolvedActiveFolderId;
+
       postMessage({
         type: "setPresetFolders",
         folders: uiState.presetFolders,
-        activeFolderId: uiState.activePresetFolderId ?? "__all__",
+        activeFolderId: resolvedActiveFolderId,
       });
     }
 
@@ -2808,6 +3666,9 @@ async function deleteInstalledPackById(id: string): Promise<void> {
         uiState.activePresetId = null;
       }
     }
+
+    populatePresetDropdown();
+    renderActivePreset();
   }
 
   if (resourceEntries.length > 0) {
@@ -2819,13 +3680,43 @@ async function deleteInstalledPackById(id: string): Promise<void> {
     });
   }
 
-  if (pack.archivePath) {
+  let retainedPack = plan.retainedPack;
+  if (retainedPack) {
+    const nextPresetSignatures = Object.fromEntries(
+      plan.preservedPresetIds
+        .map((presetId) => [presetId, pack.presetSignatures?.[presetId] ?? ""] as const)
+        .filter(([, signature]) => typeof signature === "string" && signature.length > 0)
+    );
+    const availablePresetIds = new Set(uiState.presets.map((preset) => preset.id));
+    const nextPresetIds = plan.preservedPresetIds.filter((presetId) => availablePresetIds.has(presetId));
+    retainedPack = nextPresetIds.length > 0;
+    const nextPack: InstalledPackMetadata = {
+      ...pack,
+      presetIds: nextPresetIds,
+      presetSignatures: nextPresetSignatures,
+      resources: plan.preservedResourceEntries,
+    };
+    if (retainedPack) {
+      state.installedPacks = state.installedPacks.map((entry) => (entry.id === id ? nextPack : entry));
+    } else {
+      state.installedPacks = state.installedPacks.filter((entry) => entry.id !== id);
+    }
+  } else {
+    state.installedPacks = state.installedPacks.filter((entry) => entry.id !== id);
+  }
+  const normalizedInstalledChanged = reconcileInstalledPacksWithPresetLibrary();
+  if (normalizedInstalledChanged) {
+    retainedPack = state.installedPacks.some((entry) => entry.id === id);
+  }
+  if (!retainedPack && pack.archivePath) {
     postMessage({ type: "deleteImportedToneSharingPack", path: pack.archivePath });
   }
-
-  state.installedPacks = state.installedPacks.filter((entry) => entry.id !== id);
   persistInstalledPacks();
   await renderInstalledPacks();
+  return {
+    ...plan,
+    retainedPack,
+  };
 }
 
 function bindBrowseActions(): void {
@@ -2851,11 +3742,19 @@ function bindBrowseActions(): void {
     if (button.dataset.action === "delete-installed") {
       const title = card.querySelector(".tone-sharing-card-item-title")?.textContent?.trim() || id;
       const pack = state.installedPacks.find((entry) => entry.id === id);
+      const plan = pack ? buildInstalledPackDeletionPlan(pack) : null;
       const presetCount = pack?.presetIds.length ?? 0;
       const resourceCount = pack?.resources.length ?? 0;
       const archiveLine = pack?.archiveFileName ? `\nArchive: ${pack.archiveFileName}` : "";
+      const summaryLines = plan
+        ? `\nUnmodified presets to remove: ${plan.removablePresetIds.length}`
+          + `\nPresets kept (modified or unverifiable): ${plan.preservedPresetIds.length}`
+          + `\nPresets already missing: ${plan.missingPresetIds.length}`
+          + `\nLinked resources to remove: ${plan.removableResourceEntries.length}`
+          + `\nResources kept (still referenced): ${plan.preservedResourceEntries.length}`
+        : "";
       const confirmed = await showConfirm(
-        `Delete installed pack \"${title}\"?\nPresets to remove: ${presetCount}\nResources to remove: ${resourceCount}${archiveLine}\n\nThis cannot be undone.`,
+        `Delete installed pack \"${title}\"?\nPresets in pack: ${presetCount}\nResources in pack: ${resourceCount}${summaryLines}${archiveLine}\n\nOnly unmodified presets and resources no longer used by other presets will be removed.`,
         "Delete Installed Pack",
       );
       if (!confirmed) {
@@ -2864,8 +3763,9 @@ function bindBrowseActions(): void {
 
       try {
         setUploadStatus("Deleting installed pack...");
-        await deleteInstalledPackById(id);
-        setUploadStatus("Installed pack deleted.");
+        const result = await deleteInstalledPackById(id, plan ?? undefined);
+        const statusPrefix = result.retainedPack ? "Installed pack partially removed." : "Installed pack deleted.";
+        setUploadStatus(`${statusPrefix} Removed ${result.removablePresetIds.length} preset(s) and ${result.removableResourceEntries.length} resource(s); kept ${result.preservedPresetIds.length} preset(s).`);
       } catch (error) {
         setUploadStatus(`Delete failed: ${(error as Error).message}`);
       }
@@ -2889,20 +3789,26 @@ function bindBrowseActions(): void {
 
     if (button.dataset.action === "preview" && kind === "item") {
       const itemTitle = card.dataset.title ?? "";
+      const restoreBusy = setActionButtonBusy(button, "Previewing...");
       try {
         await previewPreset(id, itemTitle);
         setUploadStatus("Preset preview applied (not installed).");
       } catch (error) {
         setUploadStatus(`Preview failed: ${(error as Error).message}`);
+      } finally {
+        restoreBusy();
       }
       return;
     }
 
     if (button.dataset.action === "download") {
+      const restoreBusy = setActionButtonBusy(button, "Downloading...");
       try {
         await downloadAsset(kind, id);
       } catch (error) {
         setUploadStatus(`Download failed: ${(error as Error).message}`);
+      } finally {
+        restoreBusy();
       }
       return;
     }
@@ -2948,6 +3854,7 @@ function bindBrowseActions(): void {
         setUploadStatus(`Delete failed: ${(error as Error).message}`);
       }
     }
+
   });
 }
 
@@ -2980,6 +3887,7 @@ function bindBrowseModeButtons(): void {
         button.classList.toggle("active", entry.mode === browseMode);
       }
     }
+    updateCommunityPresetSearchUi();
   };
 
   for (const entry of modes) {
@@ -3001,6 +3909,7 @@ function bindBrowseModeButtons(): void {
       } else {
         await loadBrowse();
       }
+      updateFeaturedMoreLink();
     });
   }
 
@@ -3040,6 +3949,9 @@ function restoreLocalState(): void {
       state.installedPacks = [];
     }
   }
+  if (reconcileInstalledPacksWithPresetLibrary()) {
+    persistInstalledPacks();
+  }
 
   const apiInput = element<HTMLInputElement>("tone-sharing-api-base");
   if (apiInput) {
@@ -3071,6 +3983,10 @@ export function applyToneSharingAppSettings(settings?: Record<string, unknown>):
       state.installedPacks = normalizedInstalled;
       changed = true;
     }
+  }
+
+  if (reconcileInstalledPacksWithPresetLibrary()) {
+    changed = true;
   }
 
   if (!changed) {
@@ -3118,6 +4034,39 @@ function bindTopControls(): void {
   element<HTMLButtonElement>("tone-sharing-clear-filter")?.addEventListener("click", () => {
     void clearActiveSharedFilter();
   });
+  const communitySearchInput = element<HTMLInputElement>("tone-sharing-community-search-input");
+  const communitySearchClearButton = element<HTMLButtonElement>("tone-sharing-community-search-clear");
+  if (communitySearchInput) {
+    communitySearchInput.addEventListener("input", () => {
+      const nextValue = communitySearchInput.value.trim();
+      if (nextValue === communityPresetSearchQuery) {
+        updateCommunityPresetSearchUi();
+        return;
+      }
+
+      communityPresetSearchQuery = nextValue;
+      updateCommunityPresetSearchUi();
+      if (browseMode === "items" && activeSharedTarget === null) {
+        void renderStandardBrowseCollection();
+      }
+    });
+  }
+  communitySearchClearButton?.addEventListener("click", () => {
+    if (!communityPresetSearchQuery && !(communitySearchInput?.value ?? "")) {
+      updateCommunityPresetSearchUi();
+      return;
+    }
+
+    communityPresetSearchQuery = "";
+    if (communitySearchInput) {
+      communitySearchInput.value = "";
+      communitySearchInput.focus();
+    }
+    updateCommunityPresetSearchUi();
+    if (browseMode === "items" && activeSharedTarget === null) {
+      void renderStandardBrowseCollection();
+    }
+  });
   element<HTMLButtonElement>("tone-sharing-load-more")?.addEventListener("click", () => {
     if (browseCollections.loadingMore || !browseCollections.hasMore || activeSharedTarget !== null) {
       return;
@@ -3133,6 +4082,10 @@ function bindTopControls(): void {
         browseCollections.loadingMore = false;
         updateBrowseFooter();
       });
+  });
+  element<HTMLButtonElement>("tone-sharing-featured-more-btn")?.addEventListener("click", () => {
+    const presetsButton = element<HTMLButtonElement>("tone-sharing-browse-items");
+    presetsButton?.click();
   });
   element<HTMLButtonElement>("tone-sharing-signin-modal-close")?.addEventListener("click", () => {
     closeSignInModal();
@@ -3151,6 +4104,12 @@ function bindTopControls(): void {
   });
   element<HTMLButtonElement>("tone-sharing-logout")?.addEventListener("click", () => {
     void signOut();
+  });
+  element<HTMLButtonElement>("tone-sharing-save-profile")?.addEventListener("click", () => {
+    void saveProfile();
+  });
+  element<HTMLInputElement>("tone-sharing-avatar-image")?.addEventListener("change", () => {
+    previewSelectedProfileAvatar();
   });
 
   // Create Pack / Edit Pack modal
@@ -3208,10 +4167,13 @@ function bindTopControls(): void {
       return;
     }
 
+    const restoreBusy = setActionButtonBusy(button, "Downloading...");
     try {
       await downloadAsset("pack", packId);
     } catch (error) {
       setUploadStatus(`Download failed: ${(error as Error).message}`);
+    } finally {
+      restoreBusy();
     }
   });
   element<HTMLElement>("tone-sharing-pack-view-presets")?.addEventListener("click", async (event) => {
@@ -3224,28 +4186,28 @@ function bindTopControls(): void {
     const itemId = button.dataset.itemId!;
     const itemTitle = button.dataset.itemTitle!;
     if (action === "preview") {
+      const restoreBusy = setActionButtonBusy(button, "Previewing...");
       try {
         await previewPreset(itemId, itemTitle);
         const presetsEl = element<HTMLElement>("tone-sharing-pack-view-presets");
-        presetsEl?.querySelectorAll<HTMLElement>(".tone-sharing-pack-preset-row").forEach((row) => {
-          row.classList.toggle("is-previewing", row.dataset.itemId === itemId);
-        });
-        presetsEl?.querySelectorAll<HTMLButtonElement>("[data-pack-action='preview']").forEach((btn) => {
-          const isThis = btn.dataset.itemId === itemId;
-          const svg = btn.querySelector("svg")?.cloneNode(true) as SVGElement | null;
-          btn.textContent = "";
-          if (svg) btn.appendChild(svg);
-          btn.append(isThis ? " Previewing" : " Preview");
-        });
+        if (presetsEl) {
+          syncPackPreviewButtons(presetsEl, itemId);
+        } else {
+          restoreBusy();
+        }
         setUploadStatus("Preset preview applied (not installed).");
       } catch (error) {
         setUploadStatus(`Preview failed: ${(error as Error).message}`);
+        restoreBusy();
       }
     } else if (action === "download") {
+      const restoreBusy = setActionButtonBusy(button, "Downloading...");
       try {
         await downloadAsset("item", itemId);
       } catch (error) {
         setUploadStatus(`Download failed: ${(error as Error).message}`);
+      } finally {
+        restoreBusy();
       }
     }
   });

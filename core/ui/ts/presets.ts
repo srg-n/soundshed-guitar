@@ -1540,6 +1540,40 @@ function applyImportedPresetFolders(
   }
 }
 
+function assignImportedPresetsToTopLevelFolder(folderName: string, importedPresetIds: string[]): void {
+  const resolvedName = folderName.trim();
+  const targetName = resolvedName || "Imported Pack";
+  if (importedPresetIds.length === 0) {
+    return;
+  }
+
+  uiState.presetFolders = uiState.presetFolders ?? [];
+  const rootFolders = uiState.presetFolders;
+  const existing = findFolderByNameInList(rootFolders, targetName);
+  const targetFolder = existing ?? {
+    id: generateResourceId(targetName),
+    name: targetName,
+    children: [],
+    presetIds: [],
+  };
+
+  if (!existing) {
+    rootFolders.push(targetFolder);
+  }
+
+  targetFolder.children = targetFolder.children ?? [];
+  targetFolder.presetIds = targetFolder.presetIds ?? [];
+
+  importedPresetIds.forEach((presetId) => {
+    removePresetFromFolders(rootFolders, presetId);
+    if (!targetFolder.presetIds.includes(presetId)) {
+      targetFolder.presetIds.push(presetId);
+    }
+  });
+
+  persistPresetFolders();
+}
+
 export function bindLoadButtons(): void {
   const loadModelBtn = document.getElementById("load-model-btn");
   const loadIRBtn = document.getElementById("load-ir-btn");
@@ -2613,6 +2647,22 @@ type PresetArchive = {
   tone3000Resources?: Tone3000ResourceRef[];
 };
 
+function buildPresetImportSignature(preset: Preset): string {
+  const json = JSON.stringify(preset ?? null);
+  let hash = 5381;
+  for (let i = 0; i < json.length; i += 1) {
+    hash = (((hash << 5) + hash) ^ json.charCodeAt(i)) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+function buildPresetImportSignatureMap(presets: Preset[]): Record<string, string> {
+  const entries = presets
+    .filter((preset) => typeof preset.id === "string" && preset.id.trim().length > 0)
+    .map((preset) => [preset.id, buildPresetImportSignature(preset)] as const);
+  return Object.fromEntries(entries);
+}
+
 type PresetCollectionArchive = {
   formatVersion: number;
   createdAt: string;
@@ -2780,6 +2830,8 @@ export async function importPackWithConfirmation(file: File, context: ImportPack
       source: installedSource,
       packId: context.packId,
       titleHint: summary.title,
+    }, {
+      topLevelFolderName: summary.title,
     });
   } catch (error) {
     showNotification("Import failed", error instanceof Error ? error.message : String(error));
@@ -3325,6 +3377,7 @@ export function resolveImportedPresetName(
 type ArchiveImportOptions = {
   previewOnly?: boolean;
   suppressNotifications?: boolean;
+  topLevelFolderName?: string;
 };
 
 function normalizeToneSharingOrigin(value: unknown): ToneSharingOriginMetadata | undefined {
@@ -3745,7 +3798,10 @@ export async function importPresetArchive(
   const latestPreset = importedPresets[importedPresets.length - 1];
   uiState.activePresetId = latestPreset.id;
   const importedPresetIds = importedPresets.map((preset) => preset.id);
-  if (presetFoldersToImport.length > 0) {
+  const topLevelFolderName = options.topLevelFolderName?.trim();
+  if (topLevelFolderName) {
+    assignImportedPresetsToTopLevelFolder(topLevelFolderName, importedPresetIds);
+  } else if (presetFoldersToImport.length > 0) {
     applyImportedPresetFolders(presetFoldersToImport, presetIdMap, importedPresetIds);
   }
   populatePresetDropdown();
@@ -3760,6 +3816,7 @@ export async function importPresetArchive(
     packId: context.packId,
     archiveFileName: file.name,
     presetIds: importedPresetIds,
+    presetSignatures: buildPresetImportSignatureMap(importedPresets),
     resources: uniqueResources,
   });
   showNotification(importedPresets.length === 1 ? "Preset imported" : "Presets imported", importedPresets.length === 1
@@ -3957,6 +4014,10 @@ export async function importGeneratedPack(file: File, context: ArchiveImportCont
   uiState.filteredPresets = getFilteredPresets(presetSearchElement?.value ?? "");
   const latestPreset = importedPresets[0];
   uiState.activePresetId = latestPreset.id;
+  assignImportedPresetsToTopLevelFolder(
+    context.titleHint?.trim() || manifest.packId?.trim() || file.name.replace(/\.zip$/i, ""),
+    importedPresets.map((preset) => preset.id),
+  );
   populatePresetDropdown();
   renderPresetUI(clonePreset(latestPreset));
   updatePresetDropdownSelection();
@@ -3971,6 +4032,7 @@ export async function importGeneratedPack(file: File, context: ArchiveImportCont
     packId: context.packId ?? manifest.packId,
     archiveFileName: file.name,
     presetIds: importedPresets.map((preset) => preset.id),
+    presetSignatures: buildPresetImportSignatureMap(importedPresets),
     resources: Array.from(new Map(importedResources.map((entry) => [`${entry.type}:${entry.id}`, entry])).values()),
   });
   const packLabel = manifest.packId ?? file.name;

@@ -88,6 +88,36 @@ function getToneImportStatus(tone: Tone3000Tone): { status: "imported" | "partia
   return { status: "none", importedCount };
 }
 
+function formatCompactCount(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return "0";
+  }
+
+  const whole = Math.floor(value);
+  if (whole >= 1_000_000) {
+    const scaled = whole / 1_000_000;
+    return `${(scaled >= 10 ? scaled.toFixed(0) : scaled.toFixed(1)).replace(/\.0$/, "")}M`;
+  }
+  if (whole >= 1_000) {
+    const scaled = whole / 1_000;
+    return `${(scaled >= 10 ? scaled.toFixed(0) : scaled.toFixed(1)).replace(/\.0$/, "")}K`;
+  }
+  return String(whole);
+}
+
+function getToneInitials(label: string): string {
+  const normalized = label.trim().replace(/\s+/g, " ");
+  if (!normalized) {
+    return "T3";
+  }
+  const parts = normalized.split(" ").filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+  const compact = parts[0].replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase();
+  return compact || "T3";
+}
+
 /**
  * Navigate the tone3000 browser to a specific query and optional category,
  * called externally (e.g. from the AI Tone Search panel).
@@ -311,6 +341,7 @@ function renderResults(tones: Tone3000Tone[]): void {
 
   resultsEl.innerHTML = tones
     .map((tone) => {
+      const toneId = String(tone.id);
       const modelCount = tone.models_count ?? 0;
       const equipmentImageUrl = getEquipmentImageUrl(tone);
       const importStatus = getToneImportStatus(tone);
@@ -318,39 +349,48 @@ function renderResults(tones: Tone3000Tone[]): void {
         importStatus.status === "imported"
           ? "Imported"
           : importStatus.status === "partial"
-            ? "Partially Imported"
+            ? "Partial"
             : "";
-      const statusBadge = statusLabel ? `<span class="tone3000-status">${statusLabel}</span>` : "";
-      const disableImport = false;
-      const buttonLabel = importStatus.status === "imported"
-        ? "Re-import"
-        : importStatus.status === "partial"
-          ? "Re-import"
-          : "Import";
+      const statusBadge = statusLabel ? `<span class="tone3000-status">${escapeHtml(statusLabel)}</span>` : "";
+      const buttonLabel = importStatus.status === "none" ? "Import" : "Re-import";
+      const safeTitle = escapeHtml(tone.title?.trim() || "Untitled Tone");
+      const safeGear = escapeHtml(tone.gear ?? "tone");
+      const safePlatform = escapeHtml((tone.platform ?? "unknown").toUpperCase());
+      const creatorRaw = (tone.user?.username ?? "community").replace(/^@+/, "");
+      const safeCreator = escapeHtml(creatorRaw || "community");
       const imageMarkup = equipmentImageUrl
         ? `
-          <div class="tone3000-item-image">
+          <div class="tone3000-item-hero tone3000-item-hero--image">
             <img src="${escapeHtml(equipmentImageUrl)}" alt="${escapeHtml(tone.gear ?? "Equipment")}" loading="lazy" />
           </div>
         `
-        : `<div class="tone3000-item-image tone3000-item-image-placeholder"></div>`;
+        : `
+          <div class="tone3000-item-hero tone3000-item-hero--placeholder">
+            <span class="tone3000-item-hero-initials">${escapeHtml(getToneInitials(tone.title ?? "Tone"))}</span>
+          </div>
+        `;
+
       return `
-        <div class="results-item tone3000-item" data-tone-id="${String(tone.id)}">
+        <div class="results-item tone3000-item" data-tone-id="${toneId}">
           ${imageMarkup}
           <div class="results-item-main tone3000-item-main">
-            <div class="results-item-title tone3000-item-title">${escapeHtml(tone.title)}</div>
-            <div class="results-item-meta tone3000-item-meta">
-              <span>${escapeHtml(tone.gear ?? "")}</span>
-              <span>${escapeHtml(tone.platform ?? "")}</span>
-              <span>${modelCount} models</span>
-              <span>${tone.downloads_count ?? 0} downloads</span>
-              <span>${escapeHtml(tone.user?.username ?? "")}</span>
+            <div class="tone3000-item-header">
+              <div class="results-item-title tone3000-item-title">${safeTitle}</div>
               ${statusBadge}
+            </div>
+            <div class="results-item-meta tone3000-item-meta">
+              <span class="tone3000-meta-chip">${safeGear}</span>
+              <span class="tone3000-meta-chip">${safePlatform}</span>
+              <span class="tone3000-meta-chip">@${safeCreator}</span>
+            </div>
+            <div class="tone3000-item-stats">
+              <span><strong>${formatCompactCount(modelCount)}</strong> models</span>
+              <span><strong>${formatCompactCount(tone.downloads_count ?? 0)}</strong> downloads</span>
             </div>
           </div>
           <div class="results-item-actions tone3000-item-actions">
-            <button class="tone3000-details-btn" data-tone-id="${String(tone.id)}" type="button">Details</button>
-            <button class="tone3000-import-btn" data-tone-id="${String(tone.id)}" ${disableImport ? "disabled" : ""}>${buttonLabel}</button>
+            <button class="tone3000-details-btn" data-tone-id="${toneId}" type="button">Details</button>
+            <button class="tone3000-import-btn" data-tone-id="${toneId}" type="button">${buttonLabel}</button>
           </div>
         </div>
       `;
@@ -394,7 +434,7 @@ async function importToneModels(button: HTMLButtonElement, tone: Tone3000Tone): 
     showNotification("Import failed", message);
   } finally {
     button.disabled = false;
-    button.textContent = "Import";
+    renderResults(currentTones);
   }
 }
 
