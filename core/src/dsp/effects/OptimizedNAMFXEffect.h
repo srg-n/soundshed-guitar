@@ -45,14 +45,14 @@ inline void RegisterOptimizedNAMFXEffect()
   info.resourceFilterHint = {"pedal"};
   info.parameters = {
     {"inputGain",             "Input",               0.0,   -24.0, 24.0,  "dB",  "Level"},
-    {"useNamInputMetadata",   "Use Input Level Metadata", 0.0, 0.0,   1.0,  "toggle", "Advanced", true},
-    {"outputGain",            "Output",               0.0,   -24.0, 24.0,  "dB",  "Level"},
-    {"bass",                  "Bass",                 0.0,   -10.0, 10.0,  "dB",  "Tone",     true},
-    {"mid",                   "Mid",                  0.0,   -10.0, 10.0,  "dB",  "Tone",     true},
-    {"treble",                "Treble",               0.0,   -10.0, 10.0,  "dB",  "Tone",     true},
-    {"presence",              "Presence",             0.0,   -10.0, 10.0,  "dB",  "Tone",     true},
-    {"mix",                   "Mix",                  1.0,    0.0,   1.0,  "amount", "Advanced", true},
-    {"autoLevelOutput",       "Auto Level Output",    1.0,    0.0,   1.0,  "toggle", "Advanced", true}
+    {"bass",                  "Bass",                0.0,   -10.0, 10.0,  "dB",  "Tone",     true},
+    {"mid",                   "Mid",                 0.0,   -10.0, 10.0,  "dB",  "Tone",     true},
+    {"treble",                "Treble",              0.0,   -10.0, 10.0,  "dB",  "Tone",     true},
+    {"presence",              "Presence",            0.0,   -10.0, 10.0,  "dB",  "Tone",     true},
+    {"outputGain",            "Output",              0.0,   -24.0, 24.0,  "dB",  "Level"},
+    {"mix",                   "Mix",                 1.0,    0.0,   1.0,  "amount", "Advanced", true},
+    {"autoLevelOutput",       "Auto Level Output",   1.0,    0.0,   1.0,  "toggle", "Advanced", true},
+    {"clampAutoGain",         "Clamp Auto Gain",     1.0,    0.0,   1.0,  "toggle", "Advanced", true}
   };
 
   EffectRegistry::Instance().Register(info.type, info, []()

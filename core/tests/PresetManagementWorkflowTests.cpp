@@ -11,7 +11,7 @@
 #include "IPluginHost.h"
 #include "PluginController.h"
 #include "dsp/EffectGuids.h"
-#include "dsp/simd/OptimizedNAM.h"
+#include "dsp/effects/NAMSampleRate.h"
 #include "presets/PresetStorage.h"
 #include "presets/PresetTypes.h"
 

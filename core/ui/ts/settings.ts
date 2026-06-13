@@ -45,6 +45,8 @@ const DSP_NOMINAL_LEVEL_SETTING = "audio.dsp.nominalOperatingLevelDbfs";
 const DSP_PROTECTION_CEILING_SETTING = "audio.dsp.outputProtectionCeilingDbfs";
 const DSP_MULTI_THREADED_SETTING = "audio.processing.multiThreaded";
 const NAM_SLIMMABLE_SIZE_SETTING = "audio.nam.slimmableSize";
+const NAM_INTERFACE_CALIBRATION_LEVEL_SETTING = "audio.nam.interfaceCalibrationLevelDbu";
+const NAM_AUTO_INPUT_CALIBRATION_SETTING = "audio.nam.autoInputCalibration";
 const DSP_NOMINAL_LEVEL_DEFAULT = -18.0;
 const DSP_NOMINAL_LEVEL_MIN = -30.0;
 const DSP_NOMINAL_LEVEL_MAX = -6.0;
@@ -54,6 +56,9 @@ const DSP_PROTECTION_CEILING_MAX = 0.0;
 const NAM_SLIMMABLE_SIZE_DEFAULT = 1.0;
 const NAM_SLIMMABLE_SIZE_MIN = 0.0;
 const NAM_SLIMMABLE_SIZE_MAX = 1.0;
+const NAM_INTERFACE_CALIBRATION_LEVEL_DEFAULT = 12.0;
+const NAM_INTERFACE_CALIBRATION_LEVEL_MIN = 0.0;
+const NAM_INTERFACE_CALIBRATION_LEVEL_MAX = 24.0;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 2.0;
 const ZOOM_DEFAULT = 1.0;
@@ -116,6 +121,8 @@ const dspNominalLevelInput = document.getElementById("dsp-nominal-level-input") 
 const dspProtectionCeilingInput = document.getElementById("dsp-protection-ceiling-input") as HTMLInputElement | null;
 const dspMultiThreadedToggle = document.getElementById("dsp-multi-threaded-toggle") as HTMLInputElement | null;
 const namSlimmableSizeInput = document.getElementById("nam-slimmable-size-input") as HTMLInputElement | null;
+const namInterfaceCalibrationLevelInput = document.getElementById("nam-interface-calibration-level-input") as HTMLInputElement | null;
+const namAutoInputCalibrationToggle = document.getElementById("nam-auto-input-calibration-toggle") as HTMLInputElement | null;
 const factoryArchiveLoadingRow = document.getElementById("factory-archive-loading-row") as HTMLElement | null;
 const factoryArchiveSettingsSection = document.getElementById("factory-archive-settings-section") as HTMLElement | null;
 const updateCheckToggle = document.getElementById("update-check-toggle") as HTMLInputElement | null;
@@ -951,6 +958,23 @@ function initDspLevelTargetControls(): void {
     NAM_SLIMMABLE_SIZE_DEFAULT,
   );
 
+  bindImmediateNumericSetting(
+    namInterfaceCalibrationLevelInput,
+    NAM_INTERFACE_CALIBRATION_LEVEL_SETTING,
+    NAM_INTERFACE_CALIBRATION_LEVEL_MIN,
+    NAM_INTERFACE_CALIBRATION_LEVEL_MAX,
+    NAM_INTERFACE_CALIBRATION_LEVEL_DEFAULT,
+  );
+
+  if (namAutoInputCalibrationToggle && namAutoInputCalibrationToggle.dataset.bound !== "true") {
+    namAutoInputCalibrationToggle.dataset.bound = "true";
+    namAutoInputCalibrationToggle.addEventListener("change", () => {
+      const enabled = Boolean(namAutoInputCalibrationToggle.checked);
+      uiState.appSettings[NAM_AUTO_INPUT_CALIBRATION_SETTING] = enabled;
+      setAppSetting(NAM_AUTO_INPUT_CALIBRATION_SETTING, enabled);
+    });
+  }
+
   if (dspMultiThreadedToggle && dspMultiThreadedToggle.dataset.bound !== "true") {
     dspMultiThreadedToggle.dataset.bound = "true";
     dspMultiThreadedToggle.addEventListener("change", () => {
@@ -1062,6 +1086,22 @@ export function refreshSettingsView(): void {
       NAM_SLIMMABLE_SIZE_DEFAULT,
     );
     namSlimmableSizeInput.value = slimmableSize.toFixed(2);
+  }
+  if (namInterfaceCalibrationLevelInput) {
+    const storedCal = getSettingValue(NAM_INTERFACE_CALIBRATION_LEVEL_SETTING);
+    const calLevel = storedCal !== null
+      ? sanitizeNumericSetting(
+          Number(storedCal),
+          NAM_INTERFACE_CALIBRATION_LEVEL_MIN,
+          NAM_INTERFACE_CALIBRATION_LEVEL_MAX,
+          NAM_INTERFACE_CALIBRATION_LEVEL_DEFAULT,
+        )
+      : NAM_INTERFACE_CALIBRATION_LEVEL_DEFAULT;
+    namInterfaceCalibrationLevelInput.value = calLevel.toFixed(1);
+  }
+  if (namAutoInputCalibrationToggle) {
+    const stored = getSettingValue(NAM_AUTO_INPUT_CALIBRATION_SETTING);
+    namAutoInputCalibrationToggle.checked = stored === null ? true : Boolean(stored);
   }
   if (dspMultiThreadedToggle) {
     const multiThreaded = getSettingValue(DSP_MULTI_THREADED_SETTING);

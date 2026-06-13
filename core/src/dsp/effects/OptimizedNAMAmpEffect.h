@@ -377,6 +377,11 @@ public:
       mAutoLevelOutput = value > 0.5;
       RecalculateAutoGains();
     }
+    else if (key == "clampAutoGain")
+    {
+      mClampAutoGain = value > 0.5;
+      RecalculateAutoGains();
+    }
     else if (key == "calibrationInputLevel")
     {
       if (std::isfinite(value))
@@ -600,6 +605,7 @@ private:
   bool mAutoLevelInput = false;
   bool mAutoLevelOutput = true;
   bool mUseNamInputMetadata = false;
+  bool mClampAutoGain = true;
   std::optional<double> mModelInputLevel;
   std::optional<double> mModelOutputLevel;
   std::optional<double> mModelLoudness;
@@ -657,9 +663,19 @@ private:
     mAutoInputGain = 1.0;
     mAutoOutputGain = 1.0;
 
-    if (mAutoLevelInput && mUseNamInputMetadata && mModelInputLevel.has_value())
+    // Input calibration: mirrors NeuralAmpModelerPlugin _SetInputGain().
+    // delta = calibrationInputLevel(dBu) - model.inputLevel(dBu)
+    // calibrationInputLevel is only provided for the first NAM in a chain (the
+    // one whose input is a raw guitar signal at a known interface level).
+    // Without it we cannot safely compute a correction — using 0 dBu as the
+    // reference would give a -18 dB hit on a model trained at +18 dBu. Skip
+    // the correction entirely if the interface level is unknown, matching the
+    // reference plugin's behaviour when "CalibrateInput" is disabled.
+    if (mAutoLevelInput && mUseNamInputMetadata
+        && mModelInputLevel.has_value() && mCalibrationInputLevel.has_value())
     {
-      const double deltaDb = std::clamp(-*mModelInputLevel, -24.0, 24.0);
+      const double raw = *mCalibrationInputLevel - *mModelInputLevel;
+      const double deltaDb = mClampAutoGain ? std::clamp(raw, -24.0, 24.0) : raw;
       mAutoInputGain = std::pow(10.0, deltaDb / 20.0);
     }
 
@@ -667,12 +683,26 @@ private:
     {
       if (mResourceNormalizationGainDb.has_value())
       {
-        const double deltaDb = std::clamp(*mResourceNormalizationGainDb, -24.0, 24.0);
+        // Library metadata override takes highest priority.
+        const double raw = *mResourceNormalizationGainDb;
+        const double deltaDb = mClampAutoGain ? std::clamp(raw, -24.0, 24.0) : raw;
+        mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
+      }
+      else if (mModelOutputLevel.has_value() && mCalibrationInputLevel.has_value())
+      {
+        // "Calibrated" output mode: mirrors NeuralAmpModelerPlugin _SetOutputGain() case 2.
+        // gainDB += model.outputLevel(dBu) - calibrationInputLevel(dBu)
+        // Only active when the interface calibration level is known (first NAM in chain).
+        const double raw = *mModelOutputLevel - *mCalibrationInputLevel;
+        const double deltaDb = mClampAutoGain ? std::clamp(raw, -24.0, 24.0) : raw;
         mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
       }
       else if (mModelLoudness.has_value())
       {
-        const double deltaDb = std::clamp(GetNominalOperatingLevelDbfs() - *mModelLoudness, -24.0, 24.0);
+        // "Normalized" output mode: mirrors NeuralAmpModelerPlugin _SetOutputGain() case 1.
+        // gainDB += targetLoudness - model.loudness
+        const double raw = GetNominalOperatingLevelDbfs() - *mModelLoudness;
+        const double deltaDb = mClampAutoGain ? std::clamp(raw, -24.0, 24.0) : raw;
         mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
       }
     }
@@ -826,7 +856,7 @@ private:
 inline void RegisterOptimizedNAMAmpEffect()
 {
   // Ensure NAM model factories are linked in (prevents dead-stripping).
-  nam::factory::ForceFactoryRegistration();
+  ::nam::factory::ForceFactoryRegistration();
 
   EffectTypeInfo info;
   info.type = EffectGuids::kAmpNamOptimized;
@@ -839,14 +869,14 @@ inline void RegisterOptimizedNAMAmpEffect()
   info.resourceFilterHint = {"amp", "full-rig"};
   info.parameters = {
     {"inputGain",             "Input",              0.0,   -24.0, 24.0,  "dB",  "Level"},
-    {"useNamInputMetadata",   "Use NAM Input Metadata", 0.0, 0.0,   1.0,  "toggle", "Advanced", true},
     {"bass",                  "Bass",               0.0,   -10.0, 10.0,  "dB",  "Tone"},
     {"mid",                   "Mid",                0.0,   -10.0, 10.0,  "dB",  "Tone"},
     {"treble",                "Treble",             0.0,   -10.0, 10.0,  "dB",  "Tone"},
     {"presence",              "Presence",           0.0,   -10.0, 10.0,  "dB",  "Tone"},
     {"outputGain",            "Output",             0.0,   -24.0, 24.0,  "dB",  "Level"},
     {"mix",                   "Mix",                1.0,    0.0,   1.0,  "amount", "Advanced", true},
-    {"autoLevelOutput",       "Auto Level Output",  1.0,    0.0,   1.0,  "toggle", "Advanced", true}
+    {"autoLevelOutput",       "Auto Level Output",  1.0,    0.0,   1.0,  "toggle", "Advanced", true},
+    {"clampAutoGain",         "Clamp Auto Gain",    1.0,    0.0,   1.0,  "toggle", "Advanced", true}
   };
 
   EffectRegistry::Instance().Register(info.type, info, []()

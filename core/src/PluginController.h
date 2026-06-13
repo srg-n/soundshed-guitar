@@ -310,6 +310,7 @@ private:
     void ApplyDspLevelTargetSettingsFromAppSettings();
     void ApplyProcessingModeSettingsFromAppSettings();
     void ApplyNamSlimmableSettingsFromAppSettings();
+    void ApplyNamInterfaceCalibrationFromAppSettings();
     void ApplyUserInputCalibrationSettingsFromAppSettings();
     void ApplyUiSettingsFromAppSettings();
     [[nodiscard]] bool IsFactoryPresetArchiveLoadingEnabled() const;
@@ -437,6 +438,7 @@ private:
     nlohmann::json mUiSettings = nlohmann::json::object();
     nlohmann::json mUiViewState = nlohmann::json::object();
     bool mUserInputCalibrationTrainingActive = false;
+    double mNamInterfaceCalibrationLevelDbu = std::numeric_limits<double>::quiet_NaN();
 
     // Parameter values (shadow of host parameters)
     std::array<double, kParamCount> mParamValues{};

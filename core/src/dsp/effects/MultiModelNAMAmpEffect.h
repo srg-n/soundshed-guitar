@@ -14,6 +14,7 @@
 #include "dsp/LevelTargets.h"
 #include "dsp/EffectRegistry.h"
 #include "dsp/EffectGuids.h"
+#include "dsp/RealtimeParallel.h"
 #include "dsp/effects/NAMSampleRate.h"
 #include "dsp/effects/NAMSlimmableSettings.h"
 #include "NAM/dsp.h"
@@ -62,8 +63,6 @@ public:
     std::fill(mInputBufferR.begin(), mInputBufferR.end(), 0.0f);
     std::fill(mDryBufferL.begin(), mDryBufferL.end(), 0.0f);
     std::fill(mDryBufferR.begin(), mDryBufferR.end(), 0.0f);
-    mCachedAutoInputGain = 1.0;
-    mCachedAutoOutputGain = 1.0;
   }
 
   void Process(float** inputs, float** outputs, int numSamples) override
@@ -107,7 +106,6 @@ public:
     }
 
     const BlendSelection selection = SelectBlendModels();
-    UpdateAutoGains(selection);
 
     const float inputGain = static_cast<float>(mInputGain);
     const float outputGain = static_cast<float>(mOutputGain);
@@ -123,8 +121,22 @@ public:
     if (selection.upperIndex == selection.lowerIndex)
     {
       auto& model = mModels[selection.lowerIndex];
-      ProcessModel(model, mInputBufferL.data(), model.outputBufferL.data(), numSamples, 0);
-      ProcessModel(model, mInputBufferR.data(), model.outputBufferR.data(), numSamples, 1);
+      if (!model.resamplingActive && rtparallel::ShouldParallelizeStereoWork(numSamples))
+      {
+        const bool ran = rtparallel::DualLaneExecutor::Instance().Run(
+          [&]() { ProcessModel(model, mInputBufferR.data(), model.outputBufferR.data(), numSamples, 1); },
+          [&]() { ProcessModel(model, mInputBufferL.data(), model.outputBufferL.data(), numSamples, 0); });
+        if (!ran)
+        {
+          ProcessModel(model, mInputBufferL.data(), model.outputBufferL.data(), numSamples, 0);
+          ProcessModel(model, mInputBufferR.data(), model.outputBufferR.data(), numSamples, 1);
+        }
+      }
+      else
+      {
+        ProcessModel(model, mInputBufferL.data(), model.outputBufferL.data(), numSamples, 0);
+        ProcessModel(model, mInputBufferR.data(), model.outputBufferR.data(), numSamples, 1);
+      }
       WriteOutputs(model.outputBufferL.data(), model.outputBufferR.data(),
                    mDryBufferL.data(), mDryBufferR.data(),
                    outputs, numSamples, outputGain, wetMix, dryMix);
@@ -188,7 +200,6 @@ public:
     }
 
     const BlendSelection selection = SelectBlendModels();
-    UpdateAutoGains(selection);
 
     const float inputGain = static_cast<float>(mInputGain);
     const float outputGain = static_cast<float>(mOutputGain);
@@ -205,9 +216,7 @@ public:
       auto &model = mModels[selection.lowerIndex];
       ProcessModel(model, mInputBufferL.data(), model.outputBufferL.data(), numSamples, 0);
       for (int i = 0; i < numSamples; ++i)
-      {
         output[i] = mDryBufferL[i] * dryMix + model.outputBufferL[i] * outputGain * wetMix;
-      }
       return;
     }
 
@@ -253,9 +262,20 @@ public:
     {
       mAutoLevelOutput = value > 0.5;
     }
-    else if (key == "calibrationInputLevel" || key == "calibrationOutputLevel")
+    else if (key == "clampAutoGain")
     {
-      // Legacy no-op: per-model calibration overrides are retired.
+      mClampAutoGain = value > 0.5;
+    }
+    else if (key == "calibrationInputLevel")
+    {
+      if (std::isfinite(value))
+        mCalibrationInputLevel = value;
+      else
+        mCalibrationInputLevel.reset();
+    }
+    else if (key == "calibrationOutputLevel")
+    {
+      // Not used directly; output calibration uses mCalibrationInputLevel per reference plugin.
     }
     else if (key == "blend")
     {
@@ -371,7 +391,7 @@ public:
       return a.parameterValue < b.parameterValue;
     });
 
-    UpdateEffectiveGains();
+    UpdateAutoGains(SelectBlendModels());
     return true;
   }
 
@@ -396,10 +416,6 @@ private:
 
     std::vector<float> outputBufferL;
     std::vector<float> outputBufferR;
-    std::vector<float> modelInputL;
-    std::vector<float> modelInputR;
-    std::vector<float> modelOutputL;
-    std::vector<float> modelOutputR;
     std::vector<NAM_SAMPLE> fallbackInputL;
     std::vector<NAM_SAMPLE> fallbackInputR;
     std::vector<NAM_SAMPLE> fallbackOutputL;
@@ -442,11 +458,10 @@ private:
   bool mAutoLevelOutput = true;
   bool mUseNamInputMetadata = false;
   bool mEnabled = true;
+  bool mClampAutoGain = true;
   std::string mParameterId;
   std::uint64_t mLevelTargetsRevision = 0;
 
-  double mCachedAutoInputGain = 1.0;
-  double mCachedAutoOutputGain = 1.0;
   std::optional<double> mCalibrationInputLevel;
   std::optional<double> mCalibrationOutputLevel;
 
@@ -529,10 +544,6 @@ private:
 
     instance.outputBufferL.resize(static_cast<size_t>(maxBlockSize));
     instance.outputBufferR.resize(static_cast<size_t>(maxBlockSize));
-    instance.modelInputL.resize(static_cast<size_t>(instance.maxProcessingBlockSize));
-    instance.modelInputR.resize(static_cast<size_t>(instance.maxProcessingBlockSize));
-    instance.modelOutputL.resize(static_cast<size_t>(instance.maxProcessingBlockSize));
-    instance.modelOutputR.resize(static_cast<size_t>(instance.maxProcessingBlockSize));
     instance.fallbackInputL.resize(static_cast<size_t>(instance.maxProcessingBlockSize));
     instance.fallbackInputR.resize(static_cast<size_t>(instance.maxProcessingBlockSize));
     instance.fallbackOutputL.resize(static_cast<size_t>(instance.maxProcessingBlockSize));
@@ -821,9 +832,16 @@ private:
     const auto blendedNormalizationGainDb = BlendOptional(modelA->normalizationGainDb, modelB->normalizationGainDb,
       selection.weightLower, selection.weightUpper);
 
-    if (mAutoLevelInput && mUseNamInputMetadata && blendedInputLevel.has_value())
+    // Input calibration: mirrors NeuralAmpModelerPlugin _SetInputGain().
+    // delta = calibrationInputLevel(dBu) - model.inputLevel(dBu)
+    // Requires calibrationInputLevel to be explicitly provided (first NAM in
+    // chain). Without a known interface reference we cannot safely correct —
+    // 0 dBu fallback gives -18 dB on a +18 dBu model.
+    if (mAutoLevelInput && mUseNamInputMetadata
+        && blendedInputLevel.has_value() && mCalibrationInputLevel.has_value())
     {
-      const double deltaDb = std::clamp(-*blendedInputLevel, -24.0, 24.0);
+      const double raw = *mCalibrationInputLevel - *blendedInputLevel;
+      const double deltaDb = mClampAutoGain ? std::clamp(raw, -24.0, 24.0) : raw;
       mAutoInputGain = std::pow(10.0, deltaDb / 20.0);
     }
 
@@ -831,12 +849,25 @@ private:
     {
       if (blendedNormalizationGainDb.has_value())
       {
-        const double deltaDb = std::clamp(*blendedNormalizationGainDb, -24.0, 24.0);
+        // Library metadata override takes highest priority.
+        const double raw = *blendedNormalizationGainDb;
+        const double deltaDb = mClampAutoGain ? std::clamp(raw, -24.0, 24.0) : raw;
+        mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
+      }
+      else if (blendedOutputLevel.has_value() && mCalibrationInputLevel.has_value())
+      {
+        // "Calibrated" output mode: mirrors NeuralAmpModelerPlugin _SetOutputGain() case 2.
+        // gainDB += model.outputLevel(dBu) - calibrationInputLevel(dBu)
+        const double raw = *blendedOutputLevel - *mCalibrationInputLevel;
+        const double deltaDb = mClampAutoGain ? std::clamp(raw, -24.0, 24.0) : raw;
         mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
       }
       else if (blendedLoudness.has_value())
       {
-        const double deltaDb = std::clamp(GetNominalOperatingLevelDbfs() - *blendedLoudness, -24.0, 24.0);
+        // "Normalized" output mode: mirrors NeuralAmpModelerPlugin _SetOutputGain() case 1.
+        // gainDB += targetLoudness - model.loudness
+        const double raw = GetNominalOperatingLevelDbfs() - *blendedLoudness;
+        const double deltaDb = mClampAutoGain ? std::clamp(raw, -24.0, 24.0) : raw;
         mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
       }
     }
@@ -894,9 +925,10 @@ inline void RegisterMultiModelNAMAmpEffect()
   info.parameters = {
     {"blend", "Blend", 0.0, 0.0, 1.0, "amount"},
     {"inputGain", "Input", 0.0, -24.0, 24.0, "dB"},
-    {"useNamInputMetadata", "Use NAM Input Metadata", 0.0, 0.0, 1.0, "toggle", "Advanced", true},
     {"outputGain", "Output", 0.0, -24.0, 24.0, "dB"},
-    {"mix", "Mix", 1.0, 0.0, 1.0, "amount", "Advanced", true}
+    {"mix", "Mix", 1.0, 0.0, 1.0, "amount", "Advanced", true},
+    {"autoLevelOutput", "Auto Level Output", 1.0, 0.0, 1.0, "toggle", "Advanced", true},
+    {"clampAutoGain", "Clamp Auto Gain", 1.0, 0.0, 1.0, "toggle", "Advanced", true}
   };
 
   EffectRegistry::Instance().Register(info.type, info, []()

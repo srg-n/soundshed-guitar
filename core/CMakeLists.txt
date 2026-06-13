@@ -454,9 +454,6 @@ set(GUITARFX_CORE_SOURCES
     # SIMD optimizations
     src/dsp/simd/SimdMath.h
     src/dsp/simd/OptimizedActivations.h
-    src/dsp/simd/OptimizedWaveNet.h
-    src/dsp/simd/OptimizedLSTM.h
-    src/dsp/simd/OptimizedNAM.h
     src/dsp/simd/Benchmark.h
 
     # Effect processors
@@ -469,7 +466,6 @@ set(GUITARFX_CORE_SOURCES
     src/dsp/effects/SpringReverbEffect.h
     src/dsp/effects/CompressorEffect.h
     src/dsp/effects/LimiterEffect.h
-    src/dsp/effects/NAMAmpEffect.h
     src/dsp/effects/OptimizedNAMAmpEffect.h
     src/dsp/effects/MultiModelNAMAmpEffect.h
     src/dsp/effects/IRCabEffect.h

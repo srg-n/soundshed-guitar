@@ -140,6 +140,11 @@ namespace
     constexpr const char* kMultiThreadedProcessingSettingKey = "audio.processing.multiThreaded";
     constexpr const char* kNamSlimmableSizeSettingKey = "audio.nam.slimmableSize";
     constexpr const char* kNamSlimmableNodeConfigKey = "slimmableSize";
+    constexpr const char* kNamInterfaceCalibrationLevelDbuSettingKey = "audio.nam.interfaceCalibrationLevelDbu";
+    constexpr double kNamInterfaceCalibrationLevelDbuDefault = 12.0;
+    constexpr double kNamInterfaceCalibrationLevelDbuMin = 0.0;
+    constexpr double kNamInterfaceCalibrationLevelDbuMax = 24.0;
+    constexpr const char* kNamAutoInputCalibrationSettingKey = "audio.nam.autoInputCalibration";
     constexpr const char* kUserInputCalibrationProfilesSettingKey = "audio.userInputCalibration.profiles";
     constexpr const char* kUserInputCalibrationActiveProfileIdSettingKey = "audio.userInputCalibration.activeProfileId";
     constexpr const char* kLegacyInterfaceCalibrationEnabledSettingKey = "audio.interfaceCalibration.enabled";
@@ -340,6 +345,17 @@ namespace
             || type == "amp_nam_blend"
             || type == guitarfx::EffectGuids::kFxNam
             || type == "fx_nam";
+    }
+
+    // NAM amp types only (excludes fx_nam inline FX) — used for input calibration.
+    bool IsNamAmpEffectType(const std::string& type)
+    {
+        return type == guitarfx::EffectGuids::kAmpNam
+            || type == "amp_nam"
+            || type == guitarfx::EffectGuids::kAmpNamOptimized
+            || type == "amp_nam_optimized"
+            || type == guitarfx::EffectGuids::kAmpNamBlend
+            || type == "amp_nam_blend";
     }
 
     const guitarfx::GraphNode* FindNodeByIdOrType(const guitarfx::SignalGraph& graph,
@@ -1739,6 +1755,7 @@ void PluginController::Initialize()
     ApplyDspLevelTargetSettingsFromAppSettings();
     ApplyProcessingModeSettingsFromAppSettings();
     ApplyNamSlimmableSettingsFromAppSettings();
+    ApplyNamInterfaceCalibrationFromAppSettings();
     ApplyUserInputCalibrationSettingsFromAppSettings();
     ApplyUiSettingsFromAppSettings();
     LoadResourceLibraries();
@@ -2554,6 +2571,73 @@ void PluginController::ApplyNamSlimmableSettingsFromAppSettings()
         SaveAppSettings();
 }
 
+void PluginController::ApplyNamInterfaceCalibrationFromAppSettings()
+{
+    // Respect the global auto-input-calibration toggle (default: enabled).
+    bool autoCalibrationEnabled = true;
+    const auto enableIt = mAppSettings.find(kNamAutoInputCalibrationSettingKey);
+    if (enableIt != mAppSettings.end() && enableIt->is_boolean())
+        autoCalibrationEnabled = enableIt->get<bool>();
+
+    const auto it = mAppSettings.find(kNamInterfaceCalibrationLevelDbuSettingKey);
+    double calLevel = std::numeric_limits<double>::quiet_NaN();
+    if (autoCalibrationEnabled && it != mAppSettings.end() && it->is_number())
+    {
+        const double raw = it->get<double>();
+        if (raw >= kNamInterfaceCalibrationLevelDbuMin && raw <= kNamInterfaceCalibrationLevelDbuMax)
+            calLevel = raw;
+    }
+    mNamInterfaceCalibrationLevelDbu = calLevel;
+
+    if (!mActivePresetId.empty() && mActivePreset)
+    {
+        const auto& graph = mActivePreset->graph;
+
+        // Build the set of NAM amp node IDs so we can test incoming edges.
+        std::unordered_set<std::string> namNodeIds;
+        for (const auto& node : graph.nodes)
+        {
+            if (IsNamAmpEffectType(node.type))
+                namNodeIds.insert(node.id);
+        }
+
+        // A NAM node should receive interface calibration only if it is the
+        // first NAM in the signal chain — i.e. none of its incoming edges come
+        // from another NAM node. A second (or later) NAM receives the digital
+        // output of the previous model, so its input_level_dbu metadata has no
+        // relation to the analogue interface reference level.
+        auto hasNamPredecessor = [&](const std::string& nodeId) -> bool
+        {
+            for (const auto& edge : graph.edges)
+            {
+                if (edge.to == nodeId && namNodeIds.count(edge.from))
+                    return true;
+            }
+            return false;
+        };
+
+        const double clearValue = std::numeric_limits<double>::quiet_NaN();
+        std::lock_guard<std::mutex> lock(mDSPMutex);
+        for (const auto& nodeId : namNodeIds)
+        {
+            const bool isFirstNam = !hasNamPredecessor(nodeId);
+            if (std::isfinite(calLevel) && isFirstNam)
+            {
+                mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "calibrationInputLevel", calLevel);
+                mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "autoLevelInput", 1.0);
+                mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "useNamInputMetadata", 1.0);
+            }
+            else
+            {
+                // Not the first NAM in the chain (or calibration disabled):
+                // clear any previously set calibration so auto-input is off.
+                mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "calibrationInputLevel", clearValue);
+                mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "autoLevelInput", 0.0);
+            }
+        }
+    }
+}
+
 void PluginController::ApplyUserInputCalibrationSettingsFromAppSettings()
 {
     bool settingsChanged = false;
@@ -2746,6 +2830,7 @@ void PluginController::DeserializeState(const std::string& json)
                 mAppSettings[it.key()] = it.value();
 
             ApplyNamSlimmableSettingsFromAppSettings();
+            ApplyNamInterfaceCalibrationFromAppSettings();
         }
 
         if (state.contains("uiSettings") && state["uiSettings"].is_object())
@@ -8929,6 +9014,19 @@ void PluginController::ApplyPreset(const Preset& preset)
             mPendingTunerData.detected = result.detected;
             mTunerDataPending.store(true, std::memory_order_release);
         });
+
+    // Apply global interface calibration level to NAM amp nodes (overrides preset
+    // params; calibrationInputLevel is not stored in preset data).
+    if (std::isfinite(mNamInterfaceCalibrationLevelDbu))
+    {
+        for (const auto& node : normalizedPreset.graph.nodes)
+        {
+            if (!IsNamAmpEffectType(node.type)) continue;
+            mPresetMixer.SetNodeParam(initialSlotId, node.id, "calibrationInputLevel", mNamInterfaceCalibrationLevelDbu);
+            mPresetMixer.SetNodeParam(initialSlotId, node.id, "autoLevelInput", 1.0);
+            mPresetMixer.SetNodeParam(initialSlotId, node.id, "useNamInputMetadata", 1.0);
+        }
+    }
 
     mHost.NotifyStateChanged();
 }

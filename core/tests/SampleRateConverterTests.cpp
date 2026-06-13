@@ -1,6 +1,6 @@
 #include "dsp/BlockSincResampler.h"
 #include "dsp/effects/NAMSampleRate.h"
-#include "dsp/simd/OptimizedNAM.h"
+#include "dsp/effects/NAMSampleRate.h"
 
 #include <cmath>
 #include <iostream>
