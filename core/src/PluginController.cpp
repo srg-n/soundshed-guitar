@@ -8972,14 +8972,13 @@ void PluginController::HandleRuntimeNodeConfigChanged(const std::string& presetI
 
 void PluginController::ApplyPreset(const Preset& preset)
 {
-    std::lock_guard<std::mutex> lock(mDSPMutex);
-
+    // === Phase 1: Normalize and prepare preset data — no DSP lock needed. ===
+    // All work here modifies local copies only; the audio thread is unaffected.
     Preset normalizedPreset = preset;
     NormalizePresetScenes(normalizedPreset);
     std::string resolvedSceneId = mActiveSceneId;
     if (!SetPresetActiveScene(normalizedPreset, resolvedSceneId, &resolvedSceneId))
         resolvedSceneId = GetDefaultPresetSceneId(normalizedPreset);
-    mActiveSceneId = resolvedSceneId;
 
     for (auto& node : normalizedPreset.graph.nodes)
     {
@@ -9000,12 +8999,8 @@ void PluginController::ApplyPreset(const Preset& preset)
     }
 
     TryRemapHostedPluginResources(normalizedPreset);
-
     EnsurePresetBoundaryGainNodes(normalizedPreset);
 
-    // Apply global signal chain config under the DSP lock so the audio thread
-    // cannot be inside mPreChainExecutor/mPostChainExecutor.Process() while
-    // RebuildGlobalChains() tears down and recreates those executors' node states.
     auto chainConfig = normalizedPreset.globalSignalChain.value_or(mPresetMixer.GetGlobalChainConfig());
     const double inputGainDb = normalizedPreset.globalSignalChain.has_value()
         ? chainConfig.inputGain
@@ -9018,58 +9013,76 @@ void PluginController::ApplyPreset(const Preset& preset)
     chainConfig.outputGain = outputGainDb;
     chainConfig.autoLevelInput = false;
     chainConfig.autoLevelOutput = false;
-    mPresetMixer.SetGlobalChainConfig(chainConfig);
-    mPresetMixer.SetAutoLevelInput(false);
-    mPresetMixer.SetAutoLevelOutput(false);
 
     normalizedPreset.global.inputTrim = inputGainDb;
     normalizedPreset.global.outputTrim = outputGainDb;
     normalizedPreset.global.autoLevelInput = false;
     normalizedPreset.global.autoLevelOutput = false;
     normalizedPreset.globalSignalChain = chainConfig;
-    mParamValues[kParamInputTrim] = inputGainDb;
-    mParamValues[kParamOutputTrim] = outputGainDb;
-    mParamValues[kParamTranspose] = static_cast<double>(GetGlobalTransposeFromChainConfig(chainConfig));
 
-    mActivePreset = normalizedPreset;
-    mActivePresetJson = PresetStorage::SerializeToJson(normalizedPreset);
-
-    // Remove existing preset instances and add the new one
-    for (const auto& id : mPresetMixer.GetActivePresetIds())
-        mPresetMixer.RemoveActivePreset(id);
-    mMixerPresetJsonCache.clear();
-
-    // Use the real preset ID so the UI can map the mixer tab to the presetCache entry.
-    // Fall back to "p1" only for presets without an id (should not happen in practice).
     const std::string initialSlotId = normalizedPreset.id.empty() ? "p1" : normalizedPreset.id;
-    mPresetMixer.AddActivePreset(normalizedPreset, initialSlotId, normalizedPreset.name);
-    mMixerPresetJsonCache[initialSlotId] = mActivePresetJson;
-    AttachRuntimeConfigCallbacks(initialSlotId, normalizedPreset);
+    const std::string newPresetJson = PresetStorage::SerializeToJson(normalizedPreset);
 
-    // Register tuner callback
-    mPresetMixer.SetTunerCallback(
-        [this](const MultiPresetMixer::TunerResult& result)
-        {
-            std::lock_guard<std::mutex> lock(mTunerMutex);
-            mPendingTunerData.noteName = result.noteName;
-            mPendingTunerData.octave = result.octave;
-            mPendingTunerData.frequency = result.frequency;
-            mPendingTunerData.centOffset = result.centOffset;
-            mPendingTunerData.confidence = result.confidence;
-            mPendingTunerData.detected = result.detected;
-            mTunerDataPending.store(true, std::memory_order_release);
-        });
+    // === Phase 2: Build the new executor off the DSP lock. ===
+    // This is the expensive step: effect processors are created, resources loaded
+    // (e.g. NAM model weights read from disk), and Prepare() called on each node.
+    // The audio thread continues processing the current preset uninterrupted.
+    mPresetMixer.PreparePresetSwap(normalizedPreset, initialSlotId, normalizedPreset.name);
 
-    // Apply global interface calibration level to NAM amp nodes (overrides preset
-    // params; calibrationInputLevel is not stored in preset data).
-    if (std::isfinite(mNamInterfaceCalibrationLevelDbu))
+    // === Phase 3: Atomic swap under the DSP lock (fast). ===
+    // The lock is held only for lightweight state updates and the instance swap.
+    // No allocations or I/O occur inside this block.
     {
-        for (const auto& node : normalizedPreset.graph.nodes)
+        std::lock_guard<std::mutex> lock(mDSPMutex);
+
+        mActiveSceneId = resolvedSceneId;
+        mParamValues[kParamInputTrim] = inputGainDb;
+        mParamValues[kParamOutputTrim] = outputGainDb;
+        mParamValues[kParamTranspose] = static_cast<double>(GetGlobalTransposeFromChainConfig(chainConfig));
+
+        // Apply global signal chain config under the DSP lock so the audio thread
+        // cannot be inside mPreChainExecutor/mPostChainExecutor.Process() while
+        // RebuildGlobalChains() tears down and recreates those executors' node states.
+        // The pre/post chain (gate, transpose, EQ, doubler) rebuilds quickly; no I/O.
+        mPresetMixer.SetGlobalChainConfig(chainConfig);
+        mPresetMixer.SetAutoLevelInput(false);
+        mPresetMixer.SetAutoLevelOutput(false);
+
+        mActivePreset = normalizedPreset;
+        mActivePresetJson = newPresetJson;
+
+        // Use the real preset ID so the UI can map the mixer tab to the presetCache entry.
+        // Fall back to "p1" only for presets without an id (should not happen in practice).
+        mMixerPresetJsonCache.clear();
+        mPresetMixer.CommitPresetSwap(); // Fast: swap mPendingInstance into mInstances + schedule fade-in
+        mMixerPresetJsonCache[initialSlotId] = mActivePresetJson;
+        AttachRuntimeConfigCallbacks(initialSlotId, normalizedPreset);
+
+        // Register tuner callback
+        mPresetMixer.SetTunerCallback(
+            [this](const MultiPresetMixer::TunerResult& result)
+            {
+                std::lock_guard<std::mutex> lock(mTunerMutex);
+                mPendingTunerData.noteName = result.noteName;
+                mPendingTunerData.octave = result.octave;
+                mPendingTunerData.frequency = result.frequency;
+                mPendingTunerData.centOffset = result.centOffset;
+                mPendingTunerData.confidence = result.confidence;
+                mPendingTunerData.detected = result.detected;
+                mTunerDataPending.store(true, std::memory_order_release);
+            });
+
+        // Apply global interface calibration level to NAM amp nodes (overrides preset
+        // params; calibrationInputLevel is not stored in preset data).
+        if (std::isfinite(mNamInterfaceCalibrationLevelDbu))
         {
-            if (!IsNamAmpEffectType(node.type)) continue;
-            mPresetMixer.SetNodeParam(initialSlotId, node.id, "calibrationInputLevel", mNamInterfaceCalibrationLevelDbu);
-            mPresetMixer.SetNodeParam(initialSlotId, node.id, "autoLevelInput", 1.0);
-            mPresetMixer.SetNodeParam(initialSlotId, node.id, "useNamInputMetadata", 1.0);
+            for (const auto& node : normalizedPreset.graph.nodes)
+            {
+                if (!IsNamAmpEffectType(node.type)) continue;
+                mPresetMixer.SetNodeParam(initialSlotId, node.id, "calibrationInputLevel", mNamInterfaceCalibrationLevelDbu);
+                mPresetMixer.SetNodeParam(initialSlotId, node.id, "autoLevelInput", 1.0);
+                mPresetMixer.SetNodeParam(initialSlotId, node.id, "useNamInputMetadata", 1.0);
+            }
         }
     }
 

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <future>
 #include <queue>
 #include <set>
 #include <chrono>
@@ -433,6 +434,17 @@ namespace guitarfx
   {
     auto &registry = EffectRegistry::Instance();
 
+    // Work item for Phase 2: resolved refs/paths ready to hand to LoadResources.
+    struct ResourceWork
+    {
+      NodeState *state;
+      std::vector<ResourceRef> refs;
+      std::vector<std::filesystem::path> paths;
+    };
+    std::vector<ResourceWork> resourceWorkItems;
+
+    // Phase 1: Create processors, apply params/config, and resolve resource paths.
+    // Resource path resolution is fast (library lookups only); actual loading is deferred.
     for (const auto &node : mGraph.nodes)
     {
       auto [it, inserted] = mNodeStates.emplace(
@@ -480,7 +492,7 @@ namespace guitarfx
         }
       }
 
-      // Apply parameters
+      // Apply parameters and resolve resource paths
       if (state.processor)
       {
         state.processor->SetEnabled(node.enabled);
@@ -495,7 +507,8 @@ namespace guitarfx
           state.processor->SetConfig(key, value);
         }
 
-        // Load resources if needed
+        // Resolve resource paths (fast — just library lookups).
+        // Actual LoadResources calls are deferred to Phase 2 for parallel dispatch.
         if (!node.resources.empty())
         {
           std::vector<ResourceRef> resolvedRefs;
@@ -521,17 +534,56 @@ namespace guitarfx
 
           if (!resolvedPaths.empty())
           {
-            state.processor->LoadResources(resolvedRefs, resolvedPaths);
+            resourceWorkItems.push_back({&state, std::move(resolvedRefs), std::move(resolvedPaths)});
           }
           else if (state.processor->HasResource())
           {
-            // All defined resource slots have been cleared; notify the processor so it
-            // can unload the previously-loaded resource rather than leaving stale state.
-            state.processor->LoadResources({}, {});
+            // All defined resource slots have been cleared; enqueue an empty load so the
+            // processor can unload its previously-loaded resource rather than leaving stale state.
+            resourceWorkItems.push_back({&state, {}, {}});
           }
         }
       }
+    }
 
+    // Phase 2: Load resources.
+    // Effects that require main-thread execution (e.g. plugin hosts using JUCE's
+    // MessageManager) must run on the calling thread to avoid deadlocking when
+    // MessageManager::callSync is used from within a std::async worker.
+    // All other effects (NAM models, IR files) are safe to load concurrently.
+    std::vector<ResourceWork*> mainThreadWork;
+    std::vector<ResourceWork*> parallelWork;
+    for (auto &work : resourceWorkItems)
+    {
+      if (work.state->processor && work.state->processor->RequiresMainThreadLoad())
+        mainThreadWork.push_back(&work);
+      else
+        parallelWork.push_back(&work);
+    }
+
+    // Run main-thread-required loads first, serially on the calling thread.
+    for (auto *work : mainThreadWork)
+      work->state->processor->LoadResources(work->refs, work->paths);
+
+    // Run remaining loads in parallel.
+    if (parallelWork.size() > 1)
+    {
+      std::vector<std::future<void>> futures;
+      futures.reserve(parallelWork.size());
+      for (auto *work : parallelWork)
+      {
+        futures.push_back(std::async(std::launch::async, [work]()
+        {
+          work->state->processor->LoadResources(work->refs, work->paths);
+        }));
+      }
+      for (auto &f : futures)
+        f.get();
+    }
+    else if (parallelWork.size() == 1)
+    {
+      auto *work = parallelWork[0];
+      work->state->processor->LoadResources(work->refs, work->paths);
     }
   }
 

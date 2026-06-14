@@ -1670,6 +1670,15 @@ export function renderActivePreset(): void {
   renderMixerPanel();
 }
 
+/**
+ * Toggles the `loading` class on the preset list item for the given preset id.
+ * This provides an in-list spinner while the backend processes the loadPreset request.
+ */
+export function setPresetLoadingClass(presetId: string, loading: boolean): void {
+  const el = document.querySelector<HTMLElement>(`.preset-item[data-id="${CSS.escape(presetId)}"]`);
+  if (el) el.classList.toggle("loading", loading);
+}
+
 export function filterPresets(query: string): void {
   uiState.filteredPresets = getFilteredPresets(query);
   renderPresetUI(uiState.presetCache.get(uiState.activePresetId ?? "") ?? null);
@@ -1851,12 +1860,17 @@ export async function applyPresetFromLibrary(presetId: string): Promise<void> {
     updatePresetDropdownSelection();
     renderPresetUI(clonePreset(presetPayload));
     updatePresetActionButtons();
+    // Mark this preset as loading so the list item shows a progress indicator.
+    // The indicator is cleared when the backend confirms the load via "presetLoaded".
+    uiState.presetLoadingId = presetPayload.id;
+    setPresetLoadingClass(presetPayload.id, true);
     postMessage({
       type: "loadPreset",
       preset: presetPayload,
       ...(sceneId ? { sceneId } : {}),
     });
   } catch (error) {
+    uiState.presetLoadingId = null;
     console.error("Failed to apply preset", error);
     showNotification("Failed to apply preset", error instanceof Error ? error.message : "Unknown error");
   }

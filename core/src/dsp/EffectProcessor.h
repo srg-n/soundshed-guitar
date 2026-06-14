@@ -71,6 +71,10 @@ namespace guitarfx
     }
     [[nodiscard]] virtual bool RequiresResource() const { return false; }
     [[nodiscard]] virtual bool HasResource() const { return true; }
+    // Returns true if LoadResources must be called on the main/message thread.
+    // Override in effects that use platform APIs with thread-affinity requirements
+    // (e.g. JUCE plugin hosts that call MessageManager::callSync internally).
+    [[nodiscard]] virtual bool RequiresMainThreadLoad() const noexcept { return false; }
     [[nodiscard]] virtual std::filesystem::path GetResourcePath() const { return {}; }
 
     // Latency: effects with algorithmic latency (IR convolution, pitch shift) must override.

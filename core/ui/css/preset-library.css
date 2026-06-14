@@ -403,6 +403,28 @@
   background: var(--overlay-light);
 }
 
+.preset-list .preset-item.loading {
+  opacity: 0.75;
+}
+
+.preset-list .preset-item.loading h3::after {
+  content: '';
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-left: 7px;
+  border: 2px solid var(--color-primary, #4a9eff);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: preset-loading-spin 0.65s linear infinite;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+@keyframes preset-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
 .preset-list .preset-item header {
   display: flex;
   align-items: flex-start;

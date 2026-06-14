@@ -288,6 +288,51 @@ namespace guitarfx
     }
   }
 
+  void MultiPresetMixer::PreparePresetSwap(const Preset &preset, const std::string &id, const std::string &name)
+  {
+    // Build the new PresetInstance off the DSP lock. This includes effect processor
+    // creation and resource loading (e.g. NAM model loading from disk) which can take
+    // hundreds of milliseconds. The audio thread continues processing the current
+    // instance in mInstances untouched while this runs.
+    PresetInstance inst;
+    inst.cfg.id = id;
+    inst.cfg.name = name;
+
+    Preset normalizedPreset = preset;
+    EnsurePresetBoundaryGainNodes(normalizedPreset);
+
+    inst.executor.SetResourceLibrary(mResourceLibrary);
+    inst.executor.SetGraph(normalizedPreset.graph); // CreateProcessors + LoadResources here
+    inst.executor.SetSignalDiagnosticsEnabled(mSignalDiagnosticsEnabled.load(std::memory_order_acquire));
+    inst.complexityScore = EstimateGraphComplexityScore(inst.executor.GetNodeTypes());
+
+    if (mPrepared)
+    {
+      inst.executor.Prepare(mSampleRate, mMaxBlockSize); // Effect Prepare() (NAM init, IR load) here
+      AllocateInstanceBuffers(inst, mMaxBlockSize);
+    }
+
+    inst.outL.resize(static_cast<size_t>(mMaxBlockSize), 0.0f);
+    inst.outR.resize(static_cast<size_t>(mMaxBlockSize), 0.0f);
+
+    mPendingInstance = std::move(inst);
+  }
+
+  void MultiPresetMixer::CommitPresetSwap()
+  {
+    // Fast atomic swap: install the pre-built instance and clear the old one.
+    // Must be called while holding the DSP lock.
+    if (!mPendingInstance.has_value())
+      return;
+
+    mInstances.clear();
+    mInstances.push_back(std::move(*mPendingInstance));
+    mPendingInstance.reset();
+
+    // Schedule a brief output fade-in to mask the hard cut at the transition point.
+    mPresetFadeInRemaining.store(kPresetFadeInSamples, std::memory_order_release);
+  }
+
   void MultiPresetMixer::SetPresetMix(const std::string &presetId, double value)
   {
     if (auto *inst = FindInstance(presetId))
@@ -1260,6 +1305,24 @@ namespace guitarfx
       std::copy(mPostChainOutL.begin(), mPostChainOutL.begin() + numSamples, outputs[0]);
     if (outputs[1])
       std::copy(mPostChainOutR.begin(), mPostChainOutR.begin() + numSamples, outputs[1]);
+
+    // Apply preset-swap fade-in: ramps output from 0→1 over kPresetFadeInSamples samples
+    // after CommitPresetSwap() to mask the hard cut at the instance transition.
+    {
+      const int fadeRemaining = mPresetFadeInRemaining.load(std::memory_order_acquire);
+      if (fadeRemaining > 0)
+      {
+        const int fadeSamples = std::min(numSamples, fadeRemaining);
+        const float fadeTotal = static_cast<float>(kPresetFadeInSamples);
+        for (int i = 0; i < fadeSamples; ++i)
+        {
+          const float gain = 1.0f - static_cast<float>(fadeRemaining - i) / fadeTotal;
+          if (outputs[0]) outputs[0][i] *= gain;
+          if (outputs[1]) outputs[1][i] *= gain;
+        }
+        mPresetFadeInRemaining.store(fadeRemaining - fadeSamples, std::memory_order_release);
+      }
+    }
 
     // ==========================================================================
     // FINAL OUTPUT STAGE: Master gain, auto-level, limiter

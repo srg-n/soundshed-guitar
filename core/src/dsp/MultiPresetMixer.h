@@ -92,6 +92,14 @@ namespace guitarfx
     bool AddActivePreset(const Preset &preset, const std::string &presetId, const std::string &name);
     void RemoveActivePreset(const std::string &presetId);
 
+    // Seamless preset swap: build the new executor off the DSP lock, then commit atomically.
+    // PreparePresetSwap does the expensive work (effect creation, resource loading, Prepare).
+    // CommitPresetSwap installs the pre-built instance and schedules a brief fade-in.
+    // Pattern: call PreparePresetSwap() without holding the DSP lock, then hold the lock
+    // and call CommitPresetSwap().
+    void PreparePresetSwap(const Preset &preset, const std::string &id, const std::string &name);
+    void CommitPresetSwap();
+
     // Per-preset mixing controls
     void SetPresetMix(const std::string &presetId, double value);
     void SetPresetPan(const std::string &presetId, double pan);
@@ -251,6 +259,13 @@ namespace guitarfx
 
     ResourceLibrary *mResourceLibrary = nullptr;
     std::vector<PresetInstance> mInstances;
+
+    // Staged instance built off the DSP lock by PreparePresetSwap(); committed by CommitPresetSwap().
+    std::optional<PresetInstance> mPendingInstance;
+
+    // Output fade-in counter: ramps from 0→1 over kPresetFadeInSamples after a swap.
+    std::atomic<int> mPresetFadeInRemaining{0};
+    static constexpr int kPresetFadeInSamples = 1024;
 
     double mSampleRate = 44100.0;
     int mMaxBlockSize = 512;

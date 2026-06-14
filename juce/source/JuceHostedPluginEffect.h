@@ -38,6 +38,9 @@ namespace guitarfx
             const std::vector<std::filesystem::path>& paths) override;
         [[nodiscard]] bool RequiresResource() const override { return true; }
         [[nodiscard]] bool HasResource() const override { return mPlugin != nullptr; }
+        // Plugin scanning and instantiation must run on the JUCE message thread
+        // (AU and VST3 enforce this). Prevents deadlock when called from std::async.
+        [[nodiscard]] bool RequiresMainThreadLoad() const noexcept override { return true; }
         [[nodiscard]] std::filesystem::path GetResourcePath() const override { return mPluginPath; }
         [[nodiscard]] int GetLatencySamples() const override;
 

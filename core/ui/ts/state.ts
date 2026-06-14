@@ -169,6 +169,7 @@ export const uiState: UiState = {
   filteredPresets: [],
   activePresetId: null,
   activePresetIsNew: false,
+  presetLoadingId: null,
   presetCache: new Map<string, Preset>(),
   activePresetSnapshot: null,
   activePresetDraft: null,

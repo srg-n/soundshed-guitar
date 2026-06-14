@@ -1,5 +1,5 @@
 import { uiState, clonePreset, getActivePresetForRender, setActivePresetDraft, setActivePresetIsNew, setActivePresetSnapshot, setPresetDirty } from "./state.js";
-import { renderActivePreset, applyPresetFromLibrary, populatePresetDropdown, updatePresetDropdownSelection, cachePresetInMemory, updatePresetActionButtons, applyPresetFoldersFromBackend, applyPresetFavoritesFromBackend, applyPresetRecentsFromAppSettings, applyPresetRatingsFromBackend, applySetlistsFromBackend, handlePresetDataMessage, recordRecentPreset, refreshSavePresetModalPeakInfoIfOpen } from "./presets.js";
+import { renderActivePreset, applyPresetFromLibrary, populatePresetDropdown, updatePresetDropdownSelection, cachePresetInMemory, updatePresetActionButtons, applyPresetFoldersFromBackend, applyPresetFavoritesFromBackend, applyPresetRecentsFromAppSettings, applyPresetRatingsFromBackend, applySetlistsFromBackend, handlePresetDataMessage, recordRecentPreset, refreshSavePresetModalPeakInfoIfOpen, setPresetLoadingClass } from "./presets.js";
 import { syncControlsFromState, handleInputModeChanged, handleAmpCabStateChanged, syncAutoLevelControlsFromState, applyStoredInputChannel } from "./controls.js";
 import { showNotification } from "./notifications.js";
 import { appendLog } from "./logging.js";
@@ -702,6 +702,11 @@ export function handleIncomingMessage(message: string): void {
     case "presetLoaded": {
       const preset = (payload as { preset?: Preset }).preset;
       if (preset) {
+        // Clear loading indicator now that the backend has finished building the executor.
+        if (uiState.presetLoadingId) {
+          setPresetLoadingClass(uiState.presetLoadingId, false);
+          uiState.presetLoadingId = null;
+        }
         migratePresetNodeTypes(preset);
         normalizePresetResources(preset);
         const preserveNewDraft = Boolean(uiState.activePresetIsNew && uiState.activePresetId === preset.id);
