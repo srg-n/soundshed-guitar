@@ -31,7 +31,7 @@ namespace guitarfx
   {
   public:
     static constexpr int kMaxInputs = 4;
-    static constexpr double kMaxDelayMs = 500.0;
+    static constexpr double kMaxDelayMs = 60.0;
 
     void Prepare(double sampleRate, int maxBlockSize) override
     {
