@@ -447,8 +447,10 @@ export function renderPresetList(
           ? `<button class="preset-add-to-mixer-btn${inMixer ? " in-mixer" : ""}" data-preset-id="${preset.id}" title="${inMixer ? "Already in mixer" : "Add to mixer"}" type="button">${inMixer ? "✓ In Mixer" : "+ Mixer"}</button>`
           : "";
 
+        const isLoadingPreset = preset.id === uiState.presetLoadingId;
+
         return `
-        <article class="preset-item ${preset.id === activePresetId ? "active" : ""}" data-id="${preset.id}" draggable="true" style="border-left: 3px solid ${idAccentColor(preset.id)}">
+        <article class="preset-item ${preset.id === activePresetId ? "active" : ""}${isLoadingPreset ? " loading" : ""}" data-id="${preset.id}" draggable="true" style="border-left: 3px solid ${idAccentColor(preset.id)}">
           <header>
             <h3>${escapeHtml(preset.name)}</h3>
             ${addToMixerBtn}
@@ -670,8 +672,11 @@ export function renderPresetDetails(
     `;
   }
 
+  const isPresetLoading = Boolean(uiState.presetLoadingId && preset.id === uiState.presetLoadingId);
+
   presetDetailsElement.innerHTML = `
     <div class="signal-chain-container">
+      ${isPresetLoading ? `<div class="preset-loading-overlay"><span>Loading preset…</span></div>` : ""}
       <div class="signal-chain-header">
         <div class="preset-info">
           <h2 class="preset-title">${escapeHtml(preset.name)}</h2>

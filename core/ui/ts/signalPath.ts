@@ -1602,6 +1602,7 @@ export function renderSignalPathBar(): void {
   const sceneToolbarHost = document.getElementById("signal-path-scene-toolbar");
   const toolbarRow = document.getElementById("signal-path-toolbar");
   signalPathBar?.classList.toggle("mix-tab-active", mixTabActive);
+  signalPathBar?.classList.toggle("preset-loading", Boolean(uiState.presetLoadingId));
 
   // Show/hide composite edit mode banner
   updateCompositeEditBanner();
