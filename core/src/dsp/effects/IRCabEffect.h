@@ -310,23 +310,7 @@ namespace guitarfx
       else if (key == "autoGainComp")
         mAutoGainCompEnabled = value > 0.5;
       else if (key == "normalizeIR")
-      {
-        const bool newVal = value > 0.5;
-        if (newVal != mNormalizeIR)
-        {
-          if (!mImpulseL.empty())
-            CapturePreviousConvolvers(); // capture with old normalization first
-          mNormalizeIR = newVal;
-          if (!mImpulseL.empty())
-          {
-            InitializeConvolverA();
-            if (!mImpulseBL.empty())
-              InitializeConvolverB();
-            if (HasResource())
-              BeginResourceTransition();
-          }
-        }
-      }
+        mNormalizeIR = value > 0.5;
       else if (key == "outputGain")
         mOutputGain = std::pow(10.0, std::clamp(value, -24.0, 24.0) / 20.0);
       else if (key == "enabled")
