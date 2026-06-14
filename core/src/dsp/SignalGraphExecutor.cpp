@@ -873,9 +873,9 @@ namespace guitarfx
               continue;
             }
 
-            const float level = mixerEffect->GetInputLevel(inputPort);
             const float panL = mixerEffect->GetInputPanL(inputPort);
             const float panR = mixerEffect->GetInputPanR(inputPort);
+            const float level = mixerEffect->GetInputLevel(inputPort);
             const float gainL = edgeGain * level * panL;
             const float gainR = edgeGain * level * panR;
 
@@ -884,11 +884,14 @@ namespace guitarfx
             if (std::abs(gainL - gainR) > 1.0e-5f)
               mixerHasNonCenterPan = true;
 
-            for (int i = 0; i < numSamples; ++i)
-            {
-              state->bufferLeft[static_cast<size_t>(i)] += sourceState->bufferLeft[static_cast<size_t>(i)] * gainL;
-              state->bufferRight[static_cast<size_t>(i)] += sourceState->bufferRight[static_cast<size_t>(i)] * gainR;
-            }
+            // Use ProcessInput so per-input delay is applied alongside level/pan.
+            mixerEffect->ProcessInput(inputPort,
+              sourceState->bufferLeft.data(),
+              sourceState->bufferRight.data(),
+              state->bufferLeft.data(),
+              state->bufferRight.data(),
+              numSamples,
+              edgeGain);
             state->hasInput = true;
           }
           else if (shouldAccumulate)

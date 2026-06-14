@@ -88,12 +88,12 @@ namespace guitarfx
      * This is called by the executor for each input edge to a mixer node.
      */
     void ProcessInput(int inputIndex, const float *inputL, const float *inputR,
-                      float *outputL, float *outputR, int numSamples)
+                      float *outputL, float *outputR, int numSamples, float edgeGain = 1.0f)
     {
       if (inputIndex < 0 || inputIndex >= kMaxInputs)
         return;
 
-      const float level = mInputLevel[inputIndex];
+      const float level = mInputLevel[inputIndex] * edgeGain;
       const float panL = mInputPanL[inputIndex];
       const float panR = mInputPanR[inputIndex];
       const size_t delaySamples = mInputDelaySamples[inputIndex];
