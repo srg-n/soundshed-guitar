@@ -432,7 +432,6 @@ export function handleIncomingMessage(message: string): void {
       if (appSettings) {
         uiState.appSettings = appSettings as import("./types.js").AppSettings;
         applyStoredDemoAudioSelection();
-        applyStoredInputChannel();
         applyToneSharingAppSettings(appSettings);
         applyJamAppSettings();
         applyPresetRecentsFromAppSettings();
@@ -463,6 +462,10 @@ export function handleIncomingMessage(message: string): void {
           cpu: environment.cpu ?? uiState.environment?.cpu
         });
         refreshSettingsView();
+      }
+      // Apply stored input channel AFTER environment so isStandaloneUi() is correct.
+      if (appSettings) {
+        applyStoredInputChannel();
       }
       const metronome = (payload as { metronome?: { bpm?: number; enabled?: boolean; editable?: boolean; source?: string; volumeDb?: number; pan?: number; clickType?: string; beatPattern?: string; clickTypes?: Array<{ id?: string; label?: string }> } }).metronome;
       if (metronome) {

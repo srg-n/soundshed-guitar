@@ -1754,6 +1754,7 @@ void PluginController::Initialize()
     ApplyDiagnosticsSettingsFromAppSettings();
     ApplyDspLevelTargetSettingsFromAppSettings();
     ApplyProcessingModeSettingsFromAppSettings();
+    ApplyInputModeSettingsFromAppSettings();
     ApplyNamSlimmableSettingsFromAppSettings();
     ApplyNamInterfaceCalibrationFromAppSettings();
     ApplyUserInputCalibrationSettingsFromAppSettings();
@@ -2538,6 +2539,34 @@ void PluginController::ApplyProcessingModeSettingsFromAppSettings()
 
     if (settingsChanged)
         SaveAppSettings();
+}
+
+void PluginController::ApplyInputModeSettingsFromAppSettings()
+{
+    // Only applies in standalone mode; in plugin mode the DAW owns the input config.
+    if (!mHost.IsStandalone())
+        return;
+
+    // Key names must match the UI constants in controls.ts:
+    //   INPUT_CHANNEL_SETTING  = "inputChannel.mono"
+    //   MONO_MODE_SETTING      = "inputChannel.monoMode"
+    constexpr auto kMonoModeKey    = "inputChannel.monoMode";
+    constexpr auto kInputChanKey   = "inputChannel.mono";
+
+    const auto monoIt = mAppSettings.find(kMonoModeKey);
+    const auto chanIt = mAppSettings.find(kInputChanKey);
+
+    const bool storedMonoMode = (monoIt != mAppSettings.end() && monoIt->is_boolean())
+        ? monoIt->get<bool>()
+        : true; // Default to mono mode so the guitar comes through on startup
+
+    const int storedChannel = (chanIt != mAppSettings.end() && chanIt->is_number_integer())
+        ? std::clamp(chanIt->get<int>(), 0, 1)
+        : 0;
+
+    std::lock_guard<std::mutex> lock(mDSPMutex);
+    mPresetMixer.SetMonoMode(storedMonoMode);
+    mPresetMixer.SetInputChannel(storedChannel);
 }
 
 void PluginController::ApplyNamSlimmableSettingsFromAppSettings()

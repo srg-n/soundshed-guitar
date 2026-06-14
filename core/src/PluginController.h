@@ -309,6 +309,7 @@ private:
     void ApplyDiagnosticsSettingsFromAppSettings();
     void ApplyDspLevelTargetSettingsFromAppSettings();
     void ApplyProcessingModeSettingsFromAppSettings();
+    void ApplyInputModeSettingsFromAppSettings();
     void ApplyNamSlimmableSettingsFromAppSettings();
     void ApplyNamInterfaceCalibrationFromAppSettings();
     void ApplyUserInputCalibrationSettingsFromAppSettings();
