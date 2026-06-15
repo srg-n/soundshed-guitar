@@ -57,8 +57,7 @@
         "params": {
           "inputGain": 0.0,
           "outputGain": 0.0,
-          "autoLevelInput": 1.0,
-          "autoLevelOutput": 1.0
+          "useCalibration": 1.0
         }
       },
       {

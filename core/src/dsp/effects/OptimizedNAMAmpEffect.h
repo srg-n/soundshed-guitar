@@ -362,24 +362,9 @@ public:
     {
       mMix = std::clamp(value, 0.0, 1.0);
     }
-    else if (key == "autoLevelInput")
+    else if (key == "useCalibration")
     {
-      mAutoLevelInput = value > 0.5;
-      RecalculateAutoGains();
-    }
-    else if (key == "useNamInputMetadata")
-    {
-      mUseNamInputMetadata = value > 0.5;
-      RecalculateAutoGains();
-    }
-    else if (key == "autoLevelOutput")
-    {
-      mAutoLevelOutput = value > 0.5;
-      RecalculateAutoGains();
-    }
-    else if (key == "clampAutoGain")
-    {
-      mClampAutoGain = value > 0.5;
+      mUseCalibration = value > 0.5;
       RecalculateAutoGains();
     }
     else if (key == "calibrationInputLevel")
@@ -388,14 +373,6 @@ public:
         mCalibrationInputLevel = value;
       else
         mCalibrationInputLevel.reset();
-      RecalculateAutoGains();
-    }
-    else if (key == "calibrationOutputLevel")
-    {
-      if (std::isfinite(value))
-        mCalibrationOutputLevel = value;
-      else
-        mCalibrationOutputLevel.reset();
       RecalculateAutoGains();
     }
     else if (key == "bass")
@@ -426,19 +403,9 @@ public:
 
   void SetConfig(const std::string& key, const std::string& value) override
   {
-    if (key == "autoLevelInput")
+    if (key == "useCalibration")
     {
-      mAutoLevelInput = ParseBool(value);
-      RecalculateAutoGains();
-    }
-    else if (key == "useNamInputMetadata")
-    {
-      mUseNamInputMetadata = ParseBool(value);
-      RecalculateAutoGains();
-    }
-    else if (key == "autoLevelOutput")
-    {
-      mAutoLevelOutput = ParseBool(value);
+      mUseCalibration = ParseBool(value);
       RecalculateAutoGains();
     }
     else if (key == "slimmableSize")
@@ -468,12 +435,8 @@ public:
       return mPresenceDb;
     if (key == "enabled")
       return mEnabled ? 1.0 : 0.0;
-    if (key == "autoLevelOutput")
-      return mAutoLevelOutput ? 1.0 : 0.0;
-    if (key == "clampAutoGain")
-      return mClampAutoGain ? 1.0 : 0.0;
-    if (key == "useNamInputMetadata")
-      return mUseNamInputMetadata ? 1.0 : 0.0;
+    if (key == "useCalibration")
+      return mUseCalibration ? 1.0 : 0.0;
     return 0.0;
   }
 
@@ -549,15 +512,12 @@ private:
       mModelLeft = std::move(modelLeft);
       mModelRight = std::move(modelRight);
       mModelPath = resourcePath;
-      mResourceNormalizationGainDb = ReadResourceMetadataDouble(ref, "normalizationGainDb");
       ConfigureModelProcessing();
 
       mModelInputLevel = mModelLeft->HasInputLevel()
         ? std::optional<double>(mModelLeft->GetInputLevel()) : std::nullopt;
       mModelOutputLevel = mModelLeft->HasOutputLevel()
         ? std::optional<double>(mModelLeft->GetOutputLevel()) : std::nullopt;
-      mModelLoudness = mModelLeft->HasLoudness()
-        ? std::optional<double>(mModelLeft->GetLoudness()) : std::nullopt;
 
       RecalculateAutoGains();
       return true;
@@ -608,16 +568,13 @@ private:
   double mInputGain = 1.0;
   double mOutputGain = 1.0;
   double mMix = 1.0;
-  bool mAutoLevelInput = false;
-  bool mAutoLevelOutput = true;
-  bool mUseNamInputMetadata = true;
-  bool mClampAutoGain = true;
+  // When true, input and output gains are auto-corrected using model metadata
+  // dBu fields and the interface calibration level (set by the controller for
+  // the first NAM in the chain).
+  bool mUseCalibration = true;
   std::optional<double> mModelInputLevel;
   std::optional<double> mModelOutputLevel;
-  std::optional<double> mModelLoudness;
-  std::optional<double> mResourceNormalizationGainDb;
   std::optional<double> mCalibrationInputLevel;
-  std::optional<double> mCalibrationOutputLevel;
   bool mEnabled = true;
   std::uint64_t mLevelTargetsRevision = 0;
 
@@ -669,48 +626,31 @@ private:
     mAutoInputGain = 1.0;
     mAutoOutputGain = 1.0;
 
-    // Input calibration: mirrors NeuralAmpModelerPlugin _SetInputGain().
-    // delta = calibrationInputLevel(dBu) - model.inputLevel(dBu)
-    // calibrationInputLevel is only provided for the first NAM in a chain (the
-    // one whose input is a raw guitar signal at a known interface level).
-    // Without it we cannot safely compute a correction — using 0 dBu as the
-    // reference would give a -18 dB hit on a model trained at +18 dBu. Skip
-    // the correction entirely if the interface level is unknown, matching the
-    // reference plugin's behaviour when "CalibrateInput" is disabled.
-    if (mAutoLevelInput && mUseNamInputMetadata
-        && mModelInputLevel.has_value() && mCalibrationInputLevel.has_value())
+    if (!mUseCalibration)
+    {
+      mLevelTargetsRevision = GetLevelTargetsRevision();
+      UpdateEffectiveGains();
+      return;
+    }
+
+    // Input: delta = calibrationInputLevel(dBu) - model.inputLevel(dBu)
+    // Mirrors NeuralAmpModelerPlugin _SetInputGain(). Requires both interface
+    // calibration (first NAM only) and model input-level metadata.
+    if (mModelInputLevel.has_value() && mCalibrationInputLevel.has_value())
     {
       const double raw = *mCalibrationInputLevel - *mModelInputLevel;
-      const double deltaDb = mClampAutoGain ? std::clamp(raw, -24.0, 24.0) : raw;
+      const double deltaDb = std::clamp(raw, -24.0, 24.0);
       mAutoInputGain = std::pow(10.0, deltaDb / 20.0);
     }
 
-    if (mAutoLevelOutput)
+    // Output: delta = model.outputLevel(dBu) - calibrationInputLevel(dBu)
+    // Mirrors NeuralAmpModelerPlugin _SetOutputGain() case 2. Reconstructs the
+    // real-world level relationship so downstream effects see consistent drive.
+    if (mModelOutputLevel.has_value() && mCalibrationInputLevel.has_value())
     {
-      if (mResourceNormalizationGainDb.has_value())
-      {
-        // Library metadata override takes highest priority.
-        const double raw = *mResourceNormalizationGainDb;
-        const double deltaDb = mClampAutoGain ? std::clamp(raw, -24.0, 24.0) : raw;
-        mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
-      }
-      else if (mModelOutputLevel.has_value() && mCalibrationInputLevel.has_value())
-      {
-        // "Calibrated" output mode: mirrors NeuralAmpModelerPlugin _SetOutputGain() case 2.
-        // gainDB += model.outputLevel(dBu) - calibrationInputLevel(dBu)
-        // Only active when the interface calibration level is known (first NAM in chain).
-        const double raw = *mModelOutputLevel - *mCalibrationInputLevel;
-        const double deltaDb = mClampAutoGain ? std::clamp(raw, -24.0, 24.0) : raw;
-        mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
-      }
-      else if (mModelLoudness.has_value())
-      {
-        // "Normalized" output mode: mirrors NeuralAmpModelerPlugin _SetOutputGain() case 1.
-        // gainDB += targetLoudness - model.loudness
-        const double raw = GetNominalOperatingLevelDbfs() - *mModelLoudness;
-        const double deltaDb = mClampAutoGain ? std::clamp(raw, -24.0, 24.0) : raw;
-        mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
-      }
+      const double raw = *mModelOutputLevel - *mCalibrationInputLevel;
+      const double deltaDb = std::clamp(raw, -24.0, 24.0);
+      mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
     }
 
     mLevelTargetsRevision = GetLevelTargetsRevision();
@@ -880,7 +820,8 @@ inline void RegisterOptimizedNAMAmpEffect()
     {"treble",                "Treble",             0.0,   -10.0, 10.0,  "dB",  "Tone"},
     {"presence",              "Presence",           0.0,   -10.0, 10.0,  "dB",  "Tone"},
     {"outputGain",            "Output",             0.0,   -24.0, 24.0,  "dB",  "Level"},
-    {"mix",                   "Mix",                1.0,    0.0,   1.0,  "amount", "Advanced", true}
+    {"mix",                   "Mix",                1.0,    0.0,   1.0,  "amount", "Advanced", true},
+    {"useCalibration",        "Use Calibration",    1.0,    0.0,   1.0,  "toggle", "Advanced", true}
   };
 
   EffectRegistry::Instance().Register(info.type, info, []()

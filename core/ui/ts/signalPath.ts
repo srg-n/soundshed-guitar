@@ -1013,6 +1013,14 @@ function nodeUsesFullRigNamCategory(node: GraphNode): boolean {
     if (category === "full-rig") {
       return true;
     }
+
+    // Fall back to NAM gear_type metadata (e.g. "amp_cab" / "amp+cab") from the
+    // model file header. If gear_type contains "cab", the capture includes a
+    // cabinet model and should be treated as a full rig.
+    const gearType = String(libraryResource?.metadata?.gear_type ?? "").toLowerCase();
+    if (gearType && gearType.includes("cab")) {
+      return true;
+    }
   }
 
   return false;

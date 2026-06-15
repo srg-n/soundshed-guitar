@@ -51,9 +51,7 @@ inline void RegisterOptimizedNAMFXEffect()
     {"presence",              "Presence",            0.0,   -10.0, 10.0,  "dB",  "Tone",     true},
     {"outputGain",            "Output",              0.0,   -24.0, 24.0,  "dB",  "Level"},
     {"mix",                   "Mix",                 1.0,    0.0,   1.0,  "amount", "Advanced", true},
-    {"autoLevelOutput",       "Auto Level Output",   1.0,    0.0,   1.0,  "toggle", "Advanced", true},
-    {"clampAutoGain",         "Clamp Auto Gain",     1.0,    0.0,   1.0,  "toggle", "Advanced", true},
-    {"useNamInputMetadata",   "Use Input Metadata",  0.0,    0.0,   1.0,  "toggle", "Advanced", true}
+    {"useCalibration",        "Use Calibration",     1.0,    0.0,   1.0,  "toggle", "Advanced", true}
   };
 
   EffectRegistry::Instance().Register(info.type, info, []()

@@ -858,7 +858,9 @@ bool TestLoadPresetRetiresNamInputAutoLeveling()
         return false;
     }
 
+    // Set legacy params that should be normalized away
     ampNode->params["autoLevelInput"] = 1.0;
+    ampNode->params["autoLevelOutput"] = 1.0;
     ampNode->params["calibrationInputLevel"] = -12.0;
     ampNode->params["calibrationOutputLevel"] = -6.0;
 
@@ -882,17 +884,22 @@ bool TestLoadPresetRetiresNamInputAutoLeveling()
         return false;
     }
 
-    const auto autoInputIt = loadedAmp->params.find("autoLevelInput");
-    if (autoInputIt == loadedAmp->params.end() || std::abs(autoInputIt->second) > 1e-9)
+    // autoLevelInput should have been replaced by useCalibration
+    if (loadedAmp->params.count("autoLevelInput"))
     {
-        std::cerr << "NAM autoLevelInput should be retired to false on preset load\n";
+        std::cerr << "autoLevelInput should be removed on preset load\n";
+        return false;
+    }
+    if (loadedAmp->params.count("autoLevelOutput"))
+    {
+        std::cerr << "autoLevelOutput should be removed on preset load\n";
         return false;
     }
 
-    const auto autoOutputIt = loadedAmp->params.find("autoLevelOutput");
-    if (autoOutputIt == loadedAmp->params.end() || std::abs(autoOutputIt->second - 1.0) > 1e-9)
+    const auto calIt = loadedAmp->params.find("useCalibration");
+    if (calIt == loadedAmp->params.end() || std::abs(calIt->second - 1.0) > 1e-9)
     {
-        std::cerr << "NAM autoLevelOutput should default to enabled on preset load\n";
+        std::cerr << "NAM useCalibration should default to enabled on preset load\n";
         return false;
     }
 

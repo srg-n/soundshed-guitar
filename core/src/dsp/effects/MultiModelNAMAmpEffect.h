@@ -250,21 +250,9 @@ public:
     {
       mMix = std::clamp(value, 0.0, 1.0);
     }
-    else if (key == "autoLevelInput")
+    else if (key == "useCalibration")
     {
-      mAutoLevelInput = value > 0.5;
-    }
-    else if (key == "useNamInputMetadata")
-    {
-      mUseNamInputMetadata = value > 0.5;
-    }
-    else if (key == "autoLevelOutput")
-    {
-      mAutoLevelOutput = value > 0.5;
-    }
-    else if (key == "clampAutoGain")
-    {
-      mClampAutoGain = value > 0.5;
+      mUseCalibration = value > 0.5;
     }
     else if (key == "calibrationInputLevel")
     {
@@ -272,10 +260,6 @@ public:
         mCalibrationInputLevel = value;
       else
         mCalibrationInputLevel.reset();
-    }
-    else if (key == "calibrationOutputLevel")
-    {
-      // Not used directly; output calibration uses mCalibrationInputLevel per reference plugin.
     }
     else if (key == "blend")
     {
@@ -331,12 +315,8 @@ public:
       return mBlend;
     if (key == "enabled")
       return mEnabled ? 1.0 : 0.0;
-    if (key == "autoLevelOutput")
-      return mAutoLevelOutput ? 1.0 : 0.0;
-    if (key == "clampAutoGain")
-      return mClampAutoGain ? 1.0 : 0.0;
-    if (key == "useNamInputMetadata")
-      return mUseNamInputMetadata ? 1.0 : 0.0;
+    if (key == "useCalibration")
+      return mUseCalibration ? 1.0 : 0.0;
     const auto it = mTargetParams.find(key);
     if (it != mTargetParams.end())
       return it->second;
@@ -369,7 +349,6 @@ public:
       instance.parameterId = ref.parameterId;
       instance.parameterValue = ref.parameterValue.value_or(static_cast<double>(i));
       instance.parameters = ref.parameters;
-      instance.normalizationGainDb = ReadResourceMetadataDouble(ref, "normalizationGainDb");
       if (instance.parameters.empty() && !ref.parameterId.empty() && ref.parameterValue.has_value())
       {
         instance.parameters[ref.parameterId] = *ref.parameterValue;
@@ -432,8 +411,6 @@ private:
 
     std::optional<double> inputLevel;
     std::optional<double> outputLevel;
-    std::optional<double> loudness;
-    std::optional<double> normalizationGainDb;
   };
 
   struct BlendSelection
@@ -460,16 +437,12 @@ private:
   double mBlend = 0.0;
   std::map<std::string, double> mTargetParams;
   bool mHasModelParameters = false;
-  bool mAutoLevelInput = false;
-  bool mAutoLevelOutput = true;
-  bool mUseNamInputMetadata = true;
+  bool mUseCalibration = true;
   bool mEnabled = true;
-  bool mClampAutoGain = true;
   std::string mParameterId;
   std::uint64_t mLevelTargetsRevision = 0;
 
   std::optional<double> mCalibrationInputLevel;
-  std::optional<double> mCalibrationOutputLevel;
 
   void UpdateEffectiveGains()
   {
@@ -525,8 +498,6 @@ private:
           ? std::optional<double>(instance.fallbackLeft->GetInputLevel()) : std::nullopt;
         instance.outputLevel = instance.fallbackLeft->HasOutputLevel()
           ? std::optional<double>(instance.fallbackLeft->GetOutputLevel()) : std::nullopt;
-        instance.loudness = instance.fallbackLeft->HasLoudness()
-          ? std::optional<double>(instance.fallbackLeft->GetLoudness()) : std::nullopt;
         return true;
       }
 
@@ -820,7 +791,7 @@ private:
     mAutoInputGain = 1.0;
     mAutoOutputGain = 1.0;
 
-    if (mModels.empty())
+    if (mModels.empty() || !mUseCalibration)
     {
       UpdateEffectiveGains();
       return;
@@ -833,49 +804,22 @@ private:
       selection.weightLower, selection.weightUpper);
     const auto blendedOutputLevel = BlendOptional(modelA->outputLevel, modelB->outputLevel,
       selection.weightLower, selection.weightUpper);
-    const auto blendedLoudness = BlendOptional(modelA->loudness, modelB->loudness,
-      selection.weightLower, selection.weightUpper);
-    const auto blendedNormalizationGainDb = BlendOptional(modelA->normalizationGainDb, modelB->normalizationGainDb,
-      selection.weightLower, selection.weightUpper);
 
-    // Input calibration: mirrors NeuralAmpModelerPlugin _SetInputGain().
-    // delta = calibrationInputLevel(dBu) - model.inputLevel(dBu)
-    // Requires calibrationInputLevel to be explicitly provided (first NAM in
-    // chain). Without a known interface reference we cannot safely correct —
-    // 0 dBu fallback gives -18 dB on a +18 dBu model.
-    if (mAutoLevelInput && mUseNamInputMetadata
-        && blendedInputLevel.has_value() && mCalibrationInputLevel.has_value())
+    // Input: delta = calibrationInputLevel(dBu) - model.inputLevel(dBu)
+    // Requires calibrationInputLevel to be set by controller (first NAM only).
+    if (blendedInputLevel.has_value() && mCalibrationInputLevel.has_value())
     {
       const double raw = *mCalibrationInputLevel - *blendedInputLevel;
-      const double deltaDb = mClampAutoGain ? std::clamp(raw, -24.0, 24.0) : raw;
+      const double deltaDb = std::clamp(raw, -24.0, 24.0);
       mAutoInputGain = std::pow(10.0, deltaDb / 20.0);
     }
 
-    if (mAutoLevelOutput)
+    // Output: delta = model.outputLevel(dBu) - calibrationInputLevel(dBu)
+    if (blendedOutputLevel.has_value() && mCalibrationInputLevel.has_value())
     {
-      if (blendedNormalizationGainDb.has_value())
-      {
-        // Library metadata override takes highest priority.
-        const double raw = *blendedNormalizationGainDb;
-        const double deltaDb = mClampAutoGain ? std::clamp(raw, -24.0, 24.0) : raw;
-        mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
-      }
-      else if (blendedOutputLevel.has_value() && mCalibrationInputLevel.has_value())
-      {
-        // "Calibrated" output mode: mirrors NeuralAmpModelerPlugin _SetOutputGain() case 2.
-        // gainDB += model.outputLevel(dBu) - calibrationInputLevel(dBu)
-        const double raw = *blendedOutputLevel - *mCalibrationInputLevel;
-        const double deltaDb = mClampAutoGain ? std::clamp(raw, -24.0, 24.0) : raw;
-        mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
-      }
-      else if (blendedLoudness.has_value())
-      {
-        // "Normalized" output mode: mirrors NeuralAmpModelerPlugin _SetOutputGain() case 1.
-        // gainDB += targetLoudness - model.loudness
-        const double raw = GetNominalOperatingLevelDbfs() - *blendedLoudness;
-        const double deltaDb = mClampAutoGain ? std::clamp(raw, -24.0, 24.0) : raw;
-        mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
-      }
+      const double raw = *blendedOutputLevel - *mCalibrationInputLevel;
+      const double deltaDb = std::clamp(raw, -24.0, 24.0);
+      mAutoOutputGain = std::pow(10.0, deltaDb / 20.0);
     }
 
     mLevelTargetsRevision = GetLevelTargetsRevision();
@@ -932,7 +876,8 @@ inline void RegisterMultiModelNAMAmpEffect()
     {"blend", "Blend", 0.0, 0.0, 1.0, "amount"},
     {"inputGain", "Input", 0.0, -24.0, 24.0, "dB"},
     {"outputGain", "Output", 0.0, -24.0, 24.0, "dB"},
-    {"mix", "Mix", 1.0, 0.0, 1.0, "amount", "Advanced", true}
+    {"mix", "Mix", 1.0, 0.0, 1.0, "amount", "Advanced", true},
+    {"useCalibration", "Use Calibration", 1.0, 0.0, 1.0, "toggle", "Advanced", true}
   };
 
   EffectRegistry::Instance().Register(info.type, info, []()

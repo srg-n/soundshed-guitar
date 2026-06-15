@@ -8,7 +8,7 @@ Today the app handles level in four main places:
 
 1. A single user-wide input calibration gain can be applied before the chain.
 2. Manual gain controls in the preset and effect graph shape level through the chain.
-3. NAM amp models can apply automatic output normalization.
+3. NAM effects can apply model-metadata-based dBu calibration to input and output.
 4. The mixer can clamp the final output to a configurable ceiling.
 
 There is no hidden global headroom stage that permanently turns everything down.
@@ -59,16 +59,16 @@ After the input calibration stage, normal level changes come from explicit contr
 
 In simple terms: if the sound gets louder or quieter while you edit the rig, it should usually be because of an explicit control.
 
-### 3. NAM Automatic Output Normalization
+### 3. NAM Calibration (Use Calibration)
 
-NAM processing still has an automatic output-level stage.
+NAM effects apply a single dBu‑based calibration stage using model metadata.
 
-- The NAM wrappers keep `autoLevelOutput` enabled by default.
-- If a product-owned `normalizationGainDb` exists in resource metadata, that value is used first.
-- If that metadata is missing but the model exposes loudness metadata, the code aims the model toward the shared nominal operating level.
-- The shared nominal target is currently configurable in Settings and defaults to `-18 dBFS`.
+- **Input calibration**: `gain = calibrationInputLevel_dBu − model.inputLevel_dBu`. Matches the interface reference level to the model's expected input. Only active for the first NAM in the chain (where the interface calibration level is known).
+- **Output calibration**: `gain = model.outputLevel_dBu − calibrationInputLevel_dBu`. Reconstructs the real‑world output level so downstream effects see consistent drive regardless of which model is loaded.
+- Both corrections are clamped to ±24 dB and combined with the user's manual input/output gain knobs.
+- The **Use Calibration** advanced toggle (on by default) can be disabled to bypass all automatic correction, leaving only the manual gain controls active.
 
-In simple terms: NAM output normalization tries to make different amp captures land closer to the same loudness without changing the user's manual controls.
+In simple terms: when enabled, the NAM effect reads the model's dBu metadata and the interface calibration level to reconstruct correct gain staging automatically. No loudness normalization or product‑level gain metadata is applied.
 
 ### 4. Final Output Protection
 
@@ -92,20 +92,6 @@ But the controller now forces both of those paths off.
 
 In simple terms: the legacy mixer-wide auto-level system still exists in code, but the product currently treats it as retired.
 
-### NAM Auto Input And Old Calibration Fields
-
-NAM nodes still carry old fields such as:
-
-- `autoLevelInput`
-- `calibrationInputLevel`
-- `calibrationOutputLevel`
-
-The controller clears this old calibration state when presets load or when NAM level state is reset.
-
-The important part is this: current NAM auto-gain recalculation only applies output-side normalization. It does not currently compute an extra per-model input auto gain.
-
-In simple terms: old NAM input auto-leveling fields still exist for compatibility, but the live behavior is now centered on user input calibration plus NAM output normalization.
-
 ### Designed Peak Input
 
 Presets can store a `designedPeakInputDbfs` value.
@@ -119,9 +105,8 @@ In simple terms: this is reference information, not an active gain processor.
 ## Current Defaults
 
 - User input calibration gain: `0 dB` unless an active profile is selected
-- Shared nominal operating level: `-18 dBFS`
+- NAM Use Calibration: on by default (enables model-metadata-based dBu correction)
 - Shared output protection ceiling: `-1 dBFS`
-- NAM auto output normalization: on by default
 - Mixer-wide auto input: off in current product flow
 - Mixer-wide auto output: off in current product flow
 - Signal diagnostics: always on
@@ -132,12 +117,11 @@ These settings actively affect signal level behavior:
 
 - `audio.userInputCalibration.profiles`
 - `audio.userInputCalibration.activeProfileId`
-- `audio.dsp.nominalOperatingLevelDbfs`
 - `audio.dsp.outputProtectionCeilingDbfs`
 
 These settings are applied at startup and also when changed at runtime.
 
-In simple terms: if you change the nominal target or protection ceiling in Settings, the running DSP picks it up immediately.
+In simple terms: if you change the protection ceiling in Settings, the running DSP picks it up immediately.
 
 ## Diagnostics
 
@@ -163,7 +147,7 @@ If you want the simplest mental model, use this one:
 
 - Use user input calibration to match your instrument and interface to the app.
 - Use normal gain controls to shape tone and balance.
-- Let NAM auto output normalization keep different amp captures closer in level.
+- Leave NAM **Use Calibration** enabled so models automatically correct for their dBu metadata.
 - Let the final protection ceiling stop the output from going too high.
 
 That is the current system in practice.
@@ -175,7 +159,6 @@ If you need to inspect the code behind this behavior, start here:
 - `core/src/dsp/MultiPresetMixer.cpp`
 - `core/src/dsp/MultiPresetMixer.h`
 - `core/src/dsp/LevelTargets.h`
-- `core/src/dsp/effects/NAMAmpEffect.h`
 - `core/src/dsp/effects/OptimizedNAMAmpEffect.h`
 - `core/src/dsp/effects/MultiModelNAMAmpEffect.h`
 - `core/src/PluginController.cpp`

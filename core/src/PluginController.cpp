@@ -347,15 +347,19 @@ namespace
             || type == "fx_nam";
     }
 
-    // NAM amp types only (excludes fx_nam inline FX) — used for input calibration.
-    bool IsNamAmpEffectType(const std::string& type)
+    // NAM types eligible for input calibration (amp + FX). Only the first NAM-based
+    // effect in the chain path receives calibration — fx_nam is included because a
+    // pedal/FX capture may be the sole NAM node in the chain, receiving raw guitar.
+    bool IsNamCalibratableEffectType(const std::string& type)
     {
         return type == guitarfx::EffectGuids::kAmpNam
             || type == "amp_nam"
             || type == guitarfx::EffectGuids::kAmpNamOptimized
             || type == "amp_nam_optimized"
             || type == guitarfx::EffectGuids::kAmpNamBlend
-            || type == "amp_nam_blend";
+            || type == "amp_nam_blend"
+            || type == guitarfx::EffectGuids::kFxNam
+            || type == "fx_nam";
     }
 
     const guitarfx::GraphNode* FindNodeByIdOrType(const guitarfx::SignalGraph& graph,
@@ -484,6 +488,64 @@ namespace
             return static_cast<char>(std::tolower(ch));
         });
         return value;
+    }
+
+    /// Reads the "gear_type" string from a NAM file's JSON metadata header.
+    /// NAM .nam files are a JSON header followed by binary weights. We read the
+    /// first 16 KB and extract the gear_type field with a targeted string search
+    /// to avoid full JSON parse (which would fail on trailing binary data).
+    std::string TryExtractNamGearType(const std::filesystem::path& namFilePath)
+    {
+        if (!std::filesystem::exists(namFilePath))
+            return {};
+
+        try
+        {
+            std::ifstream file(namFilePath, std::ios::binary);
+            if (!file)
+                return {};
+
+            std::array<char, 16384> buf{};
+            file.read(buf.data(), buf.size());
+            const auto len = static_cast<std::size_t>(file.gcount());
+            if (len == 0)
+                return {};
+
+            const std::string_view content(buf.data(), len);
+            constexpr std::string_view needle = R"("gear_type")";
+            const auto keyPos = content.find(needle);
+            if (keyPos == std::string_view::npos)
+                return {};
+
+            auto colonPos = content.find(':', keyPos + needle.size());
+            if (colonPos == std::string_view::npos)
+                return {};
+
+            auto p = colonPos + 1;
+            while (p < len && (content[p] == ' ' || content[p] == '\t' || content[p] == '\n' || content[p] == '\r'))
+                ++p;
+
+            if (p >= len)
+                return {};
+
+            // String value: "amp_cab"
+            if (content[p] == '"')
+            {
+                ++p;
+                const auto endQ = content.find('"', p);
+                if (endQ == std::string_view::npos)
+                    return {};
+                return std::string(content.substr(p, endQ - p));
+            }
+
+            // null or other non-string value — not useful for full-rig detection
+            return {};
+        }
+        catch (...)
+        {
+        }
+
+        return {};
     }
 
     std::filesystem::path ResolvePresetFoldersPath(const guitarfx::FileSystem& fileSystem)
@@ -2622,11 +2684,11 @@ void PluginController::ApplyNamInterfaceCalibrationFromAppSettings()
     {
         const auto& graph = mActivePreset->graph;
 
-        // Build the set of NAM amp node IDs so we can test incoming edges.
+        // Build the set of NAM effect node IDs so we can test incoming edges.
         std::unordered_set<std::string> namNodeIds;
         for (const auto& node : graph.nodes)
         {
-            if (IsNamAmpEffectType(node.type))
+            if (IsNamEffectType(node.type))
                 namNodeIds.insert(node.id);
         }
 
@@ -2653,15 +2715,13 @@ void PluginController::ApplyNamInterfaceCalibrationFromAppSettings()
             if (std::isfinite(calLevel) && isFirstNam)
             {
                 mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "calibrationInputLevel", calLevel);
-                mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "autoLevelInput", 1.0);
-                mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "useNamInputMetadata", 1.0);
+                mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "useCalibration", 1.0);
             }
             else
             {
                 // Not the first NAM in the chain (or calibration disabled):
-                // clear any previously set calibration so auto-input is off.
+                // clear any previously set calibration so auto-gain correction is off.
                 mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "calibrationInputLevel", clearValue);
-                mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "autoLevelInput", 0.0);
             }
         }
     }
@@ -5066,6 +5126,11 @@ void PluginController::HandleImportRemoteResourceRequest(const nlohmann::json& p
         return;
     }
 
+    // Extract NAM gear_type from the model file header for full-rig detection.
+    std::string namGearType;
+    if (resourceType == "nam" && !targetPath.empty())
+        namGearType = TryExtractNamGearType(targetPath);
+
     LibraryResource resource;
     resource.type = resourceType;
     resource.id = resourceId;
@@ -5084,6 +5149,9 @@ void PluginController::HandleImportRemoteResourceRequest(const nlohmann::json& p
             else if (value.is_boolean()) resource.metadata[entry.key()] = value.get<bool>() ? "true" : "false";
         }
     }
+
+    if (!namGearType.empty())
+        resource.metadata["gear_type"] = namGearType;
 
     mResourceLibrary.AddResource(resource);
     AppendUserLibraryResource(resource);
@@ -5357,6 +5425,14 @@ std::optional<LibraryResource> PluginController::SaveLocalLibraryResource(const 
     resource.hash = resolvedHash;
     upsertMetadata(resource);
     resource.metadata["sourceFileName"] = resolvedPath.filename().string();
+
+    // Extract NAM gear_type from the model file header for full-rig detection.
+    if (resourceType == "nam" && !resource.metadata.contains("gear_type"))
+    {
+        const std::string gearType = TryExtractNamGearType(resolvedPath);
+        if (!gearType.empty())
+            resource.metadata["gear_type"] = gearType;
+    }
 
     if (resourceType == "plugin")
     {
@@ -8990,12 +9066,14 @@ void PluginController::ApplyPreset(const Preset& preset)
         if (!IsNamEffectType(node.type))
             continue;
 
-        node.config.erase("modelHash");
+        // Strip legacy NAM level params; replaced by single useCalibration toggle.
+        node.params.erase("autoLevelInput");
+        node.params.erase("autoLevelOutput");
+        node.params.erase("useNamInputMetadata");
+        node.params.erase("clampAutoGain");
+        node.params.erase("useAutoLevel");
         ClearNamCalibrationParams(node);
-        node.params["autoLevelInput"] = 0.0;
-        node.params["autoLevelOutput"] = 1.0;
-        node.params["clampAutoGain"] = 1.0;
-        node.params["useNamInputMetadata"] = 1.0;
+        node.params["useCalibration"] = 1.0;
     }
 
     TryRemapHostedPluginResources(normalizedPreset);
@@ -9072,16 +9150,47 @@ void PluginController::ApplyPreset(const Preset& preset)
                 mTunerDataPending.store(true, std::memory_order_release);
             });
 
-        // Apply global interface calibration level to NAM amp nodes (overrides preset
+        // Apply global interface calibration level to NAM effect nodes (overrides preset
         // params; calibrationInputLevel is not stored in preset data).
+        // A NAM node should receive interface calibration only if it is the
+        // first NAM in the signal chain — i.e. none of its incoming edges come
+        // from another NAM node. A second (or later) NAM receives the digital
+        // output of the previous model, so its input_level_dbu metadata has no
+        // relation to the analogue interface reference level.
         if (std::isfinite(mNamInterfaceCalibrationLevelDbu))
         {
+            std::unordered_set<std::string> namNodeIds;
             for (const auto& node : normalizedPreset.graph.nodes)
             {
-                if (!IsNamAmpEffectType(node.type)) continue;
-                mPresetMixer.SetNodeParam(initialSlotId, node.id, "calibrationInputLevel", mNamInterfaceCalibrationLevelDbu);
-                mPresetMixer.SetNodeParam(initialSlotId, node.id, "autoLevelInput", 1.0);
-                mPresetMixer.SetNodeParam(initialSlotId, node.id, "useNamInputMetadata", 1.0);
+                if (IsNamEffectType(node.type))
+                    namNodeIds.insert(node.id);
+            }
+
+            auto hasNamPredecessor = [&](const std::string& nodeId) -> bool
+            {
+                for (const auto& edge : normalizedPreset.graph.edges)
+                {
+                    if (edge.to == nodeId && namNodeIds.count(edge.from))
+                        return true;
+                }
+                return false;
+            };
+
+            const double clearValue = std::numeric_limits<double>::quiet_NaN();
+            for (const auto& node : normalizedPreset.graph.nodes)
+            {
+                if (!IsNamEffectType(node.type)) continue;
+
+                const bool isFirstNam = !hasNamPredecessor(node.id);
+                if (isFirstNam)
+                {
+                    mPresetMixer.SetNodeParam(initialSlotId, node.id, "calibrationInputLevel", mNamInterfaceCalibrationLevelDbu);
+                    mPresetMixer.SetNodeParam(initialSlotId, node.id, "useCalibration", 1.0);
+                }
+                else
+                {
+                    mPresetMixer.SetNodeParam(initialSlotId, node.id, "calibrationInputLevel", clearValue);
+                }
             }
         }
     }
@@ -9787,12 +9896,8 @@ void PluginController::ResetNamNodeLevelState(const std::string& nodeId)
     auto* node = mActivePreset->graph.FindNode(nodeId);
     if (!node || !IsNamEffectType(node->type)) return;
 
-    node->config.erase("modelHash");
     ClearNamCalibrationParams(*node);
-    node->params["autoLevelInput"] = 0.0;
-    node->params["autoLevelOutput"] = 1.0;
-    node->params["clampAutoGain"] = 1.0;
-    node->params["useNamInputMetadata"] = 1.0;
+    node->params["useCalibration"] = 1.0;
     mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
     mPendingStateBroadcast = true;
 
@@ -9800,11 +9905,7 @@ void PluginController::ResetNamNodeLevelState(const std::string& nodeId)
     {
         const double clearValue = std::numeric_limits<double>::quiet_NaN();
         mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "calibrationInputLevel", clearValue);
-        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "calibrationOutputLevel", clearValue);
-        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "autoLevelInput", 0.0);
-        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "autoLevelOutput", 1.0);
-        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "clampAutoGain", 1.0);
-        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "useNamInputMetadata", 1.0);
+        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "useCalibration", 1.0);
     }
 }
 
