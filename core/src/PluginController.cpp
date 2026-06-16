@@ -548,6 +548,186 @@ namespace
         return {};
     }
 
+    struct NamFileMetadata
+    {
+        std::string fileVersion;
+        std::string architecture;
+        std::string sampleRate;
+        std::string namName;
+        std::string modeledBy;
+        std::string gearMake;
+        std::string gearModel;
+        std::string gearType;
+        std::string toneType;
+        std::string inputLevelDbu;
+        std::string outputLevelDbu;
+        std::string modelDate;
+        std::string trainingFinalLoss;
+    };
+
+    /// Extracts all recognised metadata fields from a NAM model file header.
+    /// NAM .nam files are a JSON header followed by binary weights; we read the
+    /// first 64 KB and use targeted string searches to avoid a full JSON parse.
+    NamFileMetadata TryExtractNamMetadata(const std::filesystem::path& namFilePath)
+    {
+        NamFileMetadata result;
+        if (!std::filesystem::exists(namFilePath))
+            return result;
+
+        try
+        {
+            std::ifstream file(namFilePath, std::ios::binary);
+            if (!file)
+                return result;
+
+            constexpr std::size_t kBufSize = 65536;
+            std::vector<char> buf(kBufSize);
+            file.read(buf.data(), static_cast<std::streamsize>(kBufSize));
+            const auto len = static_cast<std::size_t>(file.gcount());
+            if (len == 0)
+                return result;
+
+            const std::string_view content(buf.data(), len);
+
+            // Extract a JSON string value: find "key" : "value" and return value.
+            const auto extractStr = [](const std::string_view sv, const std::string_view key) -> std::string
+            {
+                const auto needle = std::string("\"").append(key).append("\"");
+                const auto kp = sv.find(needle);
+                if (kp == std::string_view::npos) return {};
+                const auto cp = sv.find(':', kp + needle.size());
+                if (cp == std::string_view::npos) return {};
+                auto p = cp + 1;
+                while (p < sv.size() && std::isspace(static_cast<unsigned char>(sv[p]))) ++p;
+                if (p >= sv.size() || sv[p] != '"') return {};
+                ++p;
+                const auto eq = sv.find('"', p);
+                if (eq == std::string_view::npos) return {};
+                return std::string(sv.substr(p, eq - p));
+            };
+
+            // Extract a JSON number value: find "key" : number and return as string.
+            const auto extractNum = [](const std::string_view sv, const std::string_view key) -> std::string
+            {
+                const auto needle = std::string("\"").append(key).append("\"");
+                const auto kp = sv.find(needle);
+                if (kp == std::string_view::npos) return {};
+                const auto cp = sv.find(':', kp + needle.size());
+                if (cp == std::string_view::npos) return {};
+                auto p = cp + 1;
+                while (p < sv.size() && std::isspace(static_cast<unsigned char>(sv[p]))) ++p;
+                if (p >= sv.size()) return {};
+                if (!std::isdigit(static_cast<unsigned char>(sv[p])) && sv[p] != '-') return {};
+                const auto ns = p;
+                while (p < sv.size() && (std::isdigit(static_cast<unsigned char>(sv[p])) ||
+                       sv[p] == '.' || sv[p] == '-' || sv[p] == '+' || sv[p] == 'e' || sv[p] == 'E')) ++p;
+                return std::string(sv.substr(ns, p - ns));
+            };
+
+            // Return the full text of a named JSON sub-object { ... }.
+            const auto extractObjContent = [](const std::string_view sv, const std::string_view key) -> std::string_view
+            {
+                const auto needle = std::string("\"").append(key).append("\"");
+                const auto kp = sv.find(needle);
+                if (kp == std::string_view::npos) return {};
+                auto p = sv.find('{', kp + needle.size());
+                if (p == std::string_view::npos) return {};
+                int depth = 0;
+                bool ins = false, esc = false;
+                for (std::size_t i = p; i < sv.size(); ++i)
+                {
+                    const char c = sv[i];
+                    if (esc)       { esc = false; continue; }
+                    if (ins)       { if (c == '\\') esc = true; else if (c == '"') ins = false; continue; }
+                    if (c == '"')  ins = true;
+                    else if (c == '{') ++depth;
+                    else if (c == '}') { if (--depth == 0) return sv.substr(p, i - p + 1); }
+                }
+                return sv.substr(p); // buffer truncated — still usable
+            };
+
+            // Top-level fields
+            result.fileVersion  = extractStr(content, "version");
+            result.architecture = extractStr(content, "architecture");
+            result.sampleRate   = extractNum(content, "sample_rate");
+
+            // metadata sub-object
+            const auto metaContent = extractObjContent(content, "metadata");
+            if (!metaContent.empty())
+            {
+                result.namName    = extractStr(metaContent, "name");
+                result.modeledBy  = extractStr(metaContent, "modeled_by");
+                result.gearMake   = extractStr(metaContent, "gear_make");
+                result.gearModel  = extractStr(metaContent, "gear_model");
+                result.gearType   = extractStr(metaContent, "gear_type");
+                result.toneType   = extractStr(metaContent, "tone_type");
+                result.inputLevelDbu  = extractNum(metaContent, "input_level_dbu");
+                result.outputLevelDbu = extractNum(metaContent, "output_level_dbu");
+
+                // date sub-object → "YYYY-MM-DD"
+                const auto dateContent = extractObjContent(metaContent, "date");
+                if (!dateContent.empty())
+                {
+                    const auto yearStr = extractNum(dateContent, "year");
+                    if (!yearStr.empty())
+                    {
+                        try
+                        {
+                            const int y = std::stoi(yearStr);
+                            const auto ms = extractNum(dateContent, "month");
+                            const auto ds = extractNum(dateContent, "day");
+                            const int m = ms.empty() ? 0 : std::stoi(ms);
+                            const int d = ds.empty() ? 0 : std::stoi(ds);
+                            char dateBuf[12];
+                            std::snprintf(dateBuf, sizeof(dateBuf), "%04d-%02d-%02d", y, m, d);
+                            result.modelDate = dateBuf;
+                        }
+                        catch (...) {}
+                    }
+                }
+
+                // training.final_loss
+                const auto trainContent = extractObjContent(metaContent, "training");
+                if (!trainContent.empty())
+                    result.trainingFinalLoss = extractNum(trainContent, "final_loss");
+            }
+        }
+        catch (...) {}
+
+        return result;
+    }
+
+    /// Enriches a NAM LibraryResource's metadata map from the .nam file header.
+    /// Uses setIfMissing semantics for all fields except gear_type, which always
+    /// takes the file's authoritative value (required for full-rig signal routing).
+    void EnrichNamResourceMetadata(guitarfx::LibraryResource& resource, const std::filesystem::path& namFilePath)
+    {
+        const NamFileMetadata meta = TryExtractNamMetadata(namFilePath);
+
+        const auto setIfMissing = [&](const std::string& key, const std::string& value)
+        {
+            if (!value.empty() && !resource.metadata.count(key))
+                resource.metadata[key] = value;
+        };
+
+        // gear_type: always prefer the file's value — it drives full-rig cab routing.
+        if (!meta.gearType.empty())
+            resource.metadata["gear_type"] = meta.gearType;
+
+        setIfMissing("namFileVersion",     meta.fileVersion);
+        setIfMissing("architecture",       meta.architecture);
+        setIfMissing("sampleRate",         meta.sampleRate);
+        setIfMissing("namName",            meta.namName);
+        setIfMissing("modeledBy",          meta.modeledBy);
+        setIfMissing("gearMake",           meta.gearMake);
+        setIfMissing("gearModel",          meta.gearModel);
+        setIfMissing("toneType",           meta.toneType);
+        setIfMissing("inputLevelDbu",      meta.inputLevelDbu);
+        setIfMissing("outputLevelDbu",     meta.outputLevelDbu);
+        setIfMissing("modelDate",          meta.modelDate);
+        setIfMissing("trainingFinalLoss",  meta.trainingFinalLoss);
+    }
+
     std::filesystem::path ResolvePresetFoldersPath(const guitarfx::FileSystem& fileSystem)
     {
         return fileSystem.ResolveSettingsDirectory() / "presets" / "preset-folders.json";
@@ -5126,11 +5306,6 @@ void PluginController::HandleImportRemoteResourceRequest(const nlohmann::json& p
         return;
     }
 
-    // Extract NAM gear_type from the model file header for full-rig detection.
-    std::string namGearType;
-    if (resourceType == "nam" && !targetPath.empty())
-        namGearType = TryExtractNamGearType(targetPath);
-
     LibraryResource resource;
     resource.type = resourceType;
     resource.id = resourceId;
@@ -5150,8 +5325,8 @@ void PluginController::HandleImportRemoteResourceRequest(const nlohmann::json& p
         }
     }
 
-    if (!namGearType.empty())
-        resource.metadata["gear_type"] = namGearType;
+    if (resourceType == "nam")
+        EnrichNamResourceMetadata(resource, targetPath);
 
     mResourceLibrary.AddResource(resource);
     AppendUserLibraryResource(resource);
@@ -5426,13 +5601,9 @@ std::optional<LibraryResource> PluginController::SaveLocalLibraryResource(const 
     upsertMetadata(resource);
     resource.metadata["sourceFileName"] = resolvedPath.filename().string();
 
-    // Extract NAM gear_type from the model file header for full-rig detection.
-    if (resourceType == "nam" && !resource.metadata.contains("gear_type"))
-    {
-        const std::string gearType = TryExtractNamGearType(resolvedPath);
-        if (!gearType.empty())
-            resource.metadata["gear_type"] = gearType;
-    }
+    // Extract all NAM metadata fields from the model file header.
+    if (resourceType == "nam")
+        EnrichNamResourceMetadata(resource, resolvedPath);
 
     if (resourceType == "plugin")
     {

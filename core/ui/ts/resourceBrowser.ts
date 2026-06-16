@@ -78,6 +78,7 @@ export class ResourceBrowserModal {
   private previewState: PreviewState | null = null;
   private originalResourceId: string = ""; // Track original for revert on cancel
   private libraryPreviewActive = false;
+  private expandedLibraryItemId: string | null = null;
   
   // DOM elements
   private modal: HTMLElement | null = null;
@@ -717,7 +718,7 @@ export class ResourceBrowserModal {
         const metadata = res.metadata ?? {};
         const provider = metadata.provider ?? "";
         const providerBadge = provider ? `<span class="resource-browser-provider">${escapeHtml(provider)}</span>` : "";
-        const authorUsername = metadata.authorUsername ?? "";
+        const authorUsername = metadata.authorUsername ?? metadata.modeledBy ?? "";
         const sourceUrl = metadata.sourceUrl ?? "";
         const authorBadge = authorUsername ? `<span class="resource-browser-author">by: ${escapeHtml(authorUsername)}</span>` : "";
         const sourceLinkBadge = sourceUrl.startsWith("https://www.tone3000.com/") ? `<a class="resource-browser-attribution-link" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">↗ tone3000</a>` : "";
@@ -736,34 +737,137 @@ export class ResourceBrowserModal {
         const architectureBadge = architecture
           ? `<span class="resource-browser-architecture-badge" title="Model architecture">${escapeHtml(architecture)}</span>`
           : "";
+        const gearMake = metadata.gearMake ?? "";
+        const gearModel = metadata.gearModel ?? "";
+        const gearDesc = [gearMake, gearModel].filter(Boolean).join(" ");
+        const gearDescBadge = gearDesc
+          ? `<span class="resource-browser-gear-desc" title="${escapeHtml(gearDesc)}">${escapeHtml(gearDesc)}</span>`
+          : "";
+        const toneType = metadata.toneType ?? "";
+        const toneTypeBadge = toneType
+          ? `<span class="resource-browser-tone-type">${escapeHtml(toneType.replace(/_/g, " "))}</span>`
+          : "";
         const localFilePath = (res.filePath ?? "").trim();
         const canCopyLocalPath = Boolean(localFilePath);
         const copyPathAction = canCopyLocalPath
           ? `<button class="resource-browser-item-copy-path" type="button" data-resource-id="${escapeHtml(res.id)}" title="Copy local file path" aria-label="Copy local file path"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>`
           : "";
         
+        const isDetailsExpanded = this.expandedLibraryItemId === res.id;
+        const entryClass = `resource-browser-library-entry${isDetailsExpanded ? " is-details-expanded" : ""}`;
         return `
-          <div class="${selectedClass}" data-resource-id="${escapeHtml(res.id)}" data-source="library">
-            <div class="results-item-main resource-browser-item-info">
-              <div class="results-item-title resource-browser-item-title">${escapeHtml(title)}</div>
-              <div class="results-item-meta resource-browser-item-meta">
-                <span>${escapeHtml(categoryLabel)}</span>
-                ${architectureBadge}${providerBadge}${authorBadge}${sourceLinkBadge}${localPathBadge}
+          <div class="${entryClass}" data-source="library">
+            <div class="${selectedClass} resource-browser-item-row" data-resource-id="${escapeHtml(res.id)}">
+              <div class="results-item-main resource-browser-item-info">
+                <div class="results-item-title resource-browser-item-title">${escapeHtml(title)}</div>
+                <div class="results-item-meta resource-browser-item-meta">
+                  <span>${escapeHtml(categoryLabel)}</span>
+                  ${architectureBadge}${gearDescBadge}${toneTypeBadge}${providerBadge}${authorBadge}${sourceLinkBadge}${localPathBadge}
+                </div>
+              </div>
+              <div class="resource-browser-item-actions">
+                ${copyPathAction}
+                <button class="resource-browser-item-details-btn" type="button" data-resource-id="${escapeHtml(res.id)}" title="${isDetailsExpanded ? "Hide details" : "Show details"}" aria-expanded="${isDetailsExpanded ? "true" : "false"}" aria-label="Resource details">ℹ</button>
+                <button class="resource-browser-item-select" type="button">${isSelected ? "✓ Selected" : "Select"}</button>
               </div>
             </div>
-            <div class="resource-browser-item-actions">
-              ${copyPathAction}
-              <button class="resource-browser-item-select" type="button">${isSelected ? "✓ Selected" : "Select"}</button>
-            </div>
+            ${isDetailsExpanded ? this.renderLibraryItemDetailsPanel(res) : ""}
           </div>
         `;
       })
       .join("");
   }
   
+  private renderLibraryItemDetailsPanel(res: LibraryResource): string {
+    const METADATA_LABELS: Record<string, string> = {
+      provider: "Provider",
+      authorUsername: "Author",
+      modeledBy: "Modeled By",
+      sourceUrl: "Source",
+      architectureVersion: "Architecture",
+      architecture_version: "Architecture",
+      architecture: "Architecture",
+      namFileVersion: "NAM File Version",
+      sampleRate: "Sample Rate (Hz)",
+      namName: "Model Name",
+      gearMake: "Gear Make",
+      gearModel: "Gear Model",
+      gear_type: "Gear Type",
+      toneType: "Tone Type",
+      inputLevelDbu: "Input Level (dBu)",
+      outputLevelDbu: "Output Level (dBu)",
+      modelDate: "Model Date",
+      trainingFinalLoss: "Training Final Loss",
+      archive: "Pack Archive",
+      factoryArchiveKey: "Pack",
+      factoryArchiveHash: "Pack Hash",
+      originalId: "Source ID",
+      sourceFileName: "Source File",
+    };
+
+    const metadata = res.metadata ?? {};
+    const description = (res.description ?? "").trim();
+    const rows: string[] = [];
+
+    rows.push(`
+      <tr>
+        <td class="resource-browser-details-label">ID</td>
+        <td class="resource-browser-details-value resource-browser-details-mono">${escapeHtml(res.id)}</td>
+      </tr>
+    `);
+
+    const filePath = (res.filePath ?? "").trim();
+    if (filePath) {
+      rows.push(`
+        <tr>
+          <td class="resource-browser-details-label">File Path</td>
+          <td class="resource-browser-details-value resource-browser-details-mono">${escapeHtml(filePath)}</td>
+        </tr>
+      `);
+    }
+
+    for (const [key, value] of Object.entries(metadata)) {
+      if (!value) continue;
+      const label = METADATA_LABELS[key] ?? key.replace(/_/g, " ").replace(/([A-Z])/g, " $1").trim();
+      let displayValue: string;
+      if (key === "sourceUrl" && value.startsWith("http")) {
+        displayValue = `<a class="resource-browser-details-link" href="${escapeHtml(value)}" target="_blank" rel="noopener noreferrer">${escapeHtml(value)}</a>`;
+      } else {
+        displayValue = escapeHtml(value);
+      }
+      rows.push(`
+        <tr>
+          <td class="resource-browser-details-label">${escapeHtml(label)}</td>
+          <td class="resource-browser-details-value">${displayValue}</td>
+        </tr>
+      `);
+    }
+
+    return `
+      <div class="resource-browser-item-details-panel">
+        ${description ? `<p class="resource-browser-details-description">${escapeHtml(description)}</p>` : ""}
+        <table class="resource-browser-details-table">
+          <tbody>
+            ${rows.join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
   private handleLibraryClick(event: Event): void {
     const target = event.target as HTMLElement | null;
     if (!target) {
+      return;
+    }
+
+    const detailsBtn = target.closest(".resource-browser-item-details-btn") as HTMLButtonElement | null;
+    if (detailsBtn) {
+      const resourceId = detailsBtn.dataset.resourceId ?? "";
+      if (resourceId) {
+        this.expandedLibraryItemId = this.expandedLibraryItemId === resourceId ? null : resourceId;
+        this.renderLibraryList();
+      }
       return;
     }
 
