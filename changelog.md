@@ -1,5 +1,54 @@
 # Changelog
 
+## 1.3.0 (tbd)
+
+### Neural Amp Modeler (NAM)
+* Reworked NAM processing to more closely match the reference implementation. Resampling performance fixes.
+* Input leveling from model metadata is now applied for more consistent output levels across model (for first nam in chain)
+* Unified and simplified auto-gain calibration.
+
+### IR Cab
+* Added **pan** or **L/R split** controls to the IR Cab, enabling true stereo cabinet placement.
+* Simplified and corrected IR level normalization
+
+### Signal Chain & Performance
+* **Faster preset switching**: presets now load on a background thread, eliminating audio interruptions when changing presets.
+* Signal chain is safely paused during preset loading to prevent partial-state processing artifacts.
+* New **parallel execution pipeline** for the effects chain with adaptive workload balancing, improving CPU efficiency on multi-core systems.
+* Mono/stereo mode is now correctly recalled between sessions.
+
+### EQ
+* Low and high shelf filters now expose a **Q / resonance** control for more precise tonal shaping.
+
+### Mixer / Splitter
+* Fixed delay option on the Mixer/Splitter node. iF your preset suddenly have a delay it's becuase it wasn't working before, check the mixer node.
+
+### UI / UX
+* Overhauled **Tone Sharing and Browser** experience.
+* Preset folder rename and delete workflow improvements.
+* **Toast notifications**: status messages now appear as floating overlays rather than being embedded in the footer bar.
+* Improved inline knob editor keyboard input behavior.
+* Light mode styling improvements.
+
+### Plugin Host
+* Prevented a crash that could occur when the plugin attempted to host itself.
+* Improved LV2 plugin list handling and support for bundle-hierarchy plugin types.
+* Plugin list UI updated with cleaner item selection and keyboard navigation support.
+* When running inside a DAW as a plugin, input channel and mono/stereo mode are now correctly delegated to the host.
+
+### Tone 3000 / Sharing
+* Improved Tone3000 integration; the library tab (used for advanced/experimental blends) is now **disabled by default** in Settings to avoid confusion.
+* Shared preset titles now prefer the original published name.
+* Improved resource handling and UI for shared/imported presets.
+
+### Fixes
+* Fixed preset pack uninstall.
+* Fixed resource naming during import/export publish.
+* Preset-level data no longer inadvertently inherits global signal chain settings.
+* DSP diagnostic message rate is now debounced to reduce UI thread overhead.
+
+---
+
 ## 1.2.0 (June 05, 2026)
 * Support for NAM A2 architecture, including option to adjust NAM processing quality (Settings > DSP Performance). 
 * Updated Tone 3000 integration, default to A2 nam models
