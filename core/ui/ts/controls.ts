@@ -1158,6 +1158,11 @@ const GLOBAL_EQ_PARAM_MAP: Record<string, GlobalEqParamBinding> = {
     read: (node) => node.params.lowFreq,
     apply: (node, value) => { node.params.lowFreq = value; },
   },
+  eq_low_q: {
+    path: "eq.lowQ",
+    read: (node) => node.params.lowQ,
+    apply: (node, value) => { node.params.lowQ = value; },
+  },
   eq_lowmid_gain: {
     path: "eq.lowMidGain",
     read: (node) => node.params.lowMidGain,
@@ -1198,21 +1203,27 @@ const GLOBAL_EQ_PARAM_MAP: Record<string, GlobalEqParamBinding> = {
     read: (node) => node.params.highFreq,
     apply: (node, value) => { node.params.highFreq = value; },
   },
+  eq_high_q: {
+    path: "eq.highQ",
+    read: (node) => node.params.highQ,
+    apply: (node, value) => { node.params.highQ = value; },
+  },
 };
 
 let eqCurveInteraction: EqCurveInteraction | null = null;
 
 /** Map from knob param IDs ("eq_low_gain") to canonical keys ("lowGain") per band. */
 const GLOBAL_EQ_KNOB_IDS: ReadonlyArray<{ gain: string; freq: string; q: string | null }> = [
-  { gain: "eq_low_gain", freq: "eq_low_freq", q: null },
+  { gain: "eq_low_gain", freq: "eq_low_freq", q: "eq_low_q" },
   { gain: "eq_lowmid_gain", freq: "eq_lowmid_freq", q: "eq_lowmid_q" },
   { gain: "eq_highmid_gain", freq: "eq_highmid_freq", q: "eq_highmid_q" },
-  { gain: "eq_high_gain", freq: "eq_high_freq", q: null },
+  { gain: "eq_high_gain", freq: "eq_high_freq", q: "eq_high_q" },
 ];
 
 const GLOBAL_EQ_KNOB_TO_PARAM: ReadonlyArray<{ knobId: string; paramKey: string }> = [
   { knobId: "eq_low_gain", paramKey: "lowGain" },
   { knobId: "eq_low_freq", paramKey: "lowFreq" },
+  { knobId: "eq_low_q", paramKey: "lowQ" },
   { knobId: "eq_lowmid_gain", paramKey: "lowMidGain" },
   { knobId: "eq_lowmid_freq", paramKey: "lowMidFreq" },
   { knobId: "eq_lowmid_q", paramKey: "lowMidQ" },
@@ -1221,6 +1232,7 @@ const GLOBAL_EQ_KNOB_TO_PARAM: ReadonlyArray<{ knobId: string; paramKey: string 
   { knobId: "eq_highmid_q", paramKey: "highMidQ" },
   { knobId: "eq_high_gain", paramKey: "highGain" },
   { knobId: "eq_high_freq", paramKey: "highFreq" },
+  { knobId: "eq_high_q", paramKey: "highQ" },
 ];
 
 function getGlobalEqParams(): Record<string, number | undefined> {

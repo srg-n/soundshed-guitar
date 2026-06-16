@@ -71,7 +71,7 @@ All effects register via `EffectRegistry` (singleton factory). Effect type IDs, 
 
 | Type ID | Name | Key Parameters |
 |---------|------|----------------|
-| `eq_parametric` | 4-Band Parametric EQ | `lowGain/Freq`, `lowMidGain/Freq/Q`, `highMidGain/Freq/Q`, `highGain/Freq` (gains ±12 dB) |
+| `eq_parametric` | 4-Band Parametric EQ | `lowGain/Freq/Q`, `lowMidGain/Freq/Q`, `highMidGain/Freq/Q`, `highGain/Freq/Q` (gains ±12 dB; shelf Q defaults 0.707) |
 
 ### 2.5 Modulation
 

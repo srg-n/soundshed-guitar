@@ -1,4 +1,4 @@
-export type EqBand = { freq: number; gainDb: number; q: number };
+export type EqBand = { freq: number; gainDb: number; q: number; shelfType?: 'low' | 'high' };
 
 export function drawEqCurve(canvas: HTMLCanvasElement, bands: EqBand[]): void {
   const ctx = canvas.getContext("2d");
@@ -46,7 +46,7 @@ export function drawEqCurve(canvas: HTMLCanvasElement, bands: EqBand[]): void {
 
   for (let i = 0; i <= plotWidth; i += 1) {
     const freq = minFreq * Math.pow(10, (i / plotWidth) * (Math.log10(maxFreq) - Math.log10(minFreq)));
-    const magnitude = bands.reduce((acc, band) => acc * peakingMagnitude(freq, band, sampleRate), 1.0);
+    const magnitude = bands.reduce((acc, band) => acc * bandMagnitude(freq, band, sampleRate), 1.0);
     const db = 20 * Math.log10(Math.max(1e-6, magnitude));
     const clampedDb = Math.max(minDb, Math.min(maxDb, db));
     const x = padding + i;
@@ -99,26 +99,87 @@ function peakingMagnitude(freq: number, band: EqBand, sampleRate: number): numbe
   return numMag / denMag;
 }
 
+// Generic normalised-biquad transfer function magnitude (denominator starts at 1)
+function biquadMagnitude(freq: number, b0: number, b1: number, b2: number, a1: number, a2: number, sampleRate: number): number {
+  const w = 2 * Math.PI * freq / sampleRate;
+  const cosw = Math.cos(w);
+  const sinw = Math.sin(w);
+  const cos2w = Math.cos(2 * w);
+  const sin2w = Math.sin(2 * w);
+  const numRe = b0 + b1 * cosw + b2 * cos2w;
+  const numIm = b1 * -sinw + b2 * -sin2w;
+  const denRe = 1 + a1 * cosw + a2 * cos2w;
+  const denIm = a1 * -sinw + a2 * -sin2w;
+  const numMag = Math.sqrt(numRe * numRe + numIm * numIm);
+  const denMag = Math.sqrt(denRe * denRe + denIm * denIm);
+  return denMag <= 0 ? 1.0 : numMag / denMag;
+}
+
+function lowShelfMagnitude(freq: number, band: EqBand, sampleRate: number): number {
+  if (!band || band.gainDb === 0 || band.freq <= 0) return 1.0;
+  const A = Math.pow(10, band.gainDb / 40);
+  const w0 = 2 * Math.PI * band.freq / sampleRate;
+  const cosw0 = Math.cos(w0);
+  const sinw0 = Math.sin(w0);
+  const q = Math.max(0.1, band.q ?? 0.707);
+  const alpha = sinw0 / (2 * q);
+  const sqrtA = Math.sqrt(A);
+  const a0 = (A + 1) + (A - 1) * cosw0 + 2 * sqrtA * alpha;
+  if (Math.abs(a0) < 1e-9) return 1.0;
+  const b0 = A * ((A + 1) - (A - 1) * cosw0 + 2 * sqrtA * alpha) / a0;
+  const b1 = 2 * A * ((A - 1) - (A + 1) * cosw0) / a0;
+  const b2 = A * ((A + 1) - (A - 1) * cosw0 - 2 * sqrtA * alpha) / a0;
+  const a1 = -2 * ((A - 1) + (A + 1) * cosw0) / a0;
+  const a2 = ((A + 1) + (A - 1) * cosw0 - 2 * sqrtA * alpha) / a0;
+  return biquadMagnitude(freq, b0, b1, b2, a1, a2, sampleRate);
+}
+
+function highShelfMagnitude(freq: number, band: EqBand, sampleRate: number): number {
+  if (!band || band.gainDb === 0 || band.freq <= 0) return 1.0;
+  const A = Math.pow(10, band.gainDb / 40);
+  const w0 = 2 * Math.PI * band.freq / sampleRate;
+  const cosw0 = Math.cos(w0);
+  const sinw0 = Math.sin(w0);
+  const q = Math.max(0.1, band.q ?? 0.707);
+  const alpha = sinw0 / (2 * q);
+  const sqrtA = Math.sqrt(A);
+  const a0 = (A + 1) - (A - 1) * cosw0 + 2 * sqrtA * alpha;
+  if (Math.abs(a0) < 1e-9) return 1.0;
+  const b0 = A * ((A + 1) + (A - 1) * cosw0 + 2 * sqrtA * alpha) / a0;
+  const b1 = -2 * A * ((A - 1) + (A + 1) * cosw0) / a0;
+  const b2 = A * ((A + 1) + (A - 1) * cosw0 - 2 * sqrtA * alpha) / a0;
+  const a1 = 2 * ((A - 1) - (A + 1) * cosw0) / a0;
+  const a2 = ((A + 1) - (A - 1) * cosw0 - 2 * sqrtA * alpha) / a0;
+  return biquadMagnitude(freq, b0, b1, b2, a1, a2, sampleRate);
+}
+
+function bandMagnitude(freq: number, band: EqBand, sampleRate: number): number {
+  if (band.shelfType === 'low') return lowShelfMagnitude(freq, band, sampleRate);
+  if (band.shelfType === 'high') return highShelfMagnitude(freq, band, sampleRate);
+  return peakingMagnitude(freq, band, sampleRate);
+}
+
 // ===== Shared 4-band parametric EQ constants =====
 
 /** Canonical param keys for each EQ band (matches ParametricEQEffect). */
 export const EQ_BAND_KEYS: ReadonlyArray<{ gain: string; freq: string; q: string | null }> = [
-  { gain: "lowGain", freq: "lowFreq", q: null },
+  { gain: "lowGain", freq: "lowFreq", q: "lowQ" },
   { gain: "lowMidGain", freq: "lowMidFreq", q: "lowMidQ" },
   { gain: "highMidGain", freq: "highMidFreq", q: "highMidQ" },
-  { gain: "highGain", freq: "highFreq", q: null },
+  { gain: "highGain", freq: "highFreq", q: "highQ" },
 ];
 
 export const EQ_BAND_LABELS: ReadonlyArray<string> = ["Low", "Low Mid", "High Mid", "High"];
 
 export const EQ_BAND_RANGES: ReadonlyArray<{
   freqMin: number; freqMax: number;
-  hasQ: boolean; qMin: number; qMax: number;
+  hasQ: boolean; qMin: number; qMax: number; qDefault: number;
+  shelfType: 'low' | 'high' | undefined;
 }> = [
-  { freqMin: 20, freqMax: 500, hasQ: false, qMin: 0.1, qMax: 10 },
-  { freqMin: 200, freqMax: 2000, hasQ: true, qMin: 0.1, qMax: 10 },
-  { freqMin: 1000, freqMax: 8000, hasQ: true, qMin: 0.1, qMax: 10 },
-  { freqMin: 4000, freqMax: 20000, hasQ: false, qMin: 0.1, qMax: 10 },
+  { freqMin: 20, freqMax: 500, hasQ: true, qMin: 0.1, qMax: 10, qDefault: 0.707, shelfType: 'low' },
+  { freqMin: 200, freqMax: 2000, hasQ: true, qMin: 0.1, qMax: 10, qDefault: 1.0, shelfType: undefined },
+  { freqMin: 1000, freqMax: 8000, hasQ: true, qMin: 0.1, qMax: 10, qDefault: 1.0, shelfType: undefined },
+  { freqMin: 4000, freqMax: 20000, hasQ: true, qMin: 0.1, qMax: 10, qDefault: 0.707, shelfType: 'high' },
 ];
 
 export const EQ_FREQ_DEFAULTS: ReadonlyArray<number> = [100, 400, 2000, 8000];
@@ -143,8 +204,8 @@ export function buildEqBandConfigsFromParams(
     const gainValue = normalize(params[keys.gain], 0, -18, 18);
     const freqValue = normalize(params[keys.freq], freqDefault, range.freqMin, range.freqMax);
     const qValue = keys.q
-      ? normalize(params[keys.q], 1.0, range.qMin, range.qMax)
-      : 1.0;
+      ? normalize(params[keys.q], range.qDefault, range.qMin, range.qMax)
+      : range.qDefault;
 
     return {
       freq: freqValue,
@@ -152,7 +213,7 @@ export function buildEqBandConfigsFromParams(
       q: qValue,
       defaultFreq: freqDefault,
       defaultGainDb: 0,
-      defaultQ: 1.0,
+      defaultQ: range.qDefault,
       freqMin: range.freqMin,
       freqMax: range.freqMax,
       gainMin: -18,
@@ -160,6 +221,7 @@ export function buildEqBandConfigsFromParams(
       hasQ: range.hasQ,
       qMin: range.qMin,
       qMax: range.qMax,
+      shelfType: range.shelfType,
       label: EQ_BAND_LABELS[i],
     };
   });
@@ -208,6 +270,7 @@ export interface EqBandConfig {
   hasQ: boolean;
   qMin: number;
   qMax: number;
+  shelfType: 'low' | 'high' | undefined;
   label: string;
 }
 
@@ -317,7 +380,7 @@ export class EqCurveInteraction {
     }
 
     // Draw base curve (clears canvas, draws grid + combined response)
-    const eqBands: EqBand[] = this.bands.map(b => ({ freq: b.freq, gainDb: b.gainDb, q: b.q }));
+    const eqBands: EqBand[] = this.bands.map(b => ({ freq: b.freq, gainDb: b.gainDb, q: b.q, shelfType: b.shelfType }));
     drawEqCurve(this.canvas, eqBands);
 
     // Draw per-band shaded fills and individual response curves
@@ -379,7 +442,7 @@ export class EqCurveInteraction {
 
       for (let px = 0; px <= this.plotWidth; px++) {
         const freq = this.xToFreq(this.PADDING + px);
-        const mag = peakingMagnitude(freq, band, this.SAMPLE_RATE);
+        const mag = bandMagnitude(freq, band, this.SAMPLE_RATE);
         const db = 20 * Math.log10(Math.max(1e-6, mag));
         ctx.lineTo(this.PADDING + px, this.dbToY(db));
       }
@@ -395,7 +458,7 @@ export class EqCurveInteraction {
 
       for (let px = 0; px <= this.plotWidth; px++) {
         const freq = this.xToFreq(this.PADDING + px);
-        const mag = peakingMagnitude(freq, band, this.SAMPLE_RATE);
+        const mag = bandMagnitude(freq, band, this.SAMPLE_RATE);
         const db = 20 * Math.log10(Math.max(1e-6, mag));
         const y = this.dbToY(db);
         if (px === 0) ctx.moveTo(this.PADDING, y);

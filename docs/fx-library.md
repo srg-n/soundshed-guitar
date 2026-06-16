@@ -210,6 +210,7 @@ Input noise reduction.
 |-----------|-------|---------|------|
 | `lowGain` | -12..+12 | 0.0 | dB |
 | `lowFreq` | 20–500 | 100 | Hz |
+| `lowQ` | 0.1–10 | 0.707 | — |
 | `lowMidGain` | -12..+12 | 0.0 | dB |
 | `lowMidFreq` | 100–2000 | 400 | Hz |
 | `lowMidQ` | 0.1–10 | 1.0 | — |
@@ -218,6 +219,7 @@ Input noise reduction.
 | `highMidQ` | 0.1–10 | 1.0 | — |
 | `highGain` | -12..+12 | 0.0 | dB |
 | `highFreq` | 2000–16000 | 8000 | Hz |
+| `highQ` | 0.1–10 | 0.707 | — |
 
 ### Digital Delay (`delay_digital`)
 Clean digital delay.
