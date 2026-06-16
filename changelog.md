@@ -29,6 +29,8 @@
 * **Toast notifications**: status messages now appear as floating overlays rather than being embedded in the footer bar.
 * Improved inline knob editor keyboard input behavior.
 * Light mode styling improvements.
+* Add NAM/IR metadata details in resource browser
+* Add Favourites toggle for local resources
 
 ### Plugin Host
 * Prevented a crash that could occur when the plugin attempted to host itself.

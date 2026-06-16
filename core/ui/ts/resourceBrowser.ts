@@ -8,7 +8,7 @@
  */
 
 import { uiState } from "./state.js";
-import { postMessage } from "./bridge.js";
+import { postMessage, setAppSetting } from "./bridge.js";
 import { ensureTone3000Session, isTone3000AuthReady, tone3000AuthenticatedFetch } from "./tone3000.js";
 import { showNotification } from "./notifications.js";
 import { arrayBufferToBase64, escapeHtml, findResourceById } from "./utils.js";
@@ -49,12 +49,15 @@ interface PreviewLoadingState {
   modelId: string;
 }
 
+const RESOURCE_FAVORITES_SETTING = "resources.favorites";
+
 type ResourceType = "nam" | "ir";
 
 interface PersistedResourceBrowserState {
   activeTab: "library" | "tone3000";
   librarySearch: string;
   libraryCategory: string;
+  libraryFavoritesOnly?: boolean;
   tone3000Search: string;
   tone3000Category: string;
   tone3000Sort: string;
@@ -96,6 +99,8 @@ export class ResourceBrowserModal {
   // Library tab elements
   private librarySearch: HTMLInputElement | null = null;
   private libraryCategory: HTMLSelectElement | null = null;
+  private libraryFavoritesToggle: HTMLButtonElement | null = null;
+  private libraryFavoritesOnly = false;
   private libraryBrowseBtn: HTMLButtonElement | null = null;
   private libraryList: HTMLElement | null = null;
   private selectedResourceId: string = "";
@@ -190,6 +195,7 @@ export class ResourceBrowserModal {
     // Library tab elements
     this.librarySearch = document.getElementById("resource-browser-library-search") as HTMLInputElement | null;
     this.libraryCategory = document.getElementById("resource-browser-library-category") as HTMLSelectElement | null;
+    this.libraryFavoritesToggle = document.getElementById("resource-browser-library-favorites-toggle") as HTMLButtonElement | null;
     this.libraryBrowseBtn = document.getElementById("resource-browser-library-browse") as HTMLButtonElement | null;
     this.libraryList = document.getElementById("resource-browser-library-list");
     
@@ -233,6 +239,15 @@ export class ResourceBrowserModal {
       this.saveCurrentStateForResourceType();
     });
     this.libraryCategory?.addEventListener("change", () => {
+      this.renderLibraryList();
+      this.saveCurrentStateForResourceType();
+    });
+    this.libraryFavoritesToggle?.addEventListener("click", () => {
+      this.libraryFavoritesOnly = !this.libraryFavoritesOnly;
+      this.libraryFavoritesToggle?.classList.toggle("active", this.libraryFavoritesOnly);
+      if (this.libraryFavoritesToggle) {
+        this.libraryFavoritesToggle.textContent = this.libraryFavoritesOnly ? "★ Favourites" : "☆ Favourites";
+      }
       this.renderLibraryList();
       this.saveCurrentStateForResourceType();
     });
@@ -283,6 +298,7 @@ export class ResourceBrowserModal {
       activeTab: "library",
       librarySearch: "",
       libraryCategory: "all",
+      libraryFavoritesOnly: false,
       tone3000Search: "",
       tone3000Category: isIr ? "ir" : "amp",
       tone3000Sort: "popular",
@@ -315,6 +331,7 @@ export class ResourceBrowserModal {
     persisted.activeTab = this.activeTab;
     persisted.librarySearch = this.librarySearch?.value ?? "";
     persisted.libraryCategory = this.libraryCategory?.value ?? "all";
+    persisted.libraryFavoritesOnly = this.libraryFavoritesOnly;
     persisted.tone3000Search = this.tone3000Search?.value ?? "";
     persisted.tone3000Category = this.tone3000Category?.value ?? (resourceType === "ir" ? "ir" : "amp");
     persisted.tone3000Sort = this.tone3000Sort?.value ?? "popular";
@@ -358,6 +375,12 @@ export class ResourceBrowserModal {
     if (this.libraryCategory) {
       const hasOption = Array.from(this.libraryCategory.options).some((option) => option.value === persisted.libraryCategory);
       this.libraryCategory.value = hasOption ? persisted.libraryCategory : "all";
+    }
+
+    this.libraryFavoritesOnly = persisted.libraryFavoritesOnly ?? false;
+    if (this.libraryFavoritesToggle) {
+      this.libraryFavoritesToggle.classList.toggle("active", this.libraryFavoritesOnly);
+      this.libraryFavoritesToggle.textContent = this.libraryFavoritesOnly ? "★ Favourites" : "☆ Favourites";
     }
 
     this.activeTab = persisted.activeTab;
@@ -667,6 +690,34 @@ export class ResourceBrowserModal {
     }
   }
   
+  private isResourceFavorite(resourceId: string): boolean {
+    const raw = uiState.appSettings?.[RESOURCE_FAVORITES_SETTING];
+    if (!Array.isArray(raw)) {
+      return false;
+    }
+    return raw.includes(resourceId);
+  }
+
+  private toggleResourceFavorite(resourceId: string): void {
+    if (!uiState.appSettings) {
+      uiState.appSettings = {};
+    }
+    const raw = uiState.appSettings[RESOURCE_FAVORITES_SETTING];
+    let favorites: string[] = Array.isArray(raw) ? (raw.filter((val): val is string => typeof val === "string")) : [];
+
+    if (favorites.includes(resourceId)) {
+      favorites = favorites.filter((id) => id !== resourceId);
+    } else {
+      favorites.push(resourceId);
+    }
+
+    uiState.appSettings[RESOURCE_FAVORITES_SETTING] = favorites;
+    setAppSetting(RESOURCE_FAVORITES_SETTING, favorites);
+
+    // Re-render library list to show changes
+    this.renderLibraryList();
+  }
+
   private renderLibraryList(): void {
     if (!this.libraryList || !this.options) {
       return;
@@ -686,6 +737,10 @@ export class ResourceBrowserModal {
         return cat === category;
       });
     }
+
+    if (this.libraryFavoritesOnly) {
+      filtered = filtered.filter((res) => this.isResourceFavorite(res.id));
+    }
     
     if (query) {
       filtered = filtered.filter((res) => {
@@ -695,6 +750,11 @@ export class ResourceBrowserModal {
     }
     
     filtered.sort((a, b) => {
+      const aFav = this.isResourceFavorite(a.id);
+      const bFav = this.isResourceFavorite(b.id);
+      if (aFav !== bFav) {
+        return aFav ? -1 : 1;
+      }
       const leftName = (a.name || a.id);
       const rightName = (b.name || b.id);
       const byName = leftName.localeCompare(rightName);
@@ -753,6 +813,9 @@ export class ResourceBrowserModal {
           ? `<button class="resource-browser-item-copy-path" type="button" data-resource-id="${escapeHtml(res.id)}" title="Copy local file path" aria-label="Copy local file path"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>`
           : "";
         
+        const isFav = this.isResourceFavorite(res.id);
+        const favoriteAction = `<button class="resource-browser-item-fav-toggle${isFav ? " is-active" : ""}" type="button" data-resource-id="${escapeHtml(res.id)}" title="${isFav ? "Remove from favourites" : "Add to favourites"}" aria-label="Toggle favorite">${isFav ? "★" : "☆"}</button>`;
+
         const isDetailsExpanded = this.expandedLibraryItemId === res.id;
         const entryClass = `resource-browser-library-entry${isDetailsExpanded ? " is-details-expanded" : ""}`;
         return `
@@ -766,6 +829,7 @@ export class ResourceBrowserModal {
                 </div>
               </div>
               <div class="resource-browser-item-actions">
+                ${favoriteAction}
                 ${copyPathAction}
                 <button class="resource-browser-item-details-btn" type="button" data-resource-id="${escapeHtml(res.id)}" title="${isDetailsExpanded ? "Hide details" : "Show details"}" aria-expanded="${isDetailsExpanded ? "true" : "false"}" aria-label="Resource details">ℹ</button>
                 <button class="resource-browser-item-select" type="button">${isSelected ? "✓ Selected" : "Select"}</button>
@@ -858,6 +922,15 @@ export class ResourceBrowserModal {
   private handleLibraryClick(event: Event): void {
     const target = event.target as HTMLElement | null;
     if (!target) {
+      return;
+    }
+
+    const favToggleBtn = target.closest(".resource-browser-item-fav-toggle") as HTMLButtonElement | null;
+    if (favToggleBtn) {
+      const resourceId = favToggleBtn.dataset.resourceId ?? "";
+      if (resourceId) {
+        this.toggleResourceFavorite(resourceId);
+      }
       return;
     }
 
