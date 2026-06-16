@@ -317,18 +317,37 @@ export class GenericKnob {
     this.editableValueElement.textContent = "";
     this.editableValueElement.appendChild(input);
 
+    const savedValue = this.currentValue;
+    let finishing = false;
+
     const finish = (revertToLabel = false) => {
+      if (finishing) return;
+      finishing = true;
+      if (!revertToLabel) {
+        // Commit whatever is in the input right now
+        const parsedValue = Number.parseFloat(input.value);
+        if (Number.isFinite(parsedValue)) {
+          this.applyValue(parsedValue, true);
+        }
+      } else {
+        // Revert to the value that was set before the editor opened
+        this.applyValue(savedValue, false);
+      }
       this.closeInlineEditor(revertToLabel);
     };
 
+    // Only preview while typing — do NOT rewrite input.value so the user can type freely
     input.addEventListener("input", () => {
       const parsedValue = Number.parseFloat(input.value);
       if (!Number.isFinite(parsedValue)) {
         return;
       }
+      // Live-preview the value without committing or reformatting the field
+      this.emitLiveValue(clampValue(parsedValue, this.minValue, this.maxValue));
+    });
 
-      this.applyValue(parsedValue, false);
-      input.value = this.currentValue.toFixed(countStepDecimals(this.stepValue));
+    input.addEventListener("blur", () => {
+      finish(false);
     });
 
     input.addEventListener("keydown", (event) => {
@@ -361,9 +380,6 @@ export class GenericKnob {
     }
 
     this.updateDisplay(this.currentValue);
-    if (!revertToLabel) {
-      this.commitCurrentValue();
-    }
   }
 
   private updateDisplay(value: number): void {
