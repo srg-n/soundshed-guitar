@@ -13,7 +13,7 @@ import type {
 } from "./types.js";
 import { postMessage, setAppSetting, setPresetMix, setPresetPan, setPresetMute, setPresetSolo, setMasterGain, setLimiterEnabled, removeActivePreset } from "./bridge.js";
 import { requestResourceData } from "./archiveUtils.js";
-import { escapeHtml, idAccentColor, base64ToArrayBuffer } from "./utils.js";
+import { escapeHtml, idAccentColor, base64ToArrayBuffer, findResourceById } from "./utils.js";
 import { showNotification } from "./notifications.js";
 import { showConfirm } from "./dialogs.js";
 import { EffectTypeRegistry, getNodeEffectInfo, type EffectTypeInfo } from "./presetV2.js";
@@ -444,7 +444,7 @@ function getResourceBaseName(filePath: string): string {
 function getLibraryResource(resourceType: string | undefined, resourceId: string): LibraryResource | undefined {
   if (!resourceType || !resourceId) return undefined;
   const resources = uiState.resourceLibrary[resourceType] || [];
-  return resources.find((res) => res.id === resourceId);
+  return findResourceById(resources, resourceId);
 }
 
 function getLibraryResourceName(resourceType: string | undefined, resourceId: string): string {

@@ -12,7 +12,7 @@ import { postMessage } from "./bridge.js";
 import { GenericKnob } from "./controls.js";
 import { buildBlendModelMappingsFromIds, inferParamValueFromName } from "./blendUtils.js";
 import { arrayBufferToBase64, buildArchiveFileName, generateResourceId, requestResourceData, sanitizeFilename } from "./archiveUtils.js";
-import { escapeHtml, sha256HexFromBase64 } from "./utils.js";
+import { escapeHtml, sha256HexFromBase64, findResourceById } from "./utils.js";
 
 type BlendEditorDependencies = {
   getBlendLibrary: () => BlendLibrary;
@@ -1503,7 +1503,7 @@ function buildParameterMapFromLegacy(mapping: BlendModelMapping): Record<string,
 function getLibraryResource(library: ResourceLibrary, resourceType: string, resourceId: string): LibraryResource | undefined {
   if (!resourceType || !resourceId) return undefined;
   const resources = library[resourceType] || [];
-  return resources.find((res) => res.id === resourceId);
+  return findResourceById(resources, resourceId);
 }
 
 function getLibraryResourceByHash(library: ResourceLibrary, resourceType: string, hash?: string): LibraryResource | undefined {

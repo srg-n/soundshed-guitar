@@ -11,7 +11,7 @@ import { uiState } from "./state.js";
 import { postMessage } from "./bridge.js";
 import { ensureTone3000Session, isTone3000AuthReady, tone3000AuthenticatedFetch } from "./tone3000.js";
 import { showNotification } from "./notifications.js";
-import { arrayBufferToBase64, escapeHtml } from "./utils.js";
+import { arrayBufferToBase64, escapeHtml, findResourceById } from "./utils.js";
 import { FEATURE_FLAGS_CHANGED_EVENT, Features, isFeatureEnabled } from "./featureFlags.js";
 import type { LibraryResource } from "./types.js";
 import type { Tone3000Architecture, Tone3000Model, Tone3000Tone } from "./tone3000ApiTypes.js";
@@ -642,7 +642,7 @@ export class ResourceBrowserModal {
       return;
     }
 
-    const resource = (uiState.resourceLibrary[this.options.resourceType] ?? []).find((entry) => entry.id === resourceId);
+    const resource = findResourceById(uiState.resourceLibrary[this.options.resourceType] ?? [], resourceId);
     if (!resource) {
       showNotification("Copy path failed", "Resource not found.");
       return;
@@ -924,7 +924,7 @@ export class ResourceBrowserModal {
     
     // Get resource name for the preview notification
     const resources = uiState.resourceLibrary[this.options.resourceType] ?? [];
-    const resource = resources.find(r => r.id === resourceId);
+    const resource = findResourceById(resources, resourceId);
     const displayName = resource?.name || resourceId;
     showNotification("Previewing", `${displayName} - click Select to confirm`);
   }
@@ -1632,7 +1632,7 @@ export class ResourceBrowserModal {
     // Get resource name for notification
     const resourceType = this.options.resourceType;
     const resources = uiState.resourceLibrary[resourceType] ?? [];
-    const resource = resources.find(r => r.id === this.selectedResourceId);
+    const resource = findResourceById(resources, this.selectedResourceId);
     const displayName = resource?.name || this.selectedResourceId;
     
     this.options.onSelect(this.selectedResourceId);

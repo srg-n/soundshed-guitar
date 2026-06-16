@@ -3,7 +3,7 @@ import { clearNotification, showNotification } from "./notifications.js";
 import { renderPresetDetails, renderPresetList, renderMixerPanel } from "./views.js";
 import { clonePreset, uiState, DEFAULT_GLOBAL_SIGNAL_CHAIN, getActivePresetForRender, setActivePresetDraft, setActivePresetIsNew, setActivePresetSnapshot, setPresetDirty } from "./state.js";
 import { buildAttachments, buildAttachmentsFromPreset, getDefaultPresets, initializeDataLibraries, REMOTE_BASE_URL } from "./dataLibraries.js";
-import { arrayBufferToBase64, isRemoteUrl, resolveAttachmentUrl, sha256HexFromBase64 } from "./utils.js";
+import { arrayBufferToBase64, isRemoteUrl, resolveAttachmentUrl, sha256HexFromBase64, findResourceById } from "./utils.js";
 import { buildArchiveFileNameWithHash, generateResourceId, requestResourceData, sanitizeFilename } from "./archiveUtils.js";
 import type { Preset, Attachment, BlendDefinition, ResourceRef, LibraryResource, PresetFolder, Setlist, GraphNode, SignalGraph, ToneSharingOriginMetadata } from "./types.js";
 import { createEmptyPresetV2, generateUserPresetId, migratePresetNodeTypes } from "./presetV2.js";
@@ -2844,7 +2844,7 @@ export async function importPackWithConfirmation(file: File, context: ImportPack
 
 function getLibraryResource(resourceType: string, resourceId: string): LibraryResource | undefined {
   const resources = uiState.resourceLibrary[resourceType] ?? [];
-  return resources.find((res) => res.id === resourceId);
+  return findResourceById(resources, resourceId);
 }
 
 function getLibraryResourceByHash(resourceType: string, hash?: string): LibraryResource | undefined {
@@ -2896,6 +2896,65 @@ function remapPresetArchiveGraphReferences(
         node.config.blendId = blendIdMap.get(node.config.blendId) ?? node.config.blendId;
       }
     });
+  });
+}
+
+function remapPresetResourceReferences(preset: Preset, idMap: Map<string, string>): void {
+  getPresetGraphs(preset).forEach((graph) => {
+    graph.nodes?.forEach((node) => {
+      if (Array.isArray(node.resources)) {
+        node.resources.forEach((res) => {
+          const resourceId = res.resourceId ?? res.id;
+          if (resourceId) {
+            const mapped = idMap.get(resourceId) ?? idMap.get(resourceId.split("__").pop() ?? "");
+            if (mapped) {
+              res.resourceId = mapped;
+              res.id = mapped;
+            }
+          }
+        });
+      }
+    });
+  });
+
+  if (preset.audioFxModelId) {
+    const mapped = idMap.get(preset.audioFxModelId) ?? idMap.get(preset.audioFxModelId.split("__").pop() ?? "");
+    if (mapped) {
+      preset.audioFxModelId = mapped;
+    }
+  }
+  if (preset.irId) {
+    const mapped = idMap.get(preset.irId) ?? idMap.get(preset.irId.split("__").pop() ?? "");
+    if (mapped) {
+      preset.irId = mapped;
+    }
+  }
+
+  if (Array.isArray(preset.attachments)) {
+    preset.attachments = preset.attachments.map((attachment) => {
+      if (attachment.id) {
+        const mapped = idMap.get(attachment.id) ?? idMap.get(attachment.id.split("__").pop() ?? "");
+        if (mapped) {
+          return { ...attachment, id: mapped };
+        }
+      }
+      return attachment;
+    });
+  }
+}
+
+function remapBlendResourceReferences(blends: BlendDefinition[], idMap: Map<string, string>): void {
+  blends.forEach((blend) => {
+    const remapModel = (id: string) => idMap.get(id) ?? idMap.get(id.split("__").pop() ?? "") ?? id;
+    if (Array.isArray(blend.models)) {
+      blend.models = blend.models.map(remapModel);
+    }
+    if (Array.isArray(blend.modelMappings)) {
+      blend.modelMappings = blend.modelMappings.map((mapping) => ({
+        ...mapping,
+        id: remapModel(mapping.id),
+      }));
+    }
   });
 }
 
@@ -3016,6 +3075,7 @@ async function exportPresetCollectionArchive(presets: Preset[], archiveName: str
   });
 
   const exportResources: PresetArchiveResource[] = [];
+  const idMap = new Map<string, string>();
   let missingCount = 0;
 
   for (const ref of refMap.values()) {
@@ -3037,8 +3097,14 @@ async function exportPresetCollectionArchive(presets: Preset[], archiveName: str
     const hash = await sha256HexFromBase64(data);
     const fileName = buildArchiveFileNameWithHash(resource, resourceType, hash);
     resourcesFolder.file(fileName, data, { base64: true });
+
+    idMap.set(resourceId, hash);
+    if (resourceId.includes("__")) {
+      idMap.set(resourceId.split("__").pop()!, hash);
+    }
+
     exportResources.push({
-      id: resource.id,
+      id: hash,
       name: resource.name,
       category: resource.category,
       type: resourceType,
@@ -3048,14 +3114,22 @@ async function exportPresetCollectionArchive(presets: Preset[], archiveName: str
     });
   }
 
-  const exportPresets = exportSourcePresets.map((preset) => sanitizePresetForArchive(preset));
+  const exportPresets = exportSourcePresets.map((preset) => {
+    const sanitized = sanitizePresetForArchive(preset);
+    remapPresetResourceReferences(sanitized, idMap);
+    return sanitized;
+  });
+
+  const clonedBlends = JSON.parse(JSON.stringify(blendDefs)) as BlendDefinition[];
+  remapBlendResourceReferences(clonedBlends, idMap);
+
   const presetFolders = buildArchivePresetFoldersForExport(sourceFolderId, exportPresets);
   const archive: PresetCollectionArchive = {
     formatVersion: 1,
     createdAt: new Date().toISOString(),
     presets: exportPresets,
     resources: exportResources,
-    blends: blendDefs,
+    blends: clonedBlends,
     ...(presetFolders.length > 0 ? { presetFolders } : {}),
   };
 
@@ -3125,6 +3199,7 @@ export async function buildPresetArchiveBlob(preset: Preset): Promise<Blob> {
   const blendDefs = (uiState.blendLibrary ?? []).filter((blend) => blendIds.includes(blend.id));
   const resourceRefs = collectPresetResourceRefs(preset, blendDefs);
   const exportResources: PresetArchiveResource[] = [];
+  const idMap = new Map<string, string>();
 
   for (const ref of resourceRefs) {
     const resourceType = ref.resourceType ?? ref.type ?? "";
@@ -3137,8 +3212,14 @@ export async function buildPresetArchiveBlob(preset: Preset): Promise<Blob> {
     const hash = await sha256HexFromBase64(data);
     const fileName = buildArchiveFileNameWithHash(resource, resourceType, hash);
     resourcesFolder.file(fileName, data, { base64: true });
+
+    idMap.set(resourceId, hash);
+    if (resourceId.includes("__")) {
+      idMap.set(resourceId.split("__").pop()!, hash);
+    }
+
     exportResources.push({
-      id: resource.id,
+      id: hash,
       name: resource.name,
       category: resource.category,
       type: resourceType,
@@ -3148,11 +3229,17 @@ export async function buildPresetArchiveBlob(preset: Preset): Promise<Blob> {
     });
   }
 
+  const sanitizedPreset = sanitizePresetForArchive(preset);
+  const clonedBlends = JSON.parse(JSON.stringify(blendDefs)) as BlendDefinition[];
+
+  remapPresetResourceReferences(sanitizedPreset, idMap);
+  remapBlendResourceReferences(clonedBlends, idMap);
+
   const archive: PresetArchive = {
     formatVersion: 1,
-    preset: sanitizePresetForArchive(preset),
+    preset: sanitizedPreset,
     resources: exportResources,
-    blends: blendDefs,
+    blends: clonedBlends,
   };
 
   zip.file("preset.json", JSON.stringify(archive, null, 2));
@@ -3177,6 +3264,7 @@ export async function buildToneSharingPresetArchiveBlobs(preset: Preset): Promis
   const resourceRefs = collectPresetResourceRefs(preset, blendDefs);
   const exportResources: PresetArchiveResource[] = [];
   const exportTone3000Resources: Tone3000ResourceRef[] = [];
+  const idMap = new Map<string, string>();
 
   for (const ref of resourceRefs) {
     const resourceType = ref.resourceType ?? ref.type ?? "";
@@ -3218,8 +3306,14 @@ export async function buildToneSharingPresetArchiveBlobs(preset: Preset): Promis
     const hash = await sha256HexFromBase64(data);
     const fileName = buildArchiveFileNameWithHash(resource, resourceType, hash);
     resourcesFolder.file(fileName, data, { base64: true });
+
+    idMap.set(resourceId, hash);
+    if (resourceId.includes("__")) {
+      idMap.set(resourceId.split("__").pop()!, hash);
+    }
+
     exportResources.push({
-      id: resource.id,
+      id: hash,
       name: resource.name,
       category: resource.category,
       type: resourceType,
@@ -3228,11 +3322,17 @@ export async function buildToneSharingPresetArchiveBlobs(preset: Preset): Promis
     });
   }
 
+  const sanitizedPreset = sanitizePresetForArchive(preset);
+  const clonedBlends = JSON.parse(JSON.stringify(blendDefs)) as BlendDefinition[];
+
+  remapPresetResourceReferences(sanitizedPreset, idMap);
+  remapBlendResourceReferences(clonedBlends, idMap);
+
   const archive: PresetArchive = {
     formatVersion: 1,
-    preset: sanitizePresetForArchive(preset),
+    preset: sanitizedPreset,
     resources: exportResources,
-    blends: blendDefs,
+    blends: clonedBlends,
     ...(exportTone3000Resources.length > 0 ? { tone3000Resources: exportTone3000Resources } : {}),
   };
 

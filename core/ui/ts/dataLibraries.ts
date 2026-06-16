@@ -1,6 +1,7 @@
 import type { Attachment, AudioFxModelEntry, IrLibraryEntry, Preset, GraphNode } from "./types.js";
 import { EffectGuids } from "./effectGuids.js";
 import { getPresetSceneGraphs } from "./presetScenes.js";
+import { findResourceById } from "./utils.js";
 
 export const REMOTE_BASE_URL = window.AUDIOFX_REMOTE_BASE_URL ?? "";
 
@@ -9,13 +10,11 @@ let irLibrary: IrLibraryEntry[] = [];
 let defaultPresets: Preset[] = [];
 
 function resolveAudioFxModel(modelId: string | null | undefined): AudioFxModelEntry | null {
-  if (!modelId) return null;
-  return audioFxModelLibrary.find((m) => m.id === modelId) ?? null;
+  return findResourceById(audioFxModelLibrary, modelId) ?? null;
 }
 
 function resolveIR(irId: string | null | undefined): IrLibraryEntry | null {
-  if (!irId) return null;
-  return irLibrary.find((ir) => ir.id === irId) ?? null;
+  return findResourceById(irLibrary, irId) ?? null;
 }
 
 export function buildAttachments(

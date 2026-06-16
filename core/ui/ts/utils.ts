@@ -198,3 +198,26 @@ export function resolveAttachmentUrl(attachment: Attachment, baseUrl: string): s
 
   return null;
 }
+
+export function findResourceById<T extends { id: string }>(
+  resources: T[] | undefined,
+  resourceId: string | null | undefined
+): T | undefined {
+  if (!resources || !resourceId) return undefined;
+  const exactMatch = resources.find((res) => res.id === resourceId);
+  if (exactMatch) {
+    return exactMatch;
+  }
+  if (resourceId.includes("__")) {
+    const suffix = resourceId.split("__").pop();
+    if (suffix) {
+      const fallbackMatch = resources.find(
+        (res) => res.id === suffix || res.id.endsWith("__" + suffix)
+      );
+      if (fallbackMatch) {
+        return fallbackMatch;
+      }
+    }
+  }
+  return undefined;
+}

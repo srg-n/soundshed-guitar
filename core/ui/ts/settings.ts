@@ -8,7 +8,7 @@ import { updateSignalDiagnosticsView, updateDSPPerformancePlot } from "./views.j
 import { initTone3000Browser } from "./tone3000Browser.js";
 import { getAudioFxLibrary, getIrLibrary } from "./dataLibraries.js";
 import { buildArchiveFileName, requestResourceData, sanitizeFilename, arrayBufferToBase64 } from "./archiveUtils.js";
-import { escapeHtml, sha256HexFromBase64 } from "./utils.js";
+import { escapeHtml, sha256HexFromBase64, findResourceById } from "./utils.js";
 import type { AppSettingValue, Preset, BlendDefinition, ResourceRef, LibraryResource, UserInputCalibrationProfile } from "./types.js";
 import { buildBlendModelMappingsFromIds } from "./blendUtils.js";
 import { themeSwitcher, type ThemeName } from "./theme-switcher.js";
@@ -1796,7 +1796,7 @@ type LibraryArchive = {
 
 function getLibraryResource(resourceType: string, resourceId: string): LibraryResource | undefined {
   const resources = uiState.resourceLibrary[resourceType] ?? [];
-  return resources.find((res) => res.id === resourceId);
+  return findResourceById(resources, resourceId);
 }
 
 function collectPresetBlendIds(preset: Preset): string[] {
