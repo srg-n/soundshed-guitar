@@ -5,9 +5,9 @@
  * a minimum duration to avoid startup flashing.
  */
 
-const MIN_SPLASH_MS = 50;
-const THEME_TRANSITION_MS = 50;
-const FADE_OUT_MS = 50;
+const MIN_SPLASH_MS = 1;
+const THEME_TRANSITION_MS = 10;
+const FADE_OUT_MS = 1;
 
 let splashShownAt = 0;
 
