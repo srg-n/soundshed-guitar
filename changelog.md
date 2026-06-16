@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.3.0 (tbd)
+## 1.3.0 (June 16, 2026)
 
 ### Neural Amp Modeler (NAM)
 * Reworked NAM processing to more closely match the reference implementation. Resampling performance fixes.
