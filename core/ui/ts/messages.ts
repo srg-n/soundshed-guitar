@@ -1325,8 +1325,10 @@ export function handleIncomingMessage(message: string): void {
             continue;
           }
           const existing = EffectTypeRegistry.get(type);
-          const displayName = typeof effect.name === "string" ? effect.name : existing?.displayName ?? type;
-          const category = typeof effect.category === "string" ? effect.category : existing?.category ?? "utility";
+          const rawName = typeof effect.name === "string" ? effect.name.trim() : "";
+          const rawCategory = typeof effect.category === "string" ? effect.category.trim() : "";
+          const displayName = rawName || existing?.displayName || type;
+          const category = rawCategory || existing?.category || "utility";
           const requiresResource =
             typeof effect.requiresResource === "boolean" ? effect.requiresResource : existing?.requiresResource ?? false;
           const resourceType = typeof effect.resourceType === "string" ? effect.resourceType : existing?.resourceType;

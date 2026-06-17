@@ -496,12 +496,33 @@
         <div class="fx-selector-effects">
           <div class="fx-selector-search">
             <input type="text" id="fx-search-input" placeholder="Search effects..."
-                   x-model="$store.fxSelector ? $store.fxSelector.searchFilter : ''" />
+                   :value="$store.fxSelector ? $store.fxSelector.searchFilter : ''" />
           </div>
           <p>Drag any effect into the signal chain. You can also drag effects around to move them in the chain. </p>
           <div class="fx-selector-effects-list" id="fx-selector-effects-list">
-            <template x-for="fx in ($store.fxSelector ? $store.fxSelector.effects : [])" :key="fx.type || fx.id">
-              <div class="fx-item" :data-type="fx.type" x-text="fx.displayName || fx.name || fx.title || ''"></div>
+            <template x-for="fx in ($store.fxSelector ? $store.fxSelector.effects : [])" :key="fx.id || fx.type">
+              <div class="fx-item"
+                :data-effect-type="fx.type"
+                :data-blend-id="fx.blendId || ''"
+                :data-blend-category="fx.blendCategory || ''"
+                :data-composite-id="fx.compositeId || ''"
+                :data-custom-effect-id="fx.customEffectId || ''"
+                :data-custom-effect-resource-type="fx.moduleResourceType || ''"
+                :data-custom-effect-resource-id="fx.moduleResourceId || ''"
+                :data-custom-effect-default-params="fx.customEffectDefaultParams || ''"
+                :data-effect-category="fx.category || ''"
+                :style="`--category-color: ${fx.categoryColor || '#808080'}`"
+                draggable="true">
+                <div class="fx-item-icon"></div>
+                <div class="fx-item-info">
+                  <div class="fx-item-name" x-text="fx.displayName || fx.name || fx.title || ''"></div>
+                  <div class="fx-item-type" x-text="fx.category || ''"></div>
+                </div>
+                <span class="fx-item-badge" x-show="fx.requiresResource" x-text="fx.resourceType ? `Requires ${fx.resourceType}` : 'Requires resource'"></span>
+                <span class="fx-item-badge" x-show="fx.blendId">Custom blend</span>
+                <span class="fx-item-badge" x-show="fx.customEffectId">Custom</span>
+                <span class="fx-item-badge" x-show="fx.compositeId">Package</span>
+              </div>
             </template>
           </div>
         </div>
@@ -542,70 +563,68 @@
         
       </div>
             <div class="tab-panel" id="panel-jam">
-        <div class="panel-content jam-panel">
-          <div class="jam-panel-header">
-            <div>
-              <h2>Jam</h2>
-              <p class="jam-panel-subtitle">Find a backing track, pin favourites, and keep a floating YouTube player open while using the rest of the app.</p>
-            </div>
-          </div>
-          <div class="jam-sections tab-bar">
-            <button id="jam-section-backing-tracks" class="tab-btn active" type="button">Backing Tracks</button>
-            <button id="jam-section-scales" class="tab-btn" type="button">Scales</button>
-            <button id="jam-section-riffs" class="tab-btn" type="button">Riff Library</button>
-          </div>
-          <div class="jam-section-panel active" id="jam-section-panel-backing-tracks">
-            <div class="jam-tabs tab-bar">
-              <button id="jam-backing-tab-search" class="tab-btn active" type="button">Search</button>
-              <button id="jam-backing-tab-favorites" class="tab-btn" type="button">Favourites</button>
-            </div>
-            <div class="jam-tab-panel active" id="jam-backing-tab-panel-search">
-              <div class="jam-search-row">
-                <input type="text" id="jam-search-input" placeholder="Search by artist, song, key, or style..." />
-                <button id="jam-search-button" type="button">Search</button>
+        <div class="panel-content tone-sharing-panel jam-panel">
+          <div class="tone-sharing-shell">
+            <aside class="tone-sharing-sidebar">
+              <div class="tone-sharing-browse-nav" role="navigation" aria-label="Jam sections">
+                <button id="jam-backing-tab-search" class="tone-sharing-nav-btn active" type="button">Search</button>
+                <button id="jam-backing-tab-favorites" class="tone-sharing-nav-btn" type="button">Favourites</button>
+                <button id="jam-section-scales" class="tone-sharing-nav-btn" type="button">Scales</button>
+                <button id="jam-section-riffs" class="tone-sharing-nav-btn" type="button">Riff Library</button>
               </div>
-              <div class="jam-results" id="jam-results"></div>
-            </div>
-            <div class="jam-tab-panel" id="jam-backing-tab-panel-favorites" hidden>
-              <div class="jam-results" id="jam-favorites-results"></div>
-            </div>
-          </div>
-          <div class="jam-section-panel jam-scales-panel" id="jam-section-panel-scales" hidden>
-            <iframe
-              class="jam-scales-frame"
-              src="https://scalex.soundshed.com"
-              title="Scales"
-              allow="clipboard-read; clipboard-write; fullscreen"
-              referrerpolicy="strict-origin-when-cross-origin">
-            </iframe>
-          </div>
-          <div class="jam-section-panel" id="jam-section-panel-riffs" hidden>
-            <div class="jam-riff-panel">
-              <div class="settings-section">
-                <h3>Riff Library</h3>
-                <div class="riff-drop-hint" id="riff-drop-hint">Drop a WAV file anywhere on the page to import it into the current riff take.</div>
-                <div class="settings-row settings-row-two">
-                  <label for="riff-open-capture-modal">Capture</label>
-                  <button id="riff-open-capture-modal" type="button">New Riff</button>
+              <p class="tone-sharing-share-hint">Find a backing track, pin favourites, and keep a floating YouTube player open while using the rest of the app.</p>
+            </aside>
+            <div class="tone-sharing-main">
+              <div class="jam-section-panel active" id="jam-section-panel-backing-tracks">
+                <div class="jam-tab-panel active" id="jam-backing-tab-panel-search">
+                  <div class="jam-search-row">
+                    <input type="text" id="jam-search-input" placeholder="Search by artist, song, key, or style..." />
+                    <button id="jam-search-button" type="button">Search</button>
+                  </div>
+                  <div class="jam-results" id="jam-results"></div>
                 </div>
-                <div class="settings-hint">Riffs are saved as measure-aligned DI WAV takes with metadata for tempo, time signature, pattern, and preset context.</div>
-              </div>
-
-              <div class="settings-section">
-                <h3>Storage</h3>
-                <div class="settings-row">
-                  <label for="riff-library-path">Library Path</label>
-                  <input type="text" id="riff-library-path" placeholder="C:\\Users\\you\\Documents\\SoundshedRiffs" />
-                  <button id="riff-library-path-save" type="button">Set Path</button>
-                  <button id="riff-library-refresh" type="button" class="secondary">Refresh</button>
+                <div class="jam-tab-panel" id="jam-backing-tab-panel-favorites" hidden>
+                  <div class="jam-results" id="jam-favorites-results"></div>
                 </div>
-                <div class="settings-hint">Sets where riff takes and riff metadata are stored on disk.</div>
               </div>
+              <div class="jam-section-panel jam-scales-panel" id="jam-section-panel-scales" hidden>
+                <iframe
+                  class="jam-scales-frame"
+                  src="https://scalex.soundshed.com?src=soundshed-guitar"
+                  title="Scales"
+                  allow="clipboard-read; clipboard-write; fullscreen"
+                  referrerpolicy="strict-origin-when-cross-origin">
+                </iframe>
+              </div>
+              <div class="jam-section-panel" id="jam-section-panel-riffs" hidden>
+                <div class="jam-riff-panel">
+                  <div class="settings-section">
+                    <h3>Riff Library</h3>
+                    <div class="riff-drop-hint" id="riff-drop-hint">Drop a WAV file anywhere on the page to import it into the current riff take.</div>
+                    <div class="settings-row settings-row-two">
+                      <label for="riff-open-capture-modal">Capture</label>
+                      <button id="riff-open-capture-modal" type="button">New Riff</button>
+                    </div>
+                    <div class="settings-hint">Riffs are saved as measure-aligned DI WAV takes with metadata for tempo, time signature, pattern, and preset context.</div>
+                  </div>
 
-              <div class="settings-section">
-                <h3>Saved Riffs</h3>
-                <div class="results equipment-library-results" id="riff-library-list">
-                  <!-- Riff entries rendered by JS -->
+                  <div class="settings-section">
+                    <h3>Storage</h3>
+                    <div class="settings-row">
+                      <label for="riff-library-path">Library Path</label>
+                      <input type="text" id="riff-library-path" placeholder="C:\\Users\\you\\Documents\\SoundshedRiffs" />
+                      <button id="riff-library-path-save" type="button">Set Path</button>
+                      <button id="riff-library-refresh" type="button" class="secondary">Refresh</button>
+                    </div>
+                    <div class="settings-hint">Sets where riff takes and riff metadata are stored on disk.</div>
+                  </div>
+
+                  <div class="settings-section">
+                    <h3>Saved Riffs</h3>
+                    <div class="results equipment-library-results" id="riff-library-list">
+                      <!-- Riff entries rendered by JS -->
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

@@ -29,6 +29,22 @@ const floatingAddFxButton = document.getElementById("signal-path-floating-add-fx
 // State
 let activeCategory = "amp"; // Currently selected category tab
 let searchFilter = "";
+let dragDelegationBound = false;
+let effectCatalogRequested = false;
+
+function ensureEffectCatalogHydrated(reason: string): void {
+  const hasHydratedCatalog = getCatalogEffects().some((effect) => !!effect.category);
+  if (hasHydratedCatalog) {
+    effectCatalogRequested = false;
+    return;
+  }
+  if (effectCatalogRequested) {
+    return;
+  }
+  effectCatalogRequested = true;
+  console.info(`[fxSelector] requesting effect catalog (${reason})`);
+  postMessage({ type: "getEffectCatalog" });
+}
 
 function syncFxSelectorCollapsedState(options?: { focusSearch?: boolean }): void {
   const isCollapsed = fxSelectorPanel?.classList.contains("collapsed") ?? false;
@@ -192,6 +208,21 @@ export function initFxSelector(): void {
     renderEffectsList();
   });
 
+  bindFxItemDragHandlers();
+
+  ensureEffectCatalogHydrated("init");
+
+  // In Alpine mode, route declarative category clicks back into TS state.
+  try {
+    const Alpine = (window as any).Alpine;
+    const fxStore = Alpine && Alpine.store && Alpine.store("fxSelector");
+    if (fxStore) {
+      fxStore.selectCategory = (id: string) => selectCategory(id);
+    }
+  } catch {
+    // Non-fatal when Alpine is not ready.
+  }
+
   // Initial render
   renderCategories();
   renderEffectsList();
@@ -214,13 +245,6 @@ function selectCategory(categoryId: string): void {
  */
 function renderCategories(): void {
   if (!fxSelectorCategories) return;
-
-  // During Alpine port: if store is present, push data and let declarative x-for handle DOM
-  const AlpineWin = (window as any).Alpine;
-  if (AlpineWin && AlpineWin.store && AlpineWin.store('fxSelector')) {
-    pushToAlpineStore();
-    return; // skip imperative innerHTML
-  }
 
   const allEffects = getCatalogEffects();
   const blendItems = getBlendFxItems();
@@ -274,13 +298,6 @@ function renderCategories(): void {
  */
 export function renderEffectsList(): void {
   if (!fxSelectorEffectsList) return;
-
-  // During Alpine port: if store is present, push data and let declarative x-for handle DOM
-  const AlpineWin = (window as any).Alpine;
-  if (AlpineWin && AlpineWin.store && AlpineWin.store('fxSelector')) {
-    pushToAlpineStore();
-    return; // skip imperative innerHTML for the list
-  }
 
   const allEffects = getCatalogEffects();
   const allCustomEffects = getCustomEffectFxItems();
@@ -396,58 +413,62 @@ function renderFxItem(effect: FxLibraryItem, categoryColor: string): string {
  * Bind drag event handlers to all FX items.
  */
 function bindFxItemDragHandlers(): void {
-  const fxItems = fxSelectorEffectsList?.querySelectorAll(".fx-item");
-  if (!fxItems) return;
+  if (!fxSelectorEffectsList || dragDelegationBound) return;
 
-  fxItems.forEach((item) => {
-    const el = item as HTMLElement;
-    
-    el.addEventListener("dragstart", (e: DragEvent) => {
-      const effectType = el.dataset.effectType;
-      const blendId = el.dataset.blendId;
-      const compositeId = el.dataset.compositeId;
-      const customEffectId = el.dataset.customEffectId;
-      if (effectType && e.dataTransfer) {
-        e.dataTransfer.setData("application/x-fx-effect", effectType);
-        if (blendId) {
-          e.dataTransfer.setData("application/x-fx-blend", blendId);
-          e.dataTransfer.setData("application/x-fx-blend-name", el.querySelector(".fx-item-name")?.textContent ?? "");
-          e.dataTransfer.setData("application/x-fx-blend-category", el.dataset.blendCategory ?? "");
-        }
-        if (customEffectId) {
-          let defaultParams: Record<string, number> = {};
-          try {
-            defaultParams = JSON.parse(decodeURIComponent(el.dataset.customEffectDefaultParams ?? "%7B%7D")) as Record<string, number>;
-          } catch {
-            defaultParams = {};
-          }
-          e.dataTransfer.setData("application/x-fx-custom-effect", JSON.stringify({
-            customEffectId,
-            baseEffectType: effectType,
-            name: el.querySelector(".fx-item-name")?.textContent ?? "",
-            category: el.dataset.effectCategory ?? "utility",
-            moduleResourceType: el.dataset.customEffectResourceType ?? "",
-            moduleResourceId: el.dataset.customEffectResourceId ?? "",
-            defaultParams,
-          }));
-        }
-        if (compositeId) {
-          e.dataTransfer.setData("application/x-fx-composite", compositeId);
-          e.dataTransfer.setData("application/x-fx-composite-name", el.querySelector(".fx-item-name")?.textContent ?? "");
-        }
-        e.dataTransfer.effectAllowed = "copy";
-        el.classList.add("dragging");
-        
-        // Notify signal path that we're dragging from FX library
-        document.body.classList.add("fx-dragging");
+  fxSelectorEffectsList.addEventListener("dragstart", (event: Event) => {
+    const dragEvent = event as DragEvent;
+    const target = dragEvent.target as HTMLElement | null;
+    const el = target?.closest(".fx-item") as HTMLElement | null;
+    if (!el || !dragEvent.dataTransfer) return;
+
+    const effectType = el.dataset.effectType;
+    const blendId = el.dataset.blendId;
+    const compositeId = el.dataset.compositeId;
+    const customEffectId = el.dataset.customEffectId;
+    if (!effectType) return;
+
+    dragEvent.dataTransfer.setData("application/x-fx-effect", effectType);
+    if (blendId) {
+      dragEvent.dataTransfer.setData("application/x-fx-blend", blendId);
+      dragEvent.dataTransfer.setData("application/x-fx-blend-name", el.querySelector(".fx-item-name")?.textContent ?? "");
+      dragEvent.dataTransfer.setData("application/x-fx-blend-category", el.dataset.blendCategory ?? "");
+    }
+    if (customEffectId) {
+      let defaultParams: Record<string, number> = {};
+      try {
+        defaultParams = JSON.parse(decodeURIComponent(el.dataset.customEffectDefaultParams ?? "%7B%7D")) as Record<string, number>;
+      } catch {
+        defaultParams = {};
       }
-    });
+      dragEvent.dataTransfer.setData("application/x-fx-custom-effect", JSON.stringify({
+        customEffectId,
+        baseEffectType: effectType,
+        name: el.querySelector(".fx-item-name")?.textContent ?? "",
+        category: el.dataset.effectCategory ?? "utility",
+        moduleResourceType: el.dataset.customEffectResourceType ?? "",
+        moduleResourceId: el.dataset.customEffectResourceId ?? "",
+        defaultParams,
+      }));
+    }
+    if (compositeId) {
+      dragEvent.dataTransfer.setData("application/x-fx-composite", compositeId);
+      dragEvent.dataTransfer.setData("application/x-fx-composite-name", el.querySelector(".fx-item-name")?.textContent ?? "");
+    }
 
-    el.addEventListener("dragend", () => {
-      el.classList.remove("dragging");
-      document.body.classList.remove("fx-dragging");
-    });
+    dragEvent.dataTransfer.effectAllowed = "copy";
+    el.classList.add("dragging");
+    document.body.classList.add("fx-dragging");
   });
+
+  fxSelectorEffectsList.addEventListener("dragend", (event: Event) => {
+    const dragEvent = event as DragEvent;
+    const target = dragEvent.target as HTMLElement | null;
+    const el = target?.closest(".fx-item") as HTMLElement | null;
+    el?.classList.remove("dragging");
+    document.body.classList.remove("fx-dragging");
+  });
+
+  dragDelegationBound = true;
 }
 
 type BlendFxItem = EffectTypeInfo & { blendId: string; blendCategory: string };
@@ -519,6 +540,7 @@ function getCompositeFxItems(): CompositeFxItem[] {
 }
 
 export function refreshFxSelector(): void {
+  ensureEffectCatalogHydrated("refresh");
   renderCategories();
   renderEffectsList();
 }
@@ -542,6 +564,14 @@ function pushToAlpineStore(): void {
       ...compositeItems,
     ]);
 
+    if (orderedCategories.length === 0) {
+      ensureEffectCatalogHydrated("alpine-empty");
+    }
+
+    if (orderedCategories.length > 0 && !orderedCategories.includes(activeCategory)) {
+      activeCategory = orderedCategories[0];
+    }
+
     const catData = orderedCategories.map((categoryId) => {
       const meta = CATEGORY_METADATA[categoryId] ?? { name: categoryId, color: "#606060" };
       const effects = allEffects.filter((e) => e.category === categoryId);
@@ -558,18 +588,65 @@ function pushToAlpineStore(): void {
       };
     });
 
-    // For demo, simple effects list (full item data later)
+    const matchesSearch = (item: FxLibraryItem): boolean => [
+      item.displayName,
+      item.type,
+      item.category,
+      item.description ?? "",
+    ].join(" ").toLowerCase().includes(searchFilter);
+
+    const visibleEffects = searchFilter
+      ? allEffects.filter((e) => matchesSearch(e))
+      : allEffects.filter((e) => e.category === activeCategory);
+    const visibleBlends = searchFilter
+      ? blendItems.filter((b) => matchesSearch(b))
+      : blendItems.filter((b) => b.category === activeCategory);
+    const visibleCustoms = searchFilter
+      ? customEffectItems.filter((c) => matchesSearch(c))
+      : customEffectItems.filter((c) => c.category === activeCategory);
+    const visibleComposites = searchFilter
+      ? compositeItems.filter((c) => matchesSearch(c))
+      : compositeItems.filter((c) => c.category === activeCategory);
+
+    const toAlpineItem = (item: FxLibraryItem) => ({
+      id: [
+        item.type,
+        item.blendId ?? "",
+        item.customEffectId ?? "",
+        item.compositeId ?? "",
+        item.moduleResourceId ?? "",
+        item.displayName ?? "",
+      ].join("::"),
+      type: item.type,
+      displayName: item.displayName || (item as any).name || (item as any).title || "",
+      category: item.category,
+      categoryColor: searchFilter
+        ? CATEGORY_METADATA[item.category]?.color || "#808080"
+        : CATEGORY_METADATA[activeCategory]?.color || "#808080",
+      blendId: item.blendId ?? "",
+      blendCategory: item.blendCategory ?? "",
+      compositeId: item.compositeId ?? "",
+      customEffectId: item.customEffectId ?? "",
+      moduleResourceType: item.moduleResourceType ?? "",
+      moduleResourceId: item.moduleResourceId ?? "",
+      customEffectDefaultParams: item.customEffectId ? encodeDatasetJson(item.defaultParams ?? {}) : "",
+      requiresResource: !!item.requiresResource && !item.customEffectId,
+      resourceType: item.resourceType ?? "",
+    });
+
     const effData = [
-      ...allEffects.slice(0, 5).map(e => ({ type: e.type, displayName: e.displayName || (e as any).name || '', category: e.category })),
-      ...blendItems.slice(0, 2).map(b => ({ type: b.type, displayName: b.displayName, category: b.category })),
+      ...visibleEffects.map(toAlpineItem),
+      ...visibleBlends.map(toAlpineItem),
+      ...visibleCustoms.map(toAlpineItem),
+      ...visibleComposites.map(toAlpineItem),
     ];
 
-    const currentActive = (window as any).activeCategoryForAlpine || activeCategory || 'amp';
-    const currentSearch = (window as any).searchFilterForAlpine || searchFilter || '';
+    const currentActive = activeCategory || "amp";
+    const currentSearch = searchFilter || "";
 
     fxStore.updateFromTs(catData, effData, currentActive, currentSearch);
   } catch (e) {
-    // non-fatal during port
+    console.error("[fxSelector] Failed to push data to Alpine store", e);
   }
 }
 

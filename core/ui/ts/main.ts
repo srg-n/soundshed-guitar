@@ -193,6 +193,7 @@ async function bootstrap(): Promise<void> {
   console.log("[JS] IPlugReceiveData registered on window");
 
   postMessage({ type: "uiReady" });
+  postMessage({ type: "getEffectCatalog" });
   postMessage({ type: "getTheme" });
   postMessage({ type: "uiVisibility", visible: !document.hidden });
 
