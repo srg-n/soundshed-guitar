@@ -126,9 +126,6 @@ option(GUITARFX_WKWEBVIEW_INLINE_MEDIA_PLAYBACK "Enable inline media playback on
 option(GUITARFX_WKWEBVIEW_DISABLE_MEDIA_USER_ACTION "Disable Apple WKWebView user-action requirement for media playback where supported" ON)
 
 set(_guitarfx_enable_jam_default ON)
-if(APPLE)
-    set(_guitarfx_enable_jam_default OFF)
-endif()
 option(GUITARFX_ENABLE_JAM "Enable the Jam panel in the packaged UI" ${_guitarfx_enable_jam_default})
 
 set(_GUITARFX_GENERATED_UI_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/ui")

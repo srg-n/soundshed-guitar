@@ -522,7 +522,6 @@ export function renderJamPanel(): void {
   const searchResultsHost = document.getElementById("jam-results");
   const favoritesResultsHost = document.getElementById("jam-favorites-results");
   const searchInput = document.getElementById("jam-search-input") as HTMLInputElement | null;
-  const backingTracksSectionButton = document.getElementById("jam-section-backing-tracks");
   const scalesSectionButton = document.getElementById("jam-section-scales");
   const riffsSectionButton = document.getElementById("jam-section-riffs");
   const searchTab = document.getElementById("jam-backing-tab-search");
@@ -548,17 +547,15 @@ export function renderJamPanel(): void {
     searchInput.value = jam.query;
   }
 
-  backingTracksSectionButton?.toggleAttribute("hidden", !backingTracksEnabled);
   scalesSectionButton?.toggleAttribute("hidden", !scalesEnabled);
   riffsSectionButton?.toggleAttribute("hidden", !riffLibraryEnabled);
   searchTab?.toggleAttribute("hidden", !backingTracksEnabled);
   favoritesTab?.toggleAttribute("hidden", !backingTracksEnabled);
 
-  backingTracksSectionButton?.classList.toggle("active", resolvedSection === "backingTracks");
   scalesSectionButton?.classList.toggle("active", resolvedSection === "scales");
   riffsSectionButton?.classList.toggle("active", resolvedSection === "riffs");
-  searchTab?.classList.toggle("active", resolvedTab === "search");
-  favoritesTab?.classList.toggle("active", resolvedTab === "favorites");
+  searchTab?.classList.toggle("active", resolvedSection === "backingTracks" && resolvedTab === "search");
+  favoritesTab?.classList.toggle("active", resolvedSection === "backingTracks" && resolvedTab === "favorites");
 
   backingTracksPanel?.classList.toggle("active", resolvedSection === "backingTracks" && backingTracksEnabled);
   backingTracksPanel?.toggleAttribute("hidden", resolvedSection !== "backingTracks" || !backingTracksEnabled);
@@ -737,7 +734,6 @@ function bindPanelActions(): void {
   const searchButton = document.getElementById("jam-search-button");
   const resultsHosts = [document.getElementById("jam-results"), document.getElementById("jam-favorites-results")];
 
-  document.getElementById("jam-section-backing-tracks")?.addEventListener("click", () => setActiveSection("backingTracks"));
   document.getElementById("jam-section-scales")?.addEventListener("click", () => setActiveSection("scales"));
   document.getElementById("jam-section-riffs")?.addEventListener("click", () => setActiveSection("riffs"));
   document.getElementById("jam-backing-tab-search")?.addEventListener("click", () => setBackingTracksTab("search"));
