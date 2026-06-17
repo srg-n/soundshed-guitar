@@ -2726,6 +2726,7 @@
   width: 40px;
   height: 40px;
   background: linear-gradient(135deg, #505060, #38384a);
+  touch-action: none;
   border-radius: 50%;
   position: relative;
   cursor: pointer;

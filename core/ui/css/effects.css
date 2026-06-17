@@ -179,6 +179,7 @@
   cursor: pointer;
   border: 1.5px solid var(--border-medium);
   box-shadow: var(--shadow-sm);
+  touch-action: none;
 }
 
 .eq-knob .knob-indicator {

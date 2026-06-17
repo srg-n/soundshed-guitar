@@ -147,6 +147,7 @@ export class GenericKnob {
   private startY = 0;
   private startValue = 0;
   private inlineEditor: HTMLInputElement | null = null;
+  private activePointerId: number | null = null;
 
   constructor(config: KnobConfig) {
     this.knobElement = config.knobElement;
@@ -194,15 +195,30 @@ export class GenericKnob {
   }
 
   private setupEventListeners(): void {
-    this.knobElement.addEventListener("pointerdown", () => {
-      this.knobElement.focus();
-    });
-    this.knobElement.addEventListener("mousedown", (e) => this.onMouseDown(e));
-    this.knobElement.addEventListener("dblclick", (e) => this.onDoubleClick(e));
+    // Use pointer events for unified support of mouse, touch, and pen interactions.
+    // Attach move/up to the element; pointer capture ensures we receive events during drag
+    // even if the pointer leaves the knob. This also avoids accumulating document listeners
+    // when many effect knobs are created (e.g. node param panels).
+    this.knobElement.addEventListener("pointerdown", (e) => this.onPointerDown(e));
+    this.knobElement.addEventListener("pointermove", (e) => this.onPointerMove(e));
+    this.knobElement.addEventListener("pointerup", (e) => this.onPointerUp(e));
+    this.knobElement.addEventListener("pointercancel", (e) => this.onPointerUp(e));
+
+    this.knobElement.addEventListener("dblclick", (e) => this.onDoubleClick(e as MouseEvent));
     this.knobElement.addEventListener("wheel", (e) => this.onWheel(e), { passive: false });
-    document.addEventListener("mousemove", (e) => this.onMouseMove(e));
-    document.addEventListener("mouseup", () => this.onMouseUp());
-    this.editableValueElement?.addEventListener("dblclick", (e) => this.onValueDoubleClick(e));
+    this.editableValueElement?.addEventListener("dblclick", (e) => this.onValueDoubleClick(e as MouseEvent));
+
+    // Legacy fallback only when PointerEvent API is unavailable (rare in modern browsers).
+    if (typeof window !== "undefined" && !("PointerEvent" in window)) {
+      this.knobElement.addEventListener("mousedown", (e) => this.onMouseDown(e));
+      document.addEventListener("mousemove", (e) => this.onMouseMove(e));
+      document.addEventListener("mouseup", () => this.onMouseUp());
+    }
+
+    // Ensure touch interactions don't trigger scrolling/zooming while manipulating the knob.
+    if (this.knobElement.style && !this.knobElement.style.touchAction) {
+      this.knobElement.style.touchAction = "none";
+    }
   }
 
   private emitLiveValue(value: number): void {
@@ -253,6 +269,58 @@ export class GenericKnob {
     }
   }
 
+  private onPointerDown(e: PointerEvent): void {
+    if (e.button !== undefined && e.button !== 0) {
+      return; // Only primary button / touch
+    }
+    this.knobElement.focus();
+    this.closeInlineEditor(true);
+    this.isDragging = true;
+    this.startY = e.clientY;
+    this.startValue = this.currentValue;
+    this.activePointerId = e.pointerId ?? null;
+
+    if (typeof this.knobElement.setPointerCapture === "function") {
+      try {
+        this.knobElement.setPointerCapture(e.pointerId);
+      } catch {
+        // Capture may fail in some environments; fall back to document tracking (handled by existing mouse paths if needed)
+      }
+    }
+    e.preventDefault();
+  }
+
+  private onPointerMove(e: PointerEvent): void {
+    if (!this.isDragging) return;
+    if (this.activePointerId != null && (e.pointerId ?? null) !== this.activePointerId) return;
+
+    const deltaY = this.startY - e.clientY;
+    let newValue = this.startValue + deltaY * this.sensitivity;
+    newValue = clampValue(newValue, this.minValue, this.maxValue);
+
+    this.currentValue = newValue;
+    this.knobElement.dataset.value = newValue.toString();
+    this.updateDisplay(newValue);
+
+    this.emitLiveValue(this.currentValue);
+    // No need to preventDefault on every move for pointer (capture handles delivery)
+  }
+
+  private onPointerUp(e: PointerEvent): void {
+    if (!this.isDragging) return;
+    if (this.activePointerId != null && (e.pointerId ?? null) !== this.activePointerId) return;
+
+    if (typeof this.knobElement.releasePointerCapture === "function") {
+      try {
+        this.knobElement.releasePointerCapture(e.pointerId);
+      } catch {}
+    }
+
+    this.isDragging = false;
+    this.activePointerId = null;
+    this.commitCurrentValue();
+  }
+
   private onMouseDown(e: MouseEvent): void {
     this.closeInlineEditor(true);
     this.isDragging = true;
@@ -267,17 +335,17 @@ export class GenericKnob {
     const deltaY = this.startY - e.clientY;
     let newValue = this.startValue + deltaY * this.sensitivity;
     newValue = clampValue(newValue, this.minValue, this.maxValue);
-    
+
     this.currentValue = newValue;
     this.knobElement.dataset.value = newValue.toString();
     this.updateDisplay(newValue);
-    
+
     this.emitLiveValue(this.currentValue);
   }
 
   private onMouseUp(): void {
     if (!this.isDragging) return;
-    
+
     this.isDragging = false;
     this.commitCurrentValue();
   }
