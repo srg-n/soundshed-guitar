@@ -1,0 +1,2357 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=2" />
+  <title>Soundshed GuitarX</title>
+  <script src="build-flags.js"></script>
+  <style>
+    html[data-jam-enabled="false"] [data-panel="jam"],
+    html[data-jam-enabled="false"] #panel-jam,
+    html[data-jam-enabled="false"] #jam-player-dock,
+    html[data-jam-enabled="false"] #jam-floating-player-root {
+      display: none !important;
+    }
+  </style>
+  <link rel="stylesheet" href="css/variables.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/controls.css" />
+  <link rel="stylesheet" href="css/navigation.css" />
+  <link rel="stylesheet" href="css/amp.css" />
+  <link rel="stylesheet" href="css/effects.css" />
+  <link rel="stylesheet" href="css/signal-path.css" />
+  <link rel="stylesheet" href="css/modals.css" />
+  <link rel="stylesheet" href="css/layout-designer.css" />
+  <link rel="stylesheet" href="css/fx-library.css" />
+  <link rel="stylesheet" href="css/preset-library.css" />
+  <link rel="stylesheet" href="css/advanced-panel.css" />
+  <link rel="stylesheet" href="css/settings.css" />
+  <link rel="stylesheet" href="css/tone-sharing.css" />
+  <link rel="stylesheet" href="css/jam.css" />
+</head>
+
+<body>
+  <div id="app" class="prevent-select">
+    <!-- Splash Screen - shown during initialization, hidden once app is ready -->
+    <div id="splash-screen" class="splash-screen" role="status" aria-live="polite" aria-label="Application loading">
+      <div class="splash-content">
+        <div class="splash-logo">
+          <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="100" cy="100" r="95" fill="none" stroke="currentColor" stroke-width="2" opacity="0.2"/>
+            <path d="M 60 80 Q 100 50 140 80 Q 140 120 100 140 Q 60 120 60 80" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="100" cy="110" r="8" fill="currentColor"/>
+            <path d="M 100 60 L 100 50" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M 130 90 L 138 85" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M 130 130 L 138 138" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M 70 130 L 62 138" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M 70 90 L 62 85" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h1 class="splash-title">Soundshed Guitar</h1>
+        <p class="splash-subtitle">Initializing...</p>
+        <div class="splash-spinner"></div>
+      </div>
+    </div>
+
+    <header class="icon-bar">
+      <span class="app-title">Soundshed Guitar</span>
+      <span class="icon-bar-spacer"></span>
+      <nav class="nav-tabs" aria-label="Main navigation">
+        <button class="icon-btn nav-tab active" data-panel="visualizer" title="Play">PLAY</button>
+        <button class="icon-btn nav-tab" data-panel="sharing" title="Tones">TONES</button>
+        <button class="icon-btn nav-tab" data-panel="jam" title="Jam">JAM</button>
+      </nav>
+      <span class="icon-bar-spacer"></span>
+      <button class="icon-btn nav-settings-btn" data-panel="settings" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" stroke="currentColor" stroke-width="1.5" fill="none" />
+          <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.86l.03.03a2 2 0 0 1-2.83 2.83l-.03-.03A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 1.53V21a2 2 0 0 1-4 0v-.07a1.7 1.7 0 0 0-1-1.53 1.7 1.7 0 0 0-1.86.34l-.03.03a2 2 0 1 1-2.83-2.83l.03-.03A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.53-1H3a2 2 0 0 1 0-4h.07a1.7 1.7 0 0 0 1.53-1 1.7 1.7 0 0 0-.34-1.86l-.03-.03a2 2 0 1 1 2.83-2.83l.03.03A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3.07V3a2 2 0 0 1 4 0v.07a1.7 1.7 0 0 0 1 1.53 1.7 1.7 0 0 0 1.86-.34l.03-.03a2 2 0 1 1 2.83 2.83l-.03.03A1.7 1.7 0 0 0 19.4 9c0 .46.17.9.46 1.24.3.33.74.53 1.21.56H21a2 2 0 0 1 0 4h-.07a1.7 1.7 0 0 0-1.53 1z" stroke="currentColor" stroke-width="1.5" fill="none" />
+        </svg>
+      </button>
+
+    </header>
+
+    <section class="control-bar">
+      <div class="control-bar-group">
+        <div class="input-vu-meter" id="input-vu-meter" title="Raw input peak level">
+          <div class="vu-segments" id="vu-segments">
+            <div class="vu-seg vu-seg-red" data-db="-3"></div>
+            <div class="vu-seg vu-seg-red" data-db="-6"></div>
+            <div class="vu-seg vu-seg-yellow" data-db="-9"></div>
+            <div class="vu-seg vu-seg-yellow" data-db="-12"></div>
+            <div class="vu-seg vu-seg-yellow" data-db="-18"></div>
+            <div class="vu-seg vu-seg-green" data-db="-24"></div>
+            <div class="vu-seg vu-seg-green" data-db="-36"></div>
+            <div class="vu-seg vu-seg-green" data-db="-48"></div>
+            <div class="vu-peak-hold" id="vu-peak-hold"></div>
+          </div>
+          <span class="vu-db-value" id="vu-db-value">--</span>
+          <button
+            id="user-input-calibration-toolbar-trigger"
+            class="input-vu-meter-dropdown-trigger"
+            type="button"
+            aria-label="Input calibration options"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            aria-controls="user-input-calibration-toolbar-menu"
+            title="Input calibration options"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M3.5 5.75 8 10.25l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <div id="user-input-calibration-toolbar-menu" class="input-calibration-toolbar-menu" role="menu" hidden></div>
+        </div>
+        <div class="control-stack control-stack-knob">
+          <div class="control-stack-label">INPUT</div>
+          <div class="knob-control" id="input-control" title="Input Level">
+            <div class="knob" data-param="input" data-value="0">
+              <div class="knob-indicator"></div>
+            </div>
+            <span class="knob-value" id="input-value">+0.0 dB</span>
+          </div>
+        </div>
+
+        <div class="control-stack input-mode-control">
+          <div class="toggle-control mini-toggle-control">
+            <span class="toggle-label">INPUT MODE</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="stereo-input-toggle" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <span class="input-mode-status" id="input-mode-status">STEREO</span>
+          <div class="input-channel-selector" id="input-channel-selector">
+            <select id="input-channel-select">
+              <option value="0" selected>Input 1</option>
+              <option value="1">Input 2</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="control-stack control-stack-knob">
+          <div class="toggle-control mini-toggle-control">
+            <span class="toggle-label">GATE</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="gate-toggle" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="knob-control" id="gate-threshold-control" title="Gate Threshold">
+            <div class="knob" data-param="gate_threshold" data-value="-60">
+              <div class="knob-indicator"></div>
+            </div>
+            <span class="knob-value" id="gate-threshold-value">-60 dB</span>
+          </div>
+        </div>
+
+        <div class="control-stack control-stack-knob transpose-control-stack">
+          <div class="control-stack-label">TRANSPOSE</div>
+          <div class="knob-control">
+            <div class="knob" data-param="transpose" data-value="0">
+              <div class="knob-indicator"></div>
+            </div>
+            <span class="knob-value" id="transpose-value">0 st</span>
+          </div>
+        </div>
+
+        <div class="control-stack eq-control">
+          <div class="toggle-control mini-toggle-control">
+            <span class="toggle-label">Global EQ</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="eq-toggle" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <button class="eq-icon-btn panel-switch" data-panel="eq" title="EQ">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 21v-7M12 21V3M20 21v-11" stroke="currentColor" stroke-width="2" fill="none" />
+            </svg>
+          </button>
+        </div>
+
+      </div>
+
+        <div class="control-bar-group preset-group">
+          <div class="preset-row preset-toolbar-row">
+            <div class="preset-toolbar" aria-label="Preset actions">
+              <div class="preset-toolbar-group">
+                <span class="preset-toolbar-group-label">Presets</span>
+                <div class="preset-actions">
+                  <button class="preset-action-btn" id="preset-random-btn" type="button" title="Load a random preset">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <path d="M16 3h5v5" />
+                      <path d="M4 20L21 3" />
+                      <path d="M21 16v5h-5" />
+                      <path d="M15 15l6 6" />
+                      <path d="M4 4l5 5" />
+                    </svg>
+                    <span class="preset-action-btn-label">Random</span>
+                  </button>
+                  <button class="preset-action-btn" id="preset-new-btn" type="button" title="Start a new preset from the default rig">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <rect x="3" y="3" width="18" height="18" rx="4" />
+                      <line x1="12" y1="7" x2="12" y2="17" />
+                      <line x1="7" y1="12" x2="17" y2="12" />
+                    </svg>
+                    <span class="preset-action-btn-label">New</span>
+                  </button>
+                </div>
+              </div>
+
+              <span class="preset-toolbar-separator" aria-hidden="true"></span>
+
+              <div class="preset-toolbar-group">
+                <span class="preset-toolbar-group-label">Manage</span>
+                <div class="preset-actions">
+                  <button class="preset-action-btn" id="preset-edit-btn" type="button" title="Edit preset details">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                    <span class="preset-action-btn-label">Edit</span>
+                  </button>
+                  <button class="preset-action-btn" id="preset-save-btn" type="button" title="Save changes to this preset">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                      <polyline points="17 21 17 13 7 13 7 21" />
+                      <polyline points="7 3 7 8 15 8" />
+                    </svg>
+                    <span class="preset-action-btn-label">Save</span>
+                  </button>
+                </div>
+              </div>
+
+              <span class="preset-toolbar-separator" aria-hidden="true"></span>
+
+              <div class="preset-toolbar-group">
+                <span class="preset-toolbar-group-label">Share</span>
+                <div class="preset-actions">
+                  <button class="preset-action-btn preset-action-btn-primary" id="preset-publish-btn" type="button" title="Publish this preset to Tone Sharing">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <circle cx="18" cy="5" r="3" />
+                      <circle cx="6" cy="12" r="3" />
+                      <circle cx="18" cy="19" r="3" />
+                      <path d="M8.6 10.7l6.8-4.4" />
+                      <path d="M8.6 13.3l6.8 4.4" />
+                    </svg>
+                    <span class="preset-action-btn-label">Publish</span>
+                  </button>
+                </div>
+              </div>
+
+              <span class="preset-toolbar-separator" aria-hidden="true"></span>
+
+              <div class="preset-toolbar-group preset-extra-actions">
+                
+                <div class="preset-actions">
+                  <button class="preset-action-btn preset-extra-actions-btn" id="preset-extra-actions-btn" type="button" title="Extra preset functions" aria-haspopup="menu" aria-expanded="false" aria-controls="preset-extra-actions-menu">
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <circle cx="5" cy="12" r="1.75" />
+                      <circle cx="12" cy="12" r="1.75" />
+                      <circle cx="19" cy="12" r="1.75" />
+                    </svg>
+                    <span class="preset-action-btn-label">Options</span>
+                    <span class="preset-extra-actions-caret" aria-hidden="true">▾</span>
+                  </button>
+                </div>
+                <div class="preset-extra-actions-menu" id="preset-extra-actions-menu" role="menu" aria-hidden="true">
+                  <button class="preset-extra-action-item" id="preset-save-as-btn" type="button" role="menuitem" title="Save this preset as a new copy">Save As</button>
+                  <button class="preset-extra-action-item" id="preset-export-btn" type="button" role="menuitem" title="Export this preset as a file">Export preset</button>
+                  <button class="preset-extra-action-item" id="preset-import-btn" type="button" role="menuitem" title="Import a preset file">Import preset</button>
+                  <button class="preset-extra-action-item preset-extra-action-item-danger" id="preset-delete-btn" type="button" role="menuitem" title="Delete this preset">Delete preset</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="preset-row preset-selector-row">
+            <button class="nav-btn preset-nav-btn" id="prev-preset" type="button" title="Previous Preset">←</button>
+            <div class="preset-selector" id="preset-selector">
+              <button class="preset-favorite" id="preset-favorite" type="button" title="Toggle Favorite" aria-label="Toggle favorite">♡</button>
+              <button class="preset-chooser-label" id="preset-chooser-label" type="button" aria-haspopup="dialog" aria-expanded="false">
+                Default Preset
+              </button>
+              <span class="preset-selector-status" id="preset-selector-status">Factory</span>
+            </div>
+            <button class="nav-btn preset-nav-btn" id="next-preset" type="button" title="Next Preset">→</button>
+          </div>
+
+          <input type="file" id="preset-import-input" accept=".soundshed.preset,.soundshed.presets,.zip,.presetz,application/zip" style="display: none;" />
+
+          <div class="tone-sharing-preview-indicator" id="tone-sharing-preview-indicator" style="display: none;" aria-live="polite">
+            <span class="tone-sharing-preview-label" id="tone-sharing-preview-text">Previewing preset:</span>
+            <button class="tone-sharing-preview-clear" id="tone-sharing-preview-clear" type="button" title="Clear preview and restore original preset">✕</button>
+          </div>
+
+        <div class="preset-library-popover" id="preset-library-popover" aria-hidden="true">
+          <section class="preset-library" id="preset-library">
+            <div class="preset-library-header">
+              <div class="preset-library-tabs" role="tablist" style="display:none">
+                <button id="preset-lib-tab-presets" type="button" class="preset-lib-tab active" role="tab" aria-selected="true" aria-controls="preset-library-presets-panel">Presets</button>
+                <button id="preset-lib-tab-multi-rig" type="button" class="preset-lib-tab" role="tab" aria-selected="false" aria-controls="preset-library-multi-rig-panel">Multi-Rig</button>
+              </div>
+              <input type="text" id="preset-search" placeholder="Search presets..." />
+              <div class="preset-library-actions">
+                <button id="preset-export-folder-btn" type="button" class="preset-library-export-btn" title="Export presets" aria-label="Export presets">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 5 17 10" />
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                  </svg>
+                </button>
+              </div>
+              <button id="preset-library-close-btn" type="button" class="preset-library-close-btn" aria-label="Close preset selector" title="Close">×</button>
+            </div>
+            <div class="preset-tag-filter-bar" id="preset-tag-filter-bar">
+              <button type="button" class="preset-tag-filter-chip" data-tag="lead">lead</button>
+              <button type="button" class="preset-tag-filter-chip" data-tag="rhythm">rhythm</button>
+              <button type="button" class="preset-tag-filter-chip" data-tag="clean">clean</button>
+              <button type="button" class="preset-tag-filter-chip" data-tag="crunch">crunch</button>
+              <button type="button" class="preset-tag-filter-chip" data-tag="high-gain">high-gain</button>
+              <button type="button" class="preset-tag-filter-chip" data-tag="ambient">ambient</button>
+              <button type="button" class="preset-tag-filter-chip" data-tag="atmospheric">atmospheric</button>
+              <button type="button" class="preset-tag-filter-chip" data-tag="bass">bass</button>
+            </div>
+            <div class="preset-library-body" id="preset-library-presets-panel" role="tabpanel" aria-labelledby="preset-lib-tab-presets">
+              <div class="preset-folder-tree" id="preset-folder-tree"></div>
+              <div class="preset-list-column">
+                <div class="preset-folder-toolbar" id="preset-folder-toolbar">
+                  <input type="text" id="preset-folder-name" placeholder="New Folder Name" />
+                  <button id="preset-folder-add" type="button" class="preset-folder-toolbar-btn" title="Create folder in current folder" aria-label="Create folder in current folder">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                      <line x1="12" y1="10" x2="12" y2="16" />
+                      <line x1="9" y1="13" x2="15" y2="13" />
+                    </svg>
+                  </button>
+                  <button id="preset-folder-rename" type="button" class="preset-folder-toolbar-btn" title="Rename current folder" aria-label="Rename current folder">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v3" />
+                      <path d="M14 20h7" />
+                      <path d="M16.5 6.5l3 3" />
+                      <path d="M13 17l6.5-6.5a2.12 2.12 0 0 0-3-3L10 14v3z" />
+                    </svg>
+                  </button>
+                  <button id="preset-folder-delete" type="button" class="preset-folder-toolbar-btn preset-folder-toolbar-btn-danger" title="Delete current folder" aria-label="Delete current folder">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M8 6v-1a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v1" />
+                      <path d="M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14" />
+                      <line x1="10" y1="11" x2="10" y2="17" />
+                      <line x1="14" y1="11" x2="14" y2="17" />
+                    </svg>
+                  </button>
+                </div>
+                <div class="preset-list" id="preset-list"></div>
+              </div>
+            </div>
+
+            <div class="preset-library-body preset-library-multi-rig-panel" id="preset-library-multi-rig-panel" role="tabpanel" aria-labelledby="preset-lib-tab-multi-rig" hidden>
+              <div class="composite-preset-list" id="composite-preset-list"></div>
+            </div>
+
+            <div class="setlist-collapsible" id="setlist-collapsible">
+              <button class="setlist-toggle" id="setlist-toggle" type="button" aria-expanded="false">
+                Setlists
+                <span class="setlist-toggle-icon">▾</span>
+              </button>
+              <div class="setlist-panel" id="setlist-panel" aria-hidden="true">
+                <div class="setlist-header">
+                  <input type="text" id="setlist-name-input" placeholder="New setlist name" />
+                  <input type="number" id="setlist-bank-input" placeholder="Bank" min="0" step="1" />
+                  <button id="setlist-add-btn" type="button">Create Setlist</button>
+                </div>
+                <div class="setlist-body">
+                  <div class="setlist-list" id="setlist-list"></div>
+                  <div class="setlist-editor">
+                    <div class="setlist-editor-header" id="setlist-editor-header">Select a setlist</div>
+                    <div class="setlist-slots" id="setlist-slots"></div>
+                    <div class="setlist-hint">Drag presets here to add slots.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div class="control-bar-group">
+        <div class="control-stack control-stack-knob">
+          <div class="toggle-control mini-toggle-control">
+            <span class="toggle-label">DOUBLER</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="doubler-toggle" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="knob-control" id="delay-control">
+            <!--<span class="knob-label">DELAY</span>-->
+            <div class="knob" data-param="delay" data-value="6">
+              <div class="knob-indicator"></div>
+            </div>
+            <span class="knob-value" id="delay-value">6.00 ms</span>
+          </div>
+        </div>
+
+        <div class="control-stack output-control-stack">
+          <div class="output-control-row">
+            <div class="control-stack control-stack-knob output-knob-stack">
+              <div class="control-stack-label">OUTPUT</div>
+              <div class="knob-control" id="output-control">
+                <!--<span class="knob-label">OUTPUT</span>-->
+                <div class="knob" data-param="output" data-value="0">
+                  <div class="knob-indicator"></div>
+                </div>
+                <span class="knob-value" id="output-value">+0.0 dB</span>
+              </div>
+            </div>
+            <button
+              id="output-mute-toggle"
+              class="output-quick-mute-btn"
+              type="button"
+              aria-label="Mute output"
+              aria-pressed="false"
+              title="Mute output"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 9v6h4l5 4V5L8 9H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                <path class="output-quick-mute-wave" d="M16.5 9.5c1.6 1 2.5 2.6 2.5 4.5s-.9 3.5-2.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                <path class="output-quick-mute-slash" d="M5 5l14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="jam-player-dock" id="jam-player-dock" aria-hidden="true"></div>
+    </section>
+
+    <!-- Signal Path Bar -->
+    <section class="signal-path-bar" id="signal-path-bar">
+      <!-- Composite edit mode banner -->
+      <div class="composite-edit-banner" id="composite-edit-banner" style="display: none;">
+        <span class="composite-edit-banner-label">Editing Composite:</span>
+        <span class="composite-edit-banner-name" id="composite-edit-banner-name"></span>
+        <span class="composite-edit-banner-hint">Use the signal chain below to add/remove/configure effects</span>
+      </div>
+      <div class="signal-path-scroll">
+        <div class="signal-path-nodes" id="signal-path-nodes">
+          <!-- Signal path nodes will be rendered here by JavaScript -->
+          <div class="signal-node input-node" data-node-id="__input__">
+            <div class="node-icon"><span class="fx-effect-icon" style="--icon-url: url('/images/icons/amp.svg')" aria-hidden="true"></span>
+            </div>
+            <span class="node-label">Input</span>
+          </div>
+          <div class="signal-connector"></div>
+          <div class="signal-node" data-node-id="placeholder">
+            <div class="node-icon"><span class="fx-effect-icon" style="--icon-url: url('/images/icons/bolt.svg')" aria-hidden="true"></span>
+            </div>
+            <span class="node-label">No Preset</span>
+          </div>
+          <div class="signal-connector"></div>
+          <div class="signal-node output-node" data-node-id="__output__">
+            <div class="node-icon"><span class="fx-effect-icon" style="--icon-url: url('/images/icons/speaker.svg')" aria-hidden="true"></span>
+            </div>
+            <span class="node-label">Output</span>
+          </div>
+        </div>
+      </div>
+      <div class="signal-path-toolbar" id="signal-path-toolbar">
+        <div class="signal-path-scene-toolbar" id="signal-path-scene-toolbar"></div>
+        <button class="signal-path-toolbar-scene-btn" id="signal-path-toolbar-scene-btn" type="button" aria-hidden="true" title="Add a new Scene for this preset. This enables you save specific settings or new combinations of effects under one preset for easy access.">
+          <span class="signal-path-toolbar-scene-btn-icon" aria-hidden="true">+</span>
+          <span>Scene</span>
+        </button>
+        <button class="signal-path-floating-add-fx" id="signal-path-floating-add-fx" type="button" aria-hidden="true">
+          <span class="signal-path-floating-add-fx-icon" aria-hidden="true">+</span>
+          <span>Add FX</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- FX Library Selector Panel -->
+    <section class="fx-selector-panel collapsed" id="fx-selector-panel">
+      <div class="fx-selector-header">
+        <span class="fx-selector-title">FX Library</span>
+        <button class="fx-selector-toggle" id="fx-selector-toggle" aria-expanded="false" title="Expand FX Library">
+          <span class="fx-toggle-icon" aria-hidden="true">▾</span>
+        </button>
+      </div>
+      <div class="fx-selector-content">
+        <div class="fx-selector-categories" id="fx-selector-categories">
+          <!-- Categories rendered by JavaScript -->
+        </div>
+        <div class="fx-selector-effects">
+          <div class="fx-selector-search">
+            <input type="text" id="fx-search-input" placeholder="Search effects..." />
+          </div>
+          <p>Drag any effect into the signal chain. You can also drag effects around to move them in the chain. </p>
+          <div class="fx-selector-effects-list" id="fx-selector-effects-list">
+            <!-- Effects rendered by JavaScript -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Hidden file inputs -->
+      <input type="file" id="model-file-input" accept=".nam,.json" style="display: none;" />
+      <input type="file" id="ir-file-input" accept=".wav,.ir" style="display: none;" />
+
+      <!-- Advanced Panel -->
+      <div class="tab-panel" id="panel-advanced">
+        <div class="panel-content">
+          <h2>Advanced</h2>
+          <div id="preset-details"></div>
+        </div>
+      </div>
+
+      <!-- Effect Visualization Panel (Default) -->
+      <div class="tab-panel active" id="panel-visualizer">
+        
+          <div class="visualization-panel">
+            <div class="effect-visualization" id="effect-visualization">
+              <div class="effect-visualization-overlay" id="effect-visualization-overlay">
+                <div class="effect-visualization-placeholder">
+                  <h3>No Effect Selected</h3>
+                  <p>Pick a node in the signal chain above to see its visualization and controls.</p>
+                </div>
+              </div>
+
+              <!-- Node Parameter Panel (shown when a node is selected) -->
+              <section class="node-params-panel" id="node-params-panel" style="display: none;"></section>
+            </div>
+          </div>
+        
+      </div>
+      <div class="tab-panel" id="panel-jam">
+        <div class="panel-content jam-panel">
+          <div class="jam-panel-header">
+            <div>
+              <h2>Jam</h2>
+              <p class="jam-panel-subtitle">Find a backing track, pin favourites, and keep a floating YouTube player open while using the rest of the app.</p>
+            </div>
+          </div>
+          <div class="jam-sections tab-bar">
+            <button id="jam-section-backing-tracks" class="tab-btn active" type="button">Backing Tracks</button>
+            <button id="jam-section-scales" class="tab-btn" type="button">Scales</button>
+            <button id="jam-section-riffs" class="tab-btn" type="button">Riff Library</button>
+          </div>
+          <div class="jam-section-panel active" id="jam-section-panel-backing-tracks">
+            <div class="jam-tabs tab-bar">
+              <button id="jam-backing-tab-search" class="tab-btn active" type="button">Search</button>
+              <button id="jam-backing-tab-favorites" class="tab-btn" type="button">Favourites</button>
+            </div>
+            <div class="jam-tab-panel active" id="jam-backing-tab-panel-search">
+              <div class="jam-search-row">
+                <input type="text" id="jam-search-input" placeholder="Search by artist, song, key, or style..." />
+                <button id="jam-search-button" type="button">Search</button>
+              </div>
+              <div class="jam-results" id="jam-results"></div>
+            </div>
+            <div class="jam-tab-panel" id="jam-backing-tab-panel-favorites" hidden>
+              <div class="jam-results" id="jam-favorites-results"></div>
+            </div>
+          </div>
+          <div class="jam-section-panel jam-scales-panel" id="jam-section-panel-scales" hidden>
+            <iframe
+              class="jam-scales-frame"
+              src="https://scalex.soundshed.com"
+              title="Scales"
+              allow="clipboard-read; clipboard-write; fullscreen"
+              referrerpolicy="strict-origin-when-cross-origin">
+            </iframe>
+          </div>
+          <div class="jam-section-panel" id="jam-section-panel-riffs" hidden>
+            <div class="jam-riff-panel">
+              <div class="settings-section">
+                <h3>Riff Library</h3>
+                <div class="riff-drop-hint" id="riff-drop-hint">Drop a WAV file anywhere on the page to import it into the current riff take.</div>
+                <div class="settings-row settings-row-two">
+                  <label for="riff-open-capture-modal">Capture</label>
+                  <button id="riff-open-capture-modal" type="button">New Riff</button>
+                </div>
+                <div class="settings-hint">Riffs are saved as measure-aligned DI WAV takes with metadata for tempo, time signature, pattern, and preset context.</div>
+              </div>
+
+              <div class="settings-section">
+                <h3>Storage</h3>
+                <div class="settings-row">
+                  <label for="riff-library-path">Library Path</label>
+                  <input type="text" id="riff-library-path" placeholder="C:\\Users\\you\\Documents\\SoundshedRiffs" />
+                  <button id="riff-library-path-save" type="button">Set Path</button>
+                  <button id="riff-library-refresh" type="button" class="secondary">Refresh</button>
+                </div>
+                <div class="settings-hint">Sets where riff takes and riff metadata are stored on disk.</div>
+              </div>
+
+              <div class="settings-section">
+                <h3>Saved Riffs</h3>
+                <div class="results equipment-library-results" id="riff-library-list">
+                  <!-- Riff entries rendered by JS -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="panel-sharing">
+        <div class="panel-content tone-sharing-panel">
+          <div class="tone-sharing-shell">
+            <aside class="tone-sharing-sidebar">
+              <div class="tone-sharing-sidebar-actions">
+                <button id="tone-sharing-account-btn" type="button" class="tone-sharing-account-chip">Sign In</button>
+                <button id="tone-sharing-api-toggle" type="button" class="tone-sharing-icon-btn" title="API settings">⚙</button>
+              </div>
+              <div class="tone-sharing-browse-nav" role="navigation" aria-label="Tone sharing sections">
+                <button id="tone-sharing-browse-featured" type="button" class="tone-sharing-nav-btn active">Featured</button>
+                <button id="tone-sharing-browse-items" type="button" class="tone-sharing-nav-btn">Community Presets</button>
+                <button id="tone-sharing-browse-packs" type="button" class="tone-sharing-nav-btn">Packs</button>
+                <button id="tone-sharing-browse-review" type="button" class="tone-sharing-nav-btn" style="display: none;">Review Queue</button>
+                <button id="tone-sharing-browse-ai-search" type="button" class="tone-sharing-nav-btn">AI Tone Search</button>
+                <button id="tone-sharing-browse-installed" type="button" class="tone-sharing-nav-btn">Installed</button>
+                <button id="tone-sharing-browse-mine" type="button" class="tone-sharing-nav-btn">My Content</button>
+              </div>
+              <button id="tone-sharing-open-pack-modal" type="button" class="tone-sharing-toolbar-btn tone-sharing-create-pack-btn" disabled>+ Create Pack</button>
+              <p class="tone-sharing-share-hint">Share a preset in 3 steps: load it, click Publish, then use Share on its card after approval.</p>
+            </aside>
+            <div class="tone-sharing-main">
+              <div class="tone-sharing-endpoint tone-sharing-endpoint--hidden" id="tone-sharing-endpoint-row">
+                <label for="tone-sharing-api-base">API</label>
+                <input id="tone-sharing-api-base" type="text" value="https://api-guitar.soundshed.com/v1" />
+                <button id="tone-sharing-refresh" type="button">Refresh</button>
+              </div>
+              <div class="tone-sharing-active-filter tone-sharing-active-filter--hidden" id="tone-sharing-active-filter">
+                <span id="tone-sharing-active-filter-label">Filtered to a shared tone.</span>
+                <button id="tone-sharing-clear-filter" type="button" class="tone-sharing-toolbar-btn">Clear Filter</button>
+              </div>
+              <div class="tone-sharing-community-search tone-sharing-community-search--hidden" id="tone-sharing-community-search">
+                <label for="tone-sharing-community-search-input">Search community presets</label>
+                <input id="tone-sharing-community-search-input" type="text" placeholder="Name, description, creator, or tag" autocomplete="off" />
+                <button id="tone-sharing-community-search-clear" type="button" class="tone-sharing-toolbar-btn">Clear</button>
+              </div>
+              <div class="tone-sharing-featured-more" id="tone-sharing-featured-more" style="display: none;">
+                <span id="tone-sharing-featured-more-label" class="tone-sharing-status">More presets available in Community Presets.</span>
+                <button id="tone-sharing-featured-more-btn" type="button" class="tone-sharing-toolbar-btn">Browse Community Presets</button>
+              </div>
+              <div class="tone-sharing-feed" id="tone-sharing-feed"></div>
+              <div class="tone-sharing-feed-footer tone-sharing-feed-footer--hidden" id="tone-sharing-feed-footer">
+                <button id="tone-sharing-load-more" type="button" class="tone-sharing-toolbar-btn">Load More</button>
+                <span id="tone-sharing-feed-footer-label" class="tone-sharing-status"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="panel-settings">
+        <div class="panel-content settings-panel">
+
+          <!-- Update available banner — shown when a newer version is detected -->
+          <div id="settings-update-banner" class="settings-update-banner" style="display: none;" role="alert">
+            <div class="settings-update-banner-icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10M12 2l-4 4M12 2l4 4"/><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/></svg>
+            </div>
+            <div class="settings-update-banner-body">
+              <strong id="settings-update-banner-title">Software Update Available</strong>
+              <span id="settings-update-banner-notes" class="settings-update-banner-notes"></span>
+            </div>
+            <a id="settings-update-banner-link" href="#" target="_blank" rel="noopener noreferrer" class="settings-update-banner-btn">Download</a>
+          </div>
+
+          <div class="settings-layout">
+            <div class="equipment-tabs tab-bar" role="tablist" aria-label="Settings sections">
+              <button class="equipment-tab-btn tab-btn active" data-equipment-tab="settings" role="tab" aria-selected="true" aria-controls="equipment-tab-settings">General</button>
+              <button class="equipment-tab-btn tab-btn" data-equipment-tab="performance" role="tab" aria-selected="false" aria-controls="equipment-tab-performance">DSP Performance</button>
+              <button class="equipment-tab-btn tab-btn" data-equipment-tab="features" role="tab" aria-selected="false" aria-controls="equipment-tab-features">Features</button>
+              <button class="equipment-tab-btn tab-btn" data-equipment-tab="library" role="tab" aria-selected="false" aria-controls="equipment-tab-library">Library</button>
+              <button class="equipment-tab-btn tab-btn" data-equipment-tab="help" role="tab" aria-selected="false" aria-controls="equipment-tab-help">Help</button>
+            </div>
+
+            <div class="settings-content">
+          <div class="equipment-tab-panel active" id="equipment-tab-settings">
+
+            <h2>Audio</h2>
+            <div class="settings-section">
+              <h3>Audio Device</h3>
+              <div class="settings-row settings-row-two" id="open-audio-preferences-row">
+                <label for="open-audio-preferences">Preferences</label>
+                <button id="open-audio-preferences" type="button">Open Audio Preferences</button>
+              </div>
+              <div class="settings-hint" id="open-audio-preferences-hint">Opens the native audio/MIDI device settings dialog for the standalone app.</div>
+              <div class="settings-row">
+                <label for="run-signal-test">Signal Path Test</label>
+                <button id="run-signal-test" type="button">Run Signal Path Test</button>
+              </div>
+            </div>
+           
+            <h2 id="settings-tone3000-heading">Tone3000</h2>
+            <div class="settings-section" id="settings-tone3000-section">
+              <h3>Tone3000 API</h3>
+              <div class="settings-row">
+                <label for="tone3000-use-soundshed-api-toggle">Use Soundshed Tone Search API</label>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="tone3000-use-soundshed-api-toggle" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="settings-hint" id="tone3000-proxy-info-hint">Fetch Tone 3000 results via the Soundshed API.</div>
+              <div class="settings-hint" id="tone3000-api-mode-status">Connection mode: Direct Tone3000 API</div>
+              <div class="settings-row" id="tone3000-proxy-health-row">
+                <label for="tone3000-proxy-health-check">API Health</label>
+                <button id="tone3000-proxy-health-check" type="button" class="secondary">Check API Health</button>
+              </div>
+              <div class="settings-hint" id="tone3000-proxy-health-status">API health: not checked.</div>
+              <div class="settings-row" id="tone3000-api-key-row">
+                <label for="tone3000-api-key-input">API Key</label>
+                <input type="password" id="tone3000-api-key-input" placeholder="Enter your Tone3000 API key (Settings > Legacy API Key)" />
+                <button id="tone3000-api-key-save">Save</button>
+                <button id="tone3000-api-key-clear" class="secondary">Clear</button>
+              </div>
+            </div>
+            <h2 id="settings-library-tools-heading">Library</h2>
+            <div class="settings-section" id="settings-library-tools-section">
+              <h3>Export Presets &amp; Blends</h3>
+              <div class="settings-row">
+                <label for="library-export-resources">Resources</label>
+                <select id="library-export-resources">
+                  <option value="used" selected>Only resources used by presets</option>
+                  <option value="all">All resources in library</option>
+                </select>
+                <button id="library-export-btn" type="button">Export Library</button>
+                <span class="settings-unit">.soundshed-library.zip</span>
+              </div>
+              <div class="settings-hint">Exports all presets and blends, plus IR/NAM files from the library based on the selected scope.</div>
+            </div>
+
+            <h2>Software Updates</h2>
+            <div class="settings-section">
+              <h3>Current Version</h3>
+              <div class="settings-row">
+                <label>Soundshed Guitar</label>
+                <span id="current-version-display" class="version-display">—</span>
+              </div>
+              <h3>App Updates</h3>
+              <div class="settings-row">
+                <label for="update-check-toggle">Check for updates on startup</label>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="update-check-toggle" checked />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="settings-hint">Automatically checks if a new version of Soundshed Guitar is available.</div>
+            </div>
+ <div class="settings-section">
+              <h3>Advanced DSP Level Targets</h3>
+              <!--<div class="settings-row">
+                <label for="dsp-nominal-level-input">Nominal Operating Level</label>
+                <input type="number" id="dsp-nominal-level-input" min="-30" max="-6" step="0.5" />
+                <span class="settings-unit">dBFS</span>
+              </div>-->
+              <div class="settings-hint">Target level when auto levelling signal chain elements.</div>
+              <div class="settings-row">
+                <label for="dsp-protection-ceiling-input">Output Protection Ceiling</label>
+                <input type="number" id="dsp-protection-ceiling-input" min="-6" max="0" step="0.1" />
+                <span class="settings-unit">dBFS</span>
+              </div>
+              <div class="settings-hint">Sets the final mixer auto-level and limiter target. </div>
+              <div class="settings-row">
+                <label for="nam-auto-input-calibration-toggle">NAM Auto Input Calibration</label>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="nam-auto-input-calibration-toggle" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="settings-hint">Automatically correct NAM input level using model metadata and the interface calibration level below. Applied only to the first NAM effect/amp in the signal chain.</div>
+              <div class="settings-row">
+                <label for="nam-interface-calibration-level-input">Interface Calibration Level</label>
+                <input type="number" id="nam-interface-calibration-level-input" min="0" max="24" step="0.5" />
+                <span class="settings-unit">dBu</span>
+              </div>
+              <div class="settings-hint">Reference level of your audio interface (12 dBu = typical prosumer, 18 dBu = professional).</div>
+            </div>
+          </div>
+
+          <div class="equipment-tab-panel" id="equipment-tab-library" hidden>
+            <div class="library-tabs tab-bar">
+              <button class="library-tab-btn tab-btn active" data-library-tab="tone3000">Tone 3000</button>
+              <button class="library-tab-btn tab-btn" data-library-tab="resources">Resource Library</button>
+              <button class="library-tab-btn tab-btn" data-library-tab="advanced">Advanced</button>
+            </div>
+
+            <div class="library-tab-panel active" id="library-tab-tone3000">
+              <div class="settings-section">
+                <h3>Tone3000 Browser</h3>
+                 <p>Tone 3000 is a 3rd party website with community provided NAM Models and IRs. You can browse them here but the easiest way to hear them is to select a Neural FX or Neural Amp effect in your main signal chain and use the resource selector within those. </p>
+                <div class="tone3000-search">
+                  <input type="text" id="tone3000-search-input" placeholder="Search tones..." />
+                  <select id="tone3000-sort-select" class="themed-select">
+                    <option value="popular">Most Popular</option>
+                    <option value="recent">Most Recent</option>
+                    <option value="trending">Trending</option>
+                    <option value="name">Name A-Z</option>
+                  </select>
+                  <button id="tone3000-search-button">Search</button>
+                </div>
+                <div class="tone3000-browser">
+                  <div class="tone3000-categories" id="tone3000-category-list">
+                    <!-- Category buttons rendered by JS -->
+                  </div>
+                  <div class="results tone3000-results" id="tone3000-results">
+                    <!-- Search results rendered by JS -->
+                  </div>
+                </div>
+                <div class="tone3000-pagination" id="tone3000-pagination">
+                  <button class="tone3000-page-btn" id="tone3000-prev-btn" type="button">Previous</button>
+                  <span class="tone3000-page-label" id="tone3000-page-label">Page 1</span>
+                  <button class="tone3000-page-btn" id="tone3000-next-btn" type="button">Next</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="library-tab-panel" id="library-tab-resources">
+              <div class="settings-section">
+                <h3>Resource Library</h3>
+                <p>The resource library shows the list of items (NAM models, Impulse Responses) already imported for use in the app. </p>
+                <div class="equipment-library-filters">
+                  <input type="text" id="equipment-library-search" placeholder="Search models and IRs..." />
+                  <select id="equipment-library-type">
+                    <option value="all">All Types</option>
+                    <option value="nam">Amp Models</option>
+                    <option value="ir">Cab IRs</option>
+                  </select>
+                  <select id="equipment-library-source">
+                    <option value="all">All Sources</option>
+                    <option value="built-in">Built-in</option>
+                    <option value="local">Local</option>
+                    <option value="tone3000">Tone3000</option>
+                    <option value="imported">Imported</option>
+                  </select>
+                  <select id="equipment-library-view">
+                    <option value="list">List View</option>
+                    <option value="grouped" selected>Group by Tone</option>
+                  </select>
+                  <select id="equipment-library-category">
+                    <option value="all">All Categories</option>
+                  </select>
+                </div>
+                <div class="settings-row" id="equipment-library-cleanup-row">
+                  <label for="equipment-library-cleanup-scope">Cleanup unused</label>
+                  <select id="equipment-library-cleanup-scope">
+                    <option value="all" selected>All types</option>
+                    <option value="nam">Amp models only</option>
+                    <option value="ir">IRs only</option>
+                  </select>
+                  <button id="equipment-library-cleanup-btn" type="button">Remove unused</button>
+                </div>
+                <div class="equipment-library-summary" id="equipment-library-summary"></div>
+                <div class="results equipment-library-results" id="equipment-library-results">
+                  <!-- Library results rendered by JS -->
+                </div>
+              </div>
+            </div>
+            <div class="library-tab-panel" id="library-tab-advanced">
+              <div class="advanced-panel">
+                <div class="advanced-sub-tabs tab-bar">
+                  <button class="advanced-sub-tab-btn tab-btn active" data-advanced-tab="composites">Composite Effects</button>
+                  <button class="advanced-sub-tab-btn tab-btn" data-advanced-tab="blends">Blends</button>
+                  <button class="advanced-sub-tab-btn tab-btn" data-advanced-tab="layouts">Effect Layouts</button>
+                </div>
+
+                <div class="advanced-sub-panel active" id="advanced-tab-composites">
+                  <div class="advanced-toolbar">
+                    <input type="text" id="composite-search-input" class="advanced-search-input" placeholder="Search composites..." />
+                    <button id="composite-new-btn" class="advanced-action-btn" title="Create new composite effect">+ New Composite</button>
+                  </div>
+                  <div class="composite-list" id="composite-list">
+                    <!-- Composite list rendered by JS -->
+                  </div>
+
+                  <div class="composite-editor" id="composite-editor" style="display: none;">
+                    <div class="composite-editor-header">
+                      <h3 id="composite-editor-title">Edit Composite Effect</h3>
+                      <div class="composite-editor-actions">
+                        <button id="composite-editor-save-btn" class="advanced-action-btn primary" title="Save composite">Save</button>
+                        <button id="composite-editor-save-as-btn" class="advanced-action-btn" title="Save as new composite">Save As New</button>
+                        <button id="composite-editor-cancel-btn" class="advanced-action-btn" title="Cancel editing">Cancel</button>
+                      </div>
+                    </div>
+                    <div class="composite-editor-body">
+                      <div class="composite-editor-meta">
+                        <div class="composite-field-row">
+                          <label for="composite-edit-name">Name</label>
+                          <input type="text" id="composite-edit-name" placeholder="Effect name" />
+                        </div>
+                        <div class="composite-field-row">
+                          <label for="composite-edit-category">Category</label>
+                          <select id="composite-edit-category">
+                            <option value="channel">Channel Strip</option>
+                            <option value="amp">Amplifier</option>
+                            <option value="cab">Cabinet</option>
+                            <option value="dynamics">Dynamics</option>
+                            <option value="eq">Equalizer</option>
+                            <option value="modulation">Modulation</option>
+                            <option value="delay">Delay</option>
+                            <option value="reverb">Reverb</option>
+                            <option value="utility">Utility</option>
+                          </select>
+                        </div>
+                        <div class="composite-field-row">
+                          <label for="composite-edit-description">Description</label>
+                          <textarea id="composite-edit-description" rows="2" placeholder="Description..."></textarea>
+                        </div>
+                        <div class="composite-field-row">
+                          <label for="composite-edit-author">Author</label>
+                          <input type="text" id="composite-edit-author" placeholder="Author name" />
+                        </div>
+                        <div class="composite-field-row">
+                          <label for="composite-edit-tags">Tags</label>
+                          <input type="text" id="composite-edit-tags" placeholder="Comma-separated tags" />
+                        </div>
+                      </div>
+
+                      <div class="composite-editor-section">
+                        <h4>Inner Signal Path</h4>
+                        <p class="section-hint">
+                          The signal chain above shows this composite's inner effects.
+                          Use it to add, remove, and configure effects just like a normal preset.
+                        </p>
+                      </div>
+
+                      <div class="composite-editor-section">
+                        <h4>Exposed Parameters</h4>
+                        <p class="section-hint">Select which parameters are surfaced to the user.</p>
+                        <div class="composite-exposed-params" id="composite-exposed-params">
+                          <!-- Exposed params rendered by JS -->
+                        </div>
+                        <button id="composite-add-param-btn" class="advanced-action-btn">+ Expose Parameter</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="advanced-sub-panel" id="advanced-tab-blends">
+                  <div class="advanced-toolbar">
+                    <input type="text" id="blend-search-input" class="advanced-search-input" placeholder="Search blends..." />
+                  </div>
+                  <div class="composite-list" id="blend-list">
+                    <!-- Blend list rendered by JS -->
+                  </div>
+                </div>
+
+                <div class="advanced-sub-panel" id="advanced-tab-layouts">
+                  <div class="advanced-toolbar">
+                    <input type="text" id="layout-search-input" class="advanced-search-input" placeholder="Search layouts..." />
+                  </div>
+                  <div class="layout-list" id="layout-list">
+                    <!-- Layout list rendered by JS -->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="equipment-tab-panel" id="equipment-tab-features" hidden>
+            <h2>Feature Toggles</h2>
+            <div class="settings-hint">Simplify the options available in the app depedning on your preferences for trying online or advacned features..</div>
+            <div id="settings-feature-groups"></div>
+            <div class="settings-section" id="factory-archive-settings-section" hidden>
+              <h3>Factory Preset Archives</h3>
+              <div class="settings-row" id="factory-archive-loading-row">
+                <label for="factory-archive-loading-toggle">Load Factory Preset Archives on Startup</label>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="factory-archive-loading-toggle" checked />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="settings-hint">Disable this while authoring factory preset archives in development so bundled preset packs stay on disk without being imported at startup.</div>
+            </div>
+          </div>
+
+          <div class="equipment-tab-panel" id="equipment-tab-performance">
+            <h2>DSP Performance</h2>
+            <div class="performance-section">
+              <h3>Diagnostics</h3>
+              <div class="settings-hint">Signal levels, headroom, and clipping are reported continuously for chain input/output and nodes. DSP Load figure is for single audio-thread (typically 1 core), not your entire CPU.</div>
+            </div>
+            <div class="performance-stats">
+              <div class="performance-metric">
+                <span class="metric-label">DSP Load:</span>
+                <span class="metric-value" id="dsp-load-value">0.0%</span>
+              </div>
+              <div class="performance-metric">
+                <span class="metric-label">Peak Load:</span>
+                <span class="metric-value" id="dsp-peak-value">0.0%</span>
+              </div>
+              <div class="performance-metric">
+                <span class="metric-label">I/O Latency:</span>
+                <span class="metric-value" id="dsp-latency-value">—</span>
+              </div>
+            </div>
+            <div class="performance-section">
+              <h3>NAM Processing Quality</h3>
+              <div class="nam-quality-control">
+                <label for="nam-slimmable-size-input">Adjust Quality</label>
+                <div class="nam-quality-slider-row">
+                  <span class="nam-quality-endpoint">Min</span>
+                  <input type="range" id="nam-slimmable-size-input" min="0" max="1" step="0.01" />
+                  <span class="nam-quality-endpoint">Max</span>
+                </div>
+              </div>
+              <div class="settings-hint">Adjust quality while watching DSP Load and Peak Load above. Lower quality reduces CPU use.</div>
+              <div class="settings-row">
+                <label for="dsp-multi-threaded-toggle">Multi-threaded processing</label>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="dsp-multi-threaded-toggle" checked />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="settings-hint">Enable to use worker threads for parallel preset processing. Disable to force single-threaded DSP execution.</div>
+            </div>
+            <div class="performance-details">
+              <h3>Signal Diagnostics <span class="metric-value" id="signal-diagnostics-status">Enabled</span></h3>
+              <div class="signal-diagnostics-summary">
+                <div class="performance-metric">
+                  <span class="metric-label">Input Peak:</span>
+                  <span class="metric-value" id="signal-input-peak">—</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Input RMS:</span>
+                  <span class="metric-value" id="signal-input-rms">—</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Input Headroom:</span>
+                  <span class="metric-value" id="signal-input-headroom">—</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Input Clipping:</span>
+                  <span class="metric-value signal-clip-status clip-off" id="signal-input-clipping">
+                    <span class="clip-indicator"></span>
+                    —
+                  </span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Output Peak:</span>
+                  <span class="metric-value" id="signal-output-peak">—</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Output RMS:</span>
+                  <span class="metric-value" id="signal-output-rms">—</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Output Headroom:</span>
+                  <span class="metric-value" id="signal-output-headroom">—</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Output Clipping:</span>
+                  <span class="metric-value signal-clip-status clip-off" id="signal-output-clipping">
+                    <span class="clip-indicator"></span>
+                    —
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div class="performance-plot-container">
+              <canvas id="performance-plot" width="400" height="200"></canvas>
+            </div>
+            <div class="performance-details">
+              <h3>Per-Node Diagnostics</h3>
+              <div class="designed-peak-input-section" id="designed-peak-input-section">
+                <div class="performance-metric">
+                  <span class="metric-label">Preset Designed Peak Input:</span>
+                  <span class="metric-value" id="designed-peak-stored-value">&mdash;</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Current Raw Input Peak (10s hold):</span>
+                  <span class="metric-value" id="designed-peak-current-value">&mdash;</span>
+                </div>
+                <button type="button" id="apply-designed-peak-btn" class="settings-row-btn" disabled>Apply as Designed Peak Input to Preset</button>
+              </div>
+              <div id="signal-diagnostics-list">
+                <!-- Signal diagnostics details will be populated here -->
+              </div>
+            </div>
+          </div>
+
+          <div class="equipment-tab-panel" id="equipment-tab-help">
+            <h2>Help</h2>
+
+            <div class="settings-section help-section">
+              <h3>Signal Path</h3>
+              <p class="settings-help-copy">Build your tone by adding and ordering effects in the chain. Click a node to edit parameters, bypass it, or swap models and IRs. Drag and drop to re-order items. Save your preset when the chain sounds right.</p>
+            </div>
+
+            <div class="settings-section help-section">
+              <h3>Presets And Scenes</h3>
+              <p class="settings-help-copy">Use the Presets panel to load, save, and organize tones. Scenes let you store multiple variations inside one preset for quick changes during practice or performance. Add to Mixer lets you use multiple presets at the same time abd mix between them.</p>
+            </div>
+
+            <div class="settings-section help-section">
+              <h3>Jam</h3>
+              <p class="settings-help-copy">Search backing tracks, pin favorites, and keep the floating player visible while you tweak your sound. Use keywords like artist, key, tempo, or style for better results.</p>
+            </div>
+
+            <div class="settings-section help-section">
+              <h3>Library And Sharing</h3>
+              <p class="settings-help-copy">Browse Tone3000 and local resources to load amps, cabinets, and riffs. Import content to your library, then export complete library bundles when you need backups or transfers.</p>
+            </div>
+
+            <div class="settings-section help-section">
+              <h3>Performance And Diagnostics</h3>
+              <p class="settings-help-copy">In DSP Performance, monitor load, latency, and signal diagnostics to troubleshoot clipping, gain staging, and node-level behavior.</p>
+            </div>
+
+            <div class="settings-section help-section">
+              <h3>More Guides</h3>
+              <p class="settings-help-copy">For full walkthroughs, troubleshooting tips, and feature updates, visit <a href="https://guitar.soundshed.com" target="_blank" rel="noopener noreferrer">guitar.soundshed.com</a>.</p>
+            </div>
+          </div>
+
+            </div>
+          </div>
+
+
+        </div>
+      </div>
+
+    </main>
+
+    <!-- Footer Bar -->
+    <footer class="footer-bar">
+      <div id="footer-demo-audio-container" class="footer-demo-audio-container">
+        <!-- Demo audio controls rendered by JavaScript -->
+      </div>
+      <span class="footer-divider">|</span>
+      <button class="footer-btn">TUNER</button>
+      <span class="footer-divider">|</span>
+      <button class="footer-btn footer-btn-disabled" disabled>MIDI</button>
+      <span class="footer-divider">|</span>
+      <button class="footer-btn metronome-only" id="footer-riff-record-btn">REC</button>
+      <button class="bpm-display metronome-only" id="footer-bpm-btn" title="Set BPM">
+        <span id="footer-bpm-value">120.0</span> BPM
+      </button>
+      <div class="footer-bpm-panel metronome-only" id="footer-bpm-panel" aria-hidden="true">
+        <label class="footer-bpm-field">
+          <span>BPM</span>
+          <input type="number" id="footer-bpm-input" min="30" max="300" step="1" />
+        </label>
+        <input type="range" id="footer-bpm-slider" min="30" max="300" step="1" />
+      </div>
+      <button class="footer-btn" id="footer-tap-btn">TAP</button>
+      <span class="footer-divider">|</span>
+      <button
+        class="footer-btn footer-metronome-btn metronome-only"
+        id="footer-metronome-btn"
+        type="button"
+        aria-label="Metronome"
+        title="Metronome"
+      >
+        <svg class="footer-metronome-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M9 3.5h6L19 20.5H5L9 3.5Z" />
+          <path d="M10 7.5h4" />
+          <path d="M12 8.5v7" />
+          <path d="M12 10.5l2.75-1.75" />
+        </svg>
+      </button>
+      <button
+        class="footer-metronome-play-btn metronome-only"
+        id="footer-metronome-toggle"
+        type="button"
+        aria-label="Start metronome"
+        aria-pressed="false"
+        title="Start metronome"
+      >
+        <span class="footer-metronome-play-icon" aria-hidden="true">▶</span>
+      </button>
+      <span class="footer-divider">|</span>
+      <div class="footer-right">
+        <div class="footer-zoom-control">
+          <select id="zoom-level-select" class="footer-demo-select themed-select zoom-level-select" aria-label="UI zoom level" title="UI zoom level"></select>
+        </div>
+        <span class="footer-divider">|</span>
+        <div class="footer-theme-select">
+          <span class="footer-theme-label">THEME</span>
+          <select id="theme-select" class="footer-demo-select themed-select"></select>
+        </div>
+      </div>
+    </footer>
+    <div id="notification-area" class="notification-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+        <div id="custom-effect-designer-modal" class="modal custom-effect-designer-modal" style="display: none;">
+      <div class="modal-content custom-effect-designer-content">
+        <div class="modal-header">
+          <div class="custom-effect-designer-header-copy">
+            <h3>Custom Effect Designer</h3>
+            <p id="custom-effect-designer-subtitle" class="custom-effect-designer-subtitle">Describe the Custom Effect you want to build.</p>
+          </div>
+          <button id="custom-effect-designer-close" class="modal-close" type="button">&times;</button>
+        </div>
+        <div class="modal-body custom-effect-designer-body">
+          <div class="custom-effect-designer-layout">
+            <section class="custom-effect-designer-chat" aria-label="Design conversation">
+              <div id="custom-effect-designer-thread" class="custom-effect-designer-thread"></div>
+              <div class="custom-effect-designer-composer">
+                <label for="custom-effect-designer-input">Describe the sound or behavior</label>
+                <textarea id="custom-effect-designer-input" placeholder="Example: Make this wider and slowly wander left/right for ambient clean parts."></textarea>
+                <div class="custom-effect-designer-composer-actions">
+                  <div id="custom-effect-designer-status" class="custom-effect-designer-status" aria-live="polite"></div>
+                  <div class="custom-effect-designer-composer-buttons">
+                    <button id="custom-effect-designer-send" class="custom-effect-designer-btn" type="button">Refine Design</button>
+                    <button id="custom-effect-designer-generate" class="custom-effect-designer-btn custom-effect-designer-btn-primary" type="button">Generate Module</button>
+                  </div>
+                </div>
+              </div>
+            </section>
+            <aside class="custom-effect-designer-sidebar">
+              <div class="custom-effect-designer-card">
+                <h4>Current Design</h4>
+                <div id="custom-effect-designer-plan" class="custom-effect-designer-plan"></div>
+              </div>
+              <div class="custom-effect-designer-card">
+                <h4>Latest Revision</h4>
+                <div id="custom-effect-designer-revision" class="custom-effect-designer-revision"></div>
+              </div>
+            </aside>
+          </div>
+        </div>
+        <div class="modal-footer custom-effect-designer-footer">
+          <span id="custom-effect-designer-footer-note" class="custom-effect-designer-footer-note">Generated modules are saved locally only when you choose Save or Use.</span>
+          <div class="custom-effect-designer-footer-actions">
+            <button id="custom-effect-designer-download" class="secondary" type="button" disabled>Download Bundle</button>
+            <button id="custom-effect-designer-save" class="secondary" type="button" disabled>Save To My Custom Effects</button>
+            <button id="custom-effect-designer-apply" type="button" disabled>Use This Effect</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+        <div id="riff-save-modal" class="modal riff-save-modal" style="display: none;">
+      <div class="modal-content riff-save-modal-content">
+        <div class="modal-header">
+          <h3 id="riff-save-modal-title">Save Take</h3>
+          <button id="riff-save-modal-close" class="modal-close" type="button">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="settings-row">
+            <label for="riff-save-title">Title</label>
+            <input type="text" id="riff-save-title" placeholder="Palm-muted verse riff" />
+            <label class="toggle-switch">
+              <input type="checkbox" id="riff-save-favorite" />
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="settings-unit">Favorite</span>
+          </div>
+          <div class="settings-row">
+            <label for="riff-save-categories">Categories</label>
+            <input type="text" id="riff-save-categories" placeholder="metal, rhythm" />
+            <span class="settings-unit">CSV</span>
+          </div>
+          <div class="settings-row">
+            <label for="riff-save-tags">Tags</label>
+            <input type="text" id="riff-save-tags" placeholder="drop C, tight, intro" />
+            <span class="settings-unit">CSV</span>
+          </div>
+          <div class="settings-row">
+            <label for="riff-save-notes">Notes</label>
+            <input type="text" id="riff-save-notes" placeholder="Works with modern high-gain presets" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="riff-save-modal-cancel" class="secondary" type="button">Cancel</button>
+          <button id="riff-save-modal-confirm" type="button">Save Take</button>
+        </div>
+      </div>
+    </div>
+
+
+        <div id="riff-capture-modal" class="modal riff-capture-modal" style="display: none;">
+      <div class="modal-content riff-capture-modal-content">
+        <div class="modal-header">
+          <h3>New Riff</h3>
+          <span class="riff-rec-indicator" aria-hidden="true">● REC</span>
+          <button id="riff-capture-modal-close" class="modal-close" type="button">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="riff-capture-tabs preset-modal-tabs" role="tablist" aria-label="Riff capture settings tabs">
+            <button class="riff-capture-tab-btn tab-btn active" data-riff-capture-tab="main" type="button">Main</button>
+            <button class="riff-capture-tab-btn tab-btn" data-riff-capture-tab="advanced" type="button">Advanced</button>
+          </div>
+          <div class="riff-capture-tab-panel active" data-riff-capture-tab-panel="main">
+            <div class="settings-row riff-capture-row">
+              <label for="riff-capture-tempo">Tempo</label>
+              <input type="number" id="riff-capture-tempo" min="30" max="300" step="1" value="120" />
+              <span class="settings-unit">BPM</span>
+              <button id="riff-sync-metronome-btn" type="button" class="secondary riff-sync-metro-btn" title="Copy current metronome tempo">↩ Metro</button>
+            </div>
+            <div class="settings-row riff-capture-row">
+              <label>Status</label>
+              <span id="riff-capture-status" class="settings-unit">Idle</span>
+            </div>
+          </div>
+          <div class="riff-capture-tab-panel" data-riff-capture-tab-panel="advanced">
+            <div class="settings-row riff-capture-row">
+              <label for="riff-capture-timesig-num">Time Signature</label>
+              <div class="riff-timesig-inline">
+                <input type="number" id="riff-capture-timesig-num" min="1" max="16" step="1" value="4" />
+                <span>/</span>
+                <input type="number" id="riff-capture-timesig-den" min="1" max="16" step="1" value="4" />
+              </div>
+              <span class="settings-unit" id="riff-capture-bars-display">— bars</span>
+            </div>
+            <div class="settings-row riff-capture-row">
+              <label for="riff-capture-pattern-type">Pattern</label>
+              <select id="riff-capture-pattern-type">
+                <option value="click" selected>Click</option>
+                <option value="drum">Drum (MIDI)</option>
+              </select>
+              <span class="settings-unit">pattern id</span>
+              <input type="text" id="riff-capture-pattern-id" placeholder="e.g. rock_4_4_01" />
+            </div>
+            <div class="settings-row riff-capture-row">
+              <label for="riff-capture-countin">Count-in</label>
+              <input type="number" id="riff-capture-countin" min="0" max="8" step="1" value="1" />
+              <span class="settings-unit">bars</span>
+            </div>
+            <div class="settings-row riff-capture-row">
+              <label for="riff-capture-metro-volume">Click Volume</label>
+              <input type="range" id="riff-capture-metro-volume" min="-60" max="6" step="1" value="-12" />
+              <span class="settings-unit" id="riff-capture-metro-volume-label">-12 dB</span>
+            </div>
+            <div class="settings-row riff-capture-row">
+              <label for="riff-capture-enable-click">Metronome Click</label>
+              <label class="settings-checkbox">
+                <input type="checkbox" id="riff-capture-enable-click" checked />
+                <span>Play click during count-in, capture, and riff preview</span>
+              </label>
+            </div>
+            <div class="settings-row riff-capture-row">
+              <label for="riff-capture-accent">Beat Pattern</label>
+              <input type="text" id="riff-capture-accent" maxlength="16" placeholder="LHLH" title="H=High L=Low S=Silent" />
+              <span class="settings-unit">H=High L=Low S=Silent</span>
+            </div>
+          </div>
+          <div class="settings-row">
+            <label>Actions</label>
+            <div class="riff-capture-actions">
+              <button id="riff-capture-record-toggle" type="button">● Record</button>
+              <button id="riff-capture-play" type="button" class="secondary">▶</button>
+            </div>
+          </div>
+          <div class="settings-row">
+            <label>Trim + Loop</label>
+            <div class="riff-trim-controls">
+              <span class="settings-unit">Start</span>
+              <span class="settings-unit" id="riff-trim-start-label">0.00s</span>
+              <span class="settings-unit">End</span>
+              <span class="settings-unit" id="riff-trim-end-label">0.00s</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="riff-capture-repeat" />
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="settings-unit">Repeat</span>
+              <button id="riff-capture-trim" type="button" class="secondary">Crop To Markers</button>
+            </div>
+          </div>
+          <div class="riff-waveform-wrap">
+            <canvas id="riff-capture-waveform" class="riff-capture-waveform" width="640" height="120" tabindex="0" aria-label="Riff trim waveform"></canvas>
+          </div>
+          <div class="settings-hint">Drag the vertical trim markers in the waveform to set loop/crop start and end.</div>
+          <div id="riff-capture-save-section" class="riff-capture-save-section" style="display: none;">
+            <div class="riff-capture-save-divider">Save Take</div>
+            <div class="settings-row riff-capture-row">
+              <label for="riff-capture-save-title">Title</label>
+              <input type="text" id="riff-capture-save-title" placeholder="Palm-muted verse riff" />
+              <label class="toggle-switch">
+                <input type="checkbox" id="riff-capture-save-favorite" />
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="settings-unit">Fav</span>
+            </div>
+            <div class="settings-row riff-capture-row">
+              <label for="riff-capture-save-categories">Categories</label>
+              <input type="text" id="riff-capture-save-categories" placeholder="metal, rhythm" />
+              <span class="settings-unit">CSV</span>
+            </div>
+            <div class="settings-row riff-capture-row">
+              <label for="riff-capture-save-tags">Tags</label>
+              <input type="text" id="riff-capture-save-tags" placeholder="drop C, tight, intro" />
+              <span class="settings-unit">CSV</span>
+            </div>
+            <div class="settings-row riff-capture-row">
+              <label for="riff-capture-save-notes">Notes</label>
+              <input type="text" id="riff-capture-save-notes" placeholder="Works with modern high-gain presets" />
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="riff-capture-modal-cancel" class="secondary" type="button">Cancel</button>
+          <button id="riff-capture-modal-save-take" type="button" disabled>Save Take</button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Tone3000 Details Modal -->
+        <div id="tone3000-details-modal" class="modal tone3000-details-modal" style="display: none;">
+      <div class="modal-content tone3000-details-content">
+        <div class="modal-header">
+          <h3 id="tone3000-details-title">Tone Details</h3>
+          <button class="tone3000-details-close" id="tone3000-details-close" title="Close tone details">×</button>
+        </div>
+        <div class="tone3000-details-body">
+          <div class="tone3000-details-hero">
+            <div class="tone3000-details-image" id="tone3000-details-image"></div>
+            <div class="tone3000-details-meta" id="tone3000-details-meta"></div>
+          </div>
+          <div class="tone3000-details-section">
+            <h4>Description</h4>
+            <p id="tone3000-details-description"></p>
+          </div>
+          <div class="tone3000-details-section">
+            <h4>Tags</h4>
+            <div class="tone3000-details-tags" id="tone3000-details-tags"></div>
+          </div>
+          <div class="tone3000-details-section">
+            <h4>Models</h4>
+            <div class="tone3000-details-status" id="tone3000-details-models-status"></div>
+            <div class="tone3000-details-controls">
+              <div class="tone3000-details-select">
+                <button class="btn btn-secondary tone3000-details-select-btn" id="tone3000-details-select-all" type="button">Select All</button>
+                <button class="btn btn-secondary tone3000-details-select-btn" id="tone3000-details-select-none" type="button">Select None</button>
+              </div>
+              <div class="tone3000-details-import-actions">
+                <button class="btn btn-secondary" id="tone3000-details-import-selected" type="button">Import Selected</button>
+                <button class="btn btn-primary" id="tone3000-details-import-blend" type="button">Import &amp; Create Blend</button>
+              </div>
+            </div>
+            <div class="tone3000-details-progress" id="tone3000-details-progress"></div>
+            <ul class="tone3000-details-models" id="tone3000-details-models"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Metronome Modal -->
+        <div id="metronome-modal" class="modal metronome-modal metronome-only" style="display: none;">
+      <div class="metronome-content">
+        <div class="metronome-card">
+          <div class="metronome-card-header">
+            <span class="metronome-card-title">Metronome</span>
+            <div class="metronome-header-controls">
+              <span class="metronome-source" id="metronome-source">Standalone</span>
+              <button class="metronome-close-btn" id="metronome-close-btn" title="Close metronome">×</button>
+            </div>
+          </div>
+          <div class="metronome-card-body">
+            <div class="metronome-top-row">
+              <div class="metronome-control-block">
+                <span class="metronome-label">Volume</span>
+                <div class="knob metronome-knob" data-param="metronome_volume" data-value="-12">
+                  <div class="knob-indicator"></div>
+                </div>
+                <span class="metronome-value" id="metronome-volume-value">-12.0 dB</span>
+              </div>
+              <div class="metronome-control-block wide">
+                <span class="metronome-label">Time Signature</span>
+                <select class="metronome-select" disabled>
+                  <option selected>4/4</option>
+                  <option>3/4</option>
+                  <option>6/8</option>
+                </select>
+              </div>
+              <div class="metronome-control-block wide">
+                <span class="metronome-label">Sound</span>
+                <select class="metronome-select" id="metronome-sound-select">
+                  <option value="click" selected>Click</option>
+                  <option value="drum">Drum</option>
+                </select>
+              </div>
+              <div class="metronome-control-block">
+                <span class="metronome-label">Pan</span>
+                <div class="knob metronome-knob" data-param="metronome_pan" data-value="0">
+                  <div class="knob-indicator"></div>
+                </div>
+                <span class="metronome-value" id="metronome-pan-value">C</span>
+              </div>
+            </div>
+
+            <div class="metronome-divider"></div>
+
+            <div class="metronome-bottom-row">
+              <div class="metronome-bpm-block">
+                <span class="metronome-label">BPM</span>
+                <div class="metronome-bpm-control">
+                  <div class="metronome-bpm-buttons">
+                    <button class="metronome-bpm-btn" id="metronome-bpm-up">▲</button>
+                    <button class="metronome-bpm-btn" id="metronome-bpm-down">▼</button>
+                  </div>
+                  <input type="number" id="metronome-bpm" min="30" max="300" step="1" class="metronome-bpm-input" />
+                </div>
+                <input type="range" id="metronome-bpm-slider" min="30" max="300" step="1" />
+              </div>
+              <button class="metronome-play" id="metronome-toggle" aria-label="Toggle metronome">
+                <span class="metronome-play-icon">▶</span>
+              </button>
+            </div>
+            <div class="metronome-pattern-row">
+              <label class="metronome-label">Beat Pattern</label>
+              <input type="text" id="metronome-accent-pattern" maxlength="16" placeholder="HLLL" class="metronome-pattern-input" title="H=High  L=Low  S=Silent" />
+            </div>
+            <div class="metronome-footer">
+              <span id="metronome-status">Stopped</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- User Input Calibration Modal -->
+        <div id="user-input-calibration-modal" class="modal input-calibration-modal" style="display: none;">
+      <div class="modal-content input-calibration-content">
+        <div class="modal-header">
+          <h3>Input Level Training</h3>
+          <button class="modal-close" id="user-input-calibration-close" title="Close">×</button>
+        </div>
+        <div class="modal-body input-calibration-body">
+          <p class="input-calibration-lead">Play the loudest picking or strumming you expect to use with this guitar and interface gain setting. Soundshed will save the captured raw input peak and apply a fixed global trim for this setup.</p>
+
+          <div class="input-calibration-metrics">
+            <div class="input-calibration-metric-card">
+              <span class="input-calibration-metric-label">Live Peak</span>
+              <span class="input-calibration-metric-value" id="user-input-calibration-live-peak">-</span>
+              <span class="input-calibration-metric-note">Raw input before any trim</span>
+            </div>
+            <div class="input-calibration-metric-card accent">
+              <span class="input-calibration-metric-label">Captured Peak</span>
+              <span class="input-calibration-metric-value" id="user-input-calibration-captured-peak">-</span>
+              <span class="input-calibration-metric-note">Peak hold saved into this profile</span>
+            </div>
+            <div class="input-calibration-metric-card">
+              <span class="input-calibration-metric-label">Recommended Trim</span>
+              <span class="input-calibration-metric-value" id="user-input-calibration-recommended-trim">-</span>
+              <span class="input-calibration-metric-note">Applied globally before the chain</span>
+            </div>
+          </div>
+
+          <div class="input-calibration-training-row">
+            <span class="input-calibration-status" id="user-input-calibration-status">Play your loudest picking or strumming to capture a training peak.</span>
+            <button id="user-input-calibration-reset" type="button" class="secondary">Reset Peak Hold</button>
+          </div>
+
+          <div class="input-calibration-form">
+            <label for="user-input-calibration-name">Profile Name</label>
+            <input id="user-input-calibration-name" type="text" maxlength="80" placeholder="Guitar X, Interface Gain at 0" />
+
+            <label for="user-input-calibration-description">Description</label>
+            <textarea id="user-input-calibration-description" rows="3" maxlength="200" placeholder="Single coils, bridge pickup, interface knob at 12 o'clock"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="user-input-calibration-cancel" type="button" class="secondary">Cancel</button>
+          <button id="user-input-calibration-save" type="button">Save Profile</button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Tuner Modal -->
+        <div id="tuner-modal" class="modal tuner-modal" style="display: none;">
+      <div class="tuner-content">
+        <div class="tuner-header">
+          <span class="tuner-title">Tuner</span>
+          <div class="tuner-header-controls">
+            <button class="tuner-mute-btn" id="tuner-mute-btn" title="Mute output">
+              <svg viewBox="0 0 24 24" width="20" height="20">
+                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"
+                  fill="currentColor" />
+              </svg>
+            </button>
+            <button class="tuner-close-btn" id="tuner-close-btn" title="Close tuner">×</button>
+          </div>
+        </div>
+
+        <div class="tuner-display">
+          <!-- Cents display -->
+          <div class="tuner-cents-display">
+            <span class="cents-marker cents-left">-50</span>
+            <span class="cents-indicator" id="tuner-cents-indicator">></span>
+            <span class="cents-value" id="tuner-cents-value">0.0</span>
+            <span class="cents-marker cents-right">+50</span>
+          </div>
+
+          <!-- Visual pitch indicator -->
+          <div class="tuner-pitch-track">
+            <div class="tuner-pitch-indicator" id="tuner-pitch-indicator"></div>
+            <div class="tuner-pitch-target"></div>
+          </div>
+
+          <!-- Note display -->
+          <div class="tuner-note-display">
+            <span class="adjacent-note adjacent-note-left" id="tuner-note-left">-</span>
+            <span class="current-note" id="tuner-current-note">-</span>
+            <span class="adjacent-note adjacent-note-right" id="tuner-note-right">-</span>
+          </div>
+        </div>
+
+        <div class="tuner-controls">
+          <div class="tuner-control-group">
+            <button class="tuner-unit-btn active" id="tuner-cents-btn">Cents</button>
+            <button class="tuner-unit-btn" id="tuner-hz-btn">Hz</button>
+          </div>
+
+          <div class="tuner-control-group">
+            <label class="toggle-switch tuner-toggle">
+              <input type="checkbox" id="tuner-live-toggle" checked />
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="tuner-toggle-label">Live Tuner</span>
+          </div>
+
+          <div class="tuner-control-group tuner-ref-group">
+            <input type="number" id="tuner-ref-freq" value="440.0" min="400" max="480" step="0.1"
+              class="tuner-ref-input" />
+            <div class="tuner-ref-buttons">
+              <button class="tuner-ref-btn" id="tuner-ref-up">▲</button>
+              <button class="tuner-ref-btn" id="tuner-ref-down">▼</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- EQ Modal -->
+        <div id="eq-modal" class="modal eq-modal" style="display: none;">
+      <div class="eq-modal-content">
+        <div class="eq-modal-header">
+          <span class="eq-modal-title">Global EQ</span>
+          <div class="eq-modal-controls">
+            <label class="toggle-switch eq-modal-toggle">
+              <input type="checkbox" id="eq-modal-toggle" />
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="eq-modal-toggle-label">Enabled</span>
+            <button class="eq-modal-close" id="eq-modal-close" title="Close EQ">×</button>
+          </div>
+        </div>
+        <div class="eq-modal-body">
+          <div class="eq-visualizer">
+            <div class="eq-visualizer-header">
+              <span>EQ Curve</span>
+              <span class="eq-visualizer-range">±18 dB</span>
+            </div>
+            <canvas class="eq-curve-canvas" id="eq-curve-canvas"></canvas>
+          </div>
+
+          <div class="eq-section">
+            <div class="eq-header">
+              <span class="eq-label">PARAMETRIC EQ</span>
+            </div>
+
+            <div class="eq-bands">
+              <!-- Low Shelf Band -->
+              <div class="eq-band">
+                <span class="eq-band-title">LOW</span>
+                <div class="eq-knob-group">
+                  <div class="eq-knob-control">
+                    <span class="eq-knob-label">GAIN</span>
+                    <div class="eq-knob" data-param="eq_low_gain" data-value="0">
+                      <div class="knob-indicator"></div>
+                    </div>
+                    <span class="knob-value" id="eq-low-gain-value">0 dB</span>
+                  </div>
+                  <div class="eq-knob-control">
+                    <span class="eq-knob-label">FREQ</span>
+                    <div class="eq-knob" data-param="eq_low_freq" data-value="100">
+                      <div class="knob-indicator"></div>
+                    </div>
+                    <span class="knob-value" id="eq-low-freq-value">100 Hz</span>
+                  </div>
+                  <div class="eq-knob-control">
+                    <span class="eq-knob-label">Q</span>
+                    <div class="eq-knob" data-param="eq_low_q" data-value="0.707">
+                      <div class="knob-indicator"></div>
+                    </div>
+                    <span class="knob-value" id="eq-low-q-value">0.71</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Low-Mid Band -->
+              <div class="eq-band">
+                <span class="eq-band-title">LOW MID</span>
+                <div class="eq-knob-group">
+                  <div class="eq-knob-control">
+                    <span class="eq-knob-label">GAIN</span>
+                    <div class="eq-knob" data-param="eq_lowmid_gain" data-value="0">
+                      <div class="knob-indicator"></div>
+                    </div>
+                    <span class="knob-value" id="eq-lowmid-gain-value">0 dB</span>
+                  </div>
+                  <div class="eq-knob-control">
+                    <span class="eq-knob-label">FREQ</span>
+                    <div class="eq-knob" data-param="eq_lowmid_freq" data-value="500">
+                      <div class="knob-indicator"></div>
+                    </div>
+                    <span class="knob-value" id="eq-lowmid-freq-value">500 Hz</span>
+                  </div>
+                  <div class="eq-knob-control">
+                    <span class="eq-knob-label">Q</span>
+                    <div class="eq-knob" data-param="eq_lowmid_q" data-value="1">
+                      <div class="knob-indicator"></div>
+                    </div>
+                    <span class="knob-value" id="eq-lowmid-q-value">1.0</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- High-Mid Band -->
+              <div class="eq-band">
+                <span class="eq-band-title">HIGH MID</span>
+                <div class="eq-knob-group">
+                  <div class="eq-knob-control">
+                    <span class="eq-knob-label">GAIN</span>
+                    <div class="eq-knob" data-param="eq_highmid_gain" data-value="0">
+                      <div class="knob-indicator"></div>
+                    </div>
+                    <span class="knob-value" id="eq-highmid-gain-value">0 dB</span>
+                  </div>
+                  <div class="eq-knob-control">
+                    <span class="eq-knob-label">FREQ</span>
+                    <div class="eq-knob" data-param="eq_highmid_freq" data-value="2000">
+                      <div class="knob-indicator"></div>
+                    </div>
+                    <span class="knob-value" id="eq-highmid-freq-value">2.0k</span>
+                  </div>
+                  <div class="eq-knob-control">
+                    <span class="eq-knob-label">Q</span>
+                    <div class="eq-knob" data-param="eq_highmid_q" data-value="1">
+                      <div class="knob-indicator"></div>
+                    </div>
+                    <span class="knob-value" id="eq-highmid-q-value">1.0</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- High Shelf Band -->
+              <div class="eq-band">
+                <span class="eq-band-title">HIGH</span>
+                <div class="eq-knob-group">
+                  <div class="eq-knob-control">
+                    <span class="eq-knob-label">GAIN</span>
+                    <div class="eq-knob" data-param="eq_high_gain" data-value="0">
+                      <div class="knob-indicator"></div>
+                    </div>
+                    <span class="knob-value" id="eq-high-gain-value">0 dB</span>
+                  </div>
+                  <div class="eq-knob-control">
+                    <span class="eq-knob-label">FREQ</span>
+                    <div class="eq-knob" data-param="eq_high_freq" data-value="8000">
+                      <div class="knob-indicator"></div>
+                    </div>
+                    <span class="knob-value" id="eq-high-freq-value">8.0k</span>
+                  </div>
+                  <div class="eq-knob-control">
+                    <span class="eq-knob-label">Q</span>
+                    <div class="eq-knob" data-param="eq_high_q" data-value="0.707">
+                      <div class="knob-indicator"></div>
+                    </div>
+                    <span class="knob-value" id="eq-high-q-value">0.71</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Blend Editor Modal -->
+        <div id="blend-editor-modal" class="modal" style="display: none;">
+      <div class="modal-content blend-editor-modal">
+        <div class="modal-header">
+          <h3>Edit Blend</h3>
+          <button class="modal-close" id="blend-editor-modal-close">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="blend-tabs tab-bar">
+            <button class="blend-tab-btn tab-btn active" data-blend-tab="settings" type="button">Blend Settings</button>
+            <button class="blend-tab-btn tab-btn" data-blend-tab="test" type="button">Test Blend</button>
+          </div>
+          <div class="blend-tab-panel active" data-blend-tab-panel="settings">
+            <div class="form-group">
+              <label for="blend-editor-name-input">Blend Name</label>
+              <input type="text" id="blend-editor-name-input" placeholder="My Blend" />
+            </div>
+            <div class="form-group">
+              <label for="blend-editor-category-select">Category</label>
+              <select id="blend-editor-category-select">
+                <option value="pedal">Pedal</option>
+                <option value="preamp">Preamp</option>
+                <option value="amp" selected>Amp</option>
+                <option value="full-rig">Full Rig</option>
+                <option value="cab">Cab</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="blend-editor-mode-select">Blend Mode</label>
+              <select id="blend-editor-mode-select">
+                <option value="interpolate" selected>Interpolate</option>
+                <option value="snap">Snap</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Mapped Parameters</label>
+              <div id="blend-parameter-list" class="blend-parameter-list"></div>
+              <div class="blend-parameter-controls">
+                <select id="blend-parameter-add-select"></select>
+                <button class="btn btn-secondary" id="blend-parameter-add-btn" type="button">Add Parameter</button>
+                <button class="btn btn-secondary" id="blend-parameter-auto-btn" type="button">Auto Map</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Models</label>
+              <div id="blend-model-list" class="blend-model-list"></div>
+              <button class="btn btn-secondary blend-add-model" id="blend-add-model-btn" type="button">Add Model</button>
+            </div>
+          </div>
+          <div class="blend-tab-panel" data-blend-tab-panel="test">
+            <div class="form-group">
+              <label>Matched Model</label>
+              <div class="blend-match-summary">
+                <span id="blend-match-name">—</span>
+                <span id="blend-match-details" class="blend-match-details"></span>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Test Parameters</label>
+              <div id="blend-test-controls" class="blend-test-controls"></div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <input type="file" id="blend-import-input" accept=".namz" style="display: none;" />
+          <button class="btn btn-secondary" id="blend-editor-export">Export .namz</button>
+          <button class="btn btn-secondary" id="blend-editor-import">Import .namz</button>
+          <button class="btn btn-secondary" id="blend-editor-cancel">Cancel</button>
+          <button class="btn btn-primary" id="blend-editor-save">Save Blend</button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Resource Browser Modal (Enhanced NAM/IR selector with Library + Tone3000) -->
+        <div id="resource-browser-modal" class="modal resource-browser-modal" style="display: none;">
+      <div class="modal-content resource-browser-modal-content" role="dialog" aria-modal="true" aria-labelledby="resource-browser-title">
+        <div class="modal-header">
+          <h3 id="resource-browser-title">Select Resource</h3>
+          <button class="modal-close" id="resource-browser-close">×</button>
+        </div>
+        <div class="modal-body">
+          <!-- Tab buttons -->
+          <div class="resource-browser-tabs">
+            <button class="resource-browser-tab-btn active" data-tab="library" type="button">Resource Library</button>
+            <button class="resource-browser-tab-btn" data-tab="tone3000" type="button">Tone 3000</button>
+          </div>
+          
+          <!-- Library Tab Panel -->
+          <div class="resource-browser-tab-panel active" data-tab-panel="library">
+            <div class="resource-browser-filters">
+              <input type="text" id="resource-browser-library-search" placeholder="Search models..." />
+              <select id="resource-browser-library-category">
+                <option value="all">All Categories</option>
+              </select>
+              <button class="btn btn-secondary" id="resource-browser-library-favorites-toggle" type="button" title="Filter by favourites">☆ Favourites</button>
+              <button class="btn btn-secondary" id="resource-browser-library-browse" type="button">Local File..</button>
+            </div>
+            <div id="resource-browser-library-list" class="results results--compact resource-browser-list"></div>
+          </div>
+          
+          <!-- Tone3000 Tab Panel -->
+          <div class="resource-browser-tab-panel" data-tab-panel="tone3000">
+            <div class="resource-browser-filters">
+              <input type="text" id="resource-browser-tone3000-search" placeholder="Search amps and pedals..." />
+              <button class="btn btn-secondary" id="resource-browser-tone3000-search-btn" type="button">Search</button>
+              <select id="resource-browser-tone3000-category">
+                <option value="amp" selected>Amps</option>
+                <option value="pedal">Pedals (FX)</option>
+                <option value="preamp">Preamps</option>
+                <option value="full-rig">Full Rigs</option>
+              </select>
+              <select id="resource-browser-tone3000-sort">
+                <option value="popular" selected>Popular</option>
+                <option value="recent">Recent</option>
+                <option value="trending">Trending</option>
+              </select>
+              <select id="resource-browser-tone3000-architecture">
+                <option value="2" selected>A2</option>
+                <option value="1">A1</option>
+                <option value="custom">Custom</option>
+                <option value="all">Any Architecture</option>
+              </select>
+            </div>
+            <div id="resource-browser-tone3000-status" class="resource-browser-status"></div>
+            <div id="resource-browser-tone3000-list" class="results results--compact resource-browser-list resource-browser-tone3000-list"></div>
+            <div id="resource-browser-tone3000-pagination" class="resource-browser-pagination">
+              <button class="resource-browser-page-btn" id="resource-browser-tone3000-prev" type="button">◀ Prev</button>
+              <span id="resource-browser-tone3000-page-label">Page 1</span>
+              <button class="resource-browser-page-btn" id="resource-browser-tone3000-next" type="button">Next ▶</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="resource-browser-cancel">Cancel</button>
+          <button class="btn btn-primary" id="resource-browser-select" disabled>Select</button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Blend Model Browser Modal -->
+        <div id="blend-model-browser-modal" class="modal" style="display: none;">
+      <div class="modal-content blend-model-browser-modal" role="dialog" aria-modal="true" aria-labelledby="blend-model-browser-title">
+        <div class="modal-header">
+          <h3 id="blend-model-browser-title">Select Model</h3>
+          <button class="modal-close" id="blend-model-browser-close">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="blend-model-browser-summary">
+            <span>Default tone group: <strong id="blend-model-browser-group">—</strong></span>
+          </div>
+          <div class="blend-model-browser-filters">
+            <input type="text" id="blend-model-browser-search" placeholder="Search models..." />
+            <select id="blend-model-browser-scope">
+              <option value="group" selected>Current tone group</option>
+              <option value="all">All models</option>
+            </select>
+            <select id="blend-model-browser-category">
+              <option value="all" selected>All types</option>
+            </select>
+          </div>
+          <div id="blend-model-browser-list" class="blend-model-browser-list"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="blend-model-browser-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Save Preset Modal -->
+        <div id="save-preset-modal" class="modal save-preset-modal" style="display: none;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="save-preset-modal-title">Save Preset</h3>
+          <button class="modal-close" id="save-preset-modal-close">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="preset-modal-tabs tab-bar">
+            <button class="preset-modal-tab-btn tab-btn active" data-preset-modal-tab="details" type="button">Details</button>
+            <button class="preset-modal-tab-btn tab-btn" data-preset-modal-tab="advanced" type="button">Advanced</button>
+          </div>
+          <div class="preset-modal-tab-panel active" data-preset-modal-tab-panel="details">
+            <div class="form-group">
+              <label for="preset-folder-select">Save Folder</label>
+              <select id="preset-folder-select" class="themed-select"></select>
+            </div>
+            <div class="form-group">
+              <label for="preset-name-input">Preset Name</label>
+              <input type="text" id="preset-name-input" placeholder="My Custom Preset" />
+            </div>
+            <div class="form-group">
+              <label for="preset-category-input">Category</label>
+              <input type="text" id="preset-category-input" placeholder="User" value="User" />
+            </div>
+            <div class="form-group">
+              <label for="preset-description-input">Description</label>
+              <textarea id="preset-description-input" placeholder="Optional description..." rows="3"></textarea>
+            </div>
+            <div class="form-group">
+              <label>Tags</label>
+              <div class="preset-tags-picker" id="preset-tags-picker">
+                <button type="button" class="preset-tag-chip" data-tag="lead">lead</button>
+                <button type="button" class="preset-tag-chip" data-tag="rhythm">rhythm</button>
+                <button type="button" class="preset-tag-chip" data-tag="clean">clean</button>
+                <button type="button" class="preset-tag-chip" data-tag="crunch">crunch</button>
+                <button type="button" class="preset-tag-chip" data-tag="high-gain">high-gain</button>
+                <button type="button" class="preset-tag-chip" data-tag="ambient">ambient</button>
+                <button type="button" class="preset-tag-chip" data-tag="atmospheric">atmospheric</button>
+              </div>
+            </div>
+            <div class="form-group preset-peak-info">
+              <label>Input Peak Level</label>
+              <div class="preset-peak-grid">
+                <span class="preset-peak-col-label">Raw Input Peak (10s)</span>
+                <span id="preset-modal-raw-peak" class="preset-peak-col-value">—</span>
+                <span class="preset-peak-col-label">Designed Peak</span>
+                <div class="preset-peak-action-cell">
+                  <span id="preset-modal-designed-peak" class="preset-peak-col-value">—</span>
+                  <button type="button" class="btn btn-secondary btn-sm" id="preset-modal-apply-peak">Apply Current</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="preset-modal-tab-panel" data-preset-modal-tab-panel="advanced">
+            <div class="form-group">
+              <label>Preset JSON (read-only)</label>
+              <div class="preset-advanced-actions">
+                <button class="btn btn-secondary" id="preset-json-validate" type="button">Validate</button>
+                <button class="btn btn-secondary" id="preset-json-cleanup" type="button">Clean Up</button>
+              </div>
+              <pre class="preset-json-report" id="preset-json-report"></pre>
+              <div class="preset-advanced-json" aria-label="Preset JSON">
+                <pre id="preset-json-view" style="user-select: all;"></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="save-preset-cancel">Cancel</button>
+          <button class="btn btn-primary" id="save-preset-confirm">Save Preset</button>
+        </div>
+      </div>
+    </div>
+
+
+        <div id="tone-sharing-pack-view-modal" class="modal tone-sharing-pack-view-modal" style="display: none;">
+      <div class="tone-sharing-pack-view-content">
+        <div class="tone-sharing-pack-view-hero" id="tone-sharing-pack-view-hero">
+          <button class="tone-sharing-pack-view-close" id="tone-sharing-pack-view-close" type="button" aria-label="Close">&#x2715;</button>
+          <div class="tone-sharing-pack-view-hero-info">
+            <div class="tone-sharing-pack-view-badge">Pack</div>
+            <h2 class="tone-sharing-pack-view-title" id="tone-sharing-pack-view-title"></h2>
+            <p class="tone-sharing-pack-view-description" id="tone-sharing-pack-view-description"></p>
+          </div>
+        </div>
+        <div class="tone-sharing-pack-view-body">
+          <div class="tone-sharing-pack-view-count" id="tone-sharing-pack-view-count"></div>
+          <div class="tone-sharing-pack-view-actions" id="tone-sharing-pack-view-actions"></div>
+          <div class="tone-sharing-pack-view-presets" id="tone-sharing-pack-view-presets"></div>
+        </div>
+      </div>
+    </div>
+
+
+        <div id="tone-sharing-publish-modal" class="modal tone-sharing-publish-modal" style="display: none;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Publish Preset</h3>
+          <button id="tone-sharing-publish-modal-close" class="modal-close" type="button">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="tone-sharing-grid-form">
+            <label for="tone-sharing-item-title">Title</label>
+            <input id="tone-sharing-item-title" type="text" placeholder="My Heavy Rhythm" />
+
+            <label for="tone-sharing-item-description">Description</label>
+            <textarea id="tone-sharing-item-description" rows="3" placeholder="Describe the tone, guitar, and mix context"></textarea>
+
+            <label>Tags</label>
+            <div class="tone-sharing-tags-picker" id="tone-sharing-tags-picker">
+              <button type="button" class="tone-sharing-tag-chip" data-tag="lead">lead</button>
+              <button type="button" class="tone-sharing-tag-chip" data-tag="rhythm">rhythm</button>
+              <button type="button" class="tone-sharing-tag-chip" data-tag="clean">clean</button>
+              <button type="button" class="tone-sharing-tag-chip" data-tag="crunch">crunch</button>
+              <button type="button" class="tone-sharing-tag-chip" data-tag="high-gain">high-gain</button>
+              <button type="button" class="tone-sharing-tag-chip" data-tag="ambient">ambient</button>
+              <button type="button" class="tone-sharing-tag-chip" data-tag="atmospheric">atmospheric</button>
+            </div>
+          </div>
+          <div class="tone-sharing-pack-assign">
+            <div class="tone-sharing-pack-assign-label">Add to pack after publishing (optional)</div>
+            <div class="tone-sharing-pack-assign-row">
+              <button id="tone-sharing-add-to-new-pack" type="button" class="btn btn-secondary">+ New Pack</button>
+              <select id="tone-sharing-pack-assign-select">
+                <option value="">Or add to existing draft pack…</option>
+              </select>
+            </div>
+          </div>
+          <div class="tone-sharing-status" id="tone-sharing-publish-modal-status"></div>
+          <div class="tone-sharing-progress" id="tone-sharing-publish-progress" style="display: none;">
+            <span class="tone-sharing-progress-spinner" aria-hidden="true"></span>
+            <span class="tone-sharing-progress-label">Uploading preset for approval...</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="tone-sharing-publish-modal-cancel" type="button" class="btn btn-secondary">Cancel</button>
+          <button id="tone-sharing-upload-item" type="button" class="btn btn-primary">Upload + Publish</button>
+        </div>
+      </div>
+    </div>
+
+
+        <div id="tone-sharing-consent-modal" class="modal" style="display: none;">
+      <div class="modal-content tone-sharing-signin-modal-content">
+        <div class="modal-header">
+          <h3>Share Preset Terms</h3>
+          <button id="tone-sharing-consent-close" class="modal-close" type="button">×</button>
+        </div>
+        <div class="modal-body">
+          <p>Community presets are published under the Creative Commons CC-0 Open Data license. By continuing, you confirm you are allowed to share this preset and agree that the Soundshed app and related services may store and use the preset resources and metadata you upload.</p>
+          <label class="tone-sharing-select-item">
+            <input id="tone-sharing-consent-checkbox" type="checkbox" />
+            <span>I agree to publish this preset under CC0 and allow Soundshed to store the uploaded preset resources and metadata.</span>
+          </label>
+          <div class="tone-sharing-status" id="tone-sharing-consent-status"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="tone-sharing-consent-cancel" type="button" class="btn btn-secondary">Cancel</button>
+          <button id="tone-sharing-consent-accept" type="button" class="btn btn-primary" disabled>Agree and Continue</button>
+        </div>
+      </div>
+    </div>
+
+
+        <div id="tone-sharing-signin-modal" class="modal" style="display: none;">
+      <div class="modal-content tone-sharing-signin-modal-content">
+        <div class="modal-header">
+          <h3>Account</h3>
+          <button id="tone-sharing-signin-modal-close" class="modal-close" type="button">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="tone-sharing-auth-status" id="tone-sharing-auth-status">Signed out</div>
+          <div class="tone-sharing-grid-form" id="tone-sharing-auth-fields">
+            <label for="tone-sharing-email">Email</label>
+            <input id="tone-sharing-email" type="email" placeholder="you@example.com" autocomplete="email" />
+            <label for="tone-sharing-code">One-time Code</label>
+            <input id="tone-sharing-code" type="text" placeholder="Enter code from email" autocomplete="one-time-code" />
+          </div>
+          <div class="tone-sharing-grid-form tone-sharing-profile-fields" id="tone-sharing-profile-fields">
+            <label for="tone-sharing-display-name">Creator Name</label>
+            <input id="tone-sharing-display-name" type="text" maxlength="80" placeholder="How your name appears on shared tones" />
+            <label for="tone-sharing-bio">Bio</label>
+            <textarea id="tone-sharing-bio" rows="3" maxlength="600" placeholder="Short style or gear bio (optional)"></textarea>
+            <label for="tone-sharing-avatar-image">Avatar Image</label>
+            <input id="tone-sharing-avatar-image" type="file" accept="image/*" />
+            <div class="tone-sharing-avatar-preview-wrap" id="tone-sharing-avatar-preview-wrap" style="display: none;">
+              <img id="tone-sharing-avatar-preview" class="tone-sharing-avatar-preview" alt="Profile avatar preview" />
+            </div>
+            <div class="tone-sharing-status" id="tone-sharing-profile-status"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="tone-sharing-logout" type="button" class="btn btn-secondary">Sign Out</button>
+          <button id="tone-sharing-save-profile" type="button" class="btn btn-secondary" style="display: none;">Save Profile</button>
+          <button id="tone-sharing-send-code" type="button" class="btn btn-secondary">Send Code</button>
+          <button id="tone-sharing-verify" type="button" class="btn btn-primary">Sign In</button>
+        </div>
+      </div>
+    </div>
+
+
+        <div id="tone-sharing-pack-modal" class="modal" style="display: none;">
+      <div class="modal-content tone-sharing-pack-modal-content">
+        <div class="modal-header">
+          <h3 id="tone-sharing-pack-modal-title">Create Pack</h3>
+          <button id="tone-sharing-pack-modal-close" class="modal-close" type="button">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="tone-sharing-grid-form">
+            <label for="tone-sharing-pack-title">Pack Title</label>
+            <input id="tone-sharing-pack-title" type="text" placeholder="Modern Metal Essentials" />
+            <label for="tone-sharing-pack-description">Description</label>
+            <textarea id="tone-sharing-pack-description" rows="2" placeholder="Short pack description"></textarea>
+            <label for="tone-sharing-pack-image">Pack Image (optional)</label>
+            <input id="tone-sharing-pack-image" type="file" accept="image/*" />
+          </div>
+          <div class="tone-sharing-pack-items-section">
+            <div class="tone-sharing-pack-items-header">
+              <span class="tone-sharing-label">My Published Presets</span>
+              <span class="tone-sharing-status" id="tone-sharing-pack-items-hint">Check presets to include in this pack</span>
+            </div>
+            <div class="tone-sharing-select-list" id="tone-sharing-pack-items"></div>
+          </div>
+          <div class="tone-sharing-status" id="tone-sharing-pack-status"></div>
+          <div class="tone-sharing-progress" id="tone-sharing-pack-progress" style="display: none;">
+            <span class="tone-sharing-progress-spinner" aria-hidden="true"></span>
+            <span class="tone-sharing-progress-label">Publishing pack...</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="tone-sharing-pack-modal-cancel" type="button" class="btn btn-secondary">Cancel</button>
+          <button id="tone-sharing-save-pack-draft" type="button" class="btn btn-secondary">Save Draft</button>
+          <button id="tone-sharing-create-pack" type="button" class="btn btn-primary">Publish Pack</button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Layout Designer Modal -->
+        <div id="layout-designer-modal" class="modal" style="display: none;">
+      <div class="modal-content layout-designer-content">
+        <div class="modal-header">
+          <h3 id="layout-designer-title">Layout Designer</h3>
+          <button class="modal-close" id="layout-designer-close">×</button>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="layout-designer-toolbar">
+          <div class="layout-designer-toolbar-group">
+            <span class="layout-designer-toolbar-label">Size:</span>
+            <div class="layout-dimensions-inputs">
+              <label>W<input type="number" id="layout-designer-width" min="200" max="800" step="8"></label>
+              <span class="dimension-separator">×</span>
+              <label>H<input type="number" id="layout-designer-height" min="150" max="600" step="8"></label>
+            </div>
+          </div>
+          <div class="layout-designer-toolbar-group">
+            <button id="layout-designer-undo" disabled title="Undo (Ctrl+Z)">
+              <svg viewBox="0 0 24 24"><path d="M3 10h10a5 5 0 0 1 0 10H9" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M7 6L3 10l4 4" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              Undo
+            </button>
+            <button id="layout-designer-redo" disabled title="Redo (Ctrl+Y)">
+              <svg viewBox="0 0 24 24"><path d="M21 10H11a5 5 0 0 0 0 10h4" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M17 6l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              Redo
+            </button>
+          </div>
+          <div class="layout-designer-toolbar-group">
+            <button id="layout-designer-grid-toggle" class="active" title="Toggle Grid (G)">
+              <svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              Grid
+            </button>
+            <button id="layout-designer-preview-toggle" title="Preview Mode (P)">
+              <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              Preview
+            </button>
+          </div>
+          <div class="layout-designer-toolbar-group">
+            <button id="layout-designer-add-label" title="Add Text Label">
+              <svg viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              Add Label
+            </button>
+            <button id="layout-designer-add-control" title="Add Parameter Control">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M12 8v8M8 12h8" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              Add Control
+            </button>
+            <button id="layout-designer-add-rect" title="Add Rectangle Overlay">
+              <svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M8 10h8M8 14h8" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              Add Rect
+            </button>
+            <button id="layout-designer-add-bg" title="Add Background Image">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="8" cy="9" r="2" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              Background
+            </button>
+            <button id="layout-designer-add-color-bg" title="Add Color/Gradient Background">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5" fill="none"/><rect x="5" y="5" width="14" height="14" rx="1" fill="currentColor" opacity="0.3"/></svg>
+              Color BG
+            </button>
+          </div>
+          <div class="layout-designer-toolbar-group">
+            <label class="layout-designer-checkbox-label" title="Use the standard auto-generated controls instead of positioned controls. The layout provides only the visual backdrop.">
+              <input type="checkbox" id="layout-designer-use-default-controls">
+              Default Controls
+            </label>
+          </div>
+          <div class="layout-designer-toolbar-group">
+            <button id="layout-designer-reset" title="Reset to Default Layout">
+              <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M3 3v5h5" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+              Reset
+            </button>
+          </div>
+          <div class="layout-designer-toolbar-group layout-designer-zoom-group">
+            <button id="layout-designer-zoom-out" title="Zoom Out">
+              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M21 21l-4.35-4.35M8 11h6" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+            </button>
+            <span id="layout-designer-zoom-label" class="layout-designer-zoom-value">100%</span>
+            <button id="layout-designer-zoom-in" title="Zoom In">
+              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M21 21l-4.35-4.35M8 11h6M11 8v6" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+            </button>
+            <button id="layout-designer-zoom-reset" title="Reset Zoom to 100%">1:1</button>
+          </div>
+        </div>
+
+        <div class="layout-designer-body">
+          <!-- Canvas Area -->
+          <div class="layout-designer-canvas-container">
+            <div id="layout-designer-canvas-wrapper" class="layout-designer-canvas-wrapper">
+              <div id="layout-designer-canvas" class="layout-designer-canvas">
+                <div id="layout-designer-grid" class="layout-designer-grid grid-visible"></div>
+                <div id="layout-designer-controls" class="layout-designer-controls"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Properties Sidebar -->
+          <div id="layout-designer-sidebar" class="layout-designer-sidebar">
+            <div class="layout-designer-sidebar-header">Properties</div>
+            <div id="layout-designer-sidebar-content" class="layout-designer-sidebar-content">
+              <div class="layout-designer-sidebar-empty">
+                Select a control or label to edit its properties
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer layout-designer-footer">
+          <div class="layout-designer-footer-left">
+            <button class="btn btn-secondary" id="layout-designer-export">Export...</button>
+            <button class="btn btn-secondary" id="layout-designer-import">Import...</button>
+            <input type="file" id="layout-designer-import-file" accept=".zip,.sgfxlayout.zip" style="display: none;" />
+          </div>
+          <div class="layout-designer-footer-right">
+            <button class="btn btn-secondary layout-designer-delete-btn" id="layout-designer-delete" hidden>Delete</button>
+            <button class="btn btn-secondary" id="layout-designer-cancel">Cancel</button>
+            <button class="btn btn-primary" id="layout-designer-save">Save Layout</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Alert/Confirm Dialog Modal -->
+        <div id="dialog-modal" class="modal dialog-modal" style="display: none;">
+      <div class="modal-content dialog-content" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+        <div class="modal-header">
+          <h3 id="dialog-title">Notice</h3>
+          <button class="modal-close" id="dialog-close" aria-label="Close">×</button>
+        </div>
+        <div class="modal-body">
+          <p id="dialog-message" class="dialog-message"></p>
+        </div>
+        <div class="modal-footer dialog-footer">
+          <button class="btn btn-secondary" id="dialog-cancel" type="button">Cancel</button>
+          <button class="btn btn-primary" id="dialog-ok" type="button">OK</button>
+        </div>
+      </div>
+    </div>
+
+
+        <div id="tone3000-required-modal" class="modal" style="display: none;">
+      <div class="modal-content tone-sharing-signin-modal-content">
+        <div class="modal-header">
+          <h3>Tone3000 API Key Required</h3>
+          <button id="tone3000-required-close" class="modal-close" type="button">×</button>
+        </div>
+        <div class="modal-body">
+          <p id="tone3000-required-message">This shared preset includes Tone3000 resources.</p>
+          <p>You need your own Tone3000 API key before import can continue. Get one from <a href="https://www.tone3000.com" target="_blank" rel="noreferrer">tone3000.com</a>, under your account Settings (Legacy API Key), then paste it below.</p>
+          <div class="tone-sharing-grid-form">
+            <label for="tone3000-required-api-key">Tone3000 API Key</label>
+            <input id="tone3000-required-api-key" type="password" placeholder="Enter your Tone3000 API key" />
+          </div>
+          <div class="tone-sharing-status" id="tone3000-required-status"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="tone3000-required-cancel" type="button" class="btn btn-secondary">Cancel Import</button>
+          <button id="tone3000-required-open-settings" type="button" class="btn btn-secondary">Open Settings</button>
+          <button id="tone3000-required-save" type="button" class="btn btn-primary">Save Key and Continue</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <div id="jam-floating-player-root"></div>
+  <script src="dist/jszip.min.js"></script>
+  <script type="module" src="dist/main.js"></script>
+</body>
+
+</html>

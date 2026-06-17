@@ -1,0 +1,35 @@
+    <!-- FX Library Selector Panel -->
+    <section class="fx-selector-panel collapsed" id="fx-selector-panel">
+      <div class="fx-selector-header">
+        <span class="fx-selector-title">FX Library</span>
+        <button class="fx-selector-toggle" id="fx-selector-toggle" aria-expanded="false" title="Expand FX Library">
+          <span class="fx-toggle-icon" aria-hidden="true">▾</span>
+        </button>
+      </div>
+      <div class="fx-selector-content" x-data>
+        <div class="fx-selector-categories" id="fx-selector-categories">
+          <template x-for="cat in ($store.fxSelector ? $store.fxSelector.categories : [])" :key="cat.id">
+            <div class="fx-category"
+                 :class="{ active: $store.fxSelector.activeCategory === cat.id }"
+                 :style="`--category-color: ${cat.color}`"
+                 x-on:click="$store.fxSelector && $store.fxSelector.selectCategory(cat.id)">
+              <span x-html="cat.iconHtml || ''"></span>
+              <span class="fx-category-name" x-text="cat.name"></span>
+              <span class="fx-category-count" x-text="cat.count"></span>
+            </div>
+          </template>
+        </div>
+        <div class="fx-selector-effects">
+          <div class="fx-selector-search">
+            <input type="text" id="fx-search-input" placeholder="Search effects..."
+                   x-model="$store.fxSelector ? $store.fxSelector.searchFilter : ''" />
+          </div>
+          <p>Drag any effect into the signal chain. You can also drag effects around to move them in the chain. </p>
+          <div class="fx-selector-effects-list" id="fx-selector-effects-list">
+            <template x-for="fx in ($store.fxSelector ? $store.fxSelector.effects : [])" :key="fx.type || fx.id">
+              <div class="fx-item" :data-type="fx.type" x-text="fx.displayName || fx.name || fx.title || ''"></div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </section>

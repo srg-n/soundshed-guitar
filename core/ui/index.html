@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=2" />
   <title>Soundshed GuitarX</title>
   <script src="build-flags.js"></script>
+  <script src="dist/alpine.min.js"></script>
   <style>
     html[data-jam-enabled="false"] [data-panel="jam"],
     html[data-jam-enabled="false"] #panel-jam,
@@ -33,7 +34,7 @@
 
 <body>
   <div id="app" class="prevent-select">
-    <!-- Splash Screen - shown during initialization, hidden once app is ready -->
+        <!-- Splash Screen - shown during initialization, hidden once app is ready -->
     <div id="splash-screen" class="splash-screen" role="status" aria-live="polite" aria-label="Application loading">
       <div class="splash-content">
         <div class="splash-logo">
@@ -54,26 +55,28 @@
       </div>
     </div>
 
-    <header class="icon-bar">
+
+        <header class="icon-bar">
       <span class="app-title">Soundshed Guitar</span>
       <span class="icon-bar-spacer"></span>
-      <nav class="nav-tabs" aria-label="Main navigation">
-        <button class="icon-btn nav-tab active" data-panel="visualizer" title="Play">PLAY</button>
-        <button class="icon-btn nav-tab" data-panel="sharing" title="Tones">TONES</button>
-        <button class="icon-btn nav-tab" data-panel="jam" title="Jam">JAM</button>
+      <nav class="nav-tabs" aria-label="Main navigation" x-data>
+        <button class="icon-btn nav-tab" :class="{ active: $store.ui && $store.ui.mainPanel === 'visualizer' }" x-on:click="$store.ui && $store.ui.switchMainPanel('visualizer')" data-panel="visualizer" title="Play">PLAY</button>
+        <button class="icon-btn nav-tab" :class="{ active: $store.ui && $store.ui.mainPanel === 'sharing' }" x-on:click="$store.ui && $store.ui.switchMainPanel('sharing')" data-panel="sharing" title="Tones">TONES</button>
+        <button class="icon-btn nav-tab" :class="{ active: $store.ui && $store.ui.mainPanel === 'jam' }" x-on:click="$store.ui && $store.ui.switchMainPanel('jam')" data-panel="jam" title="Jam">JAM</button>
       </nav>
       <span class="icon-bar-spacer"></span>
       <button class="icon-btn nav-settings-btn" data-panel="settings" title="Settings" aria-label="Settings">
         <svg viewBox="0 0 24 24">
           <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" stroke="currentColor" stroke-width="1.5" fill="none" />
-          <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.86l.03.03a2 2 0 0 1-2.83 2.83l-.03-.03A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 1.53V21a2 2 0 0 1-4 0v-.07a1.7 1.7 0 0 0-1-1.53 1.7 1.7 0 0 0-1.86.34l-.03.03a2 2 0 1 1-2.83-2.83l.03-.03A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.53-1H3a2 2 0 0 1 0-4h.07a1.7 1.7 0 0 0 1.53-1 1.7 1.7 0 0 0-.34-1.86l-.03-.03a2 2 0 1 1 2.83-2.83l.03.03A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3.07V3a2 2 0 0 1 4 0v.07a1.7 1.7 0 0 0 1 1.53 1.7 1.7 0 0 0 1.86-.34l.03-.03a2 2 0 1 1 2.83 2.83l-.03.03A1.7 1.7 0 0 0 19.4 9c0 .46.17.9.46 1.24.3.33.74.53 1.21.56H21a2 2 0 0 1 0 4h-.07a1.7 1.7 0 0 0-1.53 1z" stroke="currentColor" stroke-width="1.5" fill="none" />
+          <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.86l.03.03a2 2 0 0 1-2.83 2.83l-.03-.03A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 1.53V21a2 2 0 0 1-4 0v-.07a1.7 1.7 0 0 0-1-1.53 1.7 1.7 0 0 0-1.86.34l-.03.03a2 2 0 1 1-2.83-2.83l.03-.03A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.53-1H3a2 2 0 0 1 0-4h.07a1.7 1.7 0 0 0 1.53-1 1.7 1.7 0 0 0-.34-1.86l-.03-.03a2 2 0 1 1 2.83-2.83l.03-.03A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3.07V3a2 2 0 0 1 4 0v.07a1.7 1.7 0 0 0 1 1.53 1.7 1.7 0 0 0 1.86-.34l.03-.03a2 2 0 1 1 2.83 2.83l-.03.03A1.7 1.7 0 0 0 19.4 9c0 .46.17.9.46 1.24.3.33.74.53 1.21.56H21a2 2 0 0 1 0 4h-.07a1.7 1.7 0 0 0-1.53 1z" stroke="currentColor" stroke-width="1.5" fill="none" />
         </svg>
       </button>
 
     </header>
 
+
     <section class="control-bar">
-      <div class="control-bar-group">
+        <div class="control-bar-group">
         <div class="input-vu-meter" id="input-vu-meter" title="Raw input peak level">
           <div class="vu-segments" id="vu-segments">
             <div class="vu-seg vu-seg-red" data-db="-3"></div>
@@ -172,9 +175,8 @@
         </div>
 
       </div>
-
-        <div class="control-bar-group preset-group">
-          <div class="preset-row preset-toolbar-row">
+          <div class="control-bar-group preset-group">
+                    <div class="preset-row preset-toolbar-row">
             <div class="preset-toolbar" aria-label="Preset actions">
               <div class="preset-toolbar-group">
                 <span class="preset-toolbar-group-label">Presets</span>
@@ -266,7 +268,7 @@
             </div>
           </div>
 
-          <div class="preset-row preset-selector-row">
+                    <div class="preset-row preset-selector-row">
             <button class="nav-btn preset-nav-btn" id="prev-preset" type="button" title="Previous Preset">←</button>
             <div class="preset-selector" id="preset-selector">
               <button class="preset-favorite" id="preset-favorite" type="button" title="Toggle Favorite" aria-label="Toggle favorite">♡</button>
@@ -285,7 +287,7 @@
             <button class="tone-sharing-preview-clear" id="tone-sharing-preview-clear" type="button" title="Clear preview and restore original preset">✕</button>
           </div>
 
-        <div class="preset-library-popover" id="preset-library-popover" aria-hidden="true">
+                  <div class="preset-library-popover" id="preset-library-popover" aria-hidden="true">
           <section class="preset-library" id="preset-library">
             <div class="preset-library-header">
               <div class="preset-library-tabs" role="tablist" style="display:none">
@@ -304,15 +306,14 @@
               </div>
               <button id="preset-library-close-btn" type="button" class="preset-library-close-btn" aria-label="Close preset selector" title="Close">×</button>
             </div>
-            <div class="preset-tag-filter-bar" id="preset-tag-filter-bar">
-              <button type="button" class="preset-tag-filter-chip" data-tag="lead">lead</button>
-              <button type="button" class="preset-tag-filter-chip" data-tag="rhythm">rhythm</button>
-              <button type="button" class="preset-tag-filter-chip" data-tag="clean">clean</button>
-              <button type="button" class="preset-tag-filter-chip" data-tag="crunch">crunch</button>
-              <button type="button" class="preset-tag-filter-chip" data-tag="high-gain">high-gain</button>
-              <button type="button" class="preset-tag-filter-chip" data-tag="ambient">ambient</button>
-              <button type="button" class="preset-tag-filter-chip" data-tag="atmospheric">atmospheric</button>
-              <button type="button" class="preset-tag-filter-chip" data-tag="bass">bass</button>
+            <div class="preset-tag-filter-bar" id="preset-tag-filter-bar" x-data>
+              <template x-for="t in ($store.presetTags ? $store.presetTags.tags : [])" :key="t.tag">
+                <button type="button" class="preset-tag-filter-chip"
+                        :class="{ active: $store.presetTags && $store.presetTags.activeFilters.includes(t.tag) }"
+                        :data-tag="t.tag"
+                        x-on:click="$store.presetTags && $store.presetTags.toggle(t.tag)"
+                        x-text="t.label"></button>
+              </template>
             </div>
             <div class="preset-library-body" id="preset-library-presets-panel" role="tabpanel" aria-labelledby="preset-lib-tab-presets">
               <div class="preset-folder-tree" id="preset-folder-tree"></div>
@@ -375,9 +376,8 @@
             </div>
           </section>
         </div>
-      </div>
-
-      <div class="control-bar-group">
+        </div>
+        <div class="control-bar-group">
         <div class="control-stack control-stack-knob">
           <div class="toggle-control mini-toggle-control">
             <span class="toggle-label">DOUBLER</span>
@@ -424,11 +424,11 @@
           </div>
         </div>
       </div>
+        <div class="jam-player-dock" id="jam-player-dock" aria-hidden="true"></div>
+</section>
 
-      <div class="jam-player-dock" id="jam-player-dock" aria-hidden="true"></div>
-    </section>
 
-    <!-- Signal Path Bar -->
+        <!-- Signal Path Bar -->
     <section class="signal-path-bar" id="signal-path-bar">
       <!-- Composite edit mode banner -->
       <div class="composite-edit-banner" id="composite-edit-banner" style="display: none;">
@@ -438,7 +438,7 @@
       </div>
       <div class="signal-path-scroll">
         <div class="signal-path-nodes" id="signal-path-nodes">
-          <!-- Signal path nodes will be rendered here by JavaScript -->
+          <!-- Signal path nodes will be rendered here by JavaScript (or x-for in future) -->
           <div class="signal-node input-node" data-node-id="__input__">
             <div class="node-icon"><span class="fx-effect-icon" style="--icon-url: url('/images/icons/amp.svg')" aria-hidden="true"></span>
             </div>
@@ -471,7 +471,8 @@
       </div>
     </section>
 
-    <!-- FX Library Selector Panel -->
+
+        <!-- FX Library Selector Panel -->
     <section class="fx-selector-panel collapsed" id="fx-selector-panel">
       <div class="fx-selector-header">
         <span class="fx-selector-title">FX Library</span>
@@ -479,30 +480,42 @@
           <span class="fx-toggle-icon" aria-hidden="true">▾</span>
         </button>
       </div>
-      <div class="fx-selector-content">
+      <div class="fx-selector-content" x-data>
         <div class="fx-selector-categories" id="fx-selector-categories">
-          <!-- Categories rendered by JavaScript -->
+          <template x-for="cat in ($store.fxSelector ? $store.fxSelector.categories : [])" :key="cat.id">
+            <div class="fx-category"
+                 :class="{ active: $store.fxSelector.activeCategory === cat.id }"
+                 :style="`--category-color: ${cat.color}`"
+                 x-on:click="$store.fxSelector && $store.fxSelector.selectCategory(cat.id)">
+              <span x-html="cat.iconHtml || ''"></span>
+              <span class="fx-category-name" x-text="cat.name"></span>
+              <span class="fx-category-count" x-text="cat.count"></span>
+            </div>
+          </template>
         </div>
         <div class="fx-selector-effects">
           <div class="fx-selector-search">
-            <input type="text" id="fx-search-input" placeholder="Search effects..." />
+            <input type="text" id="fx-search-input" placeholder="Search effects..."
+                   x-model="$store.fxSelector ? $store.fxSelector.searchFilter : ''" />
           </div>
           <p>Drag any effect into the signal chain. You can also drag effects around to move them in the chain. </p>
           <div class="fx-selector-effects-list" id="fx-selector-effects-list">
-            <!-- Effects rendered by JavaScript -->
+            <template x-for="fx in ($store.fxSelector ? $store.fxSelector.effects : [])" :key="fx.type || fx.id">
+              <div class="fx-item" :data-type="fx.type" x-text="fx.displayName || fx.name || fx.title || ''"></div>
+            </template>
           </div>
         </div>
       </div>
     </section>
 
 
-    <!-- Main Content Area -->
+        <!-- Main Content Area -->
     <main class="main-content">
       <!-- Hidden file inputs -->
       <input type="file" id="model-file-input" accept=".nam,.json" style="display: none;" />
       <input type="file" id="ir-file-input" accept=".wav,.ir" style="display: none;" />
 
-      <!-- Advanced Panel -->
+            <!-- Advanced Panel -->
       <div class="tab-panel" id="panel-advanced">
         <div class="panel-content">
           <h2>Advanced</h2>
@@ -510,7 +523,7 @@
         </div>
       </div>
 
-      <!-- Effect Visualization Panel (Default) -->
+            <!-- Effect Visualization Panel (Default) -->
       <div class="tab-panel active" id="panel-visualizer">
         
           <div class="visualization-panel">
@@ -528,7 +541,7 @@
           </div>
         
       </div>
-      <div class="tab-panel" id="panel-jam">
+            <div class="tab-panel" id="panel-jam">
         <div class="panel-content jam-panel">
           <div class="jam-panel-header">
             <div>
@@ -600,7 +613,7 @@
         </div>
       </div>
 
-      <div class="tab-panel" id="panel-sharing">
+            <div class="tab-panel" id="panel-sharing">
         <div class="panel-content tone-sharing-panel">
           <div class="tone-sharing-shell">
             <aside class="tone-sharing-sidebar">
@@ -649,7 +662,7 @@
         </div>
       </div>
 
-      <div class="tab-panel" id="panel-settings">
+            <div class="tab-panel" id="panel-settings">
         <div class="panel-content settings-panel">
 
           <!-- Update available banner — shown when a newer version is detected -->
@@ -674,7 +687,7 @@
             </div>
 
             <div class="settings-content">
-          <div class="equipment-tab-panel active" id="equipment-tab-settings">
+                    <div class="equipment-tab-panel active" id="equipment-tab-settings">
 
             <h2>Audio</h2>
             <div class="settings-section">
@@ -777,7 +790,7 @@
             </div>
           </div>
 
-          <div class="equipment-tab-panel" id="equipment-tab-library" hidden>
+                    <div class="equipment-tab-panel" id="equipment-tab-library" hidden>
             <div class="library-tabs tab-bar">
               <button class="library-tab-btn tab-btn active" data-library-tab="tone3000">Tone 3000</button>
               <button class="library-tab-btn tab-btn" data-library-tab="resources">Resource Library</button>
@@ -956,7 +969,7 @@
             </div>
           </div>
 
-          <div class="equipment-tab-panel" id="equipment-tab-features" hidden>
+                    <div class="equipment-tab-panel" id="equipment-tab-features" hidden>
             <h2>Feature Toggles</h2>
             <div class="settings-hint">Simplify the options available in the app depedning on your preferences for trying online or advacned features..</div>
             <div id="settings-feature-groups"></div>
@@ -973,7 +986,7 @@
             </div>
           </div>
 
-          <div class="equipment-tab-panel" id="equipment-tab-performance">
+                    <div class="equipment-tab-panel" id="equipment-tab-performance">
             <h2>DSP Performance</h2>
             <div class="performance-section">
               <h3>Diagnostics</h3>
@@ -1078,7 +1091,7 @@
             </div>
           </div>
 
-          <div class="equipment-tab-panel" id="equipment-tab-help">
+                    <div class="equipment-tab-panel" id="equipment-tab-help">
             <h2>Help</h2>
 
             <div class="settings-section help-section">
@@ -1121,7 +1134,7 @@
 
     </main>
 
-    <!-- Footer Bar -->
+
     <footer class="footer-bar">
       <div id="footer-demo-audio-container" class="footer-demo-audio-container">
         <!-- Demo audio controls rendered by JavaScript -->
@@ -1179,9 +1192,12 @@
           <select id="theme-select" class="footer-demo-select themed-select"></select>
         </div>
       </div>
-    </footer>
-    <div id="notification-area" class="notification-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+    </footer>
 
+    <div id="notification-area" class="notification-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+
+    <!-- All modals -->
     <div id="custom-effect-designer-modal" class="modal custom-effect-designer-modal" style="display: none;">
       <div class="modal-content custom-effect-designer-content">
         <div class="modal-header">
@@ -1394,7 +1410,6 @@
       </div>
     </div>
 
-    <!-- Tone3000 Details Modal -->
     <div id="tone3000-details-modal" class="modal tone3000-details-modal" style="display: none;">
       <div class="modal-content tone3000-details-content">
         <div class="modal-header">
@@ -1434,7 +1449,6 @@
       </div>
     </div>
 
-    <!-- Metronome Modal -->
     <div id="metronome-modal" class="modal metronome-modal metronome-only" style="display: none;">
       <div class="metronome-content">
         <div class="metronome-card">
@@ -1508,7 +1522,6 @@
       </div>
     </div>
 
-    <!-- User Input Calibration Modal -->
     <div id="user-input-calibration-modal" class="modal input-calibration-modal" style="display: none;">
       <div class="modal-content input-calibration-content">
         <div class="modal-header">
@@ -1556,7 +1569,6 @@
       </div>
     </div>
 
-    <!-- Tuner Modal -->
     <div id="tuner-modal" class="modal tuner-modal" style="display: none;">
       <div class="tuner-content">
         <div class="tuner-header">
@@ -1621,7 +1633,6 @@
       </div>
     </div>
 
-    <!-- EQ Modal -->
     <div id="eq-modal" class="modal eq-modal" style="display: none;">
       <div class="eq-modal-content">
         <div class="eq-modal-header">
@@ -1767,7 +1778,6 @@
       </div>
     </div>
 
-    <!-- Blend Editor Modal -->
     <div id="blend-editor-modal" class="modal" style="display: none;">
       <div class="modal-content blend-editor-modal">
         <div class="modal-header">
@@ -1840,7 +1850,6 @@
       </div>
     </div>
 
-    <!-- Resource Browser Modal (Enhanced NAM/IR selector with Library + Tone3000) -->
     <div id="resource-browser-modal" class="modal resource-browser-modal" style="display: none;">
       <div class="modal-content resource-browser-modal-content" role="dialog" aria-modal="true" aria-labelledby="resource-browser-title">
         <div class="modal-header">
@@ -1906,7 +1915,6 @@
       </div>
     </div>
 
-    <!-- Blend Model Browser Modal -->
     <div id="blend-model-browser-modal" class="modal" style="display: none;">
       <div class="modal-content blend-model-browser-modal" role="dialog" aria-modal="true" aria-labelledby="blend-model-browser-title">
         <div class="modal-header">
@@ -1935,7 +1943,6 @@
       </div>
     </div>
 
-    <!-- Save Preset Modal -->
     <div id="save-preset-modal" class="modal save-preset-modal" style="display: none;">
       <div class="modal-content">
         <div class="modal-header">
@@ -2168,7 +2175,6 @@
       </div>
     </div>
 
-    <!-- Layout Designer Modal -->
     <div id="layout-designer-modal" class="modal" style="display: none;">
       <div class="modal-content layout-designer-content">
         <div class="modal-header">
@@ -2289,7 +2295,6 @@
       </div>
     </div>
 
-    <!-- Alert/Confirm Dialog Modal -->
     <div id="dialog-modal" class="modal dialog-modal" style="display: none;">
       <div class="modal-content dialog-content" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
         <div class="modal-header">
@@ -2328,8 +2333,11 @@
         </div>
       </div>
     </div>
+
   </div>
+
   <div id="jam-floating-player-root"></div>
+
   <script src="dist/jszip.min.js"></script>
   <script type="module" src="dist/main.js"></script>
 </body>

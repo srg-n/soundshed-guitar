@@ -3,11 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/assemble-html.js",
+    "build:html": "node scripts/assemble-html.js",
     "test": "vitest run",
-    "postbuild": "node -e \"const fs=require('fs');const path=require('path');const src=path.join(__dirname,'node_modules','jszip','dist','jszip.min.js');const dst=path.join(__dirname,'dist','jszip.min.js');fs.copyFileSync(src,dst);\""
+    "postbuild": "node -e \"const fs=require('fs');const path=require('path');const src=path.join(__dirname,'node_modules','jszip','dist','jszip.min.js');const dst=path.join(__dirname,'dist','jszip.min.js');fs.copyFileSync(src,dst);\" && node -e \"const fs=require('fs');const path=require('path');const src=path.join(__dirname,'node_modules','alpinejs','dist','cdn.min.js');const dst=path.join(__dirname,'dist','alpine.min.js');fs.copyFileSync(src,dst); console.log('copied alpine.min.js');\""
   },
   "dependencies": {
+    "alpinejs": "^3.15.12",
     "jszip": "^3.10.1"
   },
   "devDependencies": {

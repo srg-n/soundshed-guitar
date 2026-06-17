@@ -195,6 +195,7 @@ export function initFxSelector(): void {
   // Initial render
   renderCategories();
   renderEffectsList();
+  pushToAlpineStore();
 }
 
 /**
@@ -213,6 +214,13 @@ function selectCategory(categoryId: string): void {
  */
 function renderCategories(): void {
   if (!fxSelectorCategories) return;
+
+  // During Alpine port: if store is present, push data and let declarative x-for handle DOM
+  const AlpineWin = (window as any).Alpine;
+  if (AlpineWin && AlpineWin.store && AlpineWin.store('fxSelector')) {
+    pushToAlpineStore();
+    return; // skip imperative innerHTML
+  }
 
   const allEffects = getCatalogEffects();
   const blendItems = getBlendFxItems();
@@ -257,6 +265,8 @@ function renderCategories(): void {
       }
     });
   });
+
+  pushToAlpineStore();
 }
 
 /**
@@ -264,6 +274,13 @@ function renderCategories(): void {
  */
 export function renderEffectsList(): void {
   if (!fxSelectorEffectsList) return;
+
+  // During Alpine port: if store is present, push data and let declarative x-for handle DOM
+  const AlpineWin = (window as any).Alpine;
+  if (AlpineWin && AlpineWin.store && AlpineWin.store('fxSelector')) {
+    pushToAlpineStore();
+    return; // skip imperative innerHTML for the list
+  }
 
   const allEffects = getCatalogEffects();
   const allCustomEffects = getCustomEffectFxItems();
@@ -331,6 +348,8 @@ export function renderEffectsList(): void {
 
   // Bind drag handlers to FX items
   bindFxItemDragHandlers();
+
+  pushToAlpineStore();
 }
 
 /**
@@ -502,6 +521,56 @@ function getCompositeFxItems(): CompositeFxItem[] {
 export function refreshFxSelector(): void {
   renderCategories();
   renderEffectsList();
+}
+
+// Bridge to Alpine store: compute and push reactive data
+function pushToAlpineStore(): void {
+  try {
+    const Alpine = (window as any).Alpine;
+    const fxStore = Alpine && Alpine.store && Alpine.store('fxSelector');
+    if (!fxStore || typeof fxStore.updateFromTs !== 'function') return;
+
+    const allEffects = getCatalogEffects();
+    const blendItems = getBlendFxItems();
+    const customEffectItems = getCustomEffectFxItems();
+    const compositeItems = getCompositeFxItems();
+
+    const orderedCategories = getOrderedFxCategories([
+      ...allEffects,
+      ...blendItems,
+      ...customEffectItems,
+      ...compositeItems,
+    ]);
+
+    const catData = orderedCategories.map((categoryId) => {
+      const meta = CATEGORY_METADATA[categoryId] ?? { name: categoryId, color: "#606060" };
+      const effects = allEffects.filter((e) => e.category === categoryId);
+      const blends = blendItems.filter((b) => b.category === categoryId);
+      const customs = customEffectItems.filter((c) => c.category === categoryId);
+      const comps = compositeItems.filter((c) => c.category === categoryId);
+      const count = effects.length + blends.length + customs.length + comps.length;
+      return {
+        id: categoryId,
+        name: meta.name,
+        color: meta.color,
+        count,
+        iconHtml: '', // can enhance with renderIcon later
+      };
+    });
+
+    // For demo, simple effects list (full item data later)
+    const effData = [
+      ...allEffects.slice(0, 5).map(e => ({ type: e.type, displayName: e.displayName || (e as any).name || '', category: e.category })),
+      ...blendItems.slice(0, 2).map(b => ({ type: b.type, displayName: b.displayName, category: b.category })),
+    ];
+
+    const currentActive = (window as any).activeCategoryForAlpine || activeCategory || 'amp';
+    const currentSearch = (window as any).searchFilterForAlpine || searchFilter || '';
+
+    fxStore.updateFromTs(catData, effData, currentActive, currentSearch);
+  } catch (e) {
+    // non-fatal during port
+  }
 }
 
 /**

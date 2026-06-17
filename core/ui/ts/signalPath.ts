@@ -1644,7 +1644,27 @@ export function renderSignalPathBar(): void {
   lastRenderedPresetId = renderedPresetId ?? null;
   
   if (!activePreset) {
-    signalPathNodesElement.innerHTML = "";
+    // Show placeholder signal chain (no preset loaded yet)
+    if (signalPathNodesElement) {
+      signalPathNodesElement.innerHTML = `
+        <div class="signal-node input-node" data-node-id="__input__">
+          <div class="node-icon"><span class="fx-effect-icon" style="--icon-url: url('/images/icons/amp.svg')" aria-hidden="true"></span>
+          </div>
+          <span class="node-label">Input</span>
+        </div>
+        <div class="signal-connector"></div>
+        <div class="signal-node" data-node-id="placeholder">
+          <div class="node-icon"><span class="fx-effect-icon" style="--icon-url: url('/images/icons/bolt.svg')" aria-hidden="true"></span>
+          </div>
+          <span class="node-label">No Preset</span>
+        </div>
+        <div class="signal-connector"></div>
+        <div class="signal-node output-node" data-node-id="__output__">
+          <div class="node-icon"><span class="fx-effect-icon" style="--icon-url: url('/images/icons/speaker.svg')" aria-hidden="true"></span>
+          </div>
+          <span class="node-label">Output</span>
+        </div>`;
+    }
     if (sceneToolbarHost) sceneToolbarHost.innerHTML = "";
     toolbarRow?.classList.add("scene-toolbar-empty");
     updateEffectVisualization();

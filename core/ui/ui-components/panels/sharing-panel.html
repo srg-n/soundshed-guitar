@@ -1,0 +1,48 @@
+      <div class="tab-panel" id="panel-sharing">
+        <div class="panel-content tone-sharing-panel">
+          <div class="tone-sharing-shell">
+            <aside class="tone-sharing-sidebar">
+              <div class="tone-sharing-sidebar-actions">
+                <button id="tone-sharing-account-btn" type="button" class="tone-sharing-account-chip">Sign In</button>
+                <button id="tone-sharing-api-toggle" type="button" class="tone-sharing-icon-btn" title="API settings">⚙</button>
+              </div>
+              <div class="tone-sharing-browse-nav" role="navigation" aria-label="Tone sharing sections">
+                <button id="tone-sharing-browse-featured" type="button" class="tone-sharing-nav-btn active">Featured</button>
+                <button id="tone-sharing-browse-items" type="button" class="tone-sharing-nav-btn">Community Presets</button>
+                <button id="tone-sharing-browse-packs" type="button" class="tone-sharing-nav-btn">Packs</button>
+                <button id="tone-sharing-browse-review" type="button" class="tone-sharing-nav-btn" style="display: none;">Review Queue</button>
+                <button id="tone-sharing-browse-ai-search" type="button" class="tone-sharing-nav-btn">AI Tone Search</button>
+                <button id="tone-sharing-browse-installed" type="button" class="tone-sharing-nav-btn">Installed</button>
+                <button id="tone-sharing-browse-mine" type="button" class="tone-sharing-nav-btn">My Content</button>
+              </div>
+              <button id="tone-sharing-open-pack-modal" type="button" class="tone-sharing-toolbar-btn tone-sharing-create-pack-btn" disabled>+ Create Pack</button>
+              <p class="tone-sharing-share-hint">Share a preset in 3 steps: load it, click Publish, then use Share on its card after approval.</p>
+            </aside>
+            <div class="tone-sharing-main">
+              <div class="tone-sharing-endpoint tone-sharing-endpoint--hidden" id="tone-sharing-endpoint-row">
+                <label for="tone-sharing-api-base">API</label>
+                <input id="tone-sharing-api-base" type="text" value="https://api-guitar.soundshed.com/v1" />
+                <button id="tone-sharing-refresh" type="button">Refresh</button>
+              </div>
+              <div class="tone-sharing-active-filter tone-sharing-active-filter--hidden" id="tone-sharing-active-filter">
+                <span id="tone-sharing-active-filter-label">Filtered to a shared tone.</span>
+                <button id="tone-sharing-clear-filter" type="button" class="tone-sharing-toolbar-btn">Clear Filter</button>
+              </div>
+              <div class="tone-sharing-community-search tone-sharing-community-search--hidden" id="tone-sharing-community-search">
+                <label for="tone-sharing-community-search-input">Search community presets</label>
+                <input id="tone-sharing-community-search-input" type="text" placeholder="Name, description, creator, or tag" autocomplete="off" />
+                <button id="tone-sharing-community-search-clear" type="button" class="tone-sharing-toolbar-btn">Clear</button>
+              </div>
+              <div class="tone-sharing-featured-more" id="tone-sharing-featured-more" style="display: none;">
+                <span id="tone-sharing-featured-more-label" class="tone-sharing-status">More presets available in Community Presets.</span>
+                <button id="tone-sharing-featured-more-btn" type="button" class="tone-sharing-toolbar-btn">Browse Community Presets</button>
+              </div>
+              <div class="tone-sharing-feed" id="tone-sharing-feed"></div>
+              <div class="tone-sharing-feed-footer tone-sharing-feed-footer--hidden" id="tone-sharing-feed-footer">
+                <button id="tone-sharing-load-more" type="button" class="tone-sharing-toolbar-btn">Load More</button>
+                <span id="tone-sharing-feed-footer-label" class="tone-sharing-status"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>

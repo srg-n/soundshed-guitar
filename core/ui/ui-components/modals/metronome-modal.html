@@ -1,0 +1,72 @@
+<div id="metronome-modal" class="modal metronome-modal metronome-only" style="display: none;">
+      <div class="metronome-content">
+        <div class="metronome-card">
+          <div class="metronome-card-header">
+            <span class="metronome-card-title">Metronome</span>
+            <div class="metronome-header-controls">
+              <span class="metronome-source" id="metronome-source">Standalone</span>
+              <button class="metronome-close-btn" id="metronome-close-btn" title="Close metronome">×</button>
+            </div>
+          </div>
+          <div class="metronome-card-body">
+            <div class="metronome-top-row">
+              <div class="metronome-control-block">
+                <span class="metronome-label">Volume</span>
+                <div class="knob metronome-knob" data-param="metronome_volume" data-value="-12">
+                  <div class="knob-indicator"></div>
+                </div>
+                <span class="metronome-value" id="metronome-volume-value">-12.0 dB</span>
+              </div>
+              <div class="metronome-control-block wide">
+                <span class="metronome-label">Time Signature</span>
+                <select class="metronome-select" disabled>
+                  <option selected>4/4</option>
+                  <option>3/4</option>
+                  <option>6/8</option>
+                </select>
+              </div>
+              <div class="metronome-control-block wide">
+                <span class="metronome-label">Sound</span>
+                <select class="metronome-select" id="metronome-sound-select">
+                  <option value="click" selected>Click</option>
+                  <option value="drum">Drum</option>
+                </select>
+              </div>
+              <div class="metronome-control-block">
+                <span class="metronome-label">Pan</span>
+                <div class="knob metronome-knob" data-param="metronome_pan" data-value="0">
+                  <div class="knob-indicator"></div>
+                </div>
+                <span class="metronome-value" id="metronome-pan-value">C</span>
+              </div>
+            </div>
+
+            <div class="metronome-divider"></div>
+
+            <div class="metronome-bottom-row">
+              <div class="metronome-bpm-block">
+                <span class="metronome-label">BPM</span>
+                <div class="metronome-bpm-control">
+                  <div class="metronome-bpm-buttons">
+                    <button class="metronome-bpm-btn" id="metronome-bpm-up">▲</button>
+                    <button class="metronome-bpm-btn" id="metronome-bpm-down">▼</button>
+                  </div>
+                  <input type="number" id="metronome-bpm" min="30" max="300" step="1" class="metronome-bpm-input" />
+                </div>
+                <input type="range" id="metronome-bpm-slider" min="30" max="300" step="1" />
+              </div>
+              <button class="metronome-play" id="metronome-toggle" aria-label="Toggle metronome">
+                <span class="metronome-play-icon">▶</span>
+              </button>
+            </div>
+            <div class="metronome-pattern-row">
+              <label class="metronome-label">Beat Pattern</label>
+              <input type="text" id="metronome-accent-pattern" maxlength="16" placeholder="HLLL" class="metronome-pattern-input" title="H=High  L=Low  S=Silent" />
+            </div>
+            <div class="metronome-footer">
+              <span id="metronome-status">Stopped</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>

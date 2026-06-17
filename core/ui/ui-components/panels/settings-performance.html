@@ -1,0 +1,104 @@
+          <div class="equipment-tab-panel" id="equipment-tab-performance">
+            <h2>DSP Performance</h2>
+            <div class="performance-section">
+              <h3>Diagnostics</h3>
+              <div class="settings-hint">Signal levels, headroom, and clipping are reported continuously for chain input/output and nodes. DSP Load figure is for single audio-thread (typically 1 core), not your entire CPU.</div>
+            </div>
+            <div class="performance-stats">
+              <div class="performance-metric">
+                <span class="metric-label">DSP Load:</span>
+                <span class="metric-value" id="dsp-load-value">0.0%</span>
+              </div>
+              <div class="performance-metric">
+                <span class="metric-label">Peak Load:</span>
+                <span class="metric-value" id="dsp-peak-value">0.0%</span>
+              </div>
+              <div class="performance-metric">
+                <span class="metric-label">I/O Latency:</span>
+                <span class="metric-value" id="dsp-latency-value">—</span>
+              </div>
+            </div>
+            <div class="performance-section">
+              <h3>NAM Processing Quality</h3>
+              <div class="nam-quality-control">
+                <label for="nam-slimmable-size-input">Adjust Quality</label>
+                <div class="nam-quality-slider-row">
+                  <span class="nam-quality-endpoint">Min</span>
+                  <input type="range" id="nam-slimmable-size-input" min="0" max="1" step="0.01" />
+                  <span class="nam-quality-endpoint">Max</span>
+                </div>
+              </div>
+              <div class="settings-hint">Adjust quality while watching DSP Load and Peak Load above. Lower quality reduces CPU use.</div>
+              <div class="settings-row">
+                <label for="dsp-multi-threaded-toggle">Multi-threaded processing</label>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="dsp-multi-threaded-toggle" checked />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="settings-hint">Enable to use worker threads for parallel preset processing. Disable to force single-threaded DSP execution.</div>
+            </div>
+            <div class="performance-details">
+              <h3>Signal Diagnostics <span class="metric-value" id="signal-diagnostics-status">Enabled</span></h3>
+              <div class="signal-diagnostics-summary">
+                <div class="performance-metric">
+                  <span class="metric-label">Input Peak:</span>
+                  <span class="metric-value" id="signal-input-peak">—</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Input RMS:</span>
+                  <span class="metric-value" id="signal-input-rms">—</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Input Headroom:</span>
+                  <span class="metric-value" id="signal-input-headroom">—</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Input Clipping:</span>
+                  <span class="metric-value signal-clip-status clip-off" id="signal-input-clipping">
+                    <span class="clip-indicator"></span>
+                    —
+                  </span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Output Peak:</span>
+                  <span class="metric-value" id="signal-output-peak">—</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Output RMS:</span>
+                  <span class="metric-value" id="signal-output-rms">—</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Output Headroom:</span>
+                  <span class="metric-value" id="signal-output-headroom">—</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Output Clipping:</span>
+                  <span class="metric-value signal-clip-status clip-off" id="signal-output-clipping">
+                    <span class="clip-indicator"></span>
+                    —
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div class="performance-plot-container">
+              <canvas id="performance-plot" width="400" height="200"></canvas>
+            </div>
+            <div class="performance-details">
+              <h3>Per-Node Diagnostics</h3>
+              <div class="designed-peak-input-section" id="designed-peak-input-section">
+                <div class="performance-metric">
+                  <span class="metric-label">Preset Designed Peak Input:</span>
+                  <span class="metric-value" id="designed-peak-stored-value">&mdash;</span>
+                </div>
+                <div class="performance-metric">
+                  <span class="metric-label">Current Raw Input Peak (10s hold):</span>
+                  <span class="metric-value" id="designed-peak-current-value">&mdash;</span>
+                </div>
+                <button type="button" id="apply-designed-peak-btn" class="settings-row-btn" disabled>Apply as Designed Peak Input to Preset</button>
+              </div>
+              <div id="signal-diagnostics-list">
+                <!-- Signal diagnostics details will be populated here -->
+              </div>
+            </div>
+          </div>

@@ -1,0 +1,71 @@
+      <div class="tab-panel" id="panel-jam">
+        <div class="panel-content jam-panel">
+          <div class="jam-panel-header">
+            <div>
+              <h2>Jam</h2>
+              <p class="jam-panel-subtitle">Find a backing track, pin favourites, and keep a floating YouTube player open while using the rest of the app.</p>
+            </div>
+          </div>
+          <div class="jam-sections tab-bar">
+            <button id="jam-section-backing-tracks" class="tab-btn active" type="button">Backing Tracks</button>
+            <button id="jam-section-scales" class="tab-btn" type="button">Scales</button>
+            <button id="jam-section-riffs" class="tab-btn" type="button">Riff Library</button>
+          </div>
+          <div class="jam-section-panel active" id="jam-section-panel-backing-tracks">
+            <div class="jam-tabs tab-bar">
+              <button id="jam-backing-tab-search" class="tab-btn active" type="button">Search</button>
+              <button id="jam-backing-tab-favorites" class="tab-btn" type="button">Favourites</button>
+            </div>
+            <div class="jam-tab-panel active" id="jam-backing-tab-panel-search">
+              <div class="jam-search-row">
+                <input type="text" id="jam-search-input" placeholder="Search by artist, song, key, or style..." />
+                <button id="jam-search-button" type="button">Search</button>
+              </div>
+              <div class="jam-results" id="jam-results"></div>
+            </div>
+            <div class="jam-tab-panel" id="jam-backing-tab-panel-favorites" hidden>
+              <div class="jam-results" id="jam-favorites-results"></div>
+            </div>
+          </div>
+          <div class="jam-section-panel jam-scales-panel" id="jam-section-panel-scales" hidden>
+            <iframe
+              class="jam-scales-frame"
+              src="https://scalex.soundshed.com"
+              title="Scales"
+              allow="clipboard-read; clipboard-write; fullscreen"
+              referrerpolicy="strict-origin-when-cross-origin">
+            </iframe>
+          </div>
+          <div class="jam-section-panel" id="jam-section-panel-riffs" hidden>
+            <div class="jam-riff-panel">
+              <div class="settings-section">
+                <h3>Riff Library</h3>
+                <div class="riff-drop-hint" id="riff-drop-hint">Drop a WAV file anywhere on the page to import it into the current riff take.</div>
+                <div class="settings-row settings-row-two">
+                  <label for="riff-open-capture-modal">Capture</label>
+                  <button id="riff-open-capture-modal" type="button">New Riff</button>
+                </div>
+                <div class="settings-hint">Riffs are saved as measure-aligned DI WAV takes with metadata for tempo, time signature, pattern, and preset context.</div>
+              </div>
+
+              <div class="settings-section">
+                <h3>Storage</h3>
+                <div class="settings-row">
+                  <label for="riff-library-path">Library Path</label>
+                  <input type="text" id="riff-library-path" placeholder="C:\\Users\\you\\Documents\\SoundshedRiffs" />
+                  <button id="riff-library-path-save" type="button">Set Path</button>
+                  <button id="riff-library-refresh" type="button" class="secondary">Refresh</button>
+                </div>
+                <div class="settings-hint">Sets where riff takes and riff metadata are stored on disk.</div>
+              </div>
+
+              <div class="settings-section">
+                <h3>Saved Riffs</h3>
+                <div class="results equipment-library-results" id="riff-library-list">
+                  <!-- Riff entries rendered by JS -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>

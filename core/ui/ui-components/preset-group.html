@@ -1,0 +1,14 @@
+        <div class="control-bar-group preset-group">
+          <!--#include:ui-components/preset-toolbar-row.html-->
+
+          <!--#include:ui-components/preset-selector-row.html-->
+
+          <input type="file" id="preset-import-input" accept=".soundshed.preset,.soundshed.presets,.zip,.presetz,application/zip" style="display: none;" />
+
+          <div class="tone-sharing-preview-indicator" id="tone-sharing-preview-indicator" style="display: none;" aria-live="polite">
+            <span class="tone-sharing-preview-label" id="tone-sharing-preview-text">Previewing preset:</span>
+            <button class="tone-sharing-preview-clear" id="tone-sharing-preview-clear" type="button" title="Clear preview and restore original preset">✕</button>
+          </div>
+
+          <!--#include:ui-components/preset-library-popover.html-->
+        </div>

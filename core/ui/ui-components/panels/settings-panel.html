@@ -1,0 +1,41 @@
+      <div class="tab-panel" id="panel-settings">
+        <div class="panel-content settings-panel">
+
+          <!-- Update available banner — shown when a newer version is detected -->
+          <div id="settings-update-banner" class="settings-update-banner" style="display: none;" role="alert">
+            <div class="settings-update-banner-icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10M12 2l-4 4M12 2l4 4"/><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/></svg>
+            </div>
+            <div class="settings-update-banner-body">
+              <strong id="settings-update-banner-title">Software Update Available</strong>
+              <span id="settings-update-banner-notes" class="settings-update-banner-notes"></span>
+            </div>
+            <a id="settings-update-banner-link" href="#" target="_blank" rel="noopener noreferrer" class="settings-update-banner-btn">Download</a>
+          </div>
+
+          <div class="settings-layout">
+            <div class="equipment-tabs tab-bar" role="tablist" aria-label="Settings sections">
+              <button class="equipment-tab-btn tab-btn active" data-equipment-tab="settings" role="tab" aria-selected="true" aria-controls="equipment-tab-settings">General</button>
+              <button class="equipment-tab-btn tab-btn" data-equipment-tab="performance" role="tab" aria-selected="false" aria-controls="equipment-tab-performance">DSP Performance</button>
+              <button class="equipment-tab-btn tab-btn" data-equipment-tab="features" role="tab" aria-selected="false" aria-controls="equipment-tab-features">Features</button>
+              <button class="equipment-tab-btn tab-btn" data-equipment-tab="library" role="tab" aria-selected="false" aria-controls="equipment-tab-library">Library</button>
+              <button class="equipment-tab-btn tab-btn" data-equipment-tab="help" role="tab" aria-selected="false" aria-controls="equipment-tab-help">Help</button>
+            </div>
+
+            <div class="settings-content">
+          <!--#include:ui-components/panels/settings-general.html-->
+
+          <!--#include:ui-components/panels/settings-library.html-->
+
+          <!--#include:ui-components/panels/settings-features.html-->
+
+          <!--#include:ui-components/panels/settings-performance.html-->
+
+          <!--#include:ui-components/panels/settings-help.html-->
+
+            </div>
+          </div>
+
+
+        </div>
+      </div>

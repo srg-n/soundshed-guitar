@@ -7,10 +7,10 @@ import type { UiViewState } from "./types.js";
 import { isJamEnabled } from "./buildFlags.js";
 import { Features, isFeatureEnabled, isJamExperienceEnabled } from "./featureFlags.js";
 
-const tabButtons = Array.from(document.querySelectorAll(".tab-button"));
-const tabPanels = Array.from(document.querySelectorAll(".tab-panel"));
-const panelSwitchButtons = Array.from(document.querySelectorAll(".icon-bar .icon-btn, .panel-switch"));
-const mainTabPanels = Array.from(document.querySelectorAll(".main-content .tab-panel"));
+function getTabButtons() { return Array.from(document.querySelectorAll(".tab-button")); }
+function getTabPanels() { return Array.from(document.querySelectorAll(".tab-panel")); }
+function getPanelSwitchButtons() { return Array.from(document.querySelectorAll(".icon-bar .icon-btn, .panel-switch")); }
+function getMainTabPanels() { return Array.from(document.querySelectorAll(".main-content .tab-panel")); }
 
 let pendingSend = false;
 const sendDelayMs = 200;
@@ -52,6 +52,8 @@ function updateUiViewState(update: UiViewState): void {
 }
 
 export function activateTab(tabId: string): void {
+  const tabButtons = getTabButtons();
+  const tabPanels = getTabPanels();
   if (!tabButtons.length || !tabPanels.length) {
     return;
   }
@@ -71,6 +73,14 @@ export function activateTab(tabId: string): void {
 }
 
 export function switchMainPanel(panelId: string): void {
+  // Sync to Alpine store so x-show / :class in ui-components react
+  try {
+    const Alpine = (window as any).Alpine;
+    const uiStore = Alpine && Alpine.store && Alpine.store('ui');
+    if (uiStore) {
+      uiStore.mainPanel = panelId === 'library' ? 'settings' : (panelId === 'scalex' ? 'sharing' : panelId);
+    }
+  } catch {}
   const requestedSettingsTab = panelId === "library" ? "library" : null;
   const normalizedPanelId = panelId === "scalex"
     ? "sharing"
@@ -87,6 +97,8 @@ export function switchMainPanel(panelId: string): void {
     return normalizedPanelId;
   })();
 
+  const panelSwitchButtons = getPanelSwitchButtons();
+  const mainTabPanels = getMainTabPanels();
   panelSwitchButtons.forEach((btn) => {
     const btnPanel = (btn as HTMLElement).dataset.panel;
     btn.classList.toggle("active", btnPanel === effectivePanelId);
@@ -128,6 +140,7 @@ export function switchMainPanel(panelId: string): void {
 }
 
 export function initializeIconBarTabs(options?: { onEq?: () => void; onMetronome?: () => void }): void {
+  const panelSwitchButtons = getPanelSwitchButtons();
   panelSwitchButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
       const panelId = (btn as HTMLElement).dataset.panel;
@@ -152,6 +165,7 @@ export function initializeIconBarTabs(options?: { onEq?: () => void; onMetronome
 }
 
 export function initializeTabButtons(): void {
+  const tabButtons = getTabButtons();
   tabButtons.forEach((button) => {
     button.addEventListener("click", () => {
       const tabId = (button as HTMLElement).dataset.tab ?? "";
@@ -192,3 +206,6 @@ export function applyUiViewState(state?: UiViewState): void {
   }
   applyingViewState = false;
 }
+
+// Expose for Alpine direct calls from x-on:click handlers in header etc.
+(window as any).__switchMainPanel = switchMainPanel;

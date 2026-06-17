@@ -1,0 +1,58 @@
+<footer class="footer-bar">
+      <div id="footer-demo-audio-container" class="footer-demo-audio-container">
+        <!-- Demo audio controls rendered by JavaScript -->
+      </div>
+      <span class="footer-divider">|</span>
+      <button class="footer-btn">TUNER</button>
+      <span class="footer-divider">|</span>
+      <button class="footer-btn footer-btn-disabled" disabled>MIDI</button>
+      <span class="footer-divider">|</span>
+      <button class="footer-btn metronome-only" id="footer-riff-record-btn">REC</button>
+      <button class="bpm-display metronome-only" id="footer-bpm-btn" title="Set BPM">
+        <span id="footer-bpm-value">120.0</span> BPM
+      </button>
+      <div class="footer-bpm-panel metronome-only" id="footer-bpm-panel" aria-hidden="true">
+        <label class="footer-bpm-field">
+          <span>BPM</span>
+          <input type="number" id="footer-bpm-input" min="30" max="300" step="1" />
+        </label>
+        <input type="range" id="footer-bpm-slider" min="30" max="300" step="1" />
+      </div>
+      <button class="footer-btn" id="footer-tap-btn">TAP</button>
+      <span class="footer-divider">|</span>
+      <button
+        class="footer-btn footer-metronome-btn metronome-only"
+        id="footer-metronome-btn"
+        type="button"
+        aria-label="Metronome"
+        title="Metronome"
+      >
+        <svg class="footer-metronome-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M9 3.5h6L19 20.5H5L9 3.5Z" />
+          <path d="M10 7.5h4" />
+          <path d="M12 8.5v7" />
+          <path d="M12 10.5l2.75-1.75" />
+        </svg>
+      </button>
+      <button
+        class="footer-metronome-play-btn metronome-only"
+        id="footer-metronome-toggle"
+        type="button"
+        aria-label="Start metronome"
+        aria-pressed="false"
+        title="Start metronome"
+      >
+        <span class="footer-metronome-play-icon" aria-hidden="true">▶</span>
+      </button>
+      <span class="footer-divider">|</span>
+      <div class="footer-right">
+        <div class="footer-zoom-control">
+          <select id="zoom-level-select" class="footer-demo-select themed-select zoom-level-select" aria-label="UI zoom level" title="UI zoom level"></select>
+        </div>
+        <span class="footer-divider">|</span>
+        <div class="footer-theme-select">
+          <span class="footer-theme-label">THEME</span>
+          <select id="theme-select" class="footer-demo-select themed-select"></select>
+        </div>
+      </div>
+    </footer>

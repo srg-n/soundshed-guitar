@@ -577,7 +577,10 @@ if(NPM_EXECUTABLE)
     file(GLOB_RECURSE _UI_TS_SOURCES CONFIGURE_DEPENDS
         "${GUITARFX_CORE_ROOT}/ui/ts/*.ts"
         "${GUITARFX_CORE_ROOT}/ui/tsconfig.json"
-        "${GUITARFX_CORE_ROOT}/ui/package.json")
+        "${GUITARFX_CORE_ROOT}/ui/package.json"
+        "${GUITARFX_CORE_ROOT}/ui/scripts/*.js"
+        "${GUITARFX_CORE_ROOT}/ui/index*.html"
+        "${GUITARFX_CORE_ROOT}/ui/ui-components/**/*")
     set(_UI_STAMP "${CMAKE_CURRENT_BINARY_DIR}/ui_build.stamp")
 
     # On Windows, npm is typically a .cmd shim. When invoked from another batch

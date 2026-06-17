@@ -1,0 +1,46 @@
+<div id="tone-sharing-publish-modal" class="modal tone-sharing-publish-modal" style="display: none;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Publish Preset</h3>
+          <button id="tone-sharing-publish-modal-close" class="modal-close" type="button">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="tone-sharing-grid-form">
+            <label for="tone-sharing-item-title">Title</label>
+            <input id="tone-sharing-item-title" type="text" placeholder="My Heavy Rhythm" />
+
+            <label for="tone-sharing-item-description">Description</label>
+            <textarea id="tone-sharing-item-description" rows="3" placeholder="Describe the tone, guitar, and mix context"></textarea>
+
+            <label>Tags</label>
+            <div class="tone-sharing-tags-picker" id="tone-sharing-tags-picker">
+              <button type="button" class="tone-sharing-tag-chip" data-tag="lead">lead</button>
+              <button type="button" class="tone-sharing-tag-chip" data-tag="rhythm">rhythm</button>
+              <button type="button" class="tone-sharing-tag-chip" data-tag="clean">clean</button>
+              <button type="button" class="tone-sharing-tag-chip" data-tag="crunch">crunch</button>
+              <button type="button" class="tone-sharing-tag-chip" data-tag="high-gain">high-gain</button>
+              <button type="button" class="tone-sharing-tag-chip" data-tag="ambient">ambient</button>
+              <button type="button" class="tone-sharing-tag-chip" data-tag="atmospheric">atmospheric</button>
+            </div>
+          </div>
+          <div class="tone-sharing-pack-assign">
+            <div class="tone-sharing-pack-assign-label">Add to pack after publishing (optional)</div>
+            <div class="tone-sharing-pack-assign-row">
+              <button id="tone-sharing-add-to-new-pack" type="button" class="btn btn-secondary">+ New Pack</button>
+              <select id="tone-sharing-pack-assign-select">
+                <option value="">Or add to existing draft pack…</option>
+              </select>
+            </div>
+          </div>
+          <div class="tone-sharing-status" id="tone-sharing-publish-modal-status"></div>
+          <div class="tone-sharing-progress" id="tone-sharing-publish-progress" style="display: none;">
+            <span class="tone-sharing-progress-spinner" aria-hidden="true"></span>
+            <span class="tone-sharing-progress-label">Uploading preset for approval...</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="tone-sharing-publish-modal-cancel" type="button" class="btn btn-secondary">Cancel</button>
+          <button id="tone-sharing-upload-item" type="button" class="btn btn-primary">Upload + Publish</button>
+        </div>
+      </div>
+    </div>

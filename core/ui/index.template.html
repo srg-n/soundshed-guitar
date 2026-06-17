@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=2" />
+  <title>Soundshed GuitarX</title>
+  <script src="build-flags.js"></script>
+  <script src="dist/alpine.min.js"></script>
+  <style>
+    html[data-jam-enabled="false"] [data-panel="jam"],
+    html[data-jam-enabled="false"] #panel-jam,
+    html[data-jam-enabled="false"] #jam-player-dock,
+    html[data-jam-enabled="false"] #jam-floating-player-root {
+      display: none !important;
+    }
+  </style>
+  <link rel="stylesheet" href="css/variables.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/controls.css" />
+  <link rel="stylesheet" href="css/navigation.css" />
+  <link rel="stylesheet" href="css/amp.css" />
+  <link rel="stylesheet" href="css/effects.css" />
+  <link rel="stylesheet" href="css/signal-path.css" />
+  <link rel="stylesheet" href="css/modals.css" />
+  <link rel="stylesheet" href="css/layout-designer.css" />
+  <link rel="stylesheet" href="css/fx-library.css" />
+  <link rel="stylesheet" href="css/preset-library.css" />
+  <link rel="stylesheet" href="css/advanced-panel.css" />
+  <link rel="stylesheet" href="css/settings.css" />
+  <link rel="stylesheet" href="css/tone-sharing.css" />
+  <link rel="stylesheet" href="css/jam.css" />
+</head>
+
+<body>
+  <div id="app" class="prevent-select">
+    <!--#include:ui-components/splash-screen.html-->
+
+    <!--#include:ui-components/header-icon-bar.html-->
+
+    <!--#include:ui-components/control-bar.html-->
+
+    <!--#include:ui-components/signal-path-bar.html-->
+
+    <!--#include:ui-components/fx-selector-panel.html-->
+
+    <!--#include:ui-components/main-content.html-->
+
+    <!--#include:ui-components/footer-bar.html-->
+    <!--#include:ui-components/notification-area.html-->
+
+    <!-- All modals -->
+    <!--#include:ui-components/modals/custom-effect-designer-modal.html-->
+    <!--#include:ui-components/modals/riff-save-modal.html-->
+    <!--#include:ui-components/modals/riff-capture-modal.html-->
+    <!--#include:ui-components/modals/tone3000-details-modal.html-->
+    <!--#include:ui-components/modals/metronome-modal.html-->
+    <!--#include:ui-components/modals/user-input-calibration-modal.html-->
+    <!--#include:ui-components/modals/tuner-modal.html-->
+    <!--#include:ui-components/modals/eq-modal.html-->
+    <!--#include:ui-components/modals/blend-editor-modal.html-->
+    <!--#include:ui-components/modals/resource-browser-modal.html-->
+    <!--#include:ui-components/modals/blend-model-browser-modal.html-->
+    <!--#include:ui-components/modals/save-preset-modal.html-->
+    <!--#include:ui-components/modals/tone-sharing-pack-view-modal.html-->
+    <!--#include:ui-components/modals/tone-sharing-publish-modal.html-->
+    <!--#include:ui-components/modals/tone-sharing-consent-modal.html-->
+    <!--#include:ui-components/modals/tone-sharing-signin-modal.html-->
+    <!--#include:ui-components/modals/tone-sharing-pack-modal.html-->
+    <!--#include:ui-components/modals/layout-designer-modal.html-->
+    <!--#include:ui-components/modals/dialog-modal.html-->
+    <!--#include:ui-components/modals/tone3000-required-modal.html-->
+  </div>
+
+  <!--#include:ui-components/jam-floating-player-root.html-->
+
+  <script src="dist/jszip.min.js"></script>
+  <script type="module" src="dist/main.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,178 @@
+          <div class="equipment-tab-panel" id="equipment-tab-library" hidden>
+            <div class="library-tabs tab-bar">
+              <button class="library-tab-btn tab-btn active" data-library-tab="tone3000">Tone 3000</button>
+              <button class="library-tab-btn tab-btn" data-library-tab="resources">Resource Library</button>
+              <button class="library-tab-btn tab-btn" data-library-tab="advanced">Advanced</button>
+            </div>
+
+            <div class="library-tab-panel active" id="library-tab-tone3000">
+              <div class="settings-section">
+                <h3>Tone3000 Browser</h3>
+                 <p>Tone 3000 is a 3rd party website with community provided NAM Models and IRs. You can browse them here but the easiest way to hear them is to select a Neural FX or Neural Amp effect in your main signal chain and use the resource selector within those. </p>
+                <div class="tone3000-search">
+                  <input type="text" id="tone3000-search-input" placeholder="Search tones..." />
+                  <select id="tone3000-sort-select" class="themed-select">
+                    <option value="popular">Most Popular</option>
+                    <option value="recent">Most Recent</option>
+                    <option value="trending">Trending</option>
+                    <option value="name">Name A-Z</option>
+                  </select>
+                  <button id="tone3000-search-button">Search</button>
+                </div>
+                <div class="tone3000-browser">
+                  <div class="tone3000-categories" id="tone3000-category-list">
+                    <!-- Category buttons rendered by JS -->
+                  </div>
+                  <div class="results tone3000-results" id="tone3000-results">
+                    <!-- Search results rendered by JS -->
+                  </div>
+                </div>
+                <div class="tone3000-pagination" id="tone3000-pagination">
+                  <button class="tone3000-page-btn" id="tone3000-prev-btn" type="button">Previous</button>
+                  <span class="tone3000-page-label" id="tone3000-page-label">Page 1</span>
+                  <button class="tone3000-page-btn" id="tone3000-next-btn" type="button">Next</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="library-tab-panel" id="library-tab-resources">
+              <div class="settings-section">
+                <h3>Resource Library</h3>
+                <p>The resource library shows the list of items (NAM models, Impulse Responses) already imported for use in the app. </p>
+                <div class="equipment-library-filters">
+                  <input type="text" id="equipment-library-search" placeholder="Search models and IRs..." />
+                  <select id="equipment-library-type">
+                    <option value="all">All Types</option>
+                    <option value="nam">Amp Models</option>
+                    <option value="ir">Cab IRs</option>
+                  </select>
+                  <select id="equipment-library-source">
+                    <option value="all">All Sources</option>
+                    <option value="built-in">Built-in</option>
+                    <option value="local">Local</option>
+                    <option value="tone3000">Tone3000</option>
+                    <option value="imported">Imported</option>
+                  </select>
+                  <select id="equipment-library-view">
+                    <option value="list">List View</option>
+                    <option value="grouped" selected>Group by Tone</option>
+                  </select>
+                  <select id="equipment-library-category">
+                    <option value="all">All Categories</option>
+                  </select>
+                </div>
+                <div class="settings-row" id="equipment-library-cleanup-row">
+                  <label for="equipment-library-cleanup-scope">Cleanup unused</label>
+                  <select id="equipment-library-cleanup-scope">
+                    <option value="all" selected>All types</option>
+                    <option value="nam">Amp models only</option>
+                    <option value="ir">IRs only</option>
+                  </select>
+                  <button id="equipment-library-cleanup-btn" type="button">Remove unused</button>
+                </div>
+                <div class="equipment-library-summary" id="equipment-library-summary"></div>
+                <div class="results equipment-library-results" id="equipment-library-results">
+                  <!-- Library results rendered by JS -->
+                </div>
+              </div>
+            </div>
+            <div class="library-tab-panel" id="library-tab-advanced">
+              <div class="advanced-panel">
+                <div class="advanced-sub-tabs tab-bar">
+                  <button class="advanced-sub-tab-btn tab-btn active" data-advanced-tab="composites">Composite Effects</button>
+                  <button class="advanced-sub-tab-btn tab-btn" data-advanced-tab="blends">Blends</button>
+                  <button class="advanced-sub-tab-btn tab-btn" data-advanced-tab="layouts">Effect Layouts</button>
+                </div>
+
+                <div class="advanced-sub-panel active" id="advanced-tab-composites">
+                  <div class="advanced-toolbar">
+                    <input type="text" id="composite-search-input" class="advanced-search-input" placeholder="Search composites..." />
+                    <button id="composite-new-btn" class="advanced-action-btn" title="Create new composite effect">+ New Composite</button>
+                  </div>
+                  <div class="composite-list" id="composite-list">
+                    <!-- Composite list rendered by JS -->
+                  </div>
+
+                  <div class="composite-editor" id="composite-editor" style="display: none;">
+                    <div class="composite-editor-header">
+                      <h3 id="composite-editor-title">Edit Composite Effect</h3>
+                      <div class="composite-editor-actions">
+                        <button id="composite-editor-save-btn" class="advanced-action-btn primary" title="Save composite">Save</button>
+                        <button id="composite-editor-save-as-btn" class="advanced-action-btn" title="Save as new composite">Save As New</button>
+                        <button id="composite-editor-cancel-btn" class="advanced-action-btn" title="Cancel editing">Cancel</button>
+                      </div>
+                    </div>
+                    <div class="composite-editor-body">
+                      <div class="composite-editor-meta">
+                        <div class="composite-field-row">
+                          <label for="composite-edit-name">Name</label>
+                          <input type="text" id="composite-edit-name" placeholder="Effect name" />
+                        </div>
+                        <div class="composite-field-row">
+                          <label for="composite-edit-category">Category</label>
+                          <select id="composite-edit-category">
+                            <option value="channel">Channel Strip</option>
+                            <option value="amp">Amplifier</option>
+                            <option value="cab">Cabinet</option>
+                            <option value="dynamics">Dynamics</option>
+                            <option value="eq">Equalizer</option>
+                            <option value="modulation">Modulation</option>
+                            <option value="delay">Delay</option>
+                            <option value="reverb">Reverb</option>
+                            <option value="utility">Utility</option>
+                          </select>
+                        </div>
+                        <div class="composite-field-row">
+                          <label for="composite-edit-description">Description</label>
+                          <textarea id="composite-edit-description" rows="2" placeholder="Description..."></textarea>
+                        </div>
+                        <div class="composite-field-row">
+                          <label for="composite-edit-author">Author</label>
+                          <input type="text" id="composite-edit-author" placeholder="Author name" />
+                        </div>
+                        <div class="composite-field-row">
+                          <label for="composite-edit-tags">Tags</label>
+                          <input type="text" id="composite-edit-tags" placeholder="Comma-separated tags" />
+                        </div>
+                      </div>
+
+                      <div class="composite-editor-section">
+                        <h4>Inner Signal Path</h4>
+                        <p class="section-hint">
+                          The signal chain above shows this composite's inner effects.
+                          Use it to add, remove, and configure effects just like a normal preset.
+                        </p>
+                      </div>
+
+                      <div class="composite-editor-section">
+                        <h4>Exposed Parameters</h4>
+                        <p class="section-hint">Select which parameters are surfaced to the user.</p>
+                        <div class="composite-exposed-params" id="composite-exposed-params">
+                          <!-- Exposed params rendered by JS -->
+                        </div>
+                        <button id="composite-add-param-btn" class="advanced-action-btn">+ Expose Parameter</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="advanced-sub-panel" id="advanced-tab-blends">
+                  <div class="advanced-toolbar">
+                    <input type="text" id="blend-search-input" class="advanced-search-input" placeholder="Search blends..." />
+                  </div>
+                  <div class="composite-list" id="blend-list">
+                    <!-- Blend list rendered by JS -->
+                  </div>
+                </div>
+
+                <div class="advanced-sub-panel" id="advanced-tab-layouts">
+                  <div class="advanced-toolbar">
+                    <input type="text" id="layout-search-input" class="advanced-search-input" placeholder="Search layouts..." />
+                  </div>
+                  <div class="layout-list" id="layout-list">
+                    <!-- Layout list rendered by JS -->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>

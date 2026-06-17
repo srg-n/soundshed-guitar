@@ -1,0 +1,46 @@
+<div id="user-input-calibration-modal" class="modal input-calibration-modal" style="display: none;">
+      <div class="modal-content input-calibration-content">
+        <div class="modal-header">
+          <h3>Input Level Training</h3>
+          <button class="modal-close" id="user-input-calibration-close" title="Close">×</button>
+        </div>
+        <div class="modal-body input-calibration-body">
+          <p class="input-calibration-lead">Play the loudest picking or strumming you expect to use with this guitar and interface gain setting. Soundshed will save the captured raw input peak and apply a fixed global trim for this setup.</p>
+
+          <div class="input-calibration-metrics">
+            <div class="input-calibration-metric-card">
+              <span class="input-calibration-metric-label">Live Peak</span>
+              <span class="input-calibration-metric-value" id="user-input-calibration-live-peak">-</span>
+              <span class="input-calibration-metric-note">Raw input before any trim</span>
+            </div>
+            <div class="input-calibration-metric-card accent">
+              <span class="input-calibration-metric-label">Captured Peak</span>
+              <span class="input-calibration-metric-value" id="user-input-calibration-captured-peak">-</span>
+              <span class="input-calibration-metric-note">Peak hold saved into this profile</span>
+            </div>
+            <div class="input-calibration-metric-card">
+              <span class="input-calibration-metric-label">Recommended Trim</span>
+              <span class="input-calibration-metric-value" id="user-input-calibration-recommended-trim">-</span>
+              <span class="input-calibration-metric-note">Applied globally before the chain</span>
+            </div>
+          </div>
+
+          <div class="input-calibration-training-row">
+            <span class="input-calibration-status" id="user-input-calibration-status">Play your loudest picking or strumming to capture a training peak.</span>
+            <button id="user-input-calibration-reset" type="button" class="secondary">Reset Peak Hold</button>
+          </div>
+
+          <div class="input-calibration-form">
+            <label for="user-input-calibration-name">Profile Name</label>
+            <input id="user-input-calibration-name" type="text" maxlength="80" placeholder="Guitar X, Interface Gain at 0" />
+
+            <label for="user-input-calibration-description">Description</label>
+            <textarea id="user-input-calibration-description" rows="3" maxlength="200" placeholder="Single coils, bridge pickup, interface knob at 12 o'clock"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="user-input-calibration-cancel" type="button" class="secondary">Cancel</button>
+          <button id="user-input-calibration-save" type="button">Save Profile</button>
+        </div>
+      </div>
+    </div>

@@ -1,0 +1,42 @@
+    <!-- Signal Path Bar -->
+    <section class="signal-path-bar" id="signal-path-bar">
+      <!-- Composite edit mode banner -->
+      <div class="composite-edit-banner" id="composite-edit-banner" style="display: none;">
+        <span class="composite-edit-banner-label">Editing Composite:</span>
+        <span class="composite-edit-banner-name" id="composite-edit-banner-name"></span>
+        <span class="composite-edit-banner-hint">Use the signal chain below to add/remove/configure effects</span>
+      </div>
+      <div class="signal-path-scroll">
+        <div class="signal-path-nodes" id="signal-path-nodes">
+          <!-- Signal path nodes will be rendered here by JavaScript (or x-for in future) -->
+          <div class="signal-node input-node" data-node-id="__input__">
+            <div class="node-icon"><span class="fx-effect-icon" style="--icon-url: url('/images/icons/amp.svg')" aria-hidden="true"></span>
+            </div>
+            <span class="node-label">Input</span>
+          </div>
+          <div class="signal-connector"></div>
+          <div class="signal-node" data-node-id="placeholder">
+            <div class="node-icon"><span class="fx-effect-icon" style="--icon-url: url('/images/icons/bolt.svg')" aria-hidden="true"></span>
+            </div>
+            <span class="node-label">No Preset</span>
+          </div>
+          <div class="signal-connector"></div>
+          <div class="signal-node output-node" data-node-id="__output__">
+            <div class="node-icon"><span class="fx-effect-icon" style="--icon-url: url('/images/icons/speaker.svg')" aria-hidden="true"></span>
+            </div>
+            <span class="node-label">Output</span>
+          </div>
+        </div>
+      </div>
+      <div class="signal-path-toolbar" id="signal-path-toolbar">
+        <div class="signal-path-scene-toolbar" id="signal-path-scene-toolbar"></div>
+        <button class="signal-path-toolbar-scene-btn" id="signal-path-toolbar-scene-btn" type="button" aria-hidden="true" title="Add a new Scene for this preset. This enables you save specific settings or new combinations of effects under one preset for easy access.">
+          <span class="signal-path-toolbar-scene-btn-icon" aria-hidden="true">+</span>
+          <span>Scene</span>
+        </button>
+        <button class="signal-path-floating-add-fx" id="signal-path-floating-add-fx" type="button" aria-hidden="true">
+          <span class="signal-path-floating-add-fx-icon" aria-hidden="true">+</span>
+          <span>Add FX</span>
+        </button>
+      </div>
+    </section>

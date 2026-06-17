@@ -1,0 +1,35 @@
+<div id="tone-sharing-signin-modal" class="modal" style="display: none;">
+      <div class="modal-content tone-sharing-signin-modal-content">
+        <div class="modal-header">
+          <h3>Account</h3>
+          <button id="tone-sharing-signin-modal-close" class="modal-close" type="button">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="tone-sharing-auth-status" id="tone-sharing-auth-status">Signed out</div>
+          <div class="tone-sharing-grid-form" id="tone-sharing-auth-fields">
+            <label for="tone-sharing-email">Email</label>
+            <input id="tone-sharing-email" type="email" placeholder="you@example.com" autocomplete="email" />
+            <label for="tone-sharing-code">One-time Code</label>
+            <input id="tone-sharing-code" type="text" placeholder="Enter code from email" autocomplete="one-time-code" />
+          </div>
+          <div class="tone-sharing-grid-form tone-sharing-profile-fields" id="tone-sharing-profile-fields">
+            <label for="tone-sharing-display-name">Creator Name</label>
+            <input id="tone-sharing-display-name" type="text" maxlength="80" placeholder="How your name appears on shared tones" />
+            <label for="tone-sharing-bio">Bio</label>
+            <textarea id="tone-sharing-bio" rows="3" maxlength="600" placeholder="Short style or gear bio (optional)"></textarea>
+            <label for="tone-sharing-avatar-image">Avatar Image</label>
+            <input id="tone-sharing-avatar-image" type="file" accept="image/*" />
+            <div class="tone-sharing-avatar-preview-wrap" id="tone-sharing-avatar-preview-wrap" style="display: none;">
+              <img id="tone-sharing-avatar-preview" class="tone-sharing-avatar-preview" alt="Profile avatar preview" />
+            </div>
+            <div class="tone-sharing-status" id="tone-sharing-profile-status"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="tone-sharing-logout" type="button" class="btn btn-secondary">Sign Out</button>
+          <button id="tone-sharing-save-profile" type="button" class="btn btn-secondary" style="display: none;">Save Profile</button>
+          <button id="tone-sharing-send-code" type="button" class="btn btn-secondary">Send Code</button>
+          <button id="tone-sharing-verify" type="button" class="btn btn-primary">Sign In</button>
+        </div>
+      </div>
+    </div>

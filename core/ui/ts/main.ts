@@ -24,6 +24,7 @@ import { initializeBlendEditorModal } from "./signalPath.js";
 import { initializeCustomEffectDesignerModal } from "./customEffectDesigner.js";
 import { initializeDialogModals } from "./dialogs.js";
 import { activateTab, initializeIconBarTabs, initializeTabButtons, switchMainPanel } from "./navigation.js";
+import { renderSignalPathBar } from "./signalPath.js";
 import { initializeToneSharingPanel } from "./toneSharingPanel.js";
 import { initializeRiffLibraryPanel } from "./riffLibrary.js";
 import { initMultiRigTab } from "./multiPresetMixer.js";
@@ -31,6 +32,7 @@ import { initializeJamPanel } from "./jam.js";
 import { applyBuildFlags } from "./buildFlags.js";
 import { hideSplashScreen, initSplashScreen } from "./splash.js";
 import { FEATURE_FLAGS_CHANGED_EVENT } from "./featureFlags.js";
+import { initAlpineStores, startAlpine } from "./alpine.js";
 const eqModal = document.getElementById("eq-modal");
 const eqModalCloseBtn = document.getElementById("eq-modal-close");
 
@@ -106,7 +108,28 @@ async function bootstrap(): Promise<void> {
 
   applyBuildFlags();
 
+  // Alpine integration - register stores early so x-data expressions in HTML can use them.
+  initAlpineStores();
+  // Explicit start is safe even if the defer script auto-initializes.
+  startAlpine();
+
   initializeTabButtons();
+
+  // Ensure listeners for icon bar tabs (Play/Tones/Jam/Settings) are attached early
+  initializeIconBarTabs({ onEq: openEqModal });
+
+  // Ensure Alpine store reflects the initial panel (for :class in header component)
+  try {
+    const A = (window as any).Alpine;
+    const ui = A && A.store && A.store('ui');
+    if (ui) ui.mainPanel = 'visualizer';
+  } catch {}
+
+  // Force initial main panel visibility via legacy logic (adds .active)
+  switchMainPanel('visualizer');
+
+  // Ensure signal visualisation shows its (placeholder) content early
+  try { renderSignalPathBar(); } catch {}
 
   // Initialize theme switcher
   themeSwitcher; // Ensure singleton is created
@@ -121,7 +144,6 @@ async function bootstrap(): Promise<void> {
   initializeInputModeControls();
   initializeAmpCabPowerControls();
   initializePresetControls();
-  initializeIconBarTabs({ onEq: openEqModal });
   initializeDialogModals();
   initializeSavePresetModal();
   initializeSaveAsButton();
