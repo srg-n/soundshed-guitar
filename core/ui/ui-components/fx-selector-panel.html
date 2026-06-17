@@ -22,12 +22,33 @@
         <div class="fx-selector-effects">
           <div class="fx-selector-search">
             <input type="text" id="fx-search-input" placeholder="Search effects..."
-                   x-model="$store.fxSelector ? $store.fxSelector.searchFilter : ''" />
+                   :value="$store.fxSelector ? $store.fxSelector.searchFilter : ''" />
           </div>
           <p>Drag any effect into the signal chain. You can also drag effects around to move them in the chain. </p>
           <div class="fx-selector-effects-list" id="fx-selector-effects-list">
-            <template x-for="fx in ($store.fxSelector ? $store.fxSelector.effects : [])" :key="fx.type || fx.id">
-              <div class="fx-item" :data-type="fx.type" x-text="fx.displayName || fx.name || fx.title || ''"></div>
+            <template x-for="fx in ($store.fxSelector ? $store.fxSelector.effects : [])" :key="fx.id || fx.type">
+              <div class="fx-item"
+                :data-effect-type="fx.type"
+                :data-blend-id="fx.blendId || ''"
+                :data-blend-category="fx.blendCategory || ''"
+                :data-composite-id="fx.compositeId || ''"
+                :data-custom-effect-id="fx.customEffectId || ''"
+                :data-custom-effect-resource-type="fx.moduleResourceType || ''"
+                :data-custom-effect-resource-id="fx.moduleResourceId || ''"
+                :data-custom-effect-default-params="fx.customEffectDefaultParams || ''"
+                :data-effect-category="fx.category || ''"
+                :style="`--category-color: ${fx.categoryColor || '#808080'}`"
+                draggable="true">
+                <div class="fx-item-icon"></div>
+                <div class="fx-item-info">
+                  <div class="fx-item-name" x-text="fx.displayName || fx.name || fx.title || ''"></div>
+                  <div class="fx-item-type" x-text="fx.category || ''"></div>
+                </div>
+                <span class="fx-item-badge" x-show="fx.requiresResource" x-text="fx.resourceType ? `Requires ${fx.resourceType}` : 'Requires resource'"></span>
+                <span class="fx-item-badge" x-show="fx.blendId">Custom blend</span>
+                <span class="fx-item-badge" x-show="fx.customEffectId">Custom</span>
+                <span class="fx-item-badge" x-show="fx.compositeId">Package</span>
+              </div>
             </template>
           </div>
         </div>
