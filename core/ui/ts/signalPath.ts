@@ -53,6 +53,8 @@ import {
   computeBlendParamRange,
   getBlendState,
   updateBlendParamIndicators,
+  updateBlendMatchSummary,
+  renderBlendInfoHtml,
   getBlendEntriesForCategory,
   initializeBlendEditorModal,
   openBlendEditorWithDefinition,
@@ -3033,17 +3035,16 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
     const browseAccept = resourceType === "nam" ? ".nam,.json" : resourceType === "ir" ? ".wav" : "*";
     const blendId = (node as unknown as { config?: Record<string, string> }).config?.blendId;
     if (blendId) {
-      const blend = uiState.blendLibrary?.find((entry) => entry.id === blendId);
-      const blendModels = blend?.models ?? [];
-      resourceSelector = `
-        <div class="node-resource-selector" data-node-id="${node.id}">
-          <label>Blend</label>
-          <div class="resource-controls">
-            <button class="blend-open-btn" data-node-id="${node.id}">Edit Blend</button>
+      resourceSelector = blendState
+        ? renderBlendInfoHtml(node, blendState)
+        : `
+          <div class="node-resource-selector" data-node-id="${node.id}">
+            <label>Blend</label>
+            <div class="resource-controls">
+              ${isFeatureEnabled(Features.BlendTools) ? `<button class="blend-open-btn" data-node-id="${node.id}">Edit Blend</button>` : ""}
+            </div>
           </div>
-          <div class="resource-path-info">Models: ${blendModels.length}</div>
-        </div>
-      `;
+        `;
     } else {
 
     const buildOptions = (currentId: string) => resources.map((res: LibraryResource) => {
@@ -3336,6 +3337,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
   bindHostedPluginListControls(node);
   bindCustomEffectActionControls(node);
   bindBlendEditorControls(nodeParamsPanelElement, node);
+  bindBlendModeOverride(node);
   bindCloseButton();
   bindBypassButton(node, preset);
   bindCustomizeLayoutButton(node);
@@ -3831,6 +3833,7 @@ function bindNodeParamControls(node: GraphNode, preset: Preset): void {
 
         if (isBlendParam && blendState) {
           updateBlendParamIndicators(nodeParamsPanelElement, node, blendState);
+          updateBlendMatchSummary(nodeParamsPanelElement, node, blendState);
         }
       },
     });
@@ -3843,6 +3846,7 @@ function bindNodeParamControls(node: GraphNode, preset: Preset): void {
 
   if (blendState) {
     updateBlendParamIndicators(nodeParamsPanelElement, node, blendState);
+    updateBlendMatchSummary(nodeParamsPanelElement, node, blendState);
   }
 }
 
@@ -4483,6 +4487,23 @@ function sendSignalPathNodeConfigUpdate(nodeId: string, key: string, value: stri
   if (persist && !capture) {
     setPresetDirty(true);
   }
+}
+
+function bindBlendModeOverride(node: GraphNode): void {
+  const select = nodeParamsPanelElement?.querySelector<HTMLSelectElement>(".blend-mode-select");
+  if (!select) {
+    return;
+  }
+  select.addEventListener("change", () => {
+    const value = select.value;
+    node.config.blendMode = value;
+    sendSignalPathNodeConfigUpdate(node.id, "blendMode", value);
+    // Update the matched-model summary in place to reflect the new mode.
+    const blendState = getBlendState(node);
+    if (blendState) {
+      updateBlendMatchSummary(nodeParamsPanelElement, node, blendState);
+    }
+  });
 }
 
 function sendNodeResourceUpdate(

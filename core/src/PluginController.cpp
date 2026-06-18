@@ -9247,6 +9247,13 @@ void PluginController::ApplyPreset(const Preset& preset)
         node.params["useCalibration"] = 1.0;
     }
 
+    // Hydrate blend node resources (model refs + blendMode) from the blend library.
+    // This must run before the executor is built so that CreateProcessors -> LoadResources
+    // can resolve NAM model paths for MultiModelNAMAmpEffect. Without it, blend nodes added
+    // or replaced via the signal path UI have empty resources, leaving the effect in
+    // passthrough mode (no models loaded -> input/output gain and blend selection have no effect).
+    ApplyBlendDefinitions(normalizedPreset);
+
     TryRemapHostedPluginResources(normalizedPreset);
     EnsurePresetBoundaryGainNodes(normalizedPreset);
 

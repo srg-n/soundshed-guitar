@@ -3012,6 +3012,64 @@
   border-color: var(--color-primary);
 }
 
+/* ===== Blend live-view info block (match summary + mode override) ===== */
+
+.blend-info-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.blend-info-block .blend-info-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dark-primary);
+  word-break: break-word;
+}
+
+.blend-info-block .blend-match-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-dark-light);
+  background: var(--bg-dark-secondary);
+  color: var(--text-dark-primary);
+  font-size: 12px;
+}
+
+.blend-info-block .blend-match-name {
+  font-weight: 600;
+}
+
+.blend-info-block .blend-match-details {
+  color: var(--text-dark-muted);
+  font-size: 11px;
+}
+
+.blend-info-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.blend-mode-label {
+  font-size: 12px;
+  color: var(--text-dark-secondary);
+}
+
+.blend-mode-select {
+  padding: 4px 8px;
+  font-size: 12px;
+  background: var(--bg-dark-secondary);
+  border: 1px solid var(--border-dark-medium);
+  border-radius: 4px;
+  color: var(--text-dark-primary);
+  cursor: pointer;
+}
+
 /* ===== Plugin Host Resource List ===== */
 
 .plugin-host-list {

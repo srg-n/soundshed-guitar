@@ -5,15 +5,19 @@
  * and the blend-editor modal wiring extracted from signalPath.ts.
  */
 import { uiState } from "./state.js";
+import { EffectGuids } from "./effectGuids.js";
 import type {
   BlendModelMapping,
   BlendDefinition,
   BlendMode,
   BlendLibrary,
   GraphNode,
+  LibraryResource,
 } from "./types.js";
 import { buildBlendModelMappingsFromIds } from "./blendUtils.js";
 import { BlendEditorModal } from "./blendEditor.js";
+import { escapeHtml, findResourceById } from "./utils.js";
+import { Features, isFeatureEnabled } from "./featureFlags.js";
 
 // ---------------------------------------------------------------------------
 // Blend parameter specs
@@ -281,7 +285,7 @@ export function computeBlendParamRange(
 }
 
 export function getBlendState(node: GraphNode): BlendState | null {
-  if (node.type !== "amp_nam_blend") {
+  if (node.type !== EffectGuids.kAmpNamBlend) {
     return null;
   }
 
@@ -295,7 +299,9 @@ export function getBlendState(node: GraphNode): BlendState | null {
     ? blend.modelMappings
     : buildBlendModelMappingsFromIds(blend?.models ?? [], uiState.resourceLibrary);
   const paramIds = resolveBlendActiveParams(blend, mappings);
-  const blendMode = (blend?.blendMode ?? "interpolate") as BlendMode;
+  // Per-node override takes precedence over the blend definition's mode.
+  const configBlendMode = node.config?.blendMode as BlendMode | undefined;
+  const blendMode = (configBlendMode ?? blend?.blendMode ?? "interpolate") as BlendMode;
 
   return {
     blend,
@@ -335,6 +341,132 @@ export function updateBlendParamIndicators(
     const points = buildBlendMappedPointsForParam(paramId, blendState, target);
     renderMappedPointElements(knob, points, min, max);
   });
+}
+
+// ---------------------------------------------------------------------------
+// Blend match summary (live view)
+// ---------------------------------------------------------------------------
+
+export type BlendMatchSummary = {
+  name: string;
+  details: string;
+};
+
+/**
+ * Resolve a model id to a display name from the resource library.
+ */
+function resolveModelName(modelId: string): string {
+  const resources = uiState.resourceLibrary?.nam ?? [];
+  const resource = findResourceById<LibraryResource>(resources, modelId);
+  return resource?.name?.trim() || modelId;
+}
+
+/**
+ * Compute the matched model summary for the live view, mirroring the
+ * Test view's logic in blendEditor.updateMatchedModel. Reads normalised
+ * param values from the node and matches them against the blend's mappings.
+ */
+export function computeBlendMatchSummary(
+  node: GraphNode,
+  blendState: BlendState,
+): BlendMatchSummary {
+  const target: Record<string, number> = {};
+  blendState.paramIds.forEach((paramId) => {
+    const value = node.params[paramId];
+    if (typeof value === "number") {
+      target[paramId] = value;
+    }
+  });
+
+  const mappings = blendState.mappings;
+  if (!Object.keys(target).length || !mappings.length) {
+    return { name: "—", details: "" };
+  }
+
+  let bestIndex = -1;
+  let secondIndex = -1;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  let secondDistance = Number.POSITIVE_INFINITY;
+
+  mappings.forEach((mapping, index) => {
+    const params = buildParameterMapFromLegacy(mapping);
+    let distance = 0;
+    let matched = false;
+    blendState.paramIds.forEach((paramId) => {
+      if (!(paramId in target)) {
+        return;
+      }
+      const mappedValue = params[paramId];
+      if (typeof mappedValue !== "number") {
+        distance += 4;
+        return;
+      }
+      const delta = mappedValue - target[paramId];
+      distance += delta * delta;
+      matched = true;
+    });
+    if (!matched) {
+      distance += 9;
+    }
+
+    if (distance < bestDistance) {
+      secondDistance = bestDistance;
+      secondIndex = bestIndex;
+      bestDistance = distance;
+      bestIndex = index;
+    } else if (distance < secondDistance) {
+      secondDistance = distance;
+      secondIndex = index;
+    }
+  });
+
+  if (bestIndex < 0) {
+    return { name: "—", details: "" };
+  }
+
+  const bestMapping = mappings[bestIndex];
+  const bestName = resolveModelName(bestMapping.id);
+  const hasSecond = secondIndex >= 0 && secondIndex !== bestIndex;
+
+  if (blendState.blendMode === "interpolate" && hasSecond) {
+    const secondMapping = mappings[secondIndex];
+    const secondName = resolveModelName(secondMapping.id);
+    const eps = 1e-6;
+    const w1 = 1 / Math.max(bestDistance, eps);
+    const w2 = 1 / Math.max(secondDistance, eps);
+    const denom = Math.max(w1 + w2, eps);
+    const p1 = Math.round((w1 / denom) * 100);
+    const p2 = 100 - p1;
+    return { name: bestName || "—", details: `Mix: ${bestName} ${p1}% / ${secondName} ${p2}%` };
+  }
+
+  return { name: bestName || "—", details: "" };
+}
+
+/**
+ * Update the live-view blend match summary DOM elements in place.
+ * Called after a blend param changes so the matched model label tracks the knob.
+ */
+export function updateBlendMatchSummary(
+  panel: HTMLElement | null,
+  node: GraphNode,
+  blendState: BlendState,
+): void {
+  if (!panel) {
+    return;
+  }
+  const nameEl = panel.querySelector(".blend-match-name") as HTMLElement | null;
+  const detailsEl = panel.querySelector(".blend-match-details") as HTMLElement | null;
+  if (!nameEl && !detailsEl) {
+    return;
+  }
+  const summary = computeBlendMatchSummary(node, blendState);
+  if (nameEl) {
+    nameEl.textContent = summary.name;
+  }
+  if (detailsEl) {
+    detailsEl.textContent = summary.details;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -395,3 +527,45 @@ export function bindBlendEditorControls(panel: HTMLElement | null, node: GraphNo
     blendEditorModal.open(node);
   });
 }
+
+// ---------------------------------------------------------------------------
+// Blend live-view info rendering (match summary + blend mode override)
+// ---------------------------------------------------------------------------
+
+/**
+ * Render the blend info block shown in the live effect panel: matched model
+ * summary (same format as the Test view) plus a blend mode override control.
+ * The summary text is updated in place by `updateBlendMatchSummary` as the
+ * mapped param knobs are turned.
+ */
+export function renderBlendInfoHtml(node: GraphNode, blendState: BlendState): string {
+  const summary = computeBlendMatchSummary(node, blendState);
+  const blendName = escapeHtml(blendState.blend?.name ?? "");
+  const modelCount = blendState.mappings.length;
+  const blendMode = blendState.blendMode;
+  const nodeId = escapeHtml(node.id);
+  const editBlendButton = isFeatureEnabled(Features.BlendTools)
+    ? `<button class="blend-open-btn" data-node-id="${node.id}" type="button">Edit Blend</button>`
+    : "";
+
+  return `
+    <div class="node-resource-selector blend-info-block" data-node-id="${node.id}">
+      <label>Blend</label>
+      ${blendName ? `<div class="blend-info-name">${blendName}</div>` : ""}
+      <div class="blend-match-summary">
+        <span class="blend-match-name">${escapeHtml(summary.name)}</span>
+        <span class="blend-match-details">${escapeHtml(summary.details)}</span>
+      </div>
+      <div class="blend-info-controls">
+        <label class="blend-mode-label" for="blend-mode-select-${nodeId}">Blend Mode</label>
+        <select id="blend-mode-select-${nodeId}" class="blend-mode-select" data-node-id="${node.id}">
+          <option value="interpolate" ${blendMode === "interpolate" ? "selected" : ""}>Interpolate</option>
+          <option value="snap" ${blendMode === "snap" ? "selected" : ""}>Snap</option>
+        </select>
+        ${editBlendButton}
+      </div>
+      <div class="resource-path-info">Models: ${modelCount}</div>
+    </div>
+  `;
+}
+
