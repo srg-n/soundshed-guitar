@@ -500,17 +500,29 @@ function renderSearchStatus(jam: JamState): string {
 
 function renderResultCard(video: JamVideoSummary): string {
   const favorite = isFavorite(video.videoId);
+  const videoId = escapeHtml(video.videoId);
+  const title = escapeHtml(video.title);
+  const channel = escapeHtml(video.channelTitle);
+  const thumbSrc = video.thumbnailUrl ? escapeHtml(video.thumbnailUrl) : "";
   return `
-    <article class="jam-result-card" data-video-id="${escapeHtml(video.videoId)}">
-      <button class="jam-thumb-button" type="button" data-jam-action="play" data-video-id="${escapeHtml(video.videoId)}" aria-label="Play ${escapeHtml(video.title)}">
-        ${video.thumbnailUrl ? `<img class="jam-thumb-image" src="${escapeHtml(video.thumbnailUrl)}" alt="" loading="lazy" />` : '<div class="jam-thumb-fallback">Play</div>'}
-        <span class="jam-thumb-play">Play</span>
+    <article class="jam-result-card" data-video-id="${videoId}">
+      <button class="jam-result-art" type="button" data-jam-action="play" data-video-id="${videoId}" aria-label="Play ${title}">
+        ${thumbSrc
+          ? `<img class="jam-result-thumb" src="${thumbSrc}" alt="" loading="lazy" />`
+          : '<div class="jam-result-thumb-fallback"></div>'}
+        <span class="jam-result-play-overlay" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="20" height="20" aria-hidden="true"><polygon points="4,2 13,8 4,14"/></svg>
+        </span>
       </button>
-      <div class="jam-result-body">
-        <div class="jam-result-title">${escapeHtml(video.title)}</div>
-        <div class="jam-result-channel">${escapeHtml(video.channelTitle)}</div>
+      <div class="jam-result-content">
+        <div class="jam-result-title">${title}</div>
+        <div class="jam-result-meta">
+          <span class="jam-meta-chip">${channel}</span>
+        </div>
       </div>
-      <button class="jam-favorite-toggle${favorite ? " is-active" : ""}" type="button" data-jam-action="favorite" data-video-id="${escapeHtml(video.videoId)}" aria-pressed="${favorite ? "true" : "false"}" aria-label="${favorite ? "Remove from favourites" : "Add to favourites"}" title="${favorite ? "Remove from favourites" : "Add to favourites"}">${favorite ? "★" : "☆"}</button>
+      <div class="jam-result-actions">
+        <button class="jam-favorite-toggle${favorite ? " is-active" : ""}" type="button" data-jam-action="favorite" data-video-id="${videoId}" aria-pressed="${favorite ? "true" : "false"}" aria-label="${favorite ? "Remove from favourites" : "Add to favourites"}" title="${favorite ? "Remove from favourites" : "Add to favourites"}">${favorite ? "★" : "☆"}</button>
+      </div>
     </article>
   `;
 }

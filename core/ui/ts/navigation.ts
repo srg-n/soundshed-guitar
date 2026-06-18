@@ -2,7 +2,8 @@ import { uiState } from "./state.js";
 import { postMessage } from "./bridge.js";
 import { initSettingsPanel, updateSettingsSessionStatus, activateEquipmentTab, activateLibraryTab, activateAdvancedSubTab, setSettingsViewStateSuppressed } from "./settings.js";
 import { ensureTone3000Session } from "./tone3000.js";
-import { handleJamPanelActivated } from "./jam.js";
+import { handleJamPanelActivated, initializeJamPanel } from "./jam.js";
+import { initializeToneSharingPanel } from "./toneSharingPanel.js";
 import type { UiViewState } from "./types.js";
 import { isJamEnabled } from "./buildFlags.js";
 import { Features, isFeatureEnabled, isJamExperienceEnabled } from "./featureFlags.js";
@@ -133,7 +134,12 @@ export function switchMainPanel(panelId: string): void {
   }
 
   if (effectivePanelId === "jam") {
+    initializeJamPanel();
     handleJamPanelActivated();
+  }
+
+  if (effectivePanelId === "sharing") {
+    initializeToneSharingPanel();
   }
 
   updateUiViewState({ mainPanel: effectivePanelId });

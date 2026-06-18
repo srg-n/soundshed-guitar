@@ -65,6 +65,7 @@
         <button class="icon-btn nav-tab" :class="{ active: $store.ui && $store.ui.mainPanel === 'jam' }" x-on:click="$store.ui && $store.ui.switchMainPanel('jam')" data-panel="jam" title="Jam">JAM</button>
       </nav>
       <span class="icon-bar-spacer"></span>
+      <div class="jam-player-dock" id="jam-player-dock" aria-hidden="true"></div>
       <button class="icon-btn nav-settings-btn" data-panel="settings" title="Settings" aria-label="Settings">
         <svg viewBox="0 0 24 24">
           <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" stroke="currentColor" stroke-width="1.5" fill="none" />
@@ -424,7 +425,6 @@
           </div>
         </div>
       </div>
-        <div class="jam-player-dock" id="jam-player-dock" aria-hidden="true"></div>
 </section>
 
 
@@ -592,6 +592,7 @@
                   class="jam-scales-frame"
                   src="https://scalex.soundshed.com?src=soundshed-guitar"
                   title="Scales"
+                  loading="lazy"
                   allow="clipboard-read; clipboard-write; fullscreen"
                   referrerpolicy="strict-origin-when-cross-origin">
                 </iframe>
@@ -1211,9 +1212,11 @@
           <select id="theme-select" class="footer-demo-select themed-select"></select>
         </div>
       </div>
-    </footer>
+    </footer>
 
-    <div id="notification-area" class="notification-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <div id="notification-area" class="notification-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
 
 
     <!-- All modals -->

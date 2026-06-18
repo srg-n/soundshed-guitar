@@ -4229,10 +4229,17 @@ export function handleToneSharingDeepLink(deepLinkQuery: string): void {
   })();
 }
 
+let toneSharingPanelInitialized = false;
+
 export function initializeToneSharingPanel(): void {
   if (!element("panel-sharing")) {
     return;
   }
+
+  if (toneSharingPanelInitialized) {
+    return;
+  }
+  toneSharingPanelInitialized = true;
 
   restoreLocalState();
   clearPackThumbnailObjectUrls();

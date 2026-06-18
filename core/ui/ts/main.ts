@@ -25,10 +25,8 @@ import { initializeCustomEffectDesignerModal } from "./customEffectDesigner.js";
 import { initializeDialogModals } from "./dialogs.js";
 import { activateTab, initializeIconBarTabs, initializeTabButtons, switchMainPanel } from "./navigation.js";
 import { renderSignalPathBar } from "./signalPath.js";
-import { initializeToneSharingPanel } from "./toneSharingPanel.js";
 import { initializeRiffLibraryPanel } from "./riffLibrary.js";
 import { initMultiRigTab } from "./multiPresetMixer.js";
-import { initializeJamPanel } from "./jam.js";
 import { applyBuildFlags } from "./buildFlags.js";
 import { hideSplashScreen, initSplashScreen } from "./splash.js";
 import { FEATURE_FLAGS_CHANGED_EVENT } from "./featureFlags.js";
@@ -152,8 +150,6 @@ async function bootstrap(): Promise<void> {
   initializeTuner();
   initializeMetronome();
   initializeRiffLibraryPanel();
-  initializeJamPanel();
-  initializeToneSharingPanel();
   initMultiRigTab();
   initializeCustomEffectDesignerModal();
   if (eqModalCloseBtn) {
