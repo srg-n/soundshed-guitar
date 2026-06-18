@@ -214,19 +214,15 @@ export class BlendEditorModal {
     delete this.modal.dataset.nodeId;
 
     this.setActiveTab("settings");
-    this.renderParameterList();
-    this.renderModelList(mappings, category);
+    // Reset transient test state *before* rendering so renderModelList -> renderTestControls seeds fresh from mappings
     this.testParams = {};
     this.testKnobs.clear();
     if (this.testControls) {
       this.testControls.innerHTML = "";
     }
-    if (this.matchName) {
-      this.matchName.textContent = "—";
-    }
-    if (this.matchDetails) {
-      this.matchDetails.textContent = "";
-    }
+    this.renderParameterList();
+    this.renderModelList(mappings, category);
+    // Do not force match to '—' here; updateMatchedModel (called from render) will compute best match from mappings+test
     this.modal.style.display = "flex";
   }
 
@@ -306,9 +302,7 @@ export class BlendEditorModal {
         this.renderParameterList();
         this.renderModelList(this.collectCurrentMappings(), this.categorySelect?.value ?? "amp");
         const activeNode = this.getActiveNode();
-        if (activeNode) {
-          this.renderTestControls(activeNode, this.collectCurrentMappings());
-        }
+        this.renderTestControls(activeNode, this.collectCurrentMappings());
         this.updateMatchedModel();
       });
     });
@@ -323,9 +317,7 @@ export class BlendEditorModal {
     this.renderParameterList();
     this.renderModelList(this.collectCurrentMappings(), this.categorySelect?.value ?? "amp");
     const activeNode = this.getActiveNode();
-    if (activeNode) {
-      this.renderTestControls(activeNode, this.collectCurrentMappings());
-    }
+    this.renderTestControls(activeNode, this.collectCurrentMappings());
     this.updateMatchedModel();
   }
 
@@ -363,9 +355,7 @@ export class BlendEditorModal {
     this.renderParameterList();
     this.renderModelList(mappings, this.categorySelect?.value ?? "amp");
     const activeNode = this.getActiveNode();
-    if (activeNode) {
-      this.renderTestControls(activeNode, mappings);
-    }
+    this.renderTestControls(activeNode, mappings);
     this.updateMatchedModel();
   }
 
@@ -652,9 +642,7 @@ export class BlendEditorModal {
       onSelect: (resourceId) => {
         this.setRowModel(row, resourceId);
         const activeNode = this.getActiveNode();
-        if (activeNode) {
-          this.renderTestControls(activeNode, this.collectCurrentMappings());
-        }
+        this.renderTestControls(activeNode, this.collectCurrentMappings());
         this.updateMatchedModel();
       },
     });
@@ -809,9 +797,7 @@ export class BlendEditorModal {
 
     this.bindModelRowEvents(category);
     const activeNode = this.getActiveNode();
-    if (activeNode) {
-      this.renderTestControls(activeNode, mappings);
-    }
+    this.renderTestControls(activeNode, mappings);
     this.updateMatchedModel();
   }
 
@@ -879,9 +865,7 @@ export class BlendEditorModal {
       removeBtn?.addEventListener("click", () => {
         row.remove();
         const activeNode = this.getActiveNode();
-        if (activeNode) {
-          this.renderTestControls(activeNode, this.collectCurrentMappings());
-        }
+        this.renderTestControls(activeNode, this.collectCurrentMappings());
         this.updateMatchedModel();
       });
 
@@ -917,16 +901,14 @@ export class BlendEditorModal {
     this.modelList.appendChild(row);
     this.bindModelRowEvents(category);
     const activeNode = this.getActiveNode();
-    if (activeNode) {
-      this.renderTestControls(activeNode, this.collectCurrentMappings());
-    }
+    this.renderTestControls(activeNode, this.collectCurrentMappings());
     this.updateMatchedModel();
   }
 
-  private syncTestParams(node: GraphNode, mappings: BlendModelMapping[]): void {
+  private syncTestParams(node: GraphNode | null | undefined, mappings: BlendModelMapping[]): void {
     const specs = new Map(PARAM_SPECS.map((spec) => [spec.id, spec]));
     const defaultNormalized = (paramId: string): number => {
-      const nodeValue = node.params[paramId];
+      const nodeValue = node && node.params ? node.params[paramId] : undefined;
       if (typeof nodeValue === "number") {
         return nodeValue;
       }
@@ -955,7 +937,7 @@ export class BlendEditorModal {
     this.testParams = nextParams;
   }
 
-  private renderTestControls(node: GraphNode, mappings: BlendModelMapping[]): void {
+  private renderTestControls(node: GraphNode | null | undefined, mappings: BlendModelMapping[]): void {
     if (!this.testControls) {
       return;
     }
@@ -1090,19 +1072,9 @@ export class BlendEditorModal {
       return;
     }
 
-    const nodeId = this.modal.dataset.nodeId ?? "";
-    if (!nodeId) {
-      this.matchName.textContent = "—";
-      if (this.matchDetails) this.matchDetails.textContent = "";
-      return;
-    }
-
-    const node = this.getActiveNode();
-    if (!node) {
-      this.matchName.textContent = "—";
-      if (this.matchDetails) this.matchDetails.textContent = "";
-      return;
-    }
+    // Note: previously gated on nodeId/activeNode (from signal path open).
+    // Removed to fix regression: when "testing a blend" (even via openWithDefinition from lib),
+    // parameter changes must update the matched model in the Test UI based on current mappings + testParams.
 
     const target: Record<string, number> = {};
     this.activeParams.forEach((paramId) => {
