@@ -4,6 +4,8 @@ Soundshed Guitar is a guitar/bass effects app and plugin combining Neural Amp Mo
 
 Downloads: https://guitar.soundshed.com
 
+Requirements: x64 CPU with AVX2 support (circa late 2015+), or M1 onwards for macOS.
+
 ![Screenshot](https://guitar.soundshed.com/img/site/amp.png)
 
 ## Features
