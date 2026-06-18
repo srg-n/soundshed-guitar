@@ -49,29 +49,155 @@ LicenseFile="resources\EULA"
 UninstallFilesDir="{commonappdata}\{#ProductName}\uninstall"
 
 [UninstallDelete]
-Type: filesandordirs; Name: "{#ProgramFiles}\{#Publisher}\{#ProductName}"
-Type: filesandordirs; Name: "{#CommonFiles}\VST3\{#ProductName}.vst3"
-Type: filesandordirs; Name: "{#CommonFiles}\CLAP\{#ProductName}.clap"
+Type: filesandordirs; Name: "{code:GetStandaloneDir}"
+Type: filesandordirs; Name: "{code:GetVst3Dir}"
+Type: filesandordirs; Name: "{code:GetClapBinaryPath}"
+
+[Registry]
+Root: HKA; Subkey: "Software\{#Publisher}\{#ProductName}\Installer"; ValueType: string; ValueName: "StandaloneDir"; ValueData: "{code:GetStandaloneDir}"; Flags: uninsdeletekeyifempty
+Root: HKA; Subkey: "Software\{#Publisher}\{#ProductName}\Installer"; ValueType: string; ValueName: "VST3Dir"; ValueData: "{code:GetVst3Dir}"; Flags: uninsdeletekeyifempty
+Root: HKA; Subkey: "Software\{#Publisher}\{#ProductName}\Installer"; ValueType: string; ValueName: "CLAPDir"; ValueData: "{code:GetClapDir}"; Flags: uninsdeletekeyifempty
 
 ; MSVC adds a .ilk when building the plugin. Let's not include that.
 [Files]
-Source: "..\Builds\{#ProjectName}_artefacts\Release\VST3\{#ProductName}.vst3\*"; DestDir: "{#CommonFiles}\VST3\{#ProductName}.vst3\"; Excludes: *.ilk,node_modules\*,*\node_modules\*,ts\*,*\ts\*,Testing\*,*\Testing\*,tests\*,*\tests\*,assets\amps\*,assets\ir\*; Flags: ignoreversion recursesubdirs; Components: vst3
-Source: "..\Builds\{#ProjectName}_artefacts\Release\CLAP\{#ProductName}.clap"; DestDir: "{#CommonFiles}\CLAP\"; Flags: ignoreversion; Components: clap
-Source: "..\Builds\{#ProjectName}_artefacts\Release\CLAP\resources\*"; DestDir: "{#CommonFiles}\CLAP\resources\"; Excludes: node_modules\*,*\node_modules\*,ts\*,*\ts\*,Testing\*,*\Testing\*,tests\*,*\tests\*,assets\amps\*,assets\ir\*; Flags: ignoreversion recursesubdirs createallsubdirs; Components: clap
-Source: "..\Builds\{#ProjectName}_artefacts\Release\Standalone\*"; DestDir: "{#ProgramFiles}\{#Publisher}\{#ProductName}"; Excludes: *.ilk,node_modules\*,*\node_modules\*,ts\*,*\ts\*,Testing\*,*\Testing\*,tests\*,*\tests\*,assets\amps\*,assets\ir\*; Flags: ignoreversion recursesubdirs; Components: standalone
+Source: "..\Builds\{#ProjectName}_artefacts\Release\VST3\{#ProductName}.vst3\*"; DestDir: "{code:GetVst3Dir}"; Excludes: *.ilk,node_modules\*,*\node_modules\*,ts\*,*\ts\*,Testing\*,*\Testing\*,tests\*,*\tests\*,assets\amps\*,assets\ir\*; Flags: ignoreversion recursesubdirs; Components: vst3
+Source: "..\Builds\{#ProjectName}_artefacts\Release\CLAP\{#ProductName}.clap"; DestDir: "{code:GetClapDir}"; Flags: ignoreversion; Components: clap
+Source: "..\Builds\{#ProjectName}_artefacts\Release\CLAP\resources\*"; DestDir: "{code:GetClapResourcesDir}"; Excludes: node_modules\*,*\node_modules\*,ts\*,*\ts\*,Testing\*,*\Testing\*,tests\*,*\tests\*,assets\amps\*,assets\ir\*; Flags: ignoreversion recursesubdirs createallsubdirs; Components: clap
+Source: "..\Builds\{#ProjectName}_artefacts\Release\Standalone\*"; DestDir: "{code:GetStandaloneDir}"; Excludes: *.ilk,node_modules\*,*\node_modules\*,ts\*,*\ts\*,Testing\*,*\Testing\*,tests\*,*\tests\*,assets\amps\*,assets\ir\*; Flags: ignoreversion recursesubdirs; Components: standalone
 
 
 [Icons]
-Name: "{autoprograms}\{#ProductName}"; Filename: "{#ProgramFiles}\{#Publisher}\{#ProductName}\{#ProductName}.exe"; Components: standalone
+Name: "{autoprograms}\{#ProductName}"; Filename: "{code:GetStandaloneExePath}"; Components: standalone
 Name: "{autoprograms}\Uninstall {#ProductName}"; Filename: "{uninstallexe}"
 
 ; This is optional, for preset or other plugin data
 [Run]
-Filename: "{#ProgramFiles}\{#Publisher}\{#ProductName}\{#ProductName}.exe"; \
+Filename: "{code:GetStandaloneExePath}"; \
     Description: "Launch {#ProductName}"; \
     Flags: nowait postinstall skipifsilent; Components: standalone
 
 [Code]
+const
+    InstallPathsRegKey = 'Software\{#Publisher}\{#ProductName}\Installer';
+
+var
+    InstallPathsPage: TInputDirWizardPage;
+
+function TrimmedPath(const Path: string): string;
+begin
+    Result := RemoveBackslashUnlessRoot(Trim(Path));
+end;
+
+function ReadSavedInstallPath(const ValueName: string; const Fallback: string): string;
+begin
+    Result := '';
+
+    if not RegQueryStringValue(HKLM, InstallPathsRegKey, ValueName, Result) then
+        if not RegQueryStringValue(HKCU, InstallPathsRegKey, ValueName, Result) then
+            Result := Fallback;
+
+    Result := TrimmedPath(Result);
+    if Result = '' then
+        Result := TrimmedPath(Fallback);
+end;
+
+function GetStandaloneDir(Param: string): string;
+begin
+    if Assigned(InstallPathsPage) and (Trim(InstallPathsPage.Values[0]) <> '') then
+        Result := TrimmedPath(InstallPathsPage.Values[0])
+    else
+        Result := ReadSavedInstallPath('StandaloneDir', ExpandConstant('{#ProgramFiles}\{#Publisher}\{#ProductName}'));
+end;
+
+function GetVst3Dir(Param: string): string;
+begin
+    if Assigned(InstallPathsPage) and (Trim(InstallPathsPage.Values[1]) <> '') then
+        Result := TrimmedPath(InstallPathsPage.Values[1])
+    else
+        Result := ReadSavedInstallPath('VST3Dir', ExpandConstant('{#CommonFiles}\VST3\{#ProductName}.vst3'));
+end;
+
+function GetClapDir(Param: string): string;
+begin
+    if Assigned(InstallPathsPage) and (Trim(InstallPathsPage.Values[2]) <> '') then
+        Result := TrimmedPath(InstallPathsPage.Values[2])
+    else
+        Result := ReadSavedInstallPath('CLAPDir', ExpandConstant('{#CommonFiles}\CLAP'));
+end;
+
+function GetClapResourcesDir(Param: string): string;
+begin
+    Result := AddBackslash(GetClapDir('')) + 'resources';
+end;
+
+function GetClapBinaryPath(Param: string): string;
+begin
+    Result := AddBackslash(GetClapDir('')) + '{#ProductName}.clap';
+end;
+
+function GetStandaloneExePath(Param: string): string;
+begin
+    Result := AddBackslash(GetStandaloneDir('')) + '{#ProductName}.exe';
+end;
+
+procedure InitializeWizard;
+begin
+    InstallPathsPage := CreateInputDirPage(
+        wpSelectComponents,
+        'Install locations',
+        'Optional custom install paths',
+        'Choose where each selected component will be installed. Leave defaults if you do not need custom paths.',
+        False,
+        ''
+    );
+
+    InstallPathsPage.Add('Standalone application folder:');
+    InstallPathsPage.Values[0] := GetStandaloneDir('');
+
+    InstallPathsPage.Add('VST3 bundle folder (.vst3):');
+    InstallPathsPage.Values[1] := GetVst3Dir('');
+
+    InstallPathsPage.Add('CLAP plugin folder:');
+    InstallPathsPage.Values[2] := GetClapDir('');
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+    Result := False;
+
+    if (PageID = InstallPathsPage.ID) and (WizardSetupType(False) <> 'custom') then
+        Result := True;
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+    Result := True;
+
+    if CurPageID <> InstallPathsPage.ID then
+        Exit;
+
+    if WizardIsComponentSelected('standalone') and (Trim(GetStandaloneDir('')) = '') then
+    begin
+        MsgBox('Standalone install folder cannot be empty.', mbError, MB_OK);
+        Result := False;
+        Exit;
+    end;
+
+    if WizardIsComponentSelected('vst3') and (Trim(GetVst3Dir('')) = '') then
+    begin
+        MsgBox('VST3 install folder cannot be empty.', mbError, MB_OK);
+        Result := False;
+        Exit;
+    end;
+
+    if WizardIsComponentSelected('clap') and (Trim(GetClapDir('')) = '') then
+    begin
+        MsgBox('CLAP install folder cannot be empty.', mbError, MB_OK);
+        Result := False;
+        Exit;
+    end;
+end;
+
 function IsWebView2RuntimeInstalled: Boolean;
 var
     Version: string;
