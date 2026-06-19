@@ -105,3 +105,5 @@ linux-dist
 juce/builds-linux-x64/
 linux-dist-x64/
 soundshed-install
+
+core/ui/index.html

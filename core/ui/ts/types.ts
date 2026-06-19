@@ -570,6 +570,7 @@ declare global {
     SoundshedDebug?: {
       captureSnapshot: (reason?: string) => Record<string, unknown>;
       getUiSnapshot: (reason?: string) => Record<string, unknown>;
+      getPresetSummary: () => Record<string, unknown>;
     };
     AUDIOFX_REMOTE_BASE_URL?: string;
     SOUNDSHED_BUILD_FLAGS?: {

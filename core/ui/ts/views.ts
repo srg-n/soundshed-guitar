@@ -547,6 +547,34 @@ export function renderPresetList(
   });
 }
 
+function getPresetSignalChainStages(preset: Preset | null): string[] {
+  if (!preset) {
+    return [];
+  }
+
+  if (Array.isArray(preset.fxChain) && preset.fxChain.length > 0) {
+    return preset.fxChain;
+  }
+
+  const graph = preset.graph?.nodes?.length
+    ? preset.graph
+    : preset.scenes?.find((scene) => scene.graph?.nodes?.length > 0)?.graph;
+
+  if (!graph?.nodes?.length) {
+    return [];
+  }
+
+  const order = getGraphTopologicalOrder(graph);
+  return graph.nodes
+    .slice()
+    .sort((left, right) => (
+      (order.get(left.id) ?? 9999) - (order.get(right.id) ?? 9999)
+      || left.id.localeCompare(right.id)
+    ))
+    .filter((node) => node.id !== "__input__" && node.id !== "__output__" && node.type !== "input" && node.type !== "output")
+    .map((node) => getFriendlyGraphNodeName(node, node.type, node.id));
+}
+
 export function renderPresetDetails(
   preset: Preset | null,
   hooks: RenderHooks,
@@ -599,7 +627,7 @@ export function renderPresetDetails(
     })
     .join("");
 
-  const fxChainNodes = (preset.fxChain ?? [])
+  const fxChainNodes = getPresetSignalChainStages(preset)
     .map((stage) => {
       const icon = stage === "dynamics_gate" || stage === "noise_gate"
         ? renderIcon("mute", "fx-node-icon-img")

@@ -66,6 +66,35 @@ function normalizePresetResources(preset?: Preset | null): void {
   }
 }
 
+let ignoreNextStatePresetId: string | null = null;
+let ignoreNextStatePresetExpiresAtMs = 0;
+
+function markIgnoreNextStatePreset(id: string): void {
+  const presetId = id.trim();
+  if (!presetId) {
+    return;
+  }
+  ignoreNextStatePresetId = presetId;
+  ignoreNextStatePresetExpiresAtMs = Date.now() + 1500;
+}
+
+function shouldIgnoreStatePreset(incoming: Preset): boolean {
+  const incomingId = incoming.id?.trim() ?? "";
+  if (!incomingId || !ignoreNextStatePresetId) {
+    return false;
+  }
+
+  if (incomingId !== ignoreNextStatePresetId) {
+    return false;
+  }
+
+  const stillValid = Date.now() <= ignoreNextStatePresetExpiresAtMs;
+  // One-shot guard: clear once a matching state payload is observed.
+  ignoreNextStatePresetId = null;
+  ignoreNextStatePresetExpiresAtMs = 0;
+  return stillValid;
+}
+
 const DEBUG_SNAPSHOT_SKIP_TYPES = new Set(["dspPerformance", "signalLevelDiagnostics", "captureDebugSnapshot", "debugSnapshotWritten"]);
 let debugSnapshotTimer: number | null = null;
 
@@ -233,12 +262,55 @@ function scheduleUiDebugSnapshot(source: string): void {
   }, 200);
 }
 
+function summarizeGraphForDebug(graph?: Preset["graph"] | null): Record<string, unknown> {
+  const nodes = graph?.nodes ?? [];
+  const edges = graph?.edges ?? [];
+  return {
+    nodeCount: nodes.length,
+    edgeCount: edges.length,
+    nodes: nodes.map((node) => ({ id: node.id, type: node.type })),
+    edges: edges.map((edge) => ({ from: edge.from, to: edge.to })),
+  };
+}
+
+function summarizePresetForDebug(preset?: Preset | null): Record<string, unknown> | null {
+  if (!preset) {
+    return null;
+  }
+
+  return {
+    id: preset.id,
+    name: preset.name,
+    graph: summarizeGraphForDebug(preset.graph),
+    scenes: (preset.scenes ?? []).map((scene) => ({
+      id: scene.id,
+      title: scene.title,
+      graph: summarizeGraphForDebug(scene.graph),
+    })),
+  };
+}
+
 window.SoundshedDebug = {
   captureSnapshot(reason = "manual"): Record<string, unknown> {
     return postUiDebugSnapshot(reason);
   },
   getUiSnapshot(reason = "manual"): Record<string, unknown> {
     return buildUiDebugSnapshot(reason);
+  },
+  getPresetSummary(): Record<string, unknown> {
+    const activePresetId = uiState.activePresetId ?? null;
+    const activePresetForRender = getActivePresetForRender();
+    const cachedActivePreset = activePresetId ? (uiState.presetCache.get(activePresetId) ?? null) : null;
+    return {
+      activePresetId,
+      activePresetSceneId: uiState.activePresetSceneId ?? null,
+      activePresetIsNew: uiState.activePresetIsNew,
+      presetDirty: uiState.presetDirty,
+      activePresetForRender: summarizePresetForDebug(activePresetForRender),
+      activePresetDraft: summarizePresetForDebug(uiState.activePresetDraft),
+      activePresetSnapshot: summarizePresetForDebug(uiState.activePresetSnapshot),
+      cachedActivePreset: summarizePresetForDebug(cachedActivePreset),
+    };
   },
 };
 
@@ -543,28 +615,32 @@ export function handleIncomingMessage(message: string): void {
       uiState.signalTest = null;
       const preset = (payload as { preset?: Preset }).preset;
       if (preset) {
-        normalizePresetResources(preset);
-        uiState.activePresetSceneId = normalizePresetScenes(preset, uiState.activePresetSceneId ?? undefined);
-        const preserveNewDraft = Boolean(uiState.activePresetIsNew && uiState.activePresetId === preset.id);
-        setActivePresetIsNew(preserveNewDraft);
-        const snapshot = uiState.activePresetSnapshot;
-        const isNewPreset = !snapshot || snapshot.id !== preset.id;
-        if (isNewPreset) {
-          setActivePresetSnapshot(preset);
-          setPresetDirty(false);
-          uiState.presetCache.set(preset.id, clonePreset(preset));
-          if (!uiState.presets.some((p) => p.id === preset.id)) {
-            uiState.presets = [clonePreset(preset), ...uiState.presets];
-            uiState.filteredPresets = uiState.presets.slice();
-            populatePresetDropdown();
+        if (!shouldIgnoreStatePreset(preset)) {
+          normalizePresetResources(preset);
+          uiState.activePresetSceneId = normalizePresetScenes(preset, uiState.activePresetSceneId ?? undefined);
+          const preserveNewDraft = Boolean(uiState.activePresetIsNew && uiState.activePresetId === preset.id);
+          setActivePresetIsNew(preserveNewDraft);
+          const snapshot = uiState.activePresetSnapshot;
+          const isNewPreset = !snapshot || snapshot.id !== preset.id;
+          if (isNewPreset) {
+            setActivePresetSnapshot(preset);
+            setPresetDirty(false);
+            uiState.presetCache.set(preset.id, clonePreset(preset));
+            if (!uiState.presets.some((p) => p.id === preset.id)) {
+              uiState.presets = [clonePreset(preset), ...uiState.presets];
+              uiState.filteredPresets = uiState.presets.slice();
+              populatePresetDropdown();
+            }
+          } else {
+            if (!uiState.presetDirty) {
+              const dirty = presetSignature(snapshot) !== presetSignature(preset);
+              setPresetDirty(dirty);
+            }
           }
+          setActivePresetDraft(preset);
         } else {
-          if (!uiState.presetDirty) {
-            const dirty = presetSignature(snapshot) !== presetSignature(preset);
-            setPresetDirty(dirty);
-          }
+          appendLog(`state preset ignored ← ${preset.name ?? preset.id ?? "unknown"} (stale post-save state)`);
         }
-        setActivePresetDraft(preset);
       }
       renderActivePreset();
       syncControlsFromState();
@@ -935,8 +1011,11 @@ export function handleIncomingMessage(message: string): void {
       break;
     }
     case "presetSaved": {
-      appendLog(`preset saved ← ${(payload as { preset?: Preset }).preset?.name ?? "unknown"}`);
       const savedPreset = (payload as { preset?: Preset }).preset;
+      appendLog(
+        `preset saved ← ${savedPreset?.name ?? "unknown"} `
+        + `(graphNodes=${savedPreset?.graph?.nodes?.length ?? 0}, scenes=${savedPreset?.scenes?.length ?? 0})`,
+      );
       if (savedPreset) {
         normalizePresetResources(savedPreset);
         uiState.activePresetSceneId = normalizePresetScenes(savedPreset, (payload as { sceneId?: string }).sceneId ?? uiState.activePresetSceneId ?? undefined);
@@ -954,6 +1033,7 @@ export function handleIncomingMessage(message: string): void {
         }
         renderActivePreset();
         updatePresetDropdownSelection();
+        markIgnoreNextStatePreset(savedPreset.id);
       }
       showNotification("Preset saved", (payload as { path?: string }).path ?? savedPreset?.name ?? "");
       break;

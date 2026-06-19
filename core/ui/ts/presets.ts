@@ -195,6 +195,16 @@ function stripGlobalSignalChainForSave(preset: Preset): Preset {
   return cleaned;
 }
 
+function summarizePresetForSaveLog(preset: Preset): string {
+  const graphNodes = preset.graph?.nodes?.length ?? 0;
+  const graphEdges = preset.graph?.edges?.length ?? 0;
+  const scenes = preset.scenes ?? [];
+  const sceneSummary = scenes.length
+    ? scenes.map((scene) => `${scene.id}:${scene.graph?.nodes?.length ?? 0}`).join(",")
+    : "none";
+  return `graphNodes=${graphNodes}, graphEdges=${graphEdges}, scenes=${scenes.length}[${sceneSummary}]`;
+}
+
 function cloneDefaultGlobalSignalChain(): import("./types.js").GlobalSignalChainConfig {
   return JSON.parse(JSON.stringify(DEFAULT_GLOBAL_SIGNAL_CHAIN)) as import("./types.js").GlobalSignalChainConfig;
 }
@@ -2399,7 +2409,13 @@ export function saveCurrentPreset(): void {
     // Editing existing preset
     const existingPreset = uiState.presetCache.get(editingPresetId);
     if (existingPreset) {
-      const basePreset = stripLegacyGlobals(cleanedPreset ?? existingPreset);
+      // Prefer the live edited preset (draft) as the graph source. For new-preset
+      // drafts the cache entry holds the empty initial graph because the "state"
+      // broadcast handler only refreshes the cache the first time a preset id is
+      // seen — later signal-graph edits live only on activePresetDraft. Using the
+      // stale cache here would persist an empty effect graph on the first save.
+      const liveSource = activePreset && activePreset.id === editingPresetId ? activePreset : existingPreset;
+      const basePreset = stripLegacyGlobals(cleanedPreset ?? liveSource);
       const updatedPreset: Preset = {
         ...basePreset,
         name,
@@ -2428,6 +2444,7 @@ export function saveCurrentPreset(): void {
         includeGlobalSignalChain: includeGlobalFx,
         preset: stripGlobalSignalChainForSave(updatedPreset),
       };
+      appendLog(`save preset → ${updatedPreset.name} (${summarizePresetForSaveLog(updatedPreset)})`);
       postMessage(savePayload);
       uiState.presetCache.set(editingPresetId, updatedPreset);
       const index = uiState.presets.findIndex((p) => p.id === editingPresetId);
@@ -2483,6 +2500,7 @@ export function saveCurrentPreset(): void {
     includeGlobalSignalChain: includeGlobalFx,
     preset: stripGlobalSignalChainForSave(newPreset),
   };
+  appendLog(`save preset → ${newPreset.name} (${summarizePresetForSaveLog(newPreset)})`);
   postMessage(savePayload);
   uiState.filteredPresets = uiState.presets.slice();
   uiState.presetCache.set(newPreset.id, newPreset);
