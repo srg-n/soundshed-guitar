@@ -432,6 +432,7 @@ set(GUITARFX_CORE_SOURCES
     src/dispatcher/MessageDispatchSignalPath.cpp
     src/dispatcher/MessageDispatchMixer.cpp
     src/dispatcher/MessageDispatchLibraryComposite.cpp
+    src/dispatcher/MessageDispatchAutomation.cpp
     src/controller/DemoPreviewService.h
     src/controller/DemoPreviewService.cpp
 
@@ -522,6 +523,13 @@ set(GUITARFX_CORE_SOURCES
     src/util/PathSanitizer.cpp
     src/util/Wav.h
     src/util/Wav.cpp
+
+    # Automation
+    src/automation/AutomationTypes.h
+    src/automation/ParamRegistry.h
+    src/automation/ParamRegistry.cpp
+    src/automation/AutomationSlotTable.h
+    src/automation/AutomationSlotTable.cpp
 )
 
 if(GUITARFX_CORE_ENABLE_WASM_EFFECTS)

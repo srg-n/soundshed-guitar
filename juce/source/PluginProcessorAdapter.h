@@ -53,6 +53,13 @@ public:
     const juce::String getProgramName (int index) override;
     void changeProgramName (int index, const juce::String& newName) override;
 
+    // ── Automation parameters ──────────────────────────────────────
+    /// A JUCE parameter backed by an automation slot.
+    class AutomationSlotParameter;
+
+    /// Get all automation slot parameter IDs (for DAW exposure).
+    [[nodiscard]] std::vector<juce::String> getAutomationParameterIds() const;
+
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 

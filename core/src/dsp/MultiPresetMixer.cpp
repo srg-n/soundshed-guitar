@@ -832,6 +832,27 @@ namespace guitarfx
     mPostChainExecutor.SetNodeConfigForType(type, key, value);
   }
 
+  std::optional<std::pair<std::string, std::string>>
+  MultiPresetMixer::FindFirstEnabledNodeOfType(const std::string &effectType) const
+  {
+    for (const auto &inst : mInstances)
+    {
+      const auto nodeId = inst.executor.FindFirstNodeOfType(effectType);
+      if (!nodeId.empty())
+        return std::make_pair(inst.cfg.id, nodeId);
+    }
+    return std::nullopt;
+  }
+
+  bool MultiPresetMixer::SetNodeParamByType(const std::string &effectType, const std::string &paramId, double value)
+  {
+    const auto found = FindFirstEnabledNodeOfType(effectType);
+    if (!found)
+      return false;
+    SetNodeParam(found->first, found->second, paramId, value);
+    return true;
+  }
+
   std::string MultiPresetMixer::GetNodeConfig(const std::string &presetId, const std::string &nodeId, const std::string &key) const
   {
     if (const auto *inst = FindInstance(presetId))

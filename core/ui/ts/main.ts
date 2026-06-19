@@ -20,6 +20,7 @@ import { renderFooterDemoAudioControls, bindFooterDemoAudioControls } from "./de
 import { initDiagnosticsToggle, initThemeSelect, initZoomControls, initUserInputCalibrationControls } from "./settings.js";
 import { postMessage } from "./bridge.js";
 import { initializeMetronome } from "./metronome.js";
+import { initializeAutomationPanel } from "./automationPanel.js";
 import { initializeBlendEditorModal } from "./signalPath.js";
 import { initializeCustomEffectDesignerModal } from "./customEffectDesigner.js";
 import { initializeDialogModals } from "./dialogs.js";
@@ -149,6 +150,7 @@ async function bootstrap(): Promise<void> {
   initializePresetTagFilterBar();
   initializeTuner();
   initializeMetronome();
+  initializeAutomationPanel();
   initializeRiffLibraryPanel();
   initMultiRigTab();
   initializeCustomEffectDesignerModal();

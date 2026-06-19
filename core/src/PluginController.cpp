@@ -2012,6 +2012,27 @@ void PluginController::Initialize()
         mRiffLibraryIndex = LoadRiffLibraryIndex();
     }
     LoadLastSessionState();
+
+    // Initialize automation system
+    mAutomationSlots.SetMixer(&mPresetMixer);
+    mAutomationSlots.SetEffectRegistry(&EffectRegistry::Instance());
+    mAutomationSlots.InitializeRegistry(
+        mPresetMixer,
+        [this]() { return static_cast<double>(mSetlistCursorIndex); },
+        [this](int idx) { ApplySetlistPresetByIndex(idx); },
+        [this](int steps) { SetlistBankUp(steps); },
+        [this](int steps) { SetlistBankDown(steps); },
+        [this]() { return GetSetlistLength(); });
+
+    // Load automation.json
+    const auto automationData = LoadUiStorageJson("automation.json", nlohmann::json::object());
+    if (!automationData.empty())
+        mAutomationSlots.LoadFromJson(automationData);
+
+    // Load setlist cursor/bankSize from setlists.json
+    const auto setlistsData = LoadUiStorageJson("setlists.json", nlohmann::json::object());
+    mSetlistBankSize = setlistsData.value("bankSize", 1);
+    mSetlistCursorIndex = setlistsData.value("cursorIndex", 0);
 }
 
 void PluginController::Prepare(double sampleRate, int blockSize)
@@ -3076,6 +3097,8 @@ std::string PluginController::SerializeState() const
     mixer["presets"] = std::move(presetConfigs);
     state["mixer"] = std::move(mixer);
 
+    state["automation"] = mAutomationSlots.SaveToJson();
+
     return state.dump();
 }
 
@@ -3205,6 +3228,9 @@ void PluginController::DeserializeState(const std::string& json)
                 }
             }
         }
+
+        if (state.contains("automation") && state["automation"].is_object())
+            mAutomationSlots.LoadFromJson(state["automation"]);
     }
     catch (const std::exception&)
     {
@@ -3246,6 +3272,40 @@ void PluginController::HandleUIMessage(const std::string& jsonMessage)
 
 void PluginController::OnIdle()
 {
+    // MIDI learn capture polling
+    if (mAutomationSlots.IsMidiLearnArmed())
+    {
+        // Read the slot ID BEFORE polling, since PollMidiLearnCapture clears it
+        const auto slotId = mAutomationSlots.GetMidiLearnSlot();
+        auto captured = mAutomationSlots.PollMidiLearnCapture();
+        if (captured.has_value() && !slotId.empty())
+        {
+            const auto* slot = mAutomationSlots.FindSlot(slotId);
+            const bool isDefault = slot && slot->isDefault;
+            const auto label = slot ? std::optional<std::string>(slot->label) : std::nullopt;
+            const auto address = slot ? std::optional<std::string>(slot->address) : std::nullopt;
+            const auto nodeSelector = slot ? std::optional<std::string>(slot->nodeSelector) : std::nullopt;
+            const auto keyMaps = slot ? std::optional<std::vector<KeyboardMap>>(slot->keyMaps) : std::nullopt;
+
+            if (isDefault)
+                mAutomationSlots.SetDefaultSlotOverrides(slotId, label, *captured, keyMaps);
+            else
+                mAutomationSlots.SetCustomSlot(slotId, label, address, nodeSelector, *captured, keyMaps);
+
+            SaveUiStorageJson("automation.json", mAutomationSlots.SaveToJson());
+
+            nlohmann::json captureMsg;
+            captureMsg["type"] = "midiLearnCapture";
+            captureMsg["slotId"] = slotId;
+            captureMsg["eventType"] = static_cast<int>(captured->eventType);
+            captureMsg["channel"] = captured->channel;
+            captureMsg["controller"] = captured->controller;
+            SendMessageToUI(captureMsg.dump());
+
+            HandleGetAutomationRequest();
+        }
+    }
+
     // Broadcast pending state
     if (mPendingStateBroadcast)
     {
@@ -8725,7 +8785,217 @@ void PluginController::HandleSetSetlistsRequest(const nlohmann::json& payload)
     nlohmann::json toStore = nlohmann::json::object();
     toStore["setlists"] = payload.value("setlists", nlohmann::json::array());
     toStore["activeSetlistId"] = payload.value("activeSetlistId", "");
+    toStore["bankSize"] = payload.value("bankSize", 1);
+    toStore["cursorIndex"] = payload.value("cursorIndex", 0);
+    mSetlistBankSize = payload.value("bankSize", 1);
+    mSetlistCursorIndex = payload.value("cursorIndex", 0);
     SaveUiStorageJson("setlists.json", toStore);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Automation & MIDI mapping
+// ════════════════════════════════════════════════════════════════════════
+
+void PluginController::HandleGetAutomationRequest()
+{
+    nlohmann::json msg;
+    msg["type"] = "automation";
+    msg["slots"] = mAutomationSlots.GetSlotsJson();
+
+    nlohmann::json registry = nlohmann::json::array();
+    for (const auto& info : mAutomationSlots.GetRegistryInfo())
+    {
+        registry.push_back({
+            {"address", info.address}, {"label", info.label}, {"unit", info.unit},
+            {"min", info.minValue}, {"max", info.maxValue},
+            {"isStepped", info.isStepped}, {"isTrigger", info.isTrigger}
+        });
+    }
+    msg["registry"] = std::move(registry);
+    msg["maxCustomSlots"] = kMaxCustomSlots;
+    SendMessageToUI(msg.dump());
+}
+
+void PluginController::HandleSetAutomationSlotRequest(const nlohmann::json& payload)
+{
+    const std::string slotId = payload.value("slotId", "");
+    if (slotId.empty())
+        return;
+
+    const auto* existing = mAutomationSlots.FindSlot(slotId);
+    const bool isDefault = existing && existing->isDefault;
+
+    std::optional<std::string> label;
+    if (payload.contains("label") && payload["label"].is_string())
+        label = payload["label"].get<std::string>();
+
+    std::optional<std::string> address;
+    if (payload.contains("address") && payload["address"].is_string())
+        address = payload["address"].get<std::string>();
+
+    std::optional<std::string> nodeSelector;
+    if (payload.contains("nodeSelector") && payload["nodeSelector"].is_string())
+        nodeSelector = payload["nodeSelector"].get<std::string>();
+
+    std::optional<MidiControlMap> midiMap;
+    if (payload.contains("midiMap") && payload["midiMap"].is_object())
+    {
+        const auto& mm = payload["midiMap"];
+        MidiControlMap m;
+        m.eventType = static_cast<MidiControlMap::EventType>(mm.value("eventType", 0));
+        m.channel = mm.value("channel", 0);
+        m.controller = mm.value("controller", 0);
+        m.mode = static_cast<MidiControlMap::Mode>(mm.value("mode", 0));
+        m.sensitivity = mm.value("sensitivity", 0.1f);
+        m.pickupRange = mm.value("pickupRange", 0.1f);
+        midiMap = m;
+    }
+
+    std::optional<std::vector<KeyboardMap>> keyMaps;
+    if (payload.contains("keyMap") && payload["keyMap"].is_array())
+    {
+        std::vector<KeyboardMap> kms;
+        for (const auto& k : payload["keyMap"])
+        {
+            KeyboardMap km;
+            km.key = k.value("key", "");
+            km.mode = static_cast<KeyboardMap::Mode>(k.value("mode", 0));
+            km.value = k.value("value", 0.0f);
+            kms.push_back(std::move(km));
+        }
+        keyMaps = std::move(kms);
+    }
+
+    if (isDefault)
+        mAutomationSlots.SetDefaultSlotOverrides(slotId, label, midiMap, keyMaps);
+    else
+        mAutomationSlots.SetCustomSlot(slotId, label, address, nodeSelector, midiMap, keyMaps);
+
+    SaveUiStorageJson("automation.json", mAutomationSlots.SaveToJson());
+    HandleGetAutomationRequest();
+}
+
+void PluginController::HandleRemoveAutomationSlotRequest(const nlohmann::json& payload)
+{
+    const std::string slotId = payload.value("slotId", "");
+    mAutomationSlots.RemoveCustomSlot(slotId);
+    SaveUiStorageJson("automation.json", mAutomationSlots.SaveToJson());
+    HandleGetAutomationRequest();
+}
+
+void PluginController::HandleSetAutomationValueRequest(const nlohmann::json& payload)
+{
+    const std::string slotId = payload.value("slotId", "");
+    const float value = payload.value("value", 0.0f);
+    const std::string sourceStr = payload.value("source", "ui");
+    auto src = sourceStr == "keyboard" ? AutomationSource::Keyboard : AutomationSource::UI;
+
+    std::lock_guard<std::mutex> lock(mDSPMutex);
+    mAutomationSlots.ApplyAutomationLocked(slotId, value, src);
+}
+
+void PluginController::HandleArmMidiLearnRequest(const nlohmann::json& payload)
+{
+    const std::string slotId = payload.value("slotId", "");
+    mAutomationSlots.ArmMidiLearn(slotId);
+}
+
+void PluginController::HandleCancelMidiLearnRequest()
+{
+    mAutomationSlots.ArmMidiLearn("");
+}
+
+void PluginController::HandleMidi(const MidiEvent& ev)
+{
+    // Forward to UI for diagnostics logging (sent before lock to avoid blocking)
+    {
+        const int channel = ev.status & 0x0F;
+        const int statusType = (ev.status >> 4) & 0x0F;
+        const char* typeName = "Unknown";
+        switch (statusType)
+        {
+        case 0x08: typeName = "NoteOff"; break;
+        case 0x09: typeName = ev.data2 > 0 ? "NoteOn" : "NoteOff"; break;
+        case 0x0A: typeName = "Aftertouch"; break;
+        case 0x0B: typeName = "CC"; break;
+        case 0x0C: typeName = "ProgramChange"; break;
+        case 0x0D: typeName = "ChanPress"; break;
+        case 0x0E: typeName = "PitchBend"; break;
+        }
+
+        nlohmann::json logMsg;
+        logMsg["type"] = "midiLog";
+        logMsg["midiType"] = typeName;
+        logMsg["channel"] = channel;
+        logMsg["data1"] = static_cast<int>(ev.data1);
+        logMsg["data2"] = static_cast<int>(ev.data2);
+        SendMessageToUI(logMsg.dump());
+    }
+
+    std::lock_guard<std::mutex> lock(mDSPMutex);
+    mAutomationSlots.HandleMidi(ev);
+}
+
+void PluginController::ApplySetlistPresetByIndex(int index)
+{
+    const auto setlistsData = LoadUiStorageJson("setlists.json", nlohmann::json::object());
+    const auto setlists = setlistsData.value("setlists", nlohmann::json::array());
+    if (setlists.empty())
+        return;
+
+    if (index < 0 || index >= static_cast<int>(setlists.size()))
+        return;
+
+    const auto& entry = setlists[index];
+    const std::string presetId = entry.value("presetId", "");
+    if (presetId.empty())
+        return;
+
+    mSetlistCursorIndex = index;
+
+    // Persist cursor
+    auto toStore = setlistsData;
+    toStore["cursorIndex"] = index;
+    SaveUiStorageJson("setlists.json", toStore);
+
+    // Load the preset
+    AddActivePresetById(presetId);
+}
+
+void PluginController::SetlistBankUp(int steps)
+{
+    const auto setlistsData = LoadUiStorageJson("setlists.json", nlohmann::json::object());
+    const auto setlists = setlistsData.value("setlists", nlohmann::json::array());
+    const int len = static_cast<int>(setlists.size());
+    if (len == 0)
+        return;
+
+    const int newIndex = std::min(mSetlistCursorIndex + steps, len - 1);
+    if (newIndex == mSetlistCursorIndex)
+        return;
+
+    ApplySetlistPresetByIndex(newIndex);
+}
+
+void PluginController::SetlistBankDown(int steps)
+{
+    const auto setlistsData = LoadUiStorageJson("setlists.json", nlohmann::json::object());
+    const auto setlists = setlistsData.value("setlists", nlohmann::json::array());
+    const int len = static_cast<int>(setlists.size());
+    if (len == 0)
+        return;
+
+    const int newIndex = std::max(mSetlistCursorIndex - steps, 0);
+    if (newIndex == mSetlistCursorIndex)
+        return;
+
+    ApplySetlistPresetByIndex(newIndex);
+}
+
+int PluginController::GetSetlistLength() const
+{
+    const auto setlistsData = LoadUiStorageJson("setlists.json", nlohmann::json::object());
+    return static_cast<int>(setlistsData.value("setlists", nlohmann::json::array()).size());
 }
 
 void PluginController::HandleGetThemeRequest()
@@ -9004,6 +9274,9 @@ void PluginController::BroadcastState()
         std::lock_guard<std::mutex> riffLock(mRiffLibraryMutex);
         state["riffLibrary"] = mRiffLibraryIndex;
     }
+
+    // Automation slots
+    state["automation"] = mAutomationSlots.GetSlotsJson();
 
     SendMessageToUI(state.dump());
 

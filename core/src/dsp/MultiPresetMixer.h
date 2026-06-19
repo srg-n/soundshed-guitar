@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace guitarfx
@@ -194,6 +195,15 @@ namespace guitarfx
     [[nodiscard]] EffectProcessor *GetNodeProcessor(const std::string &presetId, const std::string &nodeId);
     [[nodiscard]] const EffectProcessor *GetNodeProcessor(const std::string &presetId, const std::string &nodeId) const;
     bool LoadNodeResource(const std::string &presetId, const std::string &nodeId, const ResourceRef &ref);
+
+    /// Find the first enabled node of the given effect type across all active preset instances
+    /// (topological order within each instance, instances in insertion order).
+    /// Returns (presetId, nodeId) or empty optional if not found.
+    [[nodiscard]] std::optional<std::pair<std::string, std::string>> FindFirstEnabledNodeOfType(const std::string &effectType) const;
+
+    /// Apply a parameter to the first enabled node of the given effect type across all active presets.
+    /// Returns true if a matching node was found and updated.
+    bool SetNodeParamByType(const std::string &effectType, const std::string &paramId, double value);
 
     // Push the current tempo (BPM) to all tempo-aware nodes in every preset and global chain.
     // Call once per audio block before Process().

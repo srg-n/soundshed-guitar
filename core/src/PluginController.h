@@ -13,6 +13,7 @@
  */
 
 #include "IPluginHost.h"
+#include "automation/AutomationSlotTable.h"
 #include "dsp/MultiPresetMixer.h"
 #include "dsp/effects/CompositeEffectProcessor.h"
 #include "models/ModelHasher.h"
@@ -99,6 +100,15 @@ public:
     [[nodiscard]] const std::optional<Preset>& GetActivePreset() const { return mActivePreset; }
     [[nodiscard]] const nlohmann::json& GetAppSettings() const { return mAppSettings; }
     [[nodiscard]] IPluginHost& GetHost() { return mHost; }
+
+    // ── Automation (public API for host adapters) ───────────────────
+    void HandleMidi(const MidiEvent& ev);
+    void ApplySetlistPresetByIndex(int index);
+    void SetlistBankUp(int steps);
+    void SetlistBankDown(int steps);
+    [[nodiscard]] int GetSetlistLength() const;
+    [[nodiscard]] std::vector<std::string> GetAutomationSlotIds() const { return mAutomationSlots.GetSlotIds(); }
+    [[nodiscard]] AutomationSlotTable& GetAutomationSlots() { return mAutomationSlots; }
 
     // ── Parameter bridging ─────────────────────────────────────────
     /// Plugin parameter IDs (kept stable for host automation mapping).
@@ -264,6 +274,14 @@ private:
     void HandleSetPresetRatingsRequest(const nlohmann::json& payload);
     void HandleGetSetlistsRequest();
     void HandleSetSetlistsRequest(const nlohmann::json& payload);
+
+    // Automation & MIDI mapping (handler methods — called by MessageDispatcher)
+    void HandleGetAutomationRequest();
+    void HandleSetAutomationSlotRequest(const nlohmann::json& payload);
+    void HandleRemoveAutomationSlotRequest(const nlohmann::json& payload);
+    void HandleSetAutomationValueRequest(const nlohmann::json& payload);
+    void HandleArmMidiLearnRequest(const nlohmann::json& payload);
+    void HandleCancelMidiLearnRequest();
     void HandleGetThemeRequest();
     void HandleSetThemeRequest(const nlohmann::json& payload);
 
@@ -606,6 +624,11 @@ private:
 
     // Layout library cache
     nlohmann::json mLayoutLibrary = nlohmann::json::object();
+
+    // Automation
+    AutomationSlotTable mAutomationSlots;
+    int mSetlistCursorIndex = 0;
+    int mSetlistBankSize = 1;
 };
 
 } // namespace guitarfx

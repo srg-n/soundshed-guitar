@@ -13,6 +13,7 @@ import { getRiffLibrary, postMessage } from "./bridge.js";
 import { handleHostedPluginResourceLoadFailed, handleHostedPluginResourceLoadCompleted, handleNodeResourceBrowseCancelled, refreshSelectedNodeParams, renderSignalPathBar, updateSelectedNodePeakMeter } from "./signalPath.js";
 import { refreshFxSelector } from "./fxSelector.js";
 import { applyEnvironmentState, applyMetronomeState } from "./metronome.js";
+import { applyAutomationState, handleMidiLogEntry } from "./automationPanel.js";
 import { applyToneSharingAppSettings, registerInstalledToneSharingPackFromImport, handleToneSharingDeepLink } from "./toneSharingPanel.js";
 import { applyJamAppSettings } from "./jam.js";
 import type { GlobalSignalChainConfig, Preset, PresetFolder, ResourceRef, Setlist, UiSettings, CompositePreset } from "./types.js";
@@ -562,6 +563,10 @@ export function handleIncomingMessage(message: string): void {
         applyRiffLibraryState(riffLibrary);
         refreshDemoAudioSelectors();
       }
+      const automation = (payload as { automation?: import("./types.js").AutomationSlot[] }).automation;
+      if (automation) {
+        applyAutomationState({ slots: automation });
+      }
       const mixer = (payload as { mixer?: import("./types.js").MixerState }).mixer;
       if (mixer) {
         const activePresetIds = Array.isArray(mixer.activePresetIds) ? mixer.activePresetIds.slice() : [];
@@ -1096,6 +1101,29 @@ export function handleIncomingMessage(message: string): void {
     case "setlists": {
       const setlistsPayload = payload as { setlists?: Setlist[]; activeSetlistId?: string | null };
       applySetlistsFromBackend(setlistsPayload.setlists ?? [], setlistsPayload.activeSetlistId ?? null);
+      break;
+    }
+    case "automation": {
+      const autoPayload = payload as {
+        slots?: import("./types.js").AutomationSlot[];
+        registry?: import("./types.js").AutomationRegistryEntry[];
+        maxCustomSlots?: number;
+      };
+      applyAutomationState({
+        slots: autoPayload.slots ?? [],
+        registry: autoPayload.registry ?? [],
+        maxCustomSlots: autoPayload.maxCustomSlots ?? 16,
+      });
+      break;
+    }
+    case "midiLog": {
+      const logPayload = payload as { midiType?: string; channel?: number; data1?: number; data2?: number };
+      handleMidiLogEntry({
+        type: logPayload.midiType ?? "Unknown",
+        channel: logPayload.channel ?? 0,
+        data1: logPayload.data1 ?? 0,
+        data2: logPayload.data2 ?? 0,
+      });
       break;
     }
     case "theme": {

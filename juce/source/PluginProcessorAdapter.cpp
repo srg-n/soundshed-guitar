@@ -132,7 +132,6 @@ bool PluginProcessorAdapter::isBusesLayoutSupported (const BusesLayout& layouts)
 void PluginProcessorAdapter::processBlock (juce::AudioBuffer<float>& buffer,
     juce::MidiBuffer& midiMessages)
 {
-    juce::ignoreUnused (midiMessages);
     juce::ScopedNoDenormals noDenormals;
 
     const auto totalInputCh = getTotalNumInputChannels();
@@ -142,6 +141,26 @@ void PluginProcessorAdapter::processBlock (juce::AudioBuffer<float>& buffer,
     // Clear any output channels that don't have corresponding inputs
     for (auto i = totalInputCh; i < totalOutputCh; ++i)
         buffer.clear (i, 0, numSamples);
+
+    // Drain MIDI messages and forward to the controller
+    if (!midiMessages.isEmpty())
+    {
+        for (const auto metadata : midiMessages)
+        {
+            const auto msg = metadata.getMessage();
+            if (msg.isSysEx())
+                continue;
+
+            guitarfx::MidiEvent ev;
+            const auto* rawData = msg.getRawData();
+            ev.status = rawData[0];
+            ev.data1 = rawData[1];
+            ev.data2 = rawData[2];
+            ev.sampleOffset = metadata.samplePosition;
+            mController.HandleMidi(ev);
+        }
+        midiMessages.clear();
+    }
 
     // Set up float** for the core ProcessAudio
     float* inputs[2] = {
@@ -161,6 +180,14 @@ void PluginProcessorAdapter::processBlock (juce::AudioBuffer<float>& buffer,
     }
 }
 
+std::vector<juce::String> PluginProcessorAdapter::getAutomationParameterIds() const
+{
+    std::vector<juce::String> ids;
+    for (const auto& slotId : mController.GetAutomationSlotIds())
+        ids.push_back(juce::String(slotId));
+    return ids;
+}
+
 juce::AudioProcessorEditor* PluginProcessorAdapter::createEditor()
 {
     ensureStandaloneProtocolHandlerRegistration();
@@ -177,14 +204,31 @@ juce::AudioProcessorEditor* PluginProcessorAdapter::createEditor()
 
 bool PluginProcessorAdapter::hasEditor() const { return true; }
 const juce::String PluginProcessorAdapter::getName() const { return JucePlugin_Name; }
-bool PluginProcessorAdapter::acceptsMidi() const { return false; }
+bool PluginProcessorAdapter::acceptsMidi() const { return true; }
 bool PluginProcessorAdapter::producesMidi() const { return false; }
 bool PluginProcessorAdapter::isMidiEffect() const { return false; }
 double PluginProcessorAdapter::getTailLengthSeconds() const { return 0.0; }
-int PluginProcessorAdapter::getNumPrograms() { return 1; }
-int PluginProcessorAdapter::getCurrentProgram() { return 0; }
-void PluginProcessorAdapter::setCurrentProgram (int) {}
-const juce::String PluginProcessorAdapter::getProgramName (int) { return {}; }
+
+int PluginProcessorAdapter::getNumPrograms()
+{
+    return std::max(1, mController.GetSetlistLength());
+}
+
+int PluginProcessorAdapter::getCurrentProgram()
+{
+    return 0;
+}
+
+void PluginProcessorAdapter::setCurrentProgram (int index)
+{
+    mController.ApplySetlistPresetByIndex(index);
+}
+
+const juce::String PluginProcessorAdapter::getProgramName (int index)
+{
+    return {};
+}
+
 void PluginProcessorAdapter::changeProgramName (int, const juce::String&) {}
 
 void PluginProcessorAdapter::getStateInformation (juce::MemoryBlock& destData)

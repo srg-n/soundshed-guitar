@@ -1,0 +1,40 @@
+<!-- MIDI & Automation Mapping Modal -->
+<div id="midi-modal" class="modal midi-modal" style="display: none;">
+  <div class="modal-content midi-modal-content">
+    <div class="modal-header">
+      <h3>MIDI & Automation</h3>
+      <button class="modal-close" id="midi-close-btn" title="Close">×</button>
+    </div>
+    <div class="modal-body midi-modal-body">
+      <div class="midi-tab-bar">
+        <button class="midi-tab-btn active" data-midi-tab="mappings">Mappings</button>
+        <button class="midi-tab-btn" data-midi-tab="log">MIDI Log</button>
+      </div>
+
+      <!-- Mappings Tab -->
+      <div class="midi-tab-panel active" id="midi-tab-mappings">
+        <p class="midi-help">
+          Map automation slots to MIDI control messages, keyboard keys, or DAW parameters.
+          Default slots are always available; custom slots can target any effect parameter.
+        </p>
+        <div id="automation-slots-list" class="automation-slots-list">
+          <p>Loading automation…</p>
+        </div>
+      </div>
+
+      <!-- MIDI Log Tab -->
+      <div class="midi-tab-panel" id="midi-tab-log">
+        <div class="midi-log-controls">
+          <label class="midi-log-toggle">
+            <input type="checkbox" id="midi-log-enabled" />
+            <span>Enable MIDI logging</span>
+          </label>
+          <button class="btn btn-secondary btn-small" id="midi-log-clear">Clear</button>
+        </div>
+        <div id="midi-log-output" class="midi-log-output">
+          <p class="midi-log-empty">MIDI logging is disabled. Enable it to see incoming MIDI events.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

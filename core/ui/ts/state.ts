@@ -285,6 +285,7 @@ export const uiState: UiState = {
   compositeEditPreset: null,
   focusedMixerPresetId: null,
   compositePresets: [],
+  automation: { slots: [], registry: [], maxCustomSlots: 16 },
 };
 
 export function clonePreset<T extends Preset | null>(preset: T): T {

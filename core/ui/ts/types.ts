@@ -560,6 +560,48 @@ export interface UiState {
   compositePresets?: CompositePreset[];
   /** Available software update, populated when update check finds a newer version. */
   availableUpdate?: { version: string; downloadUrl: string; releaseNotes: string } | null;
+  /** Automation & MIDI mapping state */
+  automation?: {
+    slots: AutomationSlot[];
+    registry: AutomationRegistryEntry[];
+    maxCustomSlots: number;
+  };
+}
+
+export interface AutomationMidiMap {
+  eventType: number;
+  channel: number;
+  controller: number;
+  mode: number;
+  sensitivity: number;
+  pickupRange: number;
+}
+
+export interface AutomationKeyMap {
+  key: string;
+  mode: number;
+  value: number;
+}
+
+export interface AutomationSlot {
+  slotId: string;
+  label: string;
+  address: string;
+  nodeSelector?: string;
+  isDefault: boolean;
+  value: number;
+  midiMap?: AutomationMidiMap;
+  keyMap?: AutomationKeyMap[];
+}
+
+export interface AutomationRegistryEntry {
+  address: string;
+  label: string;
+  unit: string;
+  min: number;
+  max: number;
+  isStepped: boolean;
+  isTrigger: boolean;
 }
 
 declare global {

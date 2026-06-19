@@ -32,6 +32,7 @@ void MessageDispatcher::Dispatch(PluginController& c, const std::string& jsonMes
     if (DispatchSignalPath(c, msg, type)) return;
     if (DispatchMixerAndMonitoring(c, msg, type)) return;
     if (DispatchLibraryAndComposite(c, msg, type)) return;
+    if (DispatchAutomation(c, msg, type)) return;
 
     // Unknown message type — silently ignored
 }
