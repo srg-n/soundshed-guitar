@@ -30,6 +30,8 @@ namespace guitarfx
   {
     mInitialized = false;
     mUseDirectConvolution = false;
+    mIsNonUniform = false;
+    mNonUniformStages.clear();
 
     if (irSamples.empty() || blockSize <= 0)
     {
@@ -52,9 +54,38 @@ namespace guitarfx
       return true;
     }
 
-    // Use a larger partition size for better efficiency with long IRs
-    mPartitionSize = NextPowerOf2(static_cast<size_t>(std::max(blockSize, 256)));
-    mPartitionSize = std::clamp(mPartitionSize, size_t{256}, size_t{2048});
+    // Partition size the uniform engine would use (also the maximum partition the
+    // non-uniform engine uses for its efficient tail).
+    const size_t uniformPartition =
+        std::clamp(NextPowerOf2(static_cast<size_t>(std::max(blockSize, 256))), size_t{256}, size_t{2048});
+
+    if (mLowLatencyMode)
+    {
+      // Base block = latency target for the non-uniform engine. Capped so it never
+      // exceeds the uniform partition (otherwise non-uniform gives no benefit).
+      const size_t base =
+          std::clamp(NextPowerOf2(static_cast<size_t>(std::max(blockSize, 64))), size_t{64}, size_t{256});
+      if (base < uniformPartition)
+      {
+        return BuildNonUniform(irSamples, blockSize);
+      }
+      // No latency benefit available (host block already >= uniform partition):
+      // fall through to the uniform engine.
+    }
+
+    return BuildUniform(irSamples, uniformPartition);
+  }
+
+  bool RealtimeConvolver::BuildUniform(const std::vector<float> &irSamples, size_t partitionSize)
+  {
+    mInitialized = false;
+    mUseDirectConvolution = false;
+    mIsNonUniform = false;
+
+    if (irSamples.empty() || partitionSize == 0)
+      return false;
+
+    mPartitionSize = partitionSize;
 
     // FFT size is 2x partition for linear convolution
     mFFTSize = mPartitionSize * 2;
@@ -116,6 +147,93 @@ namespace guitarfx
     // Previous input block for overlap-save (needed for proper convolution)
     mPreviousInputBlock.assign(mPartitionSize, 0.0f);
 
+    mInitialized = true;
+    return true;
+  }
+
+  // Non-uniform (Gardner-style) partitioned convolution.
+  //
+  // The IR is split into contiguous segments whose partition size grows
+  // geometrically from a small "base" block (low latency) up to the uniform
+  // partition (efficient). Each segment is an independent single-block uniform
+  // convolver, except the long tail which is one multi-partition uniform engine.
+  //
+  // For a segment covering IR samples starting at offset `off` with partition P,
+  // its single-block convolver produces (h_seg * x)[n - P]. To contribute the
+  // correctly time-aligned (h_seg * x)[n - off] to an output emitted with system
+  // latency L, the stage output is delayed by d = L + off - P. With L = base and
+  // the chosen layout (P == off for every stage after the head, and the tail
+  // starting exactly at the uniform partition), d == base for ALL stages except
+  // the head (off=0, P=base, d=0). So a single shared delay line of `base`
+  // samples aligns every non-head stage. Summing all stages reconstructs the
+  // full convolution delayed by `base` samples.
+  bool RealtimeConvolver::BuildNonUniform(const std::vector<float> &irSamples, int blockSize)
+  {
+    mInitialized = false;
+    mUseDirectConvolution = false;
+    mIsNonUniform = false;
+    mNonUniformStages.clear();
+
+    const size_t n = irSamples.size();
+    const size_t base =
+        std::clamp(NextPowerOf2(static_cast<size_t>(std::max(blockSize, 64))), size_t{64}, size_t{256});
+    const size_t maxPartition =
+        std::clamp(NextPowerOf2(static_cast<size_t>(std::max(blockSize, 256))), size_t{256}, size_t{2048});
+
+    // Build a single-block uniform stage covering irSamples[off, off+len).
+    auto addStage = [&](size_t off, size_t len, size_t partition) -> bool {
+      auto stage = std::make_unique<RealtimeConvolver>();
+      stage->mLowLatencyMode = false;
+      std::vector<float> slice(irSamples.begin() + static_cast<std::ptrdiff_t>(off),
+                               irSamples.begin() + static_cast<std::ptrdiff_t>(std::min(off + len, n)));
+      if (!stage->BuildUniform(slice, partition))
+        return false;
+      mNonUniformStages.push_back(std::move(stage));
+      return true;
+    };
+
+    // Head segment: low-latency base partition, no extra delay.
+    if (!addStage(0, base, base))
+      return false;
+
+    // Geometrically growing head segments until the partition reaches maxPartition.
+    size_t off = base;
+    while (off < n && off < maxPartition)
+    {
+      const size_t partition = off; // P == off keeps every stage delay-aligned to `base`
+      if (!addStage(off, partition, partition))
+        return false;
+      off += partition;
+    }
+
+    // Efficient tail: one multi-partition uniform engine for the remainder.
+    if (off < n)
+    {
+      // off == maxPartition here, so the tail engine partition is maxPartition and
+      // its required delay also reduces to `base`.
+      std::vector<float> tail(irSamples.begin() + static_cast<std::ptrdiff_t>(off), irSamples.end());
+      auto stage = std::make_unique<RealtimeConvolver>();
+      stage->mLowLatencyMode = false;
+      if (!stage->BuildUniform(tail, maxPartition))
+        return false;
+      mNonUniformStages.push_back(std::move(stage));
+    }
+
+    // Aggregate reporting + shared delay/scratch buffers.
+    mBaseBlock = base;
+    mPartitionSize = base; // GetLatency() reports the base block as the engine latency
+    mNumPartitions = 0;
+    for (const auto &stage : mNonUniformStages)
+      mNumPartitions += stage->GetNumPartitions();
+
+    mNuScratchSize = std::max<size_t>(static_cast<size_t>(std::max(blockSize, 1)), maxPartition);
+    mNuHeadScratch.assign(mNuScratchSize, 0.0f);
+    mNuRestScratch.assign(mNuScratchSize, 0.0f);
+    mNuStageScratch.assign(mNuScratchSize, 0.0f);
+    mNuDelayLine.assign(base, 0.0f);
+    mNuDelayPos = 0;
+
+    mIsNonUniform = true;
     mInitialized = true;
     return true;
   }
@@ -216,7 +334,7 @@ namespace guitarfx
     {
       if (output && numSamples > 0)
       {
-        std::memset(output, 0, numSamples * sizeof(double));
+        std::memset(output, 0, static_cast<size_t>(numSamples) * sizeof(float));
       }
       return;
     }
@@ -225,6 +343,13 @@ namespace guitarfx
     if (mUseDirectConvolution)
     {
       ProcessDirect(input, output, numSamples);
+      return;
+    }
+
+    // Non-uniform (Gardner-style) engine.
+    if (mIsNonUniform)
+    {
+      ProcessNonUniform(input, output, numSamples);
       return;
     }
 
@@ -251,6 +376,50 @@ namespace guitarfx
     }
   }
 
+  void RealtimeConvolver::ProcessNonUniform(const float *input, float *output, int numSamples)
+  {
+    const size_t numStages = mNonUniformStages.size();
+    int processed = 0;
+    while (processed < numSamples)
+    {
+      const int chunk = static_cast<int>(
+          std::min<size_t>(static_cast<size_t>(numSamples - processed), mNuScratchSize));
+      const float *in = input + processed;
+      float *out = output + processed;
+
+      // Stage 0 (head): contributes with no extra delay.
+      mNonUniformStages[0]->Process(in, mNuHeadScratch.data(), chunk);
+
+      // Remaining stages accumulate into mNuRestScratch.
+      std::fill_n(mNuRestScratch.data(), static_cast<size_t>(chunk), 0.0f);
+      for (size_t s = 1; s < numStages; ++s)
+      {
+        mNonUniformStages[s]->Process(in, mNuStageScratch.data(), chunk);
+        for (int k = 0; k < chunk; ++k)
+          mNuRestScratch[static_cast<size_t>(k)] += mNuStageScratch[static_cast<size_t>(k)];
+      }
+
+      // Delay the accumulated tail by exactly mBaseBlock samples and add the head.
+      if (mBaseBlock == 0)
+      {
+        for (int k = 0; k < chunk; ++k)
+          out[k] = mNuHeadScratch[static_cast<size_t>(k)] + mNuRestScratch[static_cast<size_t>(k)];
+      }
+      else
+      {
+        for (int k = 0; k < chunk; ++k)
+        {
+          const float delayed = mNuDelayLine[mNuDelayPos];
+          mNuDelayLine[mNuDelayPos] = mNuRestScratch[static_cast<size_t>(k)];
+          mNuDelayPos = (mNuDelayPos + 1) % mBaseBlock;
+          out[k] = mNuHeadScratch[static_cast<size_t>(k)] + delayed;
+        }
+      }
+
+      processed += chunk;
+    }
+  }
+
   void RealtimeConvolver::Reset()
   {
     if (!mInitialized)
@@ -266,10 +435,26 @@ namespace guitarfx
       return;
     }
 
+    // Reset non-uniform engine state
+    if (mIsNonUniform)
+    {
+      for (auto &stage : mNonUniformStages)
+      {
+        if (stage)
+          stage->Reset();
+      }
+      std::fill(mNuDelayLine.begin(), mNuDelayLine.end(), 0.0f);
+      mNuDelayPos = 0;
+      std::fill(mNuHeadScratch.begin(), mNuHeadScratch.end(), 0.0f);
+      std::fill(mNuRestScratch.begin(), mNuRestScratch.end(), 0.0f);
+      std::fill(mNuStageScratch.begin(), mNuStageScratch.end(), 0.0f);
+      return;
+    }
+
     // Clear delay line
     for (auto &fft : mInputFFTDelayLine)
     {
-      std::fill(fft.begin(), fft.end(), std::complex<double>(0.0, 0.0));
+      std::fill(fft.begin(), fft.end(), std::complex<float>(0.0f, 0.0f));
     }
     mDelayLineIndex = 0;
 

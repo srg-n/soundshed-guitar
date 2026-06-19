@@ -4450,6 +4450,10 @@ void PluginController::HandleUpdateSignalPathNodeParamRequest(const nlohmann::js
         std::lock_guard<std::mutex> lock(mDSPMutex);
         mPresetMixer.SetNodeParam(presetId, nodeId, paramKey, value);
     }
+    // Some parameters (e.g. the convolution low-latency toggle) change a node's
+    // processing latency. Re-report total plugin latency so the host updates PDC.
+    if (paramKey == "lowLatency")
+        UpdateHostLatency();
     mActivePresetJson = mActivePreset ? PresetStorage::SerializeToJson(*mActivePreset) : "{}";
 }
 

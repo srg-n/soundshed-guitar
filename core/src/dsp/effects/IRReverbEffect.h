@@ -177,6 +177,19 @@ namespace guitarfx
           InitializeConvolvers();
         }
       }
+      else if (key == "lowLatency")
+      {
+        const bool nv = value > 0.5;
+        if (nv != mLowLatency)
+        {
+          mLowLatency = nv;
+          // Rebuild immediately so the latency change takes effect without a reload.
+          // Safe from the non-audio (UI/controller) thread; InitializeConvolvers raises
+          // mRebuilding so the audio thread bypasses while convolvers are swapped.
+          if (HasResource())
+            InitializeConvolvers();
+        }
+      }
     }
 
     void SetConfig(const std::string &, const std::string &) override {}
@@ -196,6 +209,8 @@ namespace guitarfx
         const int pending = mPendingQuality.load(std::memory_order_acquire);
         return pending >= 0 ? static_cast<double>(pending) : static_cast<double>(mQuality);
       }
+      if (key == "lowLatency")
+        return mLowLatency ? 1.0 : 0.0;
       return 0.0;
     }
 
@@ -508,6 +523,11 @@ namespace guitarfx
         }
       }
 
+      mConvolverLL.SetLowLatencyMode(mLowLatency);
+      mConvolverRR.SetLowLatencyMode(mLowLatency);
+      mConvolverLR.SetLowLatencyMode(mLowLatency);
+      mConvolverRL.SetLowLatencyMode(mLowLatency);
+
       if (!mConvolverLL.SetImpulse(processedLL, mMaxBlockSize))
       {
         mRebuilding.store(false, std::memory_order_release);
@@ -587,6 +607,7 @@ namespace guitarfx
     std::atomic<double> mOutputGain{1.0};
     IRQuality mQuality = IRQuality::Standard;
     std::atomic<int> mPendingQuality{-1};
+    bool mLowLatency = false; // non-uniform (low-latency) convolution mode
     std::atomic<float> mTone{1.0f};
     std::atomic<float> mToneCoef{1.0f};
     // Set true during convolver rebuild to let the audio thread bypass safely.
@@ -609,6 +630,7 @@ namespace guitarfx
         {"mix", "Mix", 0.3, 0.0, 1.0, "amount"},
         {"outputGain", "Output", 0.0, -24.0, 24.0, "dB"},
         {"tone", "Tone", 1.0, 0.0, 1.0, "amount"},
+        {"lowLatency", "Low Latency", 0.0, 0.0, 1.0, "toggle"},
         {"quality", "Quality", 3.0, 0.0, 3.0, "enum", "", false, 1.0, {"Economy", "Standard", "High", "Full"}}};
 
     EffectRegistry::Instance().Register(info.type, info, []()

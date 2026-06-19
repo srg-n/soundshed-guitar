@@ -471,6 +471,32 @@ namespace guitarfx
         const int q = static_cast<int>(std::clamp(value, 0.0, 3.0));
         mPendingQuality.store(q, std::memory_order_release);
       }
+      else if (key == "lowLatency")
+      {
+        const bool nv = value > 0.5;
+        if (nv != mLowLatency)
+        {
+          // Rebuild immediately so the latency change takes effect without a reload.
+          // Safe because parameter updates run under the controller's DSP lock while
+          // the audio thread only renders under a try-lock (it bypasses meanwhile).
+          if (HasResource())
+          {
+            // Capture the currently-playing convolvers (old mode) for the crossfade,
+            // THEN switch the mode and rebuild the live convolvers in the new mode.
+            CapturePreviousConvolvers();
+            mLowLatency = nv;
+            ApplyPendingQuality();
+            InitializeConvolverA();
+            if (!mImpulseBL.empty())
+              InitializeConvolverB();
+            BeginResourceTransition();
+          }
+          else
+          {
+            mLowLatency = nv;
+          }
+        }
+      }
       else if (key == "air")
       {
         mAir = std::clamp(value, 0.0, 1.0);
@@ -545,6 +571,8 @@ namespace guitarfx
         const int pending = mPendingQuality.load(std::memory_order_acquire);
         return pending >= 0 ? static_cast<double>(pending) : static_cast<double>(mQuality);
       }
+      if (key == "lowLatency")
+        return mLowLatency ? 1.0 : 0.0;
       if (key == "air")
         return mAir;
       if (key == "airMode")
@@ -1005,6 +1033,8 @@ namespace guitarfx
           for (auto &s : processedR) s *= normGain;
         }
 
+        convolverL.SetLowLatencyMode(mLowLatency);
+        convolverR.SetLowLatencyMode(mLowLatency);
         if (!convolverL.SetImpulse(processedL, mMaxBlockSize) ||
             !convolverR.SetImpulse(processedR, mMaxBlockSize))
         {
@@ -1035,6 +1065,8 @@ namespace guitarfx
         for (auto &s : processedIR) s *= normGain;
       }
 
+      convolverL.SetLowLatencyMode(mLowLatency);
+      convolverR.SetLowLatencyMode(mLowLatency);
       if (!convolverL.SetImpulse(processedIR, mMaxBlockSize) ||
           !convolverR.SetImpulse(processedIR, mMaxBlockSize))
       {
@@ -1472,6 +1504,7 @@ namespace guitarfx
     std::atomic<int> mPendingQuality{-1};
     bool mNormalizeIR = true;
     bool mAutoGainCompEnabled = true;
+    bool mLowLatency = false; // non-uniform (low-latency) convolution mode
     bool mHasLoadedResource = false;
     bool mPrevHasSlotA = false;
     bool mPrevHasSlotB = false;
@@ -1571,6 +1604,7 @@ namespace guitarfx
         {"slotBPan",      "IR B Pan",       0.0,  -1.0,  1.0,     "amount", "IR B",  true},
         {"micRadialB",    "Mic B Radial",   0.0,  0.0,   1.0,     "amount", "IR B",  true},
         {"micProximityB", "Mic B Proximity",0.0,  0.0,   1.0,     "amount", "IR B",  true},
+        {"lowLatency",    "Low Latency",    0.0,  0.0,   1.0,     "toggle",  "Tone",      true},
         {"quality",       "Quality",        1.0,  0.0,   3.0,     "enum",    "Tone",      true, 1.0, {"Economy","Standard","High","Full"}}}; // 0=Economy, 1=Standard, 2=High, 3=Full
 
     EffectRegistry::Instance().Register(info.type, info, []()

@@ -12,6 +12,7 @@ set(TEST_SOURCES
     PresetManagementWorkflowTests.cpp
     PresetStorageTests.cpp
     ResourcePreviewWorkflowTests.cpp
+    RealtimeConvolverTests.cpp
     SampleRateConverterTests.cpp
     SignalChainMutationStressTest.cpp
     SignalChainThreadingBenchmark.cpp
