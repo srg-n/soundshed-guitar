@@ -514,7 +514,12 @@ bool AutomationSlotTable::ApplySlotLocked(AutomationSlot& slot)
         const double native = static_cast<double>(slot.value.load());
 
         if (mMixer)
-            return mMixer->SetNodeParamByType(effectType, paramId, native);
+        {
+            const bool ok = mMixer->SetNodeParamByType(effectType, paramId, native);
+            if (ok && mOnNodeParamApplied)
+                mOnNodeParamApplied(effectType, paramId, native);
+            return ok;
+        }
         return false;
     }
 

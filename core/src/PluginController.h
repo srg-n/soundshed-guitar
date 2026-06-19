@@ -452,6 +452,16 @@ private:
     // Deferred broadcast
     bool mPendingStateBroadcast = true;
 
+    // Deferred node-param notifications (populated on audio/UI thread, drained in OnIdle)
+    struct PendingNodeParamNotify
+    {
+        std::string nodeId;
+        std::string paramKey;
+        double value = 0.0;
+    };
+    std::mutex mPendingNodeParamMutex;
+    std::vector<PendingNodeParamNotify> mPendingNodeParamNotifies;
+
     // App settings
     nlohmann::json mAppSettings = nlohmann::json::object();
     nlohmann::json mUiSettings = nlohmann::json::object();

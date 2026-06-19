@@ -2024,6 +2024,32 @@ void PluginController::Initialize()
         [this](int steps) { SetlistBankDown(steps); },
         [this]() { return GetSetlistLength(); });
 
+    // Wire node-param-applied callback so the UI can reflect automation-driven changes.
+    mAutomationSlots.SetOnNodeParamApplied(
+        [this](const std::string& effectType, const std::string& paramId, double value)
+        {
+            // Resolve the concrete nodeId from the mixer's runtime graph.
+            const auto found = mPresetMixer.FindFirstEnabledNodeOfType(effectType);
+            if (!found)
+                return;
+
+            const auto& nodeId = found->second;
+
+            // Patch mActivePreset so a subsequent state broadcast is consistent.
+            if (mActivePreset)
+            {
+                auto* node = mActivePreset->graph.FindNode(nodeId);
+                if (node)
+                    node->params[paramId] = value;
+            }
+
+            // Queue a lightweight UI notification (safe from audio or UI thread).
+            {
+                std::lock_guard<std::mutex> lock(mPendingNodeParamMutex);
+                mPendingNodeParamNotifies.push_back({nodeId, paramId, value});
+            }
+        });
+
     // Load automation.json
     const auto automationData = LoadUiStorageJson("automation.json", nlohmann::json::object());
     if (!automationData.empty())
@@ -3311,6 +3337,25 @@ void PluginController::OnIdle()
     {
         mPendingStateBroadcast = false;
         BroadcastState();
+    }
+
+    // Drain deferred node-param notifications (from MIDI/keyboard automation)
+    {
+        std::vector<PendingNodeParamNotify> notifies;
+        {
+            std::lock_guard<std::mutex> lock(mPendingNodeParamMutex);
+            notifies = std::move(mPendingNodeParamNotifies);
+            mPendingNodeParamNotifies.clear();
+        }
+        for (const auto& n : notifies)
+        {
+            nlohmann::json msg;
+            msg["type"] = "signalPathNodeParamUpdated";
+            msg["nodeId"] = n.nodeId;
+            msg["key"] = n.paramKey;
+            msg["value"] = n.value;
+            SendMessageToUI(msg.dump());
+        }
     }
 
     // Signal test result

@@ -18,7 +18,7 @@ import { applyToneSharingAppSettings, registerInstalledToneSharingPackFromImport
 import { applyJamAppSettings } from "./jam.js";
 import type { GlobalSignalChainConfig, Preset, PresetFolder, ResourceRef, Setlist, UiSettings, CompositePreset } from "./types.js";
 import { EffectGuids } from "./effectGuids.js";
-import { migratePresetNodeTypes } from "./presetV2.js";
+import { migratePresetNodeTypes, setNodeParam } from "./presetV2.js";
 import { handleResourceDataMessage } from "./archiveUtils.js";
 import { layoutDesigner } from "./layoutDesigner.js";
 import type { LayoutLibrary, EffectLayout } from "./layoutTypes.js";
@@ -1304,6 +1304,21 @@ export function handleIncomingMessage(message: string): void {
         if (update.key === "pluginStateBase64" && !update.silent) {
           showNotification("Plugin state captured", "success");
         }
+      }
+      break;
+    }
+    case "signalPathNodeParamUpdated": {
+      const update = payload as { nodeId?: string; key?: string; value?: number };
+      if (typeof update.nodeId === "string" && typeof update.key === "string" && typeof update.value === "number") {
+        const preset = getActivePresetForRender();
+        if (preset) {
+          try {
+            setNodeParam(preset, update.nodeId, update.key, update.value);
+          } catch {
+            // Node not in the active preset draft — ignore silently.
+          }
+        }
+        refreshSelectedNodeParams();
       }
       break;
     }

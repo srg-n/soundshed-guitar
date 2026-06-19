@@ -91,6 +91,11 @@ public:
     /// Set the effect registry for node.* type resolution.
     void SetEffectRegistry(const EffectRegistry* registry) { mEffectRegistry = registry; }
 
+    /// Callback invoked after a node.* param is successfully applied.
+    /// Receives (effectType, paramId, nativeValue). Called under mDSPMutex.
+    void SetOnNodeParamApplied(std::function<void(const std::string&, const std::string&, double)> cb)
+    { mOnNodeParamApplied = std::move(cb); }
+
     /// Handle a MIDI event — matches against slot MIDI maps and applies.
     void HandleMidi(const MidiEvent& ev);
 
@@ -129,6 +134,9 @@ private:
     // MIDI learn state
     std::optional<std::string> mMidiLearnSlotId;
     std::optional<MidiControlMap> mMidiLearnCapture;
+
+    // Callback fired after a node.* param apply succeeds
+    std::function<void(const std::string&, const std::string&, double)> mOnNodeParamApplied;
 };
 
 } // namespace guitarfx
