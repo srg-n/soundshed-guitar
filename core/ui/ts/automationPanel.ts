@@ -13,6 +13,7 @@ import { EffectTypeRegistry } from "./presetV2.js";
 
 let modalInitialized = false;
 let pendingLearnSlotId: string | null = null;
+let pendingKeyLearnSlotId: string | null = null;
 let editingSlotId: string | null = null;
 let midiLogEnabled = false;
 const midiLogEntries: { time: string; type: string; data: string }[] = [];
@@ -31,6 +32,12 @@ export function applyAutomationState(next: Partial<AutomationState>): void {
     maxCustomSlots: next.maxCustomSlots ?? uiState.automation?.maxCustomSlots ?? 16,
   };
   renderAutomationPanel();
+  renderKeyboardPanel();
+}
+
+export function handleMidiLearnCapture(slotId: string): void {
+  pendingLearnSlotId = null;
+  renderAutomationPanel();
 }
 
 export function initializeAutomationPanel(): void {
@@ -41,6 +48,7 @@ export function initializeAutomationPanel(): void {
   wireTabs();
   requestAutomationState();
   renderAutomationPanel();
+  renderKeyboardPanel();
   renderMidiLog();
 }
 
@@ -83,6 +91,12 @@ function openMidiModal(): void {
   if (!modal) return;
   modal.style.display = "flex";
   requestAutomationState();
+  renderKeyboardPanel();
+  // Steal focus so keyboard events aren't consumed by buttons/inputs
+  if (document.activeElement instanceof HTMLElement) {
+    document.activeElement.blur();
+  }
+  modal.focus();
 }
 
 function closeMidiModal(): void {
@@ -93,8 +107,10 @@ function closeMidiModal(): void {
     pendingLearnSlotId = null;
     postMessage({ type: "cancelMidiLearn" });
   }
+  pendingKeyLearnSlotId = null;
   editingSlotId = null;
   renderAutomationPanel();
+  renderKeyboardPanel();
 }
 
 // ── Tabs ──────────────────────────────────────────────────────────────────
@@ -109,6 +125,9 @@ function wireTabs(): void {
       document.querySelectorAll<HTMLDivElement>(".midi-tab-panel").forEach((panel) => {
         panel.classList.toggle("active", panel.id === `midi-tab-${targetTab}`);
       });
+
+      // Steal focus so keyboard events aren't consumed by the tab button
+      blurActive();
     });
   });
 
@@ -206,12 +225,13 @@ function renderSlotRow(slot: AutomationSlot, registry: AutomationRegistryEntry[]
     <div class="automation-slot-row" data-slot-id="${escapeHtml(slot.slotId)}">
       <span class="automation-slot-label">${escapeHtml(slot.label)}</span>
       <span class="automation-slot-address" title="${escapeHtml(slot.address)}">${escapeHtml(slot.address)} ${escapeHtml(rangeText)}</span>
-      <span class="automation-slot-midi">${escapeHtml(midiText)}</span>
-      <span class="automation-slot-key">${escapeHtml(keyText)}</span>
+      <span class="automation-slot-midi">${escapeHtml(midiText)}${slot.midiMap ? ` <button class="automation-clear-btn automation-clear-midi" data-slot-id="${escapeHtml(slot.slotId)}" title="Clear MIDI mapping">✕</button>` : ""}</span>
+      <span class="automation-slot-key">${escapeHtml(keyText)}${(slot.keyMap && slot.keyMap.length > 0) ? ` <button class="automation-clear-btn automation-clear-key" data-slot-id="${escapeHtml(slot.slotId)}" title="Clear keyboard mapping">✕</button>` : ""}</span>
       <div>
         <button class="automation-learn-btn ${isLearn ? "active" : ""}" data-slot-id="${escapeHtml(slot.slotId)}">
           ${isLearn ? "Listening…" : "Learn"}
         </button>
+        ${entry?.isTrigger ? `<button class="automation-test-btn" data-slot-id="${escapeHtml(slot.slotId)}" title="Fire this command now">Test</button>` : ""}
         ${!slot.isDefault ? `<button class="automation-target-btn" data-slot-id="${escapeHtml(slot.slotId)}" title="Edit target parameter">${editingSlotId === slot.slotId ? "Close" : "Target"}</button>` : ""}
         ${!slot.isDefault ? `<button class="automation-remove-btn" data-slot-id="${escapeHtml(slot.slotId)}">✕</button>` : ""}
       </div>
@@ -231,6 +251,7 @@ function wireSlotEvents(container: HTMLElement): void {
         postMessage({ type: "armMidiLearn", slotId });
       }
       renderAutomationPanel();
+      blurActive();
     });
   });
 
@@ -239,6 +260,15 @@ function wireSlotEvents(container: HTMLElement): void {
       const slotId = btn.dataset.slotId || "";
       editingSlotId = editingSlotId === slotId ? null : slotId;
       renderAutomationPanel();
+      blurActive();
+    });
+  });
+
+  container.querySelectorAll<HTMLButtonElement>(".automation-test-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const slotId = btn.dataset.slotId || "";
+      postMessage({ type: "setAutomationValue", slotId, value: 1.0, source: "ui" });
+      blurActive();
     });
   });
 
@@ -246,6 +276,25 @@ function wireSlotEvents(container: HTMLElement): void {
     btn.addEventListener("click", () => {
       const slotId = btn.dataset.slotId || "";
       postMessage({ type: "removeAutomationSlot", slotId });
+      blurActive();
+    });
+  });
+
+  container.querySelectorAll<HTMLButtonElement>(".automation-clear-midi").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const slotId = btn.dataset.slotId || "";
+      postMessage({ type: "setAutomationSlot", slotId, midiMap: null });
+      blurActive();
+    });
+  });
+
+  container.querySelectorAll<HTMLButtonElement>(".automation-clear-key").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const slotId = btn.dataset.slotId || "";
+      postMessage({ type: "setAutomationSlot", slotId, keyMap: null });
+      blurActive();
     });
   });
 
@@ -255,6 +304,7 @@ function wireSlotEvents(container: HTMLElement): void {
       const slotNum = Date.now() % 100000;
       const slotId = `custom.${slotNum}`;
       postMessage({ type: "setAutomationSlot", slotId, label: "New Slot", address: "" });
+      blurActive();
     });
   }
 
@@ -370,6 +420,7 @@ function wireTargetEditor(container: HTMLElement): void {
       const address = select?.value || "";
       postMessage({ type: "setAutomationSlot", slotId, label, address });
       editingSlotId = null;
+      blurActive();
     });
   });
 
@@ -377,6 +428,7 @@ function wireTargetEditor(container: HTMLElement): void {
     btn.addEventListener("click", () => {
       editingSlotId = null;
       renderAutomationPanel();
+      blurActive();
     });
   });
 }
@@ -386,8 +438,76 @@ function cssEscape(s: string): string {
   return s.replace(/["\\]/g, "\\$&");
 }
 
+function blurActive(): void {
+  if (document.activeElement instanceof HTMLElement && document.activeElement.tagName === "BUTTON") {
+    document.activeElement.blur();
+  }
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// ── Keyboard mapping tab ───────────────────────────────────────────────────
+
+function renderKeyboardPanel(): void {
+  const container = document.getElementById("keyboard-slots-list");
+  if (!container) return;
+
+  const state = uiState.automation;
+  if (!state) {
+    container.innerHTML = "<p>Loading automation…</p>";
+    return;
+  }
+
+  let html = "";
+
+  for (const slot of state.slots) {
+    const isKeyLearn = pendingKeyLearnSlotId === slot.slotId;
+
+    let keyText = "—";
+    if (slot.keyMap && slot.keyMap.length > 0) {
+      keyText = slot.keyMap.map((k) => {
+        const mode = k.mode === 0 ? "trig" : `=${k.value.toFixed(2)}`;
+        return `${k.key}(${mode})`;
+      }).join(", ");
+    }
+
+    html += `
+      <div class="automation-slot-row keyboard-slot-row" data-slot-id="${escapeHtml(slot.slotId)}">
+        <span class="automation-slot-label">${escapeHtml(slot.label)}</span>
+        <span class="automation-slot-key-display">${escapeHtml(keyText)}</span>
+        <div class="keyboard-slot-actions">
+          <button class="automation-key-learn-btn ${isKeyLearn ? "active" : ""}" data-slot-id="${escapeHtml(slot.slotId)}">
+            ${isKeyLearn ? "Press a key…" : "Learn"}
+          </button>
+          ${(slot.keyMap && slot.keyMap.length > 0) ? `<button class="automation-key-clear-btn" data-slot-id="${escapeHtml(slot.slotId)}">Clear</button>` : ""}
+        </div>
+      </div>
+    `;
+  }
+
+  container.innerHTML = html;
+  wireKeyboardPanelEvents(container);
+}
+
+function wireKeyboardPanelEvents(container: HTMLElement): void {
+  container.querySelectorAll<HTMLButtonElement>(".automation-key-learn-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const slotId = btn.dataset.slotId || "";
+      pendingKeyLearnSlotId = pendingKeyLearnSlotId === slotId ? null : slotId;
+      renderKeyboardPanel();
+      blurActive();
+    });
+  });
+
+  container.querySelectorAll<HTMLButtonElement>(".automation-key-clear-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const slotId = btn.dataset.slotId || "";
+      postMessage({ type: "setAutomationSlot", slotId, keyMap: null });
+      blurActive();
+    });
+  });
 }
 
 // ── MIDI Log ──────────────────────────────────────────────────────────────
@@ -439,6 +559,31 @@ document.addEventListener("keydown", (event: KeyboardEvent) => {
   // Only handle when the MIDI modal is open
   const modal = document.getElementById("midi-modal");
   if (!modal || modal.style.display !== "flex") return;
+
+  // Keyboard learn capture — intercept the next key and assign it to the slot
+  if (pendingKeyLearnSlotId) {
+    const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+    const state = uiState.automation;
+    if (!state) return;
+    const slot = state.slots.find((s) => s.slotId === pendingKeyLearnSlotId);
+    if (!slot) {
+      pendingKeyLearnSlotId = null;
+      return;
+    }
+
+    // Build new keyMap array: replace any existing mapping for this key, add new entry.
+    // Default to Trigger mode (mode=0) for trigger addresses, SetValue (mode=1) for continuous.
+    const isTrigger = slot.address.includes("bankUp") || slot.address.includes("bankDown") || /setlist\.preset\d+$/.test(slot.address);
+    const mode = isTrigger ? 0 : 1;
+    const value = isTrigger ? 1.0 : 0.5;
+    const newKeyMap = (slot.keyMap ?? []).filter((k) => k.key !== key);
+    newKeyMap.push({ key, mode, value });
+
+    postMessage({ type: "setAutomationSlot", slotId: pendingKeyLearnSlotId, keyMap: newKeyMap });
+    pendingKeyLearnSlotId = null;
+    event.preventDefault();
+    return;
+  }
 
   const state = uiState.automation;
   if (!state) return;

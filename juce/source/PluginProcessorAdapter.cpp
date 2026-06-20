@@ -80,6 +80,77 @@ namespace
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// AutomationSlotParameter — JUCE parameter backed by an automation slot
+// ════════════════════════════════════════════════════════════════════════
+
+class PluginProcessorAdapter::AutomationSlotParameter : public juce::AudioProcessorParameter
+{
+public:
+    AutomationSlotParameter(PluginProcessorAdapter& owner, int parameterIndex,
+                            juce::String paramID, juce::String label)
+        : mOwner(owner)
+        , mParameterIndex(parameterIndex)
+        , mParamID(std::move(paramID))
+        , mLabel(std::move(label))
+    {
+    }
+
+    [[nodiscard]] int getParameterIndex() const { return mParameterIndex; }
+    [[nodiscard]] const juce::String& getSlotId() const { return mParamID; }
+
+    [[nodiscard]] float getValue() const override
+    {
+        return mOwner.mController.GetAutomationSlotValue(mParamID.toStdString());
+    }
+
+    void setValue(float newValue) override
+    {
+        // Queue the change for draining in processBlock (audio thread, under DSP lock).
+        std::lock_guard<std::mutex> lock(mOwner.mPendingDAWParamMutex);
+        mOwner.mPendingDAWParamChanges.emplace_back(mParamID.toStdString(), newValue);
+    }
+
+    [[nodiscard]] float getDefaultValue() const override { return 0.0f; }
+
+    [[nodiscard]] juce::String getName(int maximumLength) const override
+    {
+        return mLabel.substring(0, maximumLength);
+    }
+
+    [[nodiscard]] juce::String getLabel() const override { return {}; }
+
+    [[nodiscard]] int getNumSteps() const override { return juce::AudioProcessorParameter::getNumSteps(); }
+
+    [[nodiscard]] bool isDiscrete() const override { return false; }
+    [[nodiscard]] bool isBoolean() const override { return false; }
+    [[nodiscard]] bool isOrientationInverted() const override { return false; }
+
+    [[nodiscard]] juce::String getText(float value, int) const override
+    {
+        return juce::String(value, 3);
+    }
+
+    [[nodiscard]] float getValueForText(const juce::String& text) const override
+    {
+        return text.getFloatValue();
+    }
+
+    [[nodiscard]] bool isAutomatable() const override { return true; }
+    [[nodiscard]] bool isMetaParameter() const override { return false; }
+
+    [[nodiscard]] juce::AudioProcessorParameter::Category getCategory() const override
+    {
+        return genericParameter;
+    }
+
+private:
+    PluginProcessorAdapter& mOwner;
+    int mParameterIndex = 0;
+    juce::String mParamID;
+    juce::String mLabel;
+};
+
+// ════════════════════════════════════════════════════════════════════════
 // Construction / Destruction
 // ════════════════════════════════════════════════════════════════════════
 
@@ -97,6 +168,7 @@ PluginProcessorAdapter::PluginProcessorAdapter()
     guitarfx::RegisterJuceHostedPluginEffect();
     mAssetRoot = locateAssetsRoot();
     mController.Initialize();
+    registerAutomationParameters();
 }
 
 PluginProcessorAdapter::~PluginProcessorAdapter() = default;
@@ -162,6 +234,23 @@ void PluginProcessorAdapter::processBlock (juce::AudioBuffer<float>& buffer,
         midiMessages.clear();
     }
 
+    // Drain pending DAW parameter changes (collected by AutomationSlotParameter::setValue)
+    {
+        std::vector<std::pair<std::string, float>> changes;
+        {
+            std::lock_guard<std::mutex> lock(mPendingDAWParamMutex);
+            if (!mPendingDAWParamChanges.empty())
+            {
+                changes.swap(mPendingDAWParamChanges);
+            }
+        }
+        if (!changes.empty())
+        {
+            for (const auto& [slotId, value] : changes)
+                mController.ApplyAutomationFromDAW(slotId, value);
+        }
+    }
+
     // Set up float** for the core ProcessAudio
     float* inputs[2] = {
         const_cast<float*> (buffer.getReadPointer (0)),
@@ -186,6 +275,41 @@ std::vector<juce::String> PluginProcessorAdapter::getAutomationParameterIds() co
     for (const auto& slotId : mController.GetAutomationSlotIds())
         ids.push_back(juce::String(slotId));
     return ids;
+}
+
+void PluginProcessorAdapter::registerAutomationParameters()
+{
+    // Register one JUCE parameter per automation slot.
+    // Default slots are always present; custom slots that don't exist yet
+    // are reserved with placeholder IDs so DAW project state stays stable
+    // when the user adds custom slots later.
+    const auto slotIds = mController.GetAutomationSlotIds();
+
+    int paramIndex = 0;
+    for (const auto& slotId : slotIds)
+    {
+        const auto* slot = mController.GetAutomationSlots().FindSlot(slotId);
+        juce::String label = slot ? juce::String(slot->label) : juce::String(slotId);
+
+        addParameter(new AutomationSlotParameter(*this, paramIndex,
+                     juce::String(slotId), label));
+        ++paramIndex;
+    }
+
+    // Reserve placeholder parameters for unused custom slots so DAW project
+    // state remains stable when the user adds custom slots later.
+    const int reservedCustomSlots = guitarfx::kMaxCustomSlots;
+    const int existingCustomCount = static_cast<int>(slotIds.size()) -
+        static_cast<int>(std::count_if(slotIds.begin(), slotIds.end(),
+            [](const std::string& id) { return id.find("default.") == 0; }));
+
+    for (int i = existingCustomCount; i < reservedCustomSlots; ++i)
+    {
+        juce::String placeholderId = "custom._reserved_" + juce::String(i);
+        addParameter(new AutomationSlotParameter(*this, paramIndex,
+                     placeholderId, "Reserved " + juce::String(i)));
+        ++paramIndex;
+    }
 }
 
 juce::AudioProcessorEditor* PluginProcessorAdapter::createEditor()

@@ -2660,6 +2660,32 @@
   color: var(--color-accent);
 }
 
+.automation-test-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--modal-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--modal-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  margin-left: 4px;
+}
+
+.automation-test-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.automation-test-btn:active {
+  background: var(--color-accent);
+  color: #fff;
+  border-color: var(--color-accent);
+}
+
 .automation-target-editor {
   display: grid;
   grid-template-columns: 1fr 1.5fr auto;
@@ -2807,4 +2833,73 @@
 .btn-small {
   padding: 4px 10px;
   font-size: 11px;
+}
+
+/* Inline clear buttons in mapping rows */
+.automation-clear-btn {
+  display: inline-block;
+  padding: 0 4px;
+  margin-left: 4px;
+  border: none;
+  background: transparent;
+  color: var(--modal-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  vertical-align: middle;
+  line-height: 1;
+  border-radius: 3px;
+  transition: all 0.15s;
+}
+
+.automation-clear-btn:hover {
+  color: var(--color-accent);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Keyboard tab */
+.keyboard-slot-row {
+  grid-template-columns: 120px 1fr auto;
+}
+
+.keyboard-slot-row .automation-slot-key-display {
+  color: var(--modal-text-muted);
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  align-self: center;
+}
+
+.keyboard-slot-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.automation-key-learn-btn,
+.automation-key-clear-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--modal-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--modal-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.automation-key-learn-btn:hover,
+.automation-key-clear-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.automation-key-learn-btn.active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+  animation: pulse-learn 1.2s ease-in-out infinite;
 }

@@ -181,6 +181,7 @@ export const uiState: UiState = {
   presetRatings: {},
   setlists: [],
   activeSetlistId: null,
+  setlistCursorIndex: 0,
   parameters: {
     values: [],
   },

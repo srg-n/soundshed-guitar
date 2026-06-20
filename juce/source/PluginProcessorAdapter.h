@@ -60,6 +60,10 @@ public:
     /// Get all automation slot parameter IDs (for DAW exposure).
     [[nodiscard]] std::vector<juce::String> getAutomationParameterIds() const;
 
+    /// Build the full list of DAW-exposed parameter IDs (defaults + reserved custom).
+    /// Called once in the constructor to register parameters with stable indices.
+    void registerAutomationParameters();
+
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
@@ -105,6 +109,11 @@ private:
     std::filesystem::path mAssetRoot;
     std::unique_ptr<juce::FileChooser> mFileChooser;
     bool mStandaloneProtocolRegistrationAttempted = false;
+
+    // Pending DAW parameter changes, drained in processBlock under the DSP lock.
+    // Each entry: (slotId, normalized 0..1).
+    std::mutex mPendingDAWParamMutex;
+    std::vector<std::pair<std::string, float>> mPendingDAWParamChanges;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginProcessorAdapter)
 };

@@ -114,14 +114,24 @@ struct DefaultSlotDef
 
 /// The default automation slots shipped with the app.
 inline constexpr DefaultSlotDef kDefaultSlots[] = {
-    {"default.setlistPreset", "setlist.preset", "Setlist Preset"},
-    {"default.bankUp", "setlist.bankUp", "Bank Up"},
-    {"default.bankDown", "setlist.bankDown", "Bank Down"},
-    {"default.inputLevel", "global.inputTrim", "Input Level"},
-    {"default.outputLevel", "global.outputTrim", "Output Level"},
+    {"default.setlistPreset1", "setlist.preset1", "Setlist Preset 1"},
+    {"default.setlistPreset2", "setlist.preset2", "Setlist Preset 2"},
+    {"default.setlistPreset3", "setlist.preset3", "Setlist Preset 3"},
+    {"default.setlistPreset4", "setlist.preset4", "Setlist Preset 4"},
+    {"default.setlistPreset5", "setlist.preset5", "Setlist Preset 5"},
+    {"default.setlistPreset6", "setlist.preset6", "Setlist Preset 6"},
+    {"default.setlistPreset7", "setlist.preset7", "Setlist Preset 7"},
+    {"default.setlistPreset8", "setlist.preset8", "Setlist Preset 8"},
+    {"default.bankUp",        "setlist.bankUp", "Bank Up"},
+    {"default.bankDown",      "setlist.bankDown", "Bank Down"},
+    {"default.inputLevel",    "global.inputTrim", "Input Level"},
+    {"default.outputLevel",   "global.outputTrim", "Output Level"},
 };
 
 /// Maximum number of custom slots (reserved in the DAW parameter layout).
 inline constexpr int kMaxCustomSlots = 16;
+
+/// Number of setlist preset slots per bank (also the number of DAW parameters).
+inline constexpr int kSetlistPresetsPerBank = 8;
 
 } // namespace guitarfx

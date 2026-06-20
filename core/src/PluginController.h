@@ -107,8 +107,16 @@ public:
     void SetlistBankUp(int steps);
     void SetlistBankDown(int steps);
     [[nodiscard]] int GetSetlistLength() const;
+    [[nodiscard]] int GetSetlistBankBase() const;
     [[nodiscard]] std::vector<std::string> GetAutomationSlotIds() const { return mAutomationSlots.GetSlotIds(); }
     [[nodiscard]] AutomationSlotTable& GetAutomationSlots() { return mAutomationSlots; }
+    [[nodiscard]] const AutomationSlotTable& GetAutomationSlots() const { return mAutomationSlots; }
+
+    /// Apply a normalized 0..1 value from the DAW host to a slot. Takes DSP lock.
+    void ApplyAutomationFromDAW(const std::string& slotId, float normalized);
+
+    /// Get the current normalized 0..1 value of a slot (for DAW parameter readback).
+    [[nodiscard]] float GetAutomationSlotValue(const std::string& slotId) const;
 
     // ── Parameter bridging ─────────────────────────────────────────
     /// Plugin parameter IDs (kept stable for host automation mapping).
@@ -411,6 +419,8 @@ private:
     void AppendSessionLog(const std::string& message) const;
     void ApplyParamChangeLocked(int paramIdx, double value);
     void ProcessAudioLocked(float** inputs, float** outputs, int numSamples);
+    void ApplySetlistPresetByIndexDirect(int index);
+    void SetlistBankChangeDirect(int delta);
 
     // ── State ──────────────────────────────────────────────────────
     IPluginHost& mHost;
@@ -461,6 +471,11 @@ private:
     };
     std::mutex mPendingNodeParamMutex;
     std::vector<PendingNodeParamNotify> mPendingNodeParamNotifies;
+
+    // Deferred setlist preset apply (drained in OnIdle to avoid DSP lock recursion)
+    std::mutex mPendingSetlistMutex;
+    std::optional<int> mPendingSetlistPresetIndex;
+    std::optional<int> mPendingSetlistBankDelta;
 
     // App settings
     nlohmann::json mAppSettings = nlohmann::json::object();
@@ -638,7 +653,7 @@ private:
     // Automation
     AutomationSlotTable mAutomationSlots;
     int mSetlistCursorIndex = 0;
-    int mSetlistBankSize = 1;
+    int mSetlistBankSize = 8;
 };
 
 } // namespace guitarfx

@@ -1067,6 +1067,25 @@ export function applySetlistsFromBackend(setlists: Setlist[], activeSetlistId?: 
   renderSetlistPanel();
 }
 
+export function applySetlistCursorFromBackend(cursorIndex: number, presetId?: string): void {
+  uiState.setlistCursorIndex = cursorIndex;
+  renderSetlistPanel();
+  if (presetId && presetId !== uiState.activePresetId) {
+    void applyPresetFromLibrary(presetId);
+  }
+}
+
+function selectSetlistSlot(index: number): void {
+  const activeSetlist = findSetlistById(uiState.activeSetlistId);
+  if (!activeSetlist || index < 0 || index >= activeSetlist.slots.length) return;
+  const presetId = activeSetlist.slots[index].presetId;
+  if (!presetId) return;
+  uiState.setlistCursorIndex = index;
+  postMessage({ type: "setSetlistCursor", cursorIndex: index });
+  renderSetlistPanel();
+  void applyPresetFromLibrary(presetId);
+}
+
 function findSetlistById(id: string | null | undefined): Setlist | undefined {
   if (!id) {
     return undefined;
@@ -1177,11 +1196,13 @@ function renderSetlistPanel(): void {
   if (!activeSetlist.slots.length) {
     setlistSlotsElement.innerHTML = '<div class="preset-library-empty">Drop presets to add slots.</div>';
   } else {
+    const cursorIdx = uiState.setlistCursorIndex ?? 0;
     setlistSlotsElement.innerHTML = activeSetlist.slots
       .map((slot, index) => {
         const presetName = uiState.presetCache.get(slot.presetId)?.name ?? slot.presetId;
+        const isActive = index === cursorIdx ? " active" : "";
         return `
-          <div class="setlist-slot" data-slot-index="${index}" draggable="true">
+          <div class="setlist-slot${isActive}" data-slot-index="${index}" draggable="true">
             <span class="setlist-slot-title">${presetName}</span>
             <button class="setlist-slot-remove" data-slot-index="${index}" type="button">×</button>
           </div>
@@ -1191,7 +1212,8 @@ function renderSetlistPanel(): void {
   }
 
   setlistSlotsElement.querySelectorAll<HTMLButtonElement>(".setlist-slot-remove").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (e) => {
+      e.stopPropagation();
       const index = Number(button.dataset.slotIndex ?? -1);
       if (index >= 0) {
         removeSetlistSlot(index);
@@ -1200,6 +1222,13 @@ function renderSetlistPanel(): void {
   });
 
   setlistSlotsElement.querySelectorAll<HTMLElement>(".setlist-slot").forEach((slotEl) => {
+    slotEl.addEventListener("click", () => {
+      const index = Number(slotEl.dataset.slotIndex ?? -1);
+      if (index >= 0) {
+        selectSetlistSlot(index);
+      }
+    });
+
     slotEl.addEventListener("dragstart", (event) => {
       const index = slotEl.dataset.slotIndex ?? "";
       event.dataTransfer?.setData("application/x-setlist-slot", index);

@@ -95,6 +95,12 @@ bool MessageDispatcher::DispatchStateAndLists(PluginController& c,
         c.HandleSetSetlistsRequest(msg);
         return true;
     }
+    if (type == "setSetlistCursor")
+    {
+        const int cursorIndex = msg.value("cursorIndex", 0);
+        c.ApplySetlistPresetByIndex(cursorIndex);
+        return true;
+    }
     if (type == "getTheme")
     {
         c.HandleGetThemeRequest();

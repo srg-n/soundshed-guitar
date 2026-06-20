@@ -83,7 +83,8 @@ void AutomationSlotTable::InitializeRegistry(MultiPresetMixer& mixer,
                                              const std::function<void(int)>& applySetlistPresetByIndex,
                                              const std::function<void(int)>& bankUp,
                                              const std::function<void(int)>& bankDown,
-                                             const std::function<int()>& getSetlistLength)
+                                             const std::function<int()>& getSetlistLength,
+                                             const std::function<int()>& getSetlistBankBase)
 {
     mMixer = &mixer;
     mGetSetlistCursor = getSetlistCursor;
@@ -91,6 +92,7 @@ void AutomationSlotTable::InitializeRegistry(MultiPresetMixer& mixer,
     mBankUp = bankUp;
     mBankDown = bankDown;
     mGetSetlistLength = getSetlistLength;
+    mGetSetlistBankBase = getSetlistBankBase;
 
     // global.inputTrim
     {
@@ -118,19 +120,27 @@ void AutomationSlotTable::InitializeRegistry(MultiPresetMixer& mixer,
         mRegistry.Register(e);
     }
 
-    // setlist.preset
+    // setlist.preset1..N — one trigger parameter per preset slot in the current bank
+    for (int i = 1; i <= kSetlistPresetsPerBank; ++i)
     {
         ParamRegistryEntry e;
-        e.address = "setlist.preset";
-        e.label = "Setlist Preset";
+        e.address = "setlist.preset" + std::to_string(i);
+        e.label = "Setlist Preset " + std::to_string(i);
         e.unit = "";
         e.minValue = 0.0;
-        e.maxValue = 0.0; // dynamic — will be setlist length - 1 at apply time
-        e.isStepped = true;
-        e.get = [this]() { return mGetSetlistCursor ? mGetSetlistCursor() : 0.0; };
-        e.apply = [this](double v, bool) {
-            if (mApplySetlistPresetByIndex)
-                mApplySetlistPresetByIndex(static_cast<int>(std::round(v)));
+        e.maxValue = 1.0;
+        e.isTrigger = true;
+        const int slotOffset = i; // captured by value
+        e.get = [this, slotOffset]() -> double {
+            if (!mGetSetlistBankBase || !mGetSetlistCursor) return 0.0;
+            const int base = mGetSetlistBankBase();
+            const int cursor = static_cast<int>(std::round(mGetSetlistCursor()));
+            return (cursor == base + (slotOffset - 1)) ? 1.0 : 0.0;
+        };
+        e.apply = [this, slotOffset](double, bool) {
+            if (!mGetSetlistBankBase || !mApplySetlistPresetByIndex) return;
+            const int base = mGetSetlistBankBase();
+            mApplySetlistPresetByIndex(base + (slotOffset - 1));
         };
         mRegistry.Register(e);
     }
@@ -529,17 +539,7 @@ bool AutomationSlotTable::ApplySlotLocked(AutomationSlot& slot)
 
     const float normalized = slot.value.load();
 
-    // For stepped params, update max to setlist length - 1 at apply time
-    double maxVal = entry->maxValue;
-    if (entry->isStepped && entry->address == "setlist.preset")
-    {
-        if (mGetSetlistLength)
-        {
-            const int len = mGetSetlistLength();
-            if (len > 1)
-                maxVal = static_cast<double>(len - 1);
-        }
-    }
+    const double maxVal = entry->maxValue;
 
     const double native = entry->isStepped
         ? std::round(entry->minValue + normalized * (maxVal - entry->minValue))
@@ -553,6 +553,11 @@ bool AutomationSlotTable::ApplySlotLocked(AutomationSlot& slot)
         const bool fire = (prev < 0.5f) && (normalized >= 0.5f);
         if (!fire)
             return false;
+        // Reset both value and lastNormalized so the trigger can fire again
+        // on the next rising edge. Without this, a sustained/high MIDI value
+        // or repeated Test button presses would prevent retriggering.
+        slot.value.store(0.0f);
+        slot.lastNormalized.store(0.0f);
     }
     else
     {

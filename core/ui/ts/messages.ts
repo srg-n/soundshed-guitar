@@ -1,5 +1,5 @@
 import { uiState, clonePreset, getActivePresetForRender, setActivePresetDraft, setActivePresetIsNew, setActivePresetSnapshot, setPresetDirty } from "./state.js";
-import { renderActivePreset, applyPresetFromLibrary, populatePresetDropdown, updatePresetDropdownSelection, cachePresetInMemory, updatePresetActionButtons, applyPresetFoldersFromBackend, applyPresetFavoritesFromBackend, applyPresetRecentsFromAppSettings, applyPresetRatingsFromBackend, applySetlistsFromBackend, handlePresetDataMessage, recordRecentPreset, refreshSavePresetModalPeakInfoIfOpen } from "./presets.js";
+import { renderActivePreset, applyPresetFromLibrary, populatePresetDropdown, updatePresetDropdownSelection, cachePresetInMemory, updatePresetActionButtons, applyPresetFoldersFromBackend, applyPresetFavoritesFromBackend, applyPresetRecentsFromAppSettings, applyPresetRatingsFromBackend, applySetlistsFromBackend, applySetlistCursorFromBackend, handlePresetDataMessage, recordRecentPreset, refreshSavePresetModalPeakInfoIfOpen } from "./presets.js";
 import { syncControlsFromState, handleInputModeChanged, handleAmpCabStateChanged, syncAutoLevelControlsFromState, applyStoredInputChannel } from "./controls.js";
 import { showNotification } from "./notifications.js";
 import { appendLog } from "./logging.js";
@@ -13,7 +13,7 @@ import { getRiffLibrary, postMessage } from "./bridge.js";
 import { handleHostedPluginResourceLoadFailed, handleHostedPluginResourceLoadCompleted, handleNodeResourceBrowseCancelled, refreshSelectedNodeParams, renderSignalPathBar, updateSelectedNodePeakMeter } from "./signalPath.js";
 import { refreshFxSelector } from "./fxSelector.js";
 import { applyEnvironmentState, applyMetronomeState } from "./metronome.js";
-import { applyAutomationState, handleMidiLogEntry } from "./automationPanel.js";
+import { applyAutomationState, handleMidiLogEntry, handleMidiLearnCapture } from "./automationPanel.js";
 import { applyToneSharingAppSettings, registerInstalledToneSharingPackFromImport, handleToneSharingDeepLink } from "./toneSharingPanel.js";
 import { applyJamAppSettings } from "./jam.js";
 import type { GlobalSignalChainConfig, Preset, PresetFolder, ResourceRef, Setlist, UiSettings, CompositePreset } from "./types.js";
@@ -1103,6 +1103,13 @@ export function handleIncomingMessage(message: string): void {
       applySetlistsFromBackend(setlistsPayload.setlists ?? [], setlistsPayload.activeSetlistId ?? null);
       break;
     }
+    case "setlistCursorChanged": {
+      const cursorPayload = payload as { cursorIndex?: number; presetId?: string };
+      if (typeof cursorPayload.cursorIndex === "number") {
+        applySetlistCursorFromBackend(cursorPayload.cursorIndex, cursorPayload.presetId);
+      }
+      break;
+    }
     case "automation": {
       const autoPayload = payload as {
         slots?: import("./types.js").AutomationSlot[];
@@ -1124,6 +1131,13 @@ export function handleIncomingMessage(message: string): void {
         data1: logPayload.data1 ?? 0,
         data2: logPayload.data2 ?? 0,
       });
+      break;
+    }
+    case "midiLearnCapture": {
+      const capturePayload = payload as { slotId?: string };
+      if (typeof capturePayload.slotId === "string") {
+        handleMidiLearnCapture(capturePayload.slotId);
+      }
       break;
     }
     case "theme": {

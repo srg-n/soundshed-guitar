@@ -313,6 +313,26 @@
   justify-content: space-between;
   gap: 8px;
   background: var(--overlay-medium);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.setlist-slot:hover {
+  background: var(--overlay-light);
+}
+
+.setlist-slot.active {
+  border-style: solid;
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+
+.setlist-slot.active .setlist-slot-title {
+  color: #fff;
+}
+
+.setlist-slot.active .setlist-slot-remove {
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .setlist-slot-title {

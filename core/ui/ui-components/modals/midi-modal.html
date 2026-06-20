@@ -1,5 +1,5 @@
 <!-- MIDI & Automation Mapping Modal -->
-<div id="midi-modal" class="modal midi-modal" style="display: none;">
+<div id="midi-modal" class="modal midi-modal" style="display: none;" tabindex="-1">
   <div class="modal-content midi-modal-content">
     <div class="modal-header">
       <h3>MIDI & Automation</h3>
@@ -8,6 +8,7 @@
     <div class="modal-body midi-modal-body">
       <div class="midi-tab-bar">
         <button class="midi-tab-btn active" data-midi-tab="mappings">Mappings</button>
+        <button class="midi-tab-btn" data-midi-tab="keyboard">Keyboard</button>
         <button class="midi-tab-btn" data-midi-tab="log">MIDI Log</button>
       </div>
 
@@ -18,6 +19,17 @@
           Default slots are always available; custom slots can target any effect parameter.
         </p>
         <div id="automation-slots-list" class="automation-slots-list">
+          <p>Loading automation…</p>
+        </div>
+      </div>
+
+      <!-- Keyboard Tab -->
+      <div class="midi-tab-panel" id="midi-tab-keyboard">
+        <p class="midi-help">
+          Map computer keyboard keys to automation slots. Click "Learn" then press a key.
+          Trigger mode fires on key press; SetValue sets a specific level.
+        </p>
+        <div id="keyboard-slots-list" class="automation-slots-list">
           <p>Loading automation…</p>
         </div>
       </div>

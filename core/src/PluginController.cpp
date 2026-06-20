@@ -2022,7 +2022,8 @@ void PluginController::Initialize()
         [this](int idx) { ApplySetlistPresetByIndex(idx); },
         [this](int steps) { SetlistBankUp(steps); },
         [this](int steps) { SetlistBankDown(steps); },
-        [this]() { return GetSetlistLength(); });
+        [this]() { return GetSetlistLength(); },
+        [this]() { return GetSetlistBankBase(); });
 
     // Wire node-param-applied callback so the UI can reflect automation-driven changes.
     mAutomationSlots.SetOnNodeParamApplied(
@@ -2057,7 +2058,7 @@ void PluginController::Initialize()
 
     // Load setlist cursor/bankSize from setlists.json
     const auto setlistsData = LoadUiStorageJson("setlists.json", nlohmann::json::object());
-    mSetlistBankSize = setlistsData.value("bankSize", 1);
+    mSetlistBankSize = setlistsData.value("bankSize", 8);
     mSetlistCursorIndex = setlistsData.value("cursorIndex", 0);
 }
 
@@ -3356,6 +3357,23 @@ void PluginController::OnIdle()
             msg["value"] = n.value;
             SendMessageToUI(msg.dump());
         }
+    }
+
+    // Drain deferred setlist preset apply / bank change (from automation/MIDI under DSP lock)
+    {
+        std::optional<int> pendingIndex;
+        std::optional<int> pendingBankDelta;
+        {
+            std::lock_guard<std::mutex> lock(mPendingSetlistMutex);
+            pendingIndex = mPendingSetlistPresetIndex;
+            mPendingSetlistPresetIndex.reset();
+            pendingBankDelta = mPendingSetlistBankDelta;
+            mPendingSetlistBankDelta.reset();
+        }
+        if (pendingIndex.has_value())
+            ApplySetlistPresetByIndexDirect(*pendingIndex);
+        if (pendingBankDelta.has_value())
+            SetlistBankChangeDirect(*pendingBankDelta);
     }
 
     // Signal test result
@@ -8830,9 +8848,9 @@ void PluginController::HandleSetSetlistsRequest(const nlohmann::json& payload)
     nlohmann::json toStore = nlohmann::json::object();
     toStore["setlists"] = payload.value("setlists", nlohmann::json::array());
     toStore["activeSetlistId"] = payload.value("activeSetlistId", "");
-    toStore["bankSize"] = payload.value("bankSize", 1);
+    toStore["bankSize"] = payload.value("bankSize", 8);
     toStore["cursorIndex"] = payload.value("cursorIndex", 0);
-    mSetlistBankSize = payload.value("bankSize", 1);
+    mSetlistBankSize = payload.value("bankSize", 8);
     mSetlistCursorIndex = payload.value("cursorIndex", 0);
     SaveUiStorageJson("setlists.json", toStore);
 }
@@ -8883,6 +8901,7 @@ void PluginController::HandleSetAutomationSlotRequest(const nlohmann::json& payl
         nodeSelector = payload["nodeSelector"].get<std::string>();
 
     std::optional<MidiControlMap> midiMap;
+    bool clearMidiMap = false;
     if (payload.contains("midiMap") && payload["midiMap"].is_object())
     {
         const auto& mm = payload["midiMap"];
@@ -8895,8 +8914,11 @@ void PluginController::HandleSetAutomationSlotRequest(const nlohmann::json& payl
         m.pickupRange = mm.value("pickupRange", 0.1f);
         midiMap = m;
     }
+    else if (payload.contains("midiMap") && payload["midiMap"].is_null())
+        clearMidiMap = true;
 
     std::optional<std::vector<KeyboardMap>> keyMaps;
+    bool clearKeyMap = false;
     if (payload.contains("keyMap") && payload["keyMap"].is_array())
     {
         std::vector<KeyboardMap> kms;
@@ -8910,11 +8932,24 @@ void PluginController::HandleSetAutomationSlotRequest(const nlohmann::json& payl
         }
         keyMaps = std::move(kms);
     }
+    else if (payload.contains("keyMap") && payload["keyMap"].is_null())
+        clearKeyMap = true;
 
     if (isDefault)
         mAutomationSlots.SetDefaultSlotOverrides(slotId, label, midiMap, keyMaps);
     else
         mAutomationSlots.SetCustomSlot(slotId, label, address, nodeSelector, midiMap, keyMaps);
+
+    if (clearMidiMap)
+    {
+        auto* slot = mAutomationSlots.FindSlot(slotId);
+        if (slot) slot->midiMap.reset();
+    }
+    if (clearKeyMap)
+    {
+        auto* slot = mAutomationSlots.FindSlot(slotId);
+        if (slot) slot->keyMaps.clear();
+    }
 
     SaveUiStorageJson("automation.json", mAutomationSlots.SaveToJson());
     HandleGetAutomationRequest();
@@ -8937,6 +8972,18 @@ void PluginController::HandleSetAutomationValueRequest(const nlohmann::json& pay
 
     std::lock_guard<std::mutex> lock(mDSPMutex);
     mAutomationSlots.ApplyAutomationLocked(slotId, value, src);
+}
+
+void PluginController::ApplyAutomationFromDAW(const std::string& slotId, float normalized)
+{
+    std::lock_guard<std::mutex> lock(mDSPMutex);
+    mAutomationSlots.ApplyAutomationLocked(slotId, normalized, AutomationSource::DAW);
+}
+
+float PluginController::GetAutomationSlotValue(const std::string& slotId) const
+{
+    const auto* slot = mAutomationSlots.FindSlot(slotId);
+    return slot ? slot->value.load() : 0.0f;
 }
 
 void PluginController::HandleArmMidiLearnRequest(const nlohmann::json& payload)
@@ -8983,16 +9030,54 @@ void PluginController::HandleMidi(const MidiEvent& ev)
 
 void PluginController::ApplySetlistPresetByIndex(int index)
 {
+    // This method may be called from the audio thread (via automation/MIDI apply,
+    // already holding mDSPMutex) or from the UI thread (not holding the lock).
+    // AddActivePresetById needs to acquire mDSPMutex, so when we're already
+    // holding it we must defer the actual preset swap to OnIdle.
+    //
+    // We detect this by trying to lock mDSPMutex non-blocking. If it fails,
+    // we're on the audio thread (or another locked context) and must defer.
+
+    if (mDSPMutex.try_lock())
+    {
+        // We got the lock — not currently held, safe to proceed directly.
+        mDSPMutex.unlock();
+        ApplySetlistPresetByIndexDirect(index);
+    }
+    else
+    {
+        // Lock is held (audio thread under DSP lock) — defer to OnIdle.
+        std::lock_guard<std::mutex> lock(mPendingSetlistMutex);
+        mPendingSetlistPresetIndex = index;
+    }
+}
+
+void PluginController::ApplySetlistPresetByIndexDirect(int index)
+{
     const auto setlistsData = LoadUiStorageJson("setlists.json", nlohmann::json::object());
     const auto setlists = setlistsData.value("setlists", nlohmann::json::array());
     if (setlists.empty())
         return;
 
-    if (index < 0 || index >= static_cast<int>(setlists.size()))
+    // Resolve the active setlist by activeSetlistId (first setlist as fallback)
+    const std::string activeSetlistId = setlistsData.value("activeSetlistId", "");
+    const nlohmann::json* activeSlots = nullptr;
+    for (const auto& sl : setlists)
+    {
+        if (activeSetlistId.empty() || sl.value("id", "") == activeSetlistId)
+        {
+            activeSlots = &sl["slots"];
+            break;
+        }
+    }
+    if (!activeSlots || !activeSlots->is_array())
         return;
 
-    const auto& entry = setlists[index];
-    const std::string presetId = entry.value("presetId", "");
+    if (index < 0 || index >= static_cast<int>(activeSlots->size()))
+        return;
+
+    const auto& slot = (*activeSlots)[index];
+    const std::string presetId = slot.value("presetId", "");
     if (presetId.empty())
         return;
 
@@ -9005,42 +9090,97 @@ void PluginController::ApplySetlistPresetByIndex(int index)
 
     // Load the preset
     AddActivePresetById(presetId);
+
+    // Notify the UI that the setlist cursor changed so it can update its display
+    // and load the preset into the main preset chooser.
+    nlohmann::json msg;
+    msg["type"] = "setlistCursorChanged";
+    msg["cursorIndex"] = index;
+    msg["presetId"] = presetId;
+    SendMessageToUI(msg.dump());
 }
 
 void PluginController::SetlistBankUp(int steps)
 {
-    const auto setlistsData = LoadUiStorageJson("setlists.json", nlohmann::json::object());
-    const auto setlists = setlistsData.value("setlists", nlohmann::json::array());
-    const int len = static_cast<int>(setlists.size());
-    if (len == 0)
-        return;
-
-    const int newIndex = std::min(mSetlistCursorIndex + steps, len - 1);
-    if (newIndex == mSetlistCursorIndex)
-        return;
-
-    ApplySetlistPresetByIndex(newIndex);
+    if (mDSPMutex.try_lock())
+    {
+        mDSPMutex.unlock();
+        SetlistBankChangeDirect(steps);
+    }
+    else
+    {
+        std::lock_guard<std::mutex> lock(mPendingSetlistMutex);
+        mPendingSetlistBankDelta = steps;
+    }
 }
 
 void PluginController::SetlistBankDown(int steps)
 {
-    const auto setlistsData = LoadUiStorageJson("setlists.json", nlohmann::json::object());
-    const auto setlists = setlistsData.value("setlists", nlohmann::json::array());
-    const int len = static_cast<int>(setlists.size());
+    if (mDSPMutex.try_lock())
+    {
+        mDSPMutex.unlock();
+        SetlistBankChangeDirect(-steps);
+    }
+    else
+    {
+        std::lock_guard<std::mutex> lock(mPendingSetlistMutex);
+        mPendingSetlistBankDelta = -steps;
+    }
+}
+
+void PluginController::SetlistBankChangeDirect(int delta)
+{
+    const int len = GetSetlistLength();
     if (len == 0)
         return;
 
-    const int newIndex = std::max(mSetlistCursorIndex - steps, 0);
+    const int bankSize = std::max(1, mSetlistBankSize);
+    const int currentBank = mSetlistCursorIndex / bankSize;
+    const int newBank = std::clamp(currentBank + delta, 0, (len - 1) / bankSize);
+    const int newIndex = newBank * bankSize;
     if (newIndex == mSetlistCursorIndex)
         return;
 
-    ApplySetlistPresetByIndex(newIndex);
+    // Change the bank context without loading a preset.
+    mSetlistCursorIndex = newIndex;
+
+    // Persist cursor
+    const auto setlistsData = LoadUiStorageJson("setlists.json", nlohmann::json::object());
+    auto toStore = setlistsData;
+    toStore["cursorIndex"] = newIndex;
+    SaveUiStorageJson("setlists.json", toStore);
+
+    // Notify the UI that the bank/cursor changed (no presetId — bank change only)
+    nlohmann::json msg;
+    msg["type"] = "setlistCursorChanged";
+    msg["cursorIndex"] = newIndex;
+    SendMessageToUI(msg.dump());
 }
 
 int PluginController::GetSetlistLength() const
 {
     const auto setlistsData = LoadUiStorageJson("setlists.json", nlohmann::json::object());
-    return static_cast<int>(setlistsData.value("setlists", nlohmann::json::array()).size());
+    const auto setlists = setlistsData.value("setlists", nlohmann::json::array());
+    if (setlists.empty())
+        return 0;
+
+    // Resolve the active setlist by activeSetlistId (first setlist as fallback)
+    const std::string activeSetlistId = setlistsData.value("activeSetlistId", "");
+    for (const auto& sl : setlists)
+    {
+        if (activeSetlistId.empty() || sl.value("id", "") == activeSetlistId)
+        {
+            const auto& slots = sl.value("slots", nlohmann::json::array());
+            return static_cast<int>(slots.size());
+        }
+    }
+    return 0;
+}
+
+int PluginController::GetSetlistBankBase() const
+{
+    const int bankSize = std::max(1, mSetlistBankSize);
+    return (mSetlistCursorIndex / bankSize) * bankSize;
 }
 
 void PluginController::HandleGetThemeRequest()

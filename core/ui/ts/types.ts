@@ -522,6 +522,7 @@ export interface UiState {
   presetRatings?: Record<string, number>;
   setlists?: Setlist[];
   activeSetlistId?: string | null;
+  setlistCursorIndex?: number;
   parameters: ParametersState;
   signalTest: SignalTestResult | null;
   demoAudioSelectedId: string | null;
