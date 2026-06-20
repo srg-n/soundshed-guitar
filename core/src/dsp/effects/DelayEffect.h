@@ -58,6 +58,22 @@ namespace guitarfx
       const float lfoStep  = static_cast<float>(mModRate / mSampleRate);
       const float modAmp   = static_cast<float>(mModDepth * 0.001 * mSampleRate);
       const bool  pingPong = (mStereoMode == 1);
+      const bool  hasRightInput = (inputs[1] != nullptr);
+      bool dualMonoInput = false;
+      if (hasRightInput && inputs[0] && inputs[1])
+      {
+        dualMonoInput = true;
+        constexpr float kDualMonoEpsilon = 1.0e-6f;
+        for (int i = 0; i < numSamples; ++i)
+        {
+          if (std::abs(inputs[0][i] - inputs[1][i]) > kDualMonoEpsilon)
+          {
+            dualMonoInput = false;
+            break;
+          }
+        }
+      }
+      const bool  monoSource = !hasRightInput || dualMonoInput;
       const size_t bufSize = mBufferL.size();
       const double maxDelay = static_cast<double>(bufSize - 2);
 
@@ -74,7 +90,21 @@ namespace guitarfx
         const double delayR = std::clamp(mDelaySamples + mSpreadSamples + lfoVal * modAmp, 1.0, maxDelay);
 
         const float inL = inputs[0] ? inputs[0][i] : 0.0f;
-        const float inR = inputs[1] ? inputs[1][i] : inL;
+        const float inR = hasRightInput ? inputs[1][i] : inL;
+
+        // In ping-pong mode with mono/dual-mono input, keep source energy
+        // centered but add a small side bias so repeats can alternate L/R.
+        float delayInL = inL;
+        float delayInR = inR;
+        if (pingPong && monoSource)
+        {
+          constexpr float kPingPongSkew = 0.3f;
+          const float monoIn = inL;
+          const float center = monoIn * 0.5f;
+          const float skew = monoIn * kPingPongSkew;
+          delayInL = center + skew;
+          delayInR = center - skew;
+        }
 
         if (std::abs(inL) > mEnvelopeL)
           mEnvelopeL += 0.001f  * (std::abs(inL) - mEnvelopeL);
@@ -111,8 +141,8 @@ namespace guitarfx
           fbR = std::tanh(fbR * g) / g;
         }
 
-        mBufferL[mWritePos] = inL + fbL;
-        mBufferR[mWritePos] = inR + fbR;
+        mBufferL[mWritePos] = delayInL + fbL;
+        mBufferR[mWritePos] = delayInR + fbR;
 
         if (outputs[0])
           outputs[0][i] = inL * dry + delayedL * wet * duckGainL;
@@ -203,6 +233,7 @@ namespace guitarfx
 
     [[nodiscard]] std::string GetType() const override { return "delay_digital"; }
     [[nodiscard]] std::string GetCategory() const override { return "delay"; }
+    [[nodiscard]] bool ProducesStereoOutput() const override { return mStereoMode == 1; }
 
   private:
     [[nodiscard]] double GetEffectiveDelayMs() const
