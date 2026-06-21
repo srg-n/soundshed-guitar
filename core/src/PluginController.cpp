@@ -1960,6 +1960,8 @@ PluginController::PluginController(IPluginHost& host)
     : mHost(host)
 {
     mParamValues.fill(0.0);
+    mPendingMidiApply.reserve(kMaxPendingMidiApply);
+    mPendingMidiLog.reserve(kMaxPendingMidiLog);
     RegisterAllEffects();
     mDemoPreview = std::make_unique<DemoPreviewService>(
         mHost,
@@ -2023,7 +2025,9 @@ void PluginController::Initialize()
         [this](int steps) { SetlistBankUp(steps); },
         [this](int steps) { SetlistBankDown(steps); },
         [this]() { return GetSetlistLength(); },
-        [this]() { return GetSetlistBankBase(); });
+        [this]() { return GetSetlistBankBase(); },
+        [this](int bankNumber) { SelectSetlistBank(bankNumber); },
+        [this]() { return GetSetlistBankNumber(); });
 
     // Wire node-param-applied callback so the UI can reflect automation-driven changes.
     mAutomationSlots.SetOnNodeParamApplied(
@@ -3302,33 +3306,41 @@ void PluginController::OnIdle()
     // MIDI learn capture polling
     if (mAutomationSlots.IsMidiLearnArmed())
     {
-        // Read the slot ID BEFORE polling, since PollMidiLearnCapture clears it
-        const auto slotId = mAutomationSlots.GetMidiLearnSlot();
-        auto captured = mAutomationSlots.PollMidiLearnCapture();
-        if (captured.has_value() && !slotId.empty())
+        // The learn state (mMidiLearnSlotId/mMidiLearnCapture) is written by the
+        // audio thread in HandleMidi under mDSPMutex, so read + commit it under the
+        // same lock. Disk I/O and UI sends are done afterwards, outside the lock.
+        nlohmann::json captureMsg;
+        bool committed = false;
         {
-            const auto* slot = mAutomationSlots.FindSlot(slotId);
-            const bool isDefault = slot && slot->isDefault;
-            const auto label = slot ? std::optional<std::string>(slot->label) : std::nullopt;
-            const auto address = slot ? std::optional<std::string>(slot->address) : std::nullopt;
-            const auto nodeSelector = slot ? std::optional<std::string>(slot->nodeSelector) : std::nullopt;
-            const auto keyMaps = slot ? std::optional<std::vector<KeyboardMap>>(slot->keyMaps) : std::nullopt;
+            std::lock_guard<std::mutex> lock(mDSPMutex);
+            const auto slotId = mAutomationSlots.GetMidiLearnSlot();
+            auto captured = mAutomationSlots.PollMidiLearnCapture();
+            if (captured.has_value() && !slotId.empty())
+            {
+                const auto* slot = mAutomationSlots.FindSlot(slotId);
+                const bool isDefault = slot && slot->isDefault;
+                const auto label = slot ? std::optional<std::string>(slot->label) : std::nullopt;
+                const auto address = slot ? std::optional<std::string>(slot->address) : std::nullopt;
+                const auto nodeSelector = slot ? std::optional<std::string>(slot->nodeSelector) : std::nullopt;
+                const auto keyMaps = slot ? std::optional<std::vector<KeyboardMap>>(slot->keyMaps) : std::nullopt;
 
-            if (isDefault)
-                mAutomationSlots.SetDefaultSlotOverrides(slotId, label, *captured, keyMaps);
-            else
-                mAutomationSlots.SetCustomSlot(slotId, label, address, nodeSelector, *captured, keyMaps);
+                if (isDefault)
+                    mAutomationSlots.SetDefaultSlotOverrides(slotId, label, *captured, keyMaps);
+                else
+                    mAutomationSlots.SetCustomSlot(slotId, label, address, nodeSelector, *captured, keyMaps);
 
+                captureMsg["type"] = "midiLearnCapture";
+                captureMsg["slotId"] = slotId;
+                captureMsg["eventType"] = static_cast<int>(captured->eventType);
+                captureMsg["channel"] = captured->channel;
+                captureMsg["controller"] = captured->controller;
+                committed = true;
+            }
+        }
+        if (committed)
+        {
             SaveUiStorageJson("automation.json", mAutomationSlots.SaveToJson());
-
-            nlohmann::json captureMsg;
-            captureMsg["type"] = "midiLearnCapture";
-            captureMsg["slotId"] = slotId;
-            captureMsg["eventType"] = static_cast<int>(captured->eventType);
-            captureMsg["channel"] = captured->channel;
-            captureMsg["controller"] = captured->controller;
             SendMessageToUI(captureMsg.dump());
-
             HandleGetAutomationRequest();
         }
     }
@@ -3359,21 +3371,63 @@ void PluginController::OnIdle()
         }
     }
 
+    // Drain diagnostic MIDI log events (only populated while the UI log panel is
+    // open). Building JSON + SendMessageToUI happens here on the idle thread, never
+    // on the audio thread.
+    if (mMidiLogEnabled.load(std::memory_order_relaxed))
+    {
+        std::vector<MidiEvent> events;
+        {
+            std::lock_guard<std::mutex> lock(mPendingMidiLogMutex);
+            events.assign(mPendingMidiLog.begin(), mPendingMidiLog.end());
+            mPendingMidiLog.clear();
+        }
+        for (const auto& ev : events)
+        {
+            const int channel = ev.status & 0x0F;
+            const int statusType = (ev.status >> 4) & 0x0F;
+            const char* typeName = "Unknown";
+            switch (statusType)
+            {
+            case 0x08: typeName = "NoteOff"; break;
+            case 0x09: typeName = ev.data2 > 0 ? "NoteOn" : "NoteOff"; break;
+            case 0x0A: typeName = "Aftertouch"; break;
+            case 0x0B: typeName = "CC"; break;
+            case 0x0C: typeName = "ProgramChange"; break;
+            case 0x0D: typeName = "ChanPress"; break;
+            case 0x0E: typeName = "PitchBend"; break;
+            }
+
+            nlohmann::json logMsg;
+            logMsg["type"] = "midiLog";
+            logMsg["midiType"] = typeName;
+            logMsg["channel"] = channel;
+            logMsg["data1"] = static_cast<int>(ev.data1);
+            logMsg["data2"] = static_cast<int>(ev.data2);
+            SendMessageToUI(logMsg.dump());
+        }
+    }
+
     // Drain deferred setlist preset apply / bank change (from automation/MIDI under DSP lock)
     {
         std::optional<int> pendingIndex;
         std::optional<int> pendingBankDelta;
+        std::optional<int> pendingBankSelect;
         {
             std::lock_guard<std::mutex> lock(mPendingSetlistMutex);
             pendingIndex = mPendingSetlistPresetIndex;
             mPendingSetlistPresetIndex.reset();
             pendingBankDelta = mPendingSetlistBankDelta;
             mPendingSetlistBankDelta.reset();
+            pendingBankSelect = mPendingSetlistBankSelect;
+            mPendingSetlistBankSelect.reset();
         }
         if (pendingIndex.has_value())
             ApplySetlistPresetByIndexDirect(*pendingIndex);
         if (pendingBankDelta.has_value())
             SetlistBankChangeDirect(*pendingBankDelta);
+        if (pendingBankSelect.has_value())
+            SelectSetlistBankDirect(*pendingBankSelect);
     }
 
     // Signal test result
@@ -8935,20 +8989,26 @@ void PluginController::HandleSetAutomationSlotRequest(const nlohmann::json& payl
     else if (payload.contains("keyMap") && payload["keyMap"].is_null())
         clearKeyMap = true;
 
-    if (isDefault)
-        mAutomationSlots.SetDefaultSlotOverrides(slotId, label, midiMap, keyMaps);
-    else
-        mAutomationSlots.SetCustomSlot(slotId, label, address, nodeSelector, midiMap, keyMaps);
+    {
+        // Lock the DSP mutex around structural slot mutations so we never
+        // realloc/erase mSlots while the audio thread iterates it in HandleMidi.
+        // Keep the critical section short: no disk I/O or UI sends under the lock.
+        std::lock_guard<std::mutex> lock(mDSPMutex);
+        if (isDefault)
+            mAutomationSlots.SetDefaultSlotOverrides(slotId, label, midiMap, keyMaps);
+        else
+            mAutomationSlots.SetCustomSlot(slotId, label, address, nodeSelector, midiMap, keyMaps);
 
-    if (clearMidiMap)
-    {
-        auto* slot = mAutomationSlots.FindSlot(slotId);
-        if (slot) slot->midiMap.reset();
-    }
-    if (clearKeyMap)
-    {
-        auto* slot = mAutomationSlots.FindSlot(slotId);
-        if (slot) slot->keyMaps.clear();
+        if (clearMidiMap)
+        {
+            auto* slot = mAutomationSlots.FindSlot(slotId);
+            if (slot) slot->midiMap.reset();
+        }
+        if (clearKeyMap)
+        {
+            auto* slot = mAutomationSlots.FindSlot(slotId);
+            if (slot) slot->keyMaps.clear();
+        }
     }
 
     SaveUiStorageJson("automation.json", mAutomationSlots.SaveToJson());
@@ -8958,7 +9018,10 @@ void PluginController::HandleSetAutomationSlotRequest(const nlohmann::json& payl
 void PluginController::HandleRemoveAutomationSlotRequest(const nlohmann::json& payload)
 {
     const std::string slotId = payload.value("slotId", "");
-    mAutomationSlots.RemoveCustomSlot(slotId);
+    {
+        std::lock_guard<std::mutex> lock(mDSPMutex);
+        mAutomationSlots.RemoveCustomSlot(slotId);
+    }
     SaveUiStorageJson("automation.json", mAutomationSlots.SaveToJson());
     HandleGetAutomationRequest();
 }
@@ -8989,43 +9052,59 @@ float PluginController::GetAutomationSlotValue(const std::string& slotId) const
 void PluginController::HandleArmMidiLearnRequest(const nlohmann::json& payload)
 {
     const std::string slotId = payload.value("slotId", "");
+    // mMidiLearnSlotId is read by the audio thread (under mDSPMutex) in HandleMidi.
+    std::lock_guard<std::mutex> lock(mDSPMutex);
     mAutomationSlots.ArmMidiLearn(slotId);
 }
 
 void PluginController::HandleCancelMidiLearnRequest()
 {
+    std::lock_guard<std::mutex> lock(mDSPMutex);
     mAutomationSlots.ArmMidiLearn("");
 }
 
-void PluginController::HandleMidi(const MidiEvent& ev)
+void PluginController::EnqueueMidi(const MidiEvent& ev)
 {
-    // Forward to UI for diagnostics logging (sent before lock to avoid blocking)
-    {
-        const int channel = ev.status & 0x0F;
-        const int statusType = (ev.status >> 4) & 0x0F;
-        const char* typeName = "Unknown";
-        switch (statusType)
-        {
-        case 0x08: typeName = "NoteOff"; break;
-        case 0x09: typeName = ev.data2 > 0 ? "NoteOn" : "NoteOff"; break;
-        case 0x0A: typeName = "Aftertouch"; break;
-        case 0x0B: typeName = "CC"; break;
-        case 0x0C: typeName = "ProgramChange"; break;
-        case 0x0D: typeName = "ChanPress"; break;
-        case 0x0E: typeName = "PitchBend"; break;
-        }
+    // Audio thread. Must never block or allocate: both vectors are pre-reserved
+    // and capped, so push_back never reallocates. Events dropped past the cap are
+    // a deliberate safety valve against pathological message-thread stalls.
 
-        nlohmann::json logMsg;
-        logMsg["type"] = "midiLog";
-        logMsg["midiType"] = typeName;
-        logMsg["channel"] = channel;
-        logMsg["data1"] = static_cast<int>(ev.data1);
-        logMsg["data2"] = static_cast<int>(ev.data2);
-        SendMessageToUI(logMsg.dump());
+    if (mMidiLogEnabled.load(std::memory_order_relaxed))
+    {
+        std::lock_guard<std::mutex> lock(mPendingMidiLogMutex);
+        if (mPendingMidiLog.size() < kMaxPendingMidiLog)
+            mPendingMidiLog.push_back(ev);
     }
 
-    std::lock_guard<std::mutex> lock(mDSPMutex);
-    mAutomationSlots.HandleMidi(ev);
+    if (mPendingMidiApply.size() < kMaxPendingMidiApply)
+        mPendingMidiApply.push_back(ev);
+}
+
+void PluginController::ProcessQueuedMidi()
+{
+    // Audio thread. Drain queued MIDI events under the DSP lock without ever
+    // blocking: if the lock is held (e.g. a preset load on the message thread),
+    // leave the events queued and retry on the next block.
+    if (mPendingMidiApply.empty())
+        return;
+
+    std::unique_lock<std::mutex> lock(mDSPMutex, std::try_to_lock);
+    if (!lock.owns_lock())
+        return;
+
+    for (const auto& ev : mPendingMidiApply)
+        mAutomationSlots.HandleMidi(ev);
+    mPendingMidiApply.clear();
+}
+
+void PluginController::SetMidiLogEnabled(bool enabled)
+{
+    mMidiLogEnabled.store(enabled, std::memory_order_relaxed);
+    if (!enabled)
+    {
+        std::lock_guard<std::mutex> lock(mPendingMidiLogMutex);
+        mPendingMidiLog.clear();
+    }
 }
 
 void PluginController::ApplySetlistPresetByIndex(int index)
@@ -9181,6 +9260,66 @@ void PluginController::SetlistBankChangeDirect(int delta)
     SendMessageToUI(msg.dump());
 }
 
+void PluginController::SelectSetlistBank(int bankNumber)
+{
+    if (mDSPMutex.try_lock())
+    {
+        mDSPMutex.unlock();
+        SelectSetlistBankDirect(bankNumber);
+    }
+    else
+    {
+        std::lock_guard<std::mutex> lock(mPendingSetlistMutex);
+        mPendingSetlistBankSelect = bankNumber;
+    }
+}
+
+void PluginController::SelectSetlistBankDirect(int bankNumber)
+{
+    // Select the setlist whose `bank` number matches `bankNumber` and make it
+    // the active setlist ("bank"). No-op (with a log) if no setlist claims it.
+    auto setlistsData = LoadUiStorageJson("setlists.json", nlohmann::json::object());
+    const auto setlists = setlistsData.value("setlists", nlohmann::json::array());
+    if (setlists.empty())
+        return;
+
+    std::string targetId;
+    for (const auto& sl : setlists)
+    {
+        if (sl.contains("bank") && sl["bank"].is_number_integer()
+            && sl["bank"].get<int>() == bankNumber)
+        {
+            targetId = sl.value("id", "");
+            break;
+        }
+    }
+
+    if (targetId.empty())
+    {
+        AppendSessionLog("[Automation] Select Bank " + std::to_string(bankNumber)
+                         + ": no setlist mapped to this bank number");
+        return;
+    }
+
+    const std::string activeSetlistId = setlistsData.value("activeSetlistId", "");
+    if (targetId == activeSetlistId)
+        return;
+
+    // Switch the active setlist. Reset the preset cursor to the first slot.
+    // No preset is loaded — preset selection is a separate MIDI action.
+    mSetlistCursorIndex = 0;
+
+    setlistsData["activeSetlistId"] = targetId;
+    setlistsData["cursorIndex"] = 0;
+    SaveUiStorageJson("setlists.json", setlistsData);
+
+    nlohmann::json msg;
+    msg["type"] = "setlistCursorChanged";
+    msg["activeSetlistId"] = targetId;
+    msg["cursorIndex"] = 0;
+    SendMessageToUI(msg.dump());
+}
+
 int PluginController::GetSetlistLength() const
 {
     const auto setlistsData = LoadUiStorageJson("setlists.json", nlohmann::json::object());
@@ -9206,6 +9345,51 @@ int PluginController::GetSetlistBankBase() const
     // A "bank" is a whole setlist, so MIDI preset slots 1..N map directly onto
     // the active setlist's slots starting at index 0.
     return 0;
+}
+
+int PluginController::GetSetlistBankNumber() const
+{
+    // Return the bank number of the active setlist, or 0 if none/unassigned.
+    const auto setlistsData = LoadUiStorageJson("setlists.json", nlohmann::json::object());
+    const auto setlists = setlistsData.value("setlists", nlohmann::json::array());
+    if (setlists.empty())
+        return 0;
+
+    const std::string activeSetlistId = setlistsData.value("activeSetlistId", "");
+    for (const auto& sl : setlists)
+    {
+        if (activeSetlistId.empty() || sl.value("id", "") == activeSetlistId)
+        {
+            if (sl.contains("bank") && sl["bank"].is_number_integer())
+                return sl["bank"].get<int>();
+            return 0;
+        }
+    }
+    return 0;
+}
+
+std::string PluginController::GetSetlistSlotPresetId(int index) const
+{
+    if (index < 0)
+        return "";
+
+    const auto setlistsData = LoadUiStorageJson("setlists.json", nlohmann::json::object());
+    const auto setlists = setlistsData.value("setlists", nlohmann::json::array());
+    if (setlists.empty())
+        return "";
+
+    const std::string activeSetlistId = setlistsData.value("activeSetlistId", "");
+    for (const auto& sl : setlists)
+    {
+        if (activeSetlistId.empty() || sl.value("id", "") == activeSetlistId)
+        {
+            const auto& slots = sl.value("slots", nlohmann::json::array());
+            if (index >= static_cast<int>(slots.size()))
+                return "";
+            return slots[index].value("presetId", "");
+        }
+    }
+    return "";
 }
 
 void PluginController::HandleGetThemeRequest()

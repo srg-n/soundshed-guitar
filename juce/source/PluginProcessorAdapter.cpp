@@ -214,7 +214,7 @@ void PluginProcessorAdapter::processBlock (juce::AudioBuffer<float>& buffer,
     for (auto i = totalInputCh; i < totalOutputCh; ++i)
         buffer.clear (i, 0, numSamples);
 
-    // Drain MIDI messages and forward to the controller
+    // Drain MIDI messages and queue them for the controller
     if (!midiMessages.isEmpty())
     {
         for (const auto metadata : midiMessages)
@@ -229,10 +229,14 @@ void PluginProcessorAdapter::processBlock (juce::AudioBuffer<float>& buffer,
             ev.data1 = rawData[1];
             ev.data2 = rawData[2];
             ev.sampleOffset = metadata.samplePosition;
-            mController.HandleMidi(ev);
+            mController.EnqueueMidi(ev);
         }
         midiMessages.clear();
     }
+
+    // Apply queued MIDI under the DSP lock (non-blocking; runs every block so any
+    // events deferred by lock contention on a previous block are retried).
+    mController.ProcessQueuedMidi();
 
     // Drain pending DAW parameter changes (collected by AutomationSlotParameter::setValue)
     {
@@ -340,7 +344,8 @@ int PluginProcessorAdapter::getNumPrograms()
 
 int PluginProcessorAdapter::getCurrentProgram()
 {
-    return 0;
+    const int count = std::max(1, mController.GetSetlistLength());
+    return std::clamp(mController.GetSetlistCursorIndex(), 0, count - 1);
 }
 
 void PluginProcessorAdapter::setCurrentProgram (int index)
@@ -350,7 +355,10 @@ void PluginProcessorAdapter::setCurrentProgram (int index)
 
 const juce::String PluginProcessorAdapter::getProgramName (int index)
 {
-    return {};
+    const auto presetId = mController.GetSetlistSlotPresetId(index);
+    if (!presetId.empty())
+        return juce::String(presetId);
+    return "Program " + juce::String(index + 1);
 }
 
 void PluginProcessorAdapter::changeProgramName (int, const juce::String&) {}

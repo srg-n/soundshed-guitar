@@ -26,7 +26,7 @@ A single string with a small, fixed prefix vocabulary:
 |---|---|---|
 | `global.` | `global.inputTrim`, `global.outputTrim`, `global.transpose` | `ParamRegistry` static table of global mixer controls |
 | `node.<effectType>.<paramId>` | `node.amp_nam.inputGain`, `node.reverb_room.mix` | Lazy lookup: node of `effectType` in the active graph selected by the slot's optional `nodeSelector` (default = first in topological order) |
-| `setlist.<control>` | `setlist.preset`, `setlist.bankUp`, `setlist.bankDown` | Setlist cursor / structural controls |
+| `setlist.<control>` | `setlist.preset1..8`, `setlist.bankUp`, `setlist.bankDown`, `setlist.bankSelect` | Setlist cursor / structural controls |
 
 The prefix vocabulary is the *only* special case, and it is a fixed three-token grammar — not a per-feature enum. New global mixer params reuse `global.*`; new setlist structural controls reuse `setlist.*`; new node params need no registration at all (the effect's `EffectTypeInfo::parameters` already declares them).
 
@@ -110,9 +110,10 @@ struct DefaultSlot {
 };
 
 static constexpr DefaultSlot kDefaultSlots[] = {
-    { "default.setlistPreset", "setlist.preset",   "Setlist Preset" },
+    { "default.setlistPreset1..8", "setlist.preset1..8", "Setlist Preset 1..8" },
     { "default.bankUp",        "setlist.bankUp",   "Bank Up" },
     { "default.bankDown",     "setlist.bankDown", "Bank Down" },
+    { "default.bankSelect",   "setlist.bankSelect", "Select Bank" },
     { "default.inputLevel",   "global.inputTrim",  "Input Level" },
     { "default.outputLevel",  "global.outputTrim", "Output Level" },
 };
@@ -121,11 +122,13 @@ static constexpr DefaultSlot kDefaultSlots[] = {
 That's the entire default-slot definition. `isDefault=true` is just a flag the UI uses to forbid deletion/address-rebind (label, MIDI map, and keyboard map remain editable). Functionally, a default slot is identical to a custom slot — same `address` field, same generic apply path. If we later ship `global.transpose` as a default automation, we add one row here and one row in the registry. No slot-model change, no JUCE layout change (the reserved custom range absorbs it — see §3), no apply switch change.
 
 Default-slot value semantics are inherited from the address's registry entry (`isStepped` / `isTrigger`):
-- `setlist.preset` is stepped → slot value quantized to setlist length; setter calls `ApplySetlistPresetByIndex`.
-- `setlist.bankUp`/`bankDown` are triggers → fire on the 0→0.5+ rising edge; advance/retreat the setlist cursor by `bankSize`.
+- **Bank = setlist.** A "bank" is a whole setlist; each setlist owns a unique optional `bank` number (see `preset-library-organization.md`).
+- `setlist.preset1..8` are triggers → fire on the 0→0.5+ rising edge; each selects the corresponding slot (0..7) of the **active setlist** and loads its preset (`ApplySetlistPresetByIndex`).
+- `setlist.bankUp`/`bankDown` are triggers → fire on the rising edge; switch the active setlist to the next/previous one in UI list order, clamped at the first/last setlist. No preset is loaded on a bank change.
+- `setlist.bankSelect` is stepped (0..127) → selects the setlist whose `bank` number equals the value (a MIDI CC 0..127 picks the bank directly). No-op with a log entry if no setlist claims that bank number.
 - `global.inputTrim`/`outputTrim` are continuous dB.
 
-`bankSize` (default 1) and `cursorIndex` are added to the existing setlists UI-storage JSON (`setlists.json`), reusing the existing `HandleSetSetlistsRequest` save path.
+`cursorIndex` (the selected slot within the active setlist) is added to the existing setlists UI-storage JSON (`setlists.json`), reusing the existing `HandleSetSetlistsRequest` save path. A bank change also persists `activeSetlistId`.
 
 ## 2. Custom Automation Slots
 

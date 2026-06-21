@@ -124,6 +124,7 @@ inline constexpr DefaultSlotDef kDefaultSlots[] = {
     {"default.setlistPreset8", "setlist.preset8", "Setlist Preset 8"},
     {"default.bankUp",        "setlist.bankUp", "Bank Up"},
     {"default.bankDown",      "setlist.bankDown", "Bank Down"},
+    {"default.bankSelect",    "setlist.bankSelect", "Select Bank"},
     {"default.inputLevel",    "global.inputTrim", "Input Level"},
     {"default.outputLevel",   "global.outputTrim", "Output Level"},
 };

@@ -90,6 +90,8 @@ function openMidiModal(): void {
   const modal = document.getElementById("midi-modal");
   if (!modal) return;
   modal.style.display = "flex";
+  // Sync backend MIDI-log forwarding with the current toggle state.
+  postMessage({ type: "setMidiLogEnabled", enabled: midiLogEnabled });
   requestAutomationState();
   renderKeyboardPanel();
   // Steal focus so keyboard events aren't consumed by buttons/inputs
@@ -103,6 +105,8 @@ function closeMidiModal(): void {
   const modal = document.getElementById("midi-modal");
   if (!modal) return;
   modal.style.display = "none";
+  // Stop backend MIDI-log forwarding while the panel is closed.
+  postMessage({ type: "setMidiLogEnabled", enabled: false });
   if (pendingLearnSlotId) {
     pendingLearnSlotId = null;
     postMessage({ type: "cancelMidiLearn" });
@@ -136,6 +140,7 @@ function wireTabs(): void {
   if (logToggle) {
     logToggle.addEventListener("change", () => {
       midiLogEnabled = (logToggle as HTMLInputElement).checked;
+      postMessage({ type: "setMidiLogEnabled", enabled: midiLogEnabled });
       renderMidiLog();
     });
   }

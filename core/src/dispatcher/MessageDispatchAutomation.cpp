@@ -38,6 +38,11 @@ bool MessageDispatcher::DispatchAutomation(PluginController& c,
         c.HandleCancelMidiLearnRequest();
         return true;
     }
+    if (type == "setMidiLogEnabled")
+    {
+        c.SetMidiLogEnabled(msg.value("enabled", false));
+        return true;
+    }
     return false;
 }
 

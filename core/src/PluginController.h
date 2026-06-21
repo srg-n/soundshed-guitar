@@ -102,12 +102,25 @@ public:
     [[nodiscard]] IPluginHost& GetHost() { return mHost; }
 
     // ── Automation (public API for host adapters) ───────────────────
-    void HandleMidi(const MidiEvent& ev);
+    /// Queue a MIDI event from the audio thread. Non-blocking and allocation-free;
+    /// the event is applied later via ProcessQueuedMidi().
+    void EnqueueMidi(const MidiEvent& ev);
+    /// Drain and apply queued MIDI events under the DSP lock. Audio thread only;
+    /// uses try_lock so it never stalls the audio thread (events retried next block).
+    void ProcessQueuedMidi();
+    /// Enable/disable forwarding of raw MIDI events to the UI diagnostics log.
+    void SetMidiLogEnabled(bool enabled);
     void ApplySetlistPresetByIndex(int index);
     void SetlistBankUp(int steps);
     void SetlistBankDown(int steps);
+    void SelectSetlistBank(int bankNumber);
     [[nodiscard]] int GetSetlistLength() const;
     [[nodiscard]] int GetSetlistBankBase() const;
+    [[nodiscard]] int GetSetlistBankNumber() const;
+    /// Index of the currently selected setlist slot (DAW "program").
+    [[nodiscard]] int GetSetlistCursorIndex() const { return mSetlistCursorIndex; }
+    /// Preset ID at the given active-setlist slot, or empty if out of range.
+    [[nodiscard]] std::string GetSetlistSlotPresetId(int index) const;
     [[nodiscard]] std::vector<std::string> GetAutomationSlotIds() const { return mAutomationSlots.GetSlotIds(); }
     [[nodiscard]] AutomationSlotTable& GetAutomationSlots() { return mAutomationSlots; }
     [[nodiscard]] const AutomationSlotTable& GetAutomationSlots() const { return mAutomationSlots; }
@@ -421,6 +434,7 @@ private:
     void ProcessAudioLocked(float** inputs, float** outputs, int numSamples);
     void ApplySetlistPresetByIndexDirect(int index);
     void SetlistBankChangeDirect(int delta);
+    void SelectSetlistBankDirect(int bankNumber);
 
     // ── State ──────────────────────────────────────────────────────
     IPluginHost& mHost;
@@ -476,6 +490,23 @@ private:
     std::mutex mPendingSetlistMutex;
     std::optional<int> mPendingSetlistPresetIndex;
     std::optional<int> mPendingSetlistBankDelta;
+    std::optional<int> mPendingSetlistBankSelect;
+
+    // ── MIDI event queueing ─────────────────────────────────────────
+    // Audio-thread-only queue of MIDI events awaiting application under the DSP
+    // lock. Drained once per processBlock by ProcessQueuedMidi(). Not mutex
+    // protected: only ever touched on the audio thread. Pre-reserved + capped so
+    // push_back never allocates on the audio thread.
+    static constexpr std::size_t kMaxPendingMidiApply = 256;
+    std::vector<MidiEvent> mPendingMidiApply;
+
+    // Diagnostic MIDI log forwarded to the UI. Only populated while the UI log
+    // panel is open. Built on the audio thread (under mPendingMidiLogMutex) and
+    // drained/sent in OnIdle so no JSON is built on the audio thread.
+    static constexpr std::size_t kMaxPendingMidiLog = 512;
+    std::atomic<bool> mMidiLogEnabled{false};
+    std::mutex mPendingMidiLogMutex;
+    std::vector<MidiEvent> mPendingMidiLog;
 
     // App settings
     nlohmann::json mAppSettings = nlohmann::json::object();

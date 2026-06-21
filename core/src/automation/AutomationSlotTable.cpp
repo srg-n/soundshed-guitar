@@ -84,7 +84,9 @@ void AutomationSlotTable::InitializeRegistry(MultiPresetMixer& mixer,
                                              const std::function<void(int)>& bankUp,
                                              const std::function<void(int)>& bankDown,
                                              const std::function<int()>& getSetlistLength,
-                                             const std::function<int()>& getSetlistBankBase)
+                                             const std::function<int()>& getSetlistBankBase,
+                                             const std::function<void(int)>& selectSetlistBank,
+                                             const std::function<int()>& getSetlistBankNumber)
 {
     mMixer = &mixer;
     mGetSetlistCursor = getSetlistCursor;
@@ -93,6 +95,8 @@ void AutomationSlotTable::InitializeRegistry(MultiPresetMixer& mixer,
     mBankDown = bankDown;
     mGetSetlistLength = getSetlistLength;
     mGetSetlistBankBase = getSetlistBankBase;
+    mSelectSetlistBank = selectSetlistBank;
+    mGetSetlistBankNumber = getSetlistBankNumber;
 
     // global.inputTrim
     {
@@ -170,6 +174,27 @@ void AutomationSlotTable::InitializeRegistry(MultiPresetMixer& mixer,
         e.isTrigger = true;
         e.get = []() { return 0.0; };
         e.apply = [this](double, bool) { if (mBankDown) mBankDown(1); };
+        mRegistry.Register(e);
+    }
+
+    // setlist.bankSelect — select a specific bank number (0..127) directly.
+    // The value maps onto the bank number, selecting the setlist whose `bank`
+    // field matches. A MIDI CC (0..127) therefore picks the bank directly.
+    {
+        ParamRegistryEntry e;
+        e.address = "setlist.bankSelect";
+        e.label = "Select Bank";
+        e.unit = "";
+        e.minValue = 0.0;
+        e.maxValue = 127.0;
+        e.isStepped = true;
+        e.get = [this]() -> double {
+            return mGetSetlistBankNumber ? static_cast<double>(mGetSetlistBankNumber()) : 0.0;
+        };
+        e.apply = [this](double v, bool) {
+            if (mSelectSetlistBank)
+                mSelectSetlistBank(static_cast<int>(std::round(v)));
+        };
         mRegistry.Register(e);
     }
 }

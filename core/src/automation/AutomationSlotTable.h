@@ -40,7 +40,9 @@ public:
                             const std::function<void(int)>& bankUp,
                             const std::function<void(int)>& bankDown,
                             const std::function<int()>& getSetlistLength,
-                            const std::function<int()>& getSetlistBankBase);
+                            const std::function<int()>& getSetlistBankBase,
+                            const std::function<void(int)>& selectSetlistBank,
+                            const std::function<int()>& getSetlistBankNumber);
 
     /// Load custom slots + default overrides from automation.json JSON.
     void LoadFromJson(const nlohmann::json& json);
@@ -132,6 +134,8 @@ private:
     std::function<void(int)> mBankDown;
     std::function<int()> mGetSetlistLength;
     std::function<int()> mGetSetlistBankBase;
+    std::function<void(int)> mSelectSetlistBank;
+    std::function<int()> mGetSetlistBankNumber;
 
     // MIDI learn state
     std::optional<std::string> mMidiLearnSlotId;
