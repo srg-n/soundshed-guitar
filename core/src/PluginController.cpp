@@ -9095,6 +9095,7 @@ void PluginController::ApplySetlistPresetByIndexDirect(int index)
     // and load the preset into the main preset chooser.
     nlohmann::json msg;
     msg["type"] = "setlistCursorChanged";
+    msg["activeSetlistId"] = activeSetlistId;
     msg["cursorIndex"] = index;
     msg["presetId"] = presetId;
     SendMessageToUI(msg.dump());
@@ -9110,7 +9111,7 @@ void PluginController::SetlistBankUp(int steps)
     else
     {
         std::lock_guard<std::mutex> lock(mPendingSetlistMutex);
-        mPendingSetlistBankDelta = steps;
+        mPendingSetlistBankDelta = mPendingSetlistBankDelta.value_or(0) + steps;
     }
 }
 
@@ -9124,36 +9125,59 @@ void PluginController::SetlistBankDown(int steps)
     else
     {
         std::lock_guard<std::mutex> lock(mPendingSetlistMutex);
-        mPendingSetlistBankDelta = -steps;
+        mPendingSetlistBankDelta = mPendingSetlistBankDelta.value_or(0) - steps;
     }
 }
 
 void PluginController::SetlistBankChangeDirect(int delta)
 {
-    const int len = GetSetlistLength();
-    if (len == 0)
+    if (delta == 0)
         return;
 
-    const int bankSize = std::max(1, mSetlistBankSize);
-    const int currentBank = mSetlistCursorIndex / bankSize;
-    const int newBank = std::clamp(currentBank + delta, 0, (len - 1) / bankSize);
-    const int newIndex = newBank * bankSize;
-    if (newIndex == mSetlistCursorIndex)
+    // A "bank" is a whole setlist. Bank up/down moves the active setlist to the
+    // next/previous one in UI list order, clamped at the first/last setlist.
+    auto setlistsData = LoadUiStorageJson("setlists.json", nlohmann::json::object());
+    const auto setlists = setlistsData.value("setlists", nlohmann::json::array());
+    const int count = static_cast<int>(setlists.size());
+    if (count == 0)
         return;
 
-    // Change the bank context without loading a preset.
-    mSetlistCursorIndex = newIndex;
+    // Resolve the current active setlist index (by id), defaulting to the first.
+    const std::string activeSetlistId = setlistsData.value("activeSetlistId", "");
+    int currentIndex = 0;
+    if (!activeSetlistId.empty())
+    {
+        for (int i = 0; i < count; ++i)
+        {
+            if (setlists[i].value("id", "") == activeSetlistId)
+            {
+                currentIndex = i;
+                break;
+            }
+        }
+    }
 
-    // Persist cursor
-    const auto setlistsData = LoadUiStorageJson("setlists.json", nlohmann::json::object());
-    auto toStore = setlistsData;
-    toStore["cursorIndex"] = newIndex;
-    SaveUiStorageJson("setlists.json", toStore);
+    const int newIndex = std::clamp(currentIndex + delta, 0, count - 1);
+    if (newIndex == currentIndex)
+        return;
 
-    // Notify the UI that the bank/cursor changed (no presetId — bank change only)
+    const std::string newId = setlists[newIndex].value("id", "");
+
+    // Switch the active setlist ("bank"). Reset the preset cursor to the first
+    // slot. No preset is loaded on a bank change — preset selection is a
+    // separate MIDI action.
+    mSetlistCursorIndex = 0;
+
+    setlistsData["activeSetlistId"] = newId;
+    setlistsData["cursorIndex"] = 0;
+    SaveUiStorageJson("setlists.json", setlistsData);
+
+    // Notify the UI so the setlist (bank) list highlights the new active setlist
+    // and shows its slots.
     nlohmann::json msg;
     msg["type"] = "setlistCursorChanged";
-    msg["cursorIndex"] = newIndex;
+    msg["activeSetlistId"] = newId;
+    msg["cursorIndex"] = 0;
     SendMessageToUI(msg.dump());
 }
 
@@ -9179,8 +9203,9 @@ int PluginController::GetSetlistLength() const
 
 int PluginController::GetSetlistBankBase() const
 {
-    const int bankSize = std::max(1, mSetlistBankSize);
-    return (mSetlistCursorIndex / bankSize) * bankSize;
+    // A "bank" is a whole setlist, so MIDI preset slots 1..N map directly onto
+    // the active setlist's slots starting at index 0.
+    return 0;
 }
 
 void PluginController::HandleGetThemeRequest()

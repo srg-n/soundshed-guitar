@@ -1104,9 +1104,9 @@ export function handleIncomingMessage(message: string): void {
       break;
     }
     case "setlistCursorChanged": {
-      const cursorPayload = payload as { cursorIndex?: number; presetId?: string };
+      const cursorPayload = payload as { cursorIndex?: number; presetId?: string; activeSetlistId?: string };
       if (typeof cursorPayload.cursorIndex === "number") {
-        applySetlistCursorFromBackend(cursorPayload.cursorIndex, cursorPayload.presetId);
+        applySetlistCursorFromBackend(cursorPayload.cursorIndex, cursorPayload.presetId, cursorPayload.activeSetlistId);
       }
       break;
     }

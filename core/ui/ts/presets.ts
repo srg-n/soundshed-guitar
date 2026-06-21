@@ -1067,7 +1067,10 @@ export function applySetlistsFromBackend(setlists: Setlist[], activeSetlistId?: 
   renderSetlistPanel();
 }
 
-export function applySetlistCursorFromBackend(cursorIndex: number, presetId?: string): void {
+export function applySetlistCursorFromBackend(cursorIndex: number, presetId?: string, activeSetlistId?: string): void {
+  if (typeof activeSetlistId === "string" && activeSetlistId && activeSetlistId !== uiState.activeSetlistId) {
+    uiState.activeSetlistId = activeSetlistId;
+  }
   uiState.setlistCursorIndex = cursorIndex;
   renderSetlistPanel();
   if (presetId && presetId !== uiState.activePresetId) {
