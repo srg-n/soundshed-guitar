@@ -48,6 +48,16 @@ bool MessageDispatcher::DispatchPresetsAndResources(PluginController& c,
         c.HandleRequestResourceDataRequest(msg);
         return true;
     }
+    if (type == "browseResourceFolder")
+    {
+        c.HandleBrowseResourceFolderRequest();
+        return true;
+    }
+    if (type == "listResourceFolder")
+    {
+        c.HandleListResourceFolderRequest(msg);
+        return true;
+    }
     return false;
 }
 

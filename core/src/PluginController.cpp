@@ -728,6 +728,182 @@ namespace
         setIfMissing("trainingFinalLoss",  meta.trainingFinalLoss);
     }
 
+    std::string NormalizeCategoryToken(std::string value)
+    {
+        const auto isSpace = [](unsigned char ch) { return std::isspace(ch) != 0; };
+        value.erase(value.begin(), std::find_if(value.begin(), value.end(), [&](char ch)
+        {
+            return !isSpace(static_cast<unsigned char>(ch));
+        }));
+        value.erase(std::find_if(value.rbegin(), value.rend(), [&](char ch)
+        {
+            return !isSpace(static_cast<unsigned char>(ch));
+        }).base(), value.end());
+        std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch)
+        {
+            if (ch == '_' || ch == ' ')
+                return '-';
+            return static_cast<char>(std::tolower(ch));
+        });
+        return value;
+    }
+
+    std::optional<std::string> MapToLibraryCategory(const std::string& rawCategory)
+    {
+        const std::string category = NormalizeCategoryToken(rawCategory);
+        if (category.empty())
+            return std::nullopt;
+
+        if (category == "amp")
+            return std::string{"amp"};
+        if (category == "preamp" || category == "outboard")
+            return std::string{"preamp"};
+        if (category == "pedal" || category == "stomp" || category == "stompbox" || category == "effect" || category == "fx")
+            return std::string{"pedal"};
+        if (category == "cab" || category == "cabinet" || category == "ir")
+            return std::string{"cab"};
+        if (category == "full-rig" || category == "fullrig" || category == "amp-cab" || category == "ampcab"
+            || category == "amp+cab" || category == "amp-and-cab")
+            return std::string{"full-rig"};
+
+        return std::nullopt;
+    }
+
+    std::string ResolveResourceLibraryCategory(const guitarfx::LibraryResource& resource, const std::string& requestedCategory)
+    {
+        auto metadataValue = [&](const char* key) -> std::string
+        {
+            const auto it = resource.metadata.find(key);
+            return it != resource.metadata.end() ? it->second : std::string{};
+        };
+
+        if (resource.type == "nam")
+        {
+            // Prefer the Tone3000 category context for NAM imports.
+            if (auto mapped = MapToLibraryCategory(metadataValue("tone3000Category")); mapped.has_value())
+                return *mapped;
+            if (auto mapped = MapToLibraryCategory(metadataValue("gear")); mapped.has_value())
+                return *mapped;
+
+            // Otherwise use NAM-native metadata from the file header.
+            if (auto mapped = MapToLibraryCategory(metadataValue("gear_type")); mapped.has_value())
+                return *mapped;
+
+            // Fall back to requested category only when it maps to a supported bucket.
+            if (auto mapped = MapToLibraryCategory(requestedCategory); mapped.has_value())
+                return *mapped;
+
+            // If no metadata maps cleanly, use the most likely default for NAM.
+            return "amp";
+        }
+
+        return requestedCategory;
+    }
+
+    /// Lightweight WAV header parse used by the folder browser to surface IR/cab
+    /// metadata without decoding sample data. Returns false if the file is not a
+    /// readable RIFF/WAVE container.
+    struct WavHeaderInfo
+    {
+        std::uint32_t sampleRate = 0;
+        std::uint16_t channels = 0;
+        std::uint16_t bitsPerSample = 0;
+        double durationSec = 0.0;
+        bool valid = false;
+    };
+
+    WavHeaderInfo TryReadWavHeader(const std::filesystem::path& wavFilePath)
+    {
+        WavHeaderInfo info;
+        std::error_code ec;
+        if (!std::filesystem::exists(wavFilePath, ec) || ec)
+            return info;
+
+        try
+        {
+            std::ifstream file(wavFilePath, std::ios::binary);
+            if (!file)
+                return info;
+
+            const auto readU32 = [&file]() -> std::uint32_t {
+                unsigned char b[4]{};
+                file.read(reinterpret_cast<char*>(b), 4);
+                if (file.gcount() != 4) return 0u;
+                return static_cast<std::uint32_t>(b[0]) | (static_cast<std::uint32_t>(b[1]) << 8)
+                     | (static_cast<std::uint32_t>(b[2]) << 16) | (static_cast<std::uint32_t>(b[3]) << 24);
+            };
+            const auto readU16 = [&file]() -> std::uint16_t {
+                unsigned char b[2]{};
+                file.read(reinterpret_cast<char*>(b), 2);
+                if (file.gcount() != 2) return 0u;
+                return static_cast<std::uint16_t>(static_cast<std::uint16_t>(b[0]) | (static_cast<std::uint16_t>(b[1]) << 8));
+            };
+
+            char riff[4]{};
+            file.read(riff, 4);
+            if (file.gcount() != 4 || std::memcmp(riff, "RIFF", 4) != 0)
+                return info;
+            (void)readU32(); // overall size
+            char wave[4]{};
+            file.read(wave, 4);
+            if (file.gcount() != 4 || std::memcmp(wave, "WAVE", 4) != 0)
+                return info;
+
+            std::uint32_t byteRate = 0;
+            std::uint32_t dataBytes = 0;
+            bool haveFmt = false;
+            bool haveData = false;
+
+            // Walk chunks until both fmt and data are found, or EOF. Bounded by file size.
+            for (int guard = 0; guard < 4096 && file && !(haveFmt && haveData); ++guard)
+            {
+                char chunkId[4]{};
+                file.read(chunkId, 4);
+                if (file.gcount() != 4)
+                    break;
+                const std::uint32_t chunkSize = readU32();
+                if (std::memcmp(chunkId, "fmt ", 4) == 0)
+                {
+                    (void)readU16();              // audio format
+                    info.channels = readU16();
+                    info.sampleRate = readU32();
+                    byteRate = readU32();
+                    (void)readU16();              // block align
+                    info.bitsPerSample = readU16();
+                    haveFmt = true;
+                    // Skip any remaining fmt bytes (e.g. extensible header).
+                    if (chunkSize > 16)
+                        file.seekg(static_cast<std::streamoff>(chunkSize - 16), std::ios::cur);
+                    if (chunkSize & 1u)
+                        file.seekg(1, std::ios::cur);
+                }
+                else if (std::memcmp(chunkId, "data", 4) == 0)
+                {
+                    dataBytes = chunkSize;
+                    haveData = true;
+                    // Do not read the payload.
+                    file.seekg(static_cast<std::streamoff>(chunkSize) + (chunkSize & 1u), std::ios::cur);
+                }
+                else
+                {
+                    file.seekg(static_cast<std::streamoff>(chunkSize) + (chunkSize & 1u), std::ios::cur);
+                }
+            }
+
+            if (haveFmt && info.sampleRate > 0)
+            {
+                info.valid = true;
+                if (byteRate > 0 && dataBytes > 0)
+                    info.durationSec = static_cast<double>(dataBytes) / static_cast<double>(byteRate);
+            }
+        }
+        catch (...)
+        {
+        }
+
+        return info;
+    }
+
     std::filesystem::path ResolvePresetFoldersPath(const guitarfx::FileSystem& fileSystem)
     {
         return fileSystem.ResolveSettingsDirectory() / "presets" / "preset-folders.json";
@@ -5509,6 +5685,8 @@ void PluginController::HandleImportRemoteResourceRequest(const nlohmann::json& p
     if (resourceType == "nam")
         EnrichNamResourceMetadata(resource, targetPath);
 
+    resource.category = ResolveResourceLibraryCategory(resource, resource.category);
+
     mResourceLibrary.AddResource(resource);
     AppendUserLibraryResource(resource);
     BroadcastState();
@@ -5786,6 +5964,8 @@ std::optional<LibraryResource> PluginController::SaveLocalLibraryResource(const 
     if (resourceType == "nam")
         EnrichNamResourceMetadata(resource, resolvedPath);
 
+    resource.category = ResolveResourceLibraryCategory(resource, resource.category);
+
     if (resourceType == "plugin")
     {
         const std::string pluginName = payloadPluginName.empty()
@@ -5863,6 +6043,50 @@ void PluginController::HandleSaveLocalLibraryResourceRequest(const nlohmann::jso
     msg["name"] = saved->name;
     msg["filePath"] = saved->filePath.string();
     SendMessageToUI(msg.dump());
+}
+
+void PluginController::HandleRemoveLocalLibraryResourceRequest(const nlohmann::json& payload)
+{
+    const std::string resourceType = payload.value("resourceType", "");
+    std::string resourceId = payload.value("resourceId", "");
+    const std::string filePath = payload.value("filePath", "");
+
+    if (resourceType.empty())
+        return;
+
+    // Resolve the id by file path when only a path was provided (e.g. folder browser).
+    if (resourceId.empty() && !filePath.empty())
+    {
+        const auto normalize = [](std::string value) {
+            std::replace(value.begin(), value.end(), '\\', '/');
+            std::transform(value.begin(), value.end(), value.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return value;
+        };
+        const std::string target = normalize(filePath);
+        for (const auto& resource : mResourceLibrary.GetAllResources())
+        {
+            if (resource.type != resourceType)
+                continue;
+            if (normalize(resource.filePath.string()) == target)
+            {
+                resourceId = resource.id;
+                break;
+            }
+        }
+    }
+
+    if (resourceId.empty() || !mResourceLibrary.HasResource(resourceType, resourceId))
+        return;
+
+    RemoveUserLibraryResource(resourceType, resourceId);
+    BroadcastState();
+
+    SendMessageToUI(nlohmann::json{
+        {"type", "resourceRemoved"},
+        {"resourceType", resourceType},
+        {"id", resourceId}
+    }.dump());
 }
 
 void PluginController::HandleUpdateLibraryResourceRequest(const nlohmann::json& payload)
@@ -5949,6 +6173,186 @@ void PluginController::HandleBrowseLibraryResourcePathRequest(const nlohmann::js
             updatePayload["filePath"] = result.path.string();
             HandleUpdateLibraryResourceRequest(updatePayload);
         });
+}
+
+void PluginController::HandleBrowseResourceFolderRequest()
+{
+    mHost.BrowseFileAsync(BrowseFileType::Folder, "Select Resource Folder",
+        [this](const BrowseFileResult& result)
+        {
+            nlohmann::json msg;
+            msg["type"] = "resourceFolderPicked";
+            std::error_code ec;
+            if (result.success && std::filesystem::is_directory(result.path, ec) && !ec)
+            {
+                msg["success"] = true;
+                msg["path"] = result.path.generic_string();
+                const auto leaf = result.path.filename();
+                msg["name"] = leaf.empty() ? result.path.generic_string() : leaf.string();
+            }
+            else
+            {
+                msg["success"] = false;
+            }
+            SendMessageToUI(msg.dump());
+        });
+}
+
+void PluginController::HandleListResourceFolderRequest(const nlohmann::json& payload)
+{
+    const std::string rawPath = payload.value("path", "");
+    if (rawPath.empty())
+    {
+        SendMessageToUI(nlohmann::json{{"type", "resourceFolderListingFailed"}, {"message", "Missing folder path"}}.dump());
+        return;
+    }
+
+    std::error_code ec;
+    std::filesystem::path dir(rawPath);
+    if (!std::filesystem::exists(dir, ec) || ec || !std::filesystem::is_directory(dir, ec))
+    {
+        SendMessageToUI(nlohmann::json{{"type", "resourceFolderListingFailed"}, {"path", rawPath}, {"message", "Folder not found"}}.dump());
+        return;
+    }
+
+    const auto normalizePath = [](const std::filesystem::path& p) -> std::string {
+        std::error_code lec;
+        std::filesystem::path canonical = std::filesystem::weakly_canonical(p, lec);
+        if (lec)
+            canonical = p.lexically_normal();
+        std::string s = canonical.generic_string();
+        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return s;
+    };
+
+    // Map of existing library file paths so we can flag/import-link already-imported files.
+    std::map<std::string, const LibraryResource*> libraryByPath;
+    const auto allResources = mResourceLibrary.GetAllResources();
+    for (const auto& res : allResources)
+    {
+        if (res.filePath.empty())
+            continue;
+        libraryByPath.emplace(normalizePath(res.filePath), &res);
+    }
+
+    const auto classify = [](const std::filesystem::path& p) -> std::string {
+        std::string ext = p.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (ext == ".nam") return std::string{"nam"};
+        if (ext == ".wav" || ext == ".ir" || ext == ".aif" || ext == ".aiff" || ext == ".flac") return std::string{"ir"};
+        return std::string{};
+    };
+
+    constexpr std::size_t kMaxEntries = 5000;
+    std::vector<nlohmann::json> dirs;
+    std::vector<nlohmann::json> files;
+    bool truncated = false;
+
+    std::filesystem::directory_iterator it(dir, std::filesystem::directory_options::skip_permission_denied, ec);
+    if (ec)
+    {
+        SendMessageToUI(nlohmann::json{{"type", "resourceFolderListingFailed"}, {"path", rawPath}, {"message", "Unable to read folder"}}.dump());
+        return;
+    }
+
+    for (const auto& entry : it)
+    {
+        if (dirs.size() + files.size() >= kMaxEntries)
+        {
+            truncated = true;
+            break;
+        }
+
+        std::error_code eec;
+        const auto& entryPath = entry.path();
+        if (entry.is_directory(eec) && !eec)
+        {
+            dirs.push_back(nlohmann::json{{"name", entryPath.filename().string()}, {"path", entryPath.generic_string()}});
+            continue;
+        }
+        if (!entry.is_regular_file(eec) || eec)
+            continue;
+
+        const std::string resourceType = classify(entryPath);
+        if (resourceType.empty())
+            continue;
+
+        nlohmann::json file;
+        file["name"] = entryPath.filename().string();
+        file["path"] = entryPath.generic_string();
+        file["resourceType"] = resourceType;
+
+        std::error_code sec;
+        const auto sizeBytes = std::filesystem::file_size(entryPath, sec);
+        file["sizeBytes"] = sec ? 0 : static_cast<std::uint64_t>(sizeBytes);
+
+        const auto libIt = libraryByPath.find(normalizePath(entryPath));
+        if (libIt != libraryByPath.end() && libIt->second != nullptr)
+        {
+            file["alreadyInLibrary"] = true;
+            file["libraryId"] = libIt->second->id;
+        }
+        else
+        {
+            file["alreadyInLibrary"] = false;
+        }
+
+        nlohmann::json metadata = nlohmann::json::object();
+        if (resourceType == "nam")
+        {
+            LibraryResource temp;
+            EnrichNamResourceMetadata(temp, entryPath);
+            for (const auto& [key, value] : temp.metadata)
+            {
+                if (!value.empty())
+                    metadata[key] = value;
+            }
+        }
+        else
+        {
+            const WavHeaderInfo wav = TryReadWavHeader(entryPath);
+            if (wav.valid)
+            {
+                if (wav.sampleRate > 0) metadata["sampleRate"] = std::to_string(wav.sampleRate);
+                if (wav.channels > 0) metadata["channels"] = std::to_string(wav.channels);
+                if (wav.bitsPerSample > 0) metadata["bitsPerSample"] = std::to_string(wav.bitsPerSample);
+                if (wav.durationSec > 0.0)
+                {
+                    char buf[32];
+                    std::snprintf(buf, sizeof(buf), "%.3f", wav.durationSec);
+                    metadata["durationSec"] = std::string(buf);
+                }
+            }
+        }
+        file["metadata"] = std::move(metadata);
+        files.push_back(std::move(file));
+    }
+
+    const auto byName = [](const nlohmann::json& a, const nlohmann::json& b) {
+        std::string an = a.value("name", "");
+        std::string bn = b.value("name", "");
+        std::transform(an.begin(), an.end(), an.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        std::transform(bn.begin(), bn.end(), bn.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return an < bn;
+    };
+    std::sort(dirs.begin(), dirs.end(), byName);
+    std::sort(files.begin(), files.end(), byName);
+
+    const auto parentPath = dir.parent_path();
+    std::string parentStr;
+    if (!parentPath.empty() && parentPath != dir)
+        parentStr = parentPath.generic_string();
+
+    nlohmann::json msg;
+    msg["type"] = "resourceFolderListing";
+    msg["path"] = dir.generic_string();
+    msg["parent"] = parentStr;
+    const auto leaf = dir.filename();
+    msg["name"] = leaf.empty() ? dir.generic_string() : leaf.string();
+    msg["dirs"] = dirs;
+    msg["files"] = files;
+    msg["truncated"] = truncated;
+    SendMessageToUI(msg.dump());
 }
 
 void PluginController::HandleImportToneSharingPackRequest(const nlohmann::json& payload)
@@ -10703,6 +11107,15 @@ void PluginController::AppendUserLibraryResource(const LibraryResource& resource
     mResourceLibrary.SaveToFile(libraryFile);
 }
 
+void PluginController::RemoveUserLibraryResource(const std::string& type, const std::string& id)
+{
+    mResourceLibrary.RemoveResource(type, id);
+
+    const auto libraryFile = mFileSystem.ResolveSettingsDirectory() / "resources" / "indexes" / "resources-index.json";
+    [[maybe_unused]] const auto ensuredLibraryDir = mFileSystem.EnsureDirectory(libraryFile.parent_path());
+    mResourceLibrary.SaveToFile(libraryFile);
+}
+
 void PluginController::EnsureBasicGraph()
 {
     if (!mActivePreset) return;
@@ -11053,7 +11466,39 @@ void PluginController::LoadResourceLibraries()
     }
 
     mResourceLibrary.LoadFromFile(libraryFile);
+    CleanupResourceLibraryCategoriesOnStartup();
     std::cout << "[Plugin] Loaded resource library from " << libraryFile.string() << std::endl;
+}
+
+void PluginController::CleanupResourceLibraryCategoriesOnStartup()
+{
+    const auto libraryFile = mFileSystem.ResolveSettingsDirectory() / "resources" / "indexes" / "resources-index.json";
+    auto allResources = mResourceLibrary.GetAllResources();
+    std::size_t updatedCount = 0;
+
+    for (auto& resource : allResources)
+    {
+        if (resource.type != "nam")
+            continue;
+
+        // Backfill NAM metadata before category resolution so older entries can
+        // be reassigned from file-native metadata (e.g. gear_type).
+        EnrichNamResourceMetadata(resource, resource.filePath);
+
+        const std::string resolvedCategory = ResolveResourceLibraryCategory(resource, resource.category);
+        if (resolvedCategory.empty() || resolvedCategory == resource.category)
+            continue;
+
+        resource.category = resolvedCategory;
+        mResourceLibrary.UpdateResource(resource.type, resource.id, resource);
+        ++updatedCount;
+    }
+
+    if (updatedCount > 0)
+    {
+        mResourceLibrary.SaveToFile(libraryFile);
+        AppendSessionLog("Normalized resource categories at startup: " + std::to_string(updatedCount));
+    }
 }
 
 void PluginController::LoadFactoryPresetArchives()

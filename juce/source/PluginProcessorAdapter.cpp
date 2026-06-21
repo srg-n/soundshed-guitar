@@ -462,8 +462,13 @@ void PluginProcessorAdapter::BrowseFileAsync (
     mFileChooser = std::make_unique<juce::FileChooser> (
         juce::String (title), juce::File(), filters);
 
-    auto flags = juce::FileBrowserComponent::openMode
-                 | juce::FileBrowserComponent::canSelectFiles;
+    const bool folderMode = type == guitarfx::BrowseFileType::Folder;
+
+    int flags = juce::FileBrowserComponent::openMode;
+    if (folderMode)
+        flags |= juce::FileBrowserComponent::canSelectDirectories;
+    else
+        flags |= juce::FileBrowserComponent::canSelectFiles;
 
 #if ! JUCE_WINDOWS
     // Plugin bundles (.vst3 on Linux, .component on macOS, .lv2 everywhere) are
@@ -479,7 +484,8 @@ void PluginProcessorAdapter::BrowseFileAsync (
         auto file = chooser.getResult();
         mFileChooser.reset();
 
-        const bool acceptDirectories = type == guitarfx::BrowseFileType::PluginFile;
+        const bool acceptDirectories = type == guitarfx::BrowseFileType::PluginFile
+                                       || type == guitarfx::BrowseFileType::Folder;
 
         // LV2 plugins are identified by their bundle directory (a folder ending in
         // ".lv2"). When a file inside a bundle was selected (the only option on

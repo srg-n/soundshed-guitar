@@ -18,6 +18,11 @@ bool MessageDispatcher::DispatchLibraryAndComposite(PluginController& c,
         c.HandleSaveLocalLibraryResourceRequest(msg);
         return true;
     }
+    if (type == "removeLocalLibraryResource")
+    {
+        c.HandleRemoveLocalLibraryResourceRequest(msg);
+        return true;
+    }
     if (type == "updateLibraryResource")
     {
         c.HandleUpdateLibraryResourceRequest(msg);

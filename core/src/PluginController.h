@@ -231,8 +231,11 @@ private:
     void HandleDeleteSignalPathNodeRequest(const nlohmann::json& payload);
     void HandleImportRemoteResourceRequest(const nlohmann::json& payload);
     void HandleSaveLocalLibraryResourceRequest(const nlohmann::json& payload);
+    void HandleRemoveLocalLibraryResourceRequest(const nlohmann::json& payload);
     void HandleUpdateLibraryResourceRequest(const nlohmann::json& payload);
     void HandleBrowseLibraryResourcePathRequest(const nlohmann::json& payload);
+    void HandleBrowseResourceFolderRequest();
+    void HandleListResourceFolderRequest(const nlohmann::json& payload);
     void HandleImportToneSharingPackRequest(const nlohmann::json& payload);
     void HandleDeleteImportedToneSharingPackRequest(const nlohmann::json& payload);
     void HandlePreviewRemoteResourceRequest(const nlohmann::json& payload);
@@ -389,6 +392,7 @@ private:
     void RefreshWasmNodeDescriptor(GraphNode& node);
     [[nodiscard]] std::optional<std::filesystem::path> ResolveResourceRef(const ResourceRef& ref) const;
     void AppendUserLibraryResource(const LibraryResource& resource);
+    void RemoveUserLibraryResource(const std::string& type, const std::string& id);
     void EnsureBasicGraph();
     bool ExtractFirstResourceFromZip(const std::vector<std::uint8_t>& zipData,
                                      const std::string& resourceType,
@@ -406,6 +410,7 @@ private:
     [[nodiscard]] std::optional<std::string> FindPresetIdByTitle(const std::string& presetTitle) const;
     bool TryLoadConfiguredDefaultPreset();
     void LoadResourceLibraries();
+    void CleanupResourceLibraryCategoriesOnStartup();
     void LoadFactoryPresetArchives();
     void LoadBlendLibrary();
     void SaveBlendLibrary() const;

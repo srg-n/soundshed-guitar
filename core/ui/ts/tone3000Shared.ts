@@ -165,6 +165,7 @@ function importRemoteResource(options: {
     fileName,
     metadata: {
       provider: "tone3000",
+      tone3000Category: tone.gear ?? "",
       toneId: String(tone.id),
       toneTitle: tone.title ?? "",
       groupId: String(tone.id),

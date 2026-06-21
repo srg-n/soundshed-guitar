@@ -13,7 +13,7 @@ import { ensureTone3000Session, isTone3000AuthReady, tone3000AuthenticatedFetch 
 import { showNotification } from "./notifications.js";
 import { arrayBufferToBase64, escapeHtml, findResourceById } from "./utils.js";
 import { FEATURE_FLAGS_CHANGED_EVENT, Features, isFeatureEnabled } from "./featureFlags.js";
-import type { LibraryResource } from "./types.js";
+import type { AppSettingValue, LibraryResource } from "./types.js";
 import type { Tone3000Architecture, Tone3000Model, Tone3000Tone } from "./tone3000ApiTypes.js";
 import {
   buildTone3000SearchUrl,
@@ -50,11 +50,44 @@ interface PreviewLoadingState {
 }
 
 const RESOURCE_FAVORITES_SETTING = "resources.favorites";
+const FOLDER_ROOTS_SETTING = "resources.folderBrowser.roots";
+const FOLDER_ACTIVE_ROOT_SETTING = "resources.folderBrowser.activeRootId";
 
 type ResourceType = "nam" | "ir";
+type ResourceBrowserTab = "library" | "folder" | "tone3000";
+
+interface FolderRoot {
+  id: string;
+  label: string;
+  path: string;
+}
+
+interface FolderListingDir {
+  name: string;
+  path: string;
+}
+
+interface FolderListingFile {
+  name: string;
+  path: string;
+  resourceType: ResourceType;
+  sizeBytes?: number;
+  alreadyInLibrary?: boolean;
+  libraryId?: string;
+  metadata?: Record<string, string>;
+}
+
+interface FolderListing {
+  path: string;
+  parent: string;
+  name: string;
+  dirs: FolderListingDir[];
+  files: FolderListingFile[];
+  truncated?: boolean;
+}
 
 interface PersistedResourceBrowserState {
-  activeTab: "library" | "tone3000";
+  activeTab: ResourceBrowserTab;
   librarySearch: string;
   libraryCategory: string;
   libraryFavoritesOnly?: boolean;
@@ -81,6 +114,10 @@ export class ResourceBrowserModal {
   private previewState: PreviewState | null = null;
   private originalResourceId: string = ""; // Track original for revert on cancel
   private libraryPreviewActive = false;
+  private folderPreviewActive = false;
+  private folderPreviewPath: string | null = null;
+  private pendingFolderSelectPath: string | null = null;
+  private pendingFolderFavoritePaths = new Set<string>();
   private expandedLibraryItemId: string | null = null;
   
   // DOM elements
@@ -94,7 +131,7 @@ export class ResourceBrowserModal {
   private tabsContainer: HTMLElement | null = null;
   private tabButtons: HTMLButtonElement[] = [];
   private tabPanels: HTMLElement[] = [];
-  private activeTab: "library" | "tone3000" = "library";
+  private activeTab: ResourceBrowserTab = "library";
   
   // Library tab elements
   private librarySearch: HTMLInputElement | null = null;
@@ -104,6 +141,22 @@ export class ResourceBrowserModal {
   private libraryBrowseBtn: HTMLButtonElement | null = null;
   private libraryList: HTMLElement | null = null;
   private selectedResourceId: string = "";
+
+  // Folder tab elements
+  private folderRootSelect: HTMLSelectElement | null = null;
+  private folderAddBtn: HTMLButtonElement | null = null;
+  private folderRemoveBtn: HTMLButtonElement | null = null;
+  private folderSearch: HTMLInputElement | null = null;
+  private folderUpBtn: HTMLButtonElement | null = null;
+  private folderPathLabel: HTMLElement | null = null;
+  private folderStatus: HTMLElement | null = null;
+  private folderList: HTMLElement | null = null;
+
+  // Folder tab state
+  private folderCurrentPath = "";
+  private folderListing: FolderListing | null = null;
+  private folderLoading = false;
+  private expandedFolderItemPath: string | null = null;
   
   // Tone3000 tab elements
   private tone3000Search: HTMLInputElement | null = null;
@@ -135,13 +188,48 @@ export class ResourceBrowserModal {
       return;
     }
 
+    // The folder tab can import resources of any type, so refresh it regardless
+    // of the node's current resource type.
+    if (this.folderList) {
+      this.renderFolderList();
+    }
+
+    const importedNorm = (detail?.filePath ?? "").replace(/\\/g, "/").toLowerCase();
+    const importedId = (detail?.id ?? "").trim();
+    if (importedId && importedNorm && this.pendingFolderFavoritePaths.has(importedNorm)) {
+      this.setResourceFavorite(importedId, true);
+      this.pendingFolderFavoritePaths.delete(importedNorm);
+    }
+
+    // Complete a pending folder-tab "Select" once its import lands.
+    if (this.pendingFolderSelectPath) {
+      const pendingNorm = this.pendingFolderSelectPath.replace(/\\/g, "/").toLowerCase();
+      if (importedId && importedNorm === pendingNorm) {
+        const displayName = this.folderFileDisplayName(this.pendingFolderSelectPath);
+        this.finalizeFolderSelection(importedId, displayName);
+        return;
+      }
+      // Fallback: if the imported path didn't normalize identically, resolve the id
+      // from the (now refreshed) library listing for the pending file.
+      const pendingFile = this.folderListing?.files.find(
+        (f) => f.path.replace(/\\/g, "/").toLowerCase() === pendingNorm,
+      );
+      if (pendingFile) {
+        const resolved = this.folderFileLibraryMatch(pendingFile);
+        if (resolved.inLibrary && resolved.id) {
+          const displayName = this.folderFileDisplayName(this.pendingFolderSelectPath);
+          this.finalizeFolderSelection(resolved.id, displayName);
+          return;
+        }
+      }
+    }
+
     const importedType = detail?.resourceType;
     if (!importedType || importedType !== this.options.resourceType) {
       return;
     }
 
     const resources = uiState.resourceLibrary[importedType] ?? [];
-    const importedId = (detail?.id ?? "").trim();
     const normalizedPath = (detail?.filePath ?? "").trim().replace(/\\/g, "/").toLowerCase();
     const matchedId = importedId
       || resources.find((resource) => {
@@ -168,8 +256,61 @@ export class ResourceBrowserModal {
       this.saveCurrentStateForResourceType();
     }
   };
-  
-  initialize(): void {
+
+  private handleResourceRemovedEvent = (event: Event): void => {
+    if (!this.options || !this.modal || this.modal.style.display !== "flex") {
+      return;
+    }
+    const detail = (event as CustomEvent<{ id?: string; resourceType?: string }>).detail;
+    const removedId = (detail?.id ?? "").trim();
+    if (removedId) {
+      this.setResourceFavorite(removedId, false);
+    }
+    if (this.folderList) {
+      this.renderFolderList();
+    }
+    this.renderLibraryList();
+  };
+
+  private handleFolderListingEvent = (event: Event): void => {
+    const listing = (event as CustomEvent<FolderListing>).detail;
+    if (!listing || typeof listing.path !== "string") {
+      return;
+    }
+    this.folderLoading = false;
+    this.folderListing = {
+      path: listing.path,
+      parent: listing.parent ?? "",
+      name: listing.name ?? listing.path,
+      dirs: Array.isArray(listing.dirs) ? listing.dirs : [],
+      files: Array.isArray(listing.files) ? listing.files : [],
+      truncated: Boolean(listing.truncated),
+    };
+    this.folderCurrentPath = listing.path;
+    this.renderFolderPath();
+    this.renderFolderList();
+  };
+
+  private handleFolderListingFailedEvent = (event: Event): void => {
+    const detail = (event as CustomEvent<{ path?: string; message?: string }>).detail;
+    this.folderLoading = false;
+    if (this.folderStatus) {
+      this.folderStatus.textContent = detail?.message ? `Error: ${detail.message}` : "Unable to read folder.";
+    }
+    if (this.folderList) {
+      this.folderList.innerHTML = "";
+    }
+  };
+
+  private handleFolderPickedEvent = (event: Event): void => {
+    const detail = (event as CustomEvent<{ success?: boolean; path?: string; name?: string }>).detail;
+    if (!detail?.success || !detail.path) {
+      return;
+    }
+    this.addFolderRoot(detail.path, detail.name ?? detail.path);
+  };
+
+  private initialize(): void {
     if (this.initialized) {
       return;
     }
@@ -198,6 +339,16 @@ export class ResourceBrowserModal {
     this.libraryFavoritesToggle = document.getElementById("resource-browser-library-favorites-toggle") as HTMLButtonElement | null;
     this.libraryBrowseBtn = document.getElementById("resource-browser-library-browse") as HTMLButtonElement | null;
     this.libraryList = document.getElementById("resource-browser-library-list");
+
+    // Folder tab elements
+    this.folderRootSelect = document.getElementById("resource-browser-folder-root") as HTMLSelectElement | null;
+    this.folderAddBtn = document.getElementById("resource-browser-folder-add") as HTMLButtonElement | null;
+    this.folderRemoveBtn = document.getElementById("resource-browser-folder-remove") as HTMLButtonElement | null;
+    this.folderSearch = document.getElementById("resource-browser-folder-search") as HTMLInputElement | null;
+    this.folderUpBtn = document.getElementById("resource-browser-folder-up") as HTMLButtonElement | null;
+    this.folderPathLabel = document.getElementById("resource-browser-folder-path");
+    this.folderStatus = document.getElementById("resource-browser-folder-status");
+    this.folderList = document.getElementById("resource-browser-folder-list");
     
     // Tone3000 tab elements
     this.tone3000Search = document.getElementById("resource-browser-tone3000-search") as HTMLInputElement | null;
@@ -226,7 +377,7 @@ export class ResourceBrowserModal {
     // Tab switching
     this.tabButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
-        const tab = btn.dataset.tab as "library" | "tone3000" | undefined;
+        const tab = btn.dataset.tab as ResourceBrowserTab | undefined;
         if (tab) {
           this.setActiveTab(tab);
         }
@@ -255,6 +406,14 @@ export class ResourceBrowserModal {
     
     // Library item click
     this.libraryList?.addEventListener("click", (event) => this.handleLibraryClick(event));
+
+    // Folder tab events
+    this.folderAddBtn?.addEventListener("click", () => this.requestAddFolder());
+    this.folderRemoveBtn?.addEventListener("click", () => this.removeActiveFolderRoot());
+    this.folderRootSelect?.addEventListener("change", () => this.onFolderRootChanged());
+    this.folderUpBtn?.addEventListener("click", () => this.navigateFolderUp());
+    this.folderSearch?.addEventListener("input", () => this.renderFolderList());
+    this.folderList?.addEventListener("click", (event) => this.handleFolderClick(event));
     
     // Tone3000 search
     this.tone3000Search?.addEventListener("keydown", (event) => {
@@ -289,6 +448,10 @@ export class ResourceBrowserModal {
 
     document.addEventListener(FEATURE_FLAGS_CHANGED_EVENT, () => this.handleFeatureFlagsChanged());
     document.addEventListener("resource-browser:resource-imported", this.handleResourceImportedEvent as EventListener);
+    document.addEventListener("resource-browser:resource-removed", this.handleResourceRemovedEvent as EventListener);
+    document.addEventListener("resource-browser:folder-listing", this.handleFolderListingEvent as EventListener);
+    document.addEventListener("resource-browser:folder-listing-failed", this.handleFolderListingFailedEvent as EventListener);
+    document.addEventListener("resource-browser:folder-picked", this.handleFolderPickedEvent as EventListener);
     this.syncAvailableTabs();
   }
 
@@ -429,8 +592,10 @@ export class ResourceBrowserModal {
     this.previewState = null;
     this.previewLoading = null;
     this.libraryPreviewActive = false;
-    
-    // Update title
+    this.folderPreviewActive = false;
+    this.folderPreviewPath = null;
+    this.pendingFolderSelectPath = null;
+    this.pendingFolderFavoritePaths.clear();
     if (this.title) {
       this.title.textContent = options.resourceType === "ir" 
         ? "Select IR Cabinet" 
@@ -478,8 +643,11 @@ export class ResourceBrowserModal {
       this.cancelPreview();
     }
     
-    // Revert library preview if we changed from original
-    if (this.libraryPreviewActive && this.options && this.selectedResourceId !== this.originalResourceId) {
+    // Revert library or folder preview if we changed the node and didn't commit
+    const needLibraryRevert = this.libraryPreviewActive
+      && this.selectedResourceId !== this.originalResourceId;
+    const needFolderRevert = this.folderPreviewActive;
+    if (this.options && (needLibraryRevert || needFolderRevert)) {
       // Revert to original resource using updateNodeResource
       postMessage({
         type: "updateNodeResource",
@@ -492,6 +660,8 @@ export class ResourceBrowserModal {
     }
     
     this.libraryPreviewActive = false;
+    this.folderPreviewActive = false;
+    this.folderPreviewPath = null;
     this.modal.style.display = "none";
     this.saveCurrentStateForResourceType();
     this.options = null;
@@ -521,7 +691,8 @@ export class ResourceBrowserModal {
     const tone3000TabButton = this.tabButtons.find((button) => button.dataset.tab === "tone3000") ?? null;
     const tone3000TabPanel = this.tabPanels.find((panel) => panel.dataset.tabPanel === "tone3000") ?? null;
 
-    this.tabsContainer?.toggleAttribute("hidden", !tone3000Enabled);
+    // The tab bar always offers Library and Folder, so keep it visible.
+    this.tabsContainer?.toggleAttribute("hidden", false);
     tone3000TabButton?.toggleAttribute("hidden", !tone3000Enabled);
     tone3000TabPanel?.toggleAttribute("hidden", !tone3000Enabled);
 
@@ -540,7 +711,7 @@ export class ResourceBrowserModal {
     });
   }
   
-  private setActiveTab(tab: "library" | "tone3000"): void {
+  private setActiveTab(tab: ResourceBrowserTab): void {
     const resolvedTab = tab === "tone3000" && !isFeatureEnabled(Features.Tone3000) ? "library" : tab;
     this.activeTab = resolvedTab;
     
@@ -556,6 +727,10 @@ export class ResourceBrowserModal {
     // Run initial Tone3000 search if switching to that tab
     if (resolvedTab === "tone3000" && !this.tone3000Tones.length) {
       void this.runTone3000Search();
+    }
+
+    if (resolvedTab === "folder") {
+      this.initFolderTab();
     }
 
     this.updateSelectButtonState();
@@ -698,21 +873,26 @@ export class ResourceBrowserModal {
     return raw.includes(resourceId);
   }
 
-  private toggleResourceFavorite(resourceId: string): void {
+  private setResourceFavorite(resourceId: string, isFavorite: boolean): void {
     if (!uiState.appSettings) {
       uiState.appSettings = {};
     }
     const raw = uiState.appSettings[RESOURCE_FAVORITES_SETTING];
     let favorites: string[] = Array.isArray(raw) ? (raw.filter((val): val is string => typeof val === "string")) : [];
 
-    if (favorites.includes(resourceId)) {
-      favorites = favorites.filter((id) => id !== resourceId);
-    } else {
+    const alreadyFavorite = favorites.includes(resourceId);
+    if (isFavorite && !alreadyFavorite) {
       favorites.push(resourceId);
+    } else if (!isFavorite && alreadyFavorite) {
+      favorites = favorites.filter((id) => id !== resourceId);
     }
 
     uiState.appSettings[RESOURCE_FAVORITES_SETTING] = favorites;
     setAppSetting(RESOURCE_FAVORITES_SETTING, favorites);
+  }
+
+  private toggleResourceFavorite(resourceId: string): void {
+    this.setResourceFavorite(resourceId, !this.isResourceFavorite(resourceId));
 
     // Re-render library list to show changes
     this.renderLibraryList();
@@ -982,6 +1162,8 @@ export class ResourceBrowserModal {
     }
     
     this.libraryPreviewActive = true;
+    this.folderPreviewActive = false;
+    this.folderPreviewPath = null;
     
     // Send message to plugin to apply this resource to the node
     // Use updateNodeResource which is the proper message for changing node resources
@@ -1687,7 +1869,488 @@ export class ResourceBrowserModal {
     this.selectBtn.disabled = !hasSelection;
     this.selectBtn.textContent = hasSelection ? "Select" : "Select from Library";
   }
-  
+
+  // ── Folder browser tab ──────────────────────────────────────────
+
+  private getFolderRoots(): FolderRoot[] {
+    const raw = uiState.appSettings?.[FOLDER_ROOTS_SETTING];
+    if (!Array.isArray(raw)) return [];
+    const roots: FolderRoot[] = [];
+    for (const item of raw as unknown[]) {
+      if (!item || typeof item !== "object") continue;
+      const entry = item as { id?: unknown; label?: unknown; path?: unknown };
+      if (typeof entry.id !== "string" || typeof entry.path !== "string") continue;
+      const label = typeof entry.label === "string" ? entry.label : entry.path;
+      roots.push({ id: entry.id, label, path: entry.path });
+    }
+    return roots;
+  }
+
+  private setFolderRoots(roots: FolderRoot[]): void {
+    if (!uiState.appSettings) uiState.appSettings = {};
+    const serialized = roots as unknown as AppSettingValue;
+    uiState.appSettings[FOLDER_ROOTS_SETTING] = serialized;
+    setAppSetting(FOLDER_ROOTS_SETTING, serialized);
+  }
+
+  private getActiveRootId(): string {
+    const raw = uiState.appSettings?.[FOLDER_ACTIVE_ROOT_SETTING];
+    return typeof raw === "string" ? raw : "";
+  }
+
+  private setActiveRootId(id: string): void {
+    if (!uiState.appSettings) uiState.appSettings = {};
+    uiState.appSettings[FOLDER_ACTIVE_ROOT_SETTING] = id;
+    setAppSetting(FOLDER_ACTIVE_ROOT_SETTING, id);
+  }
+
+  private getActiveRoot(): FolderRoot | null {
+    const roots = this.getFolderRoots();
+    if (!roots.length) return null;
+    const activeId = this.getActiveRootId();
+    return roots.find((r) => r.id === activeId) ?? roots[0];
+  }
+
+  private initFolderTab(): void {
+    this.renderFolderRootOptions();
+    const activeRoot = this.getActiveRoot();
+    if (!activeRoot) {
+      this.folderListing = null;
+      this.folderCurrentPath = "";
+      this.renderFolderPath();
+      this.renderFolderList();
+      return;
+    }
+    const path = this.folderCurrentPath && this.folderCurrentPath.length > 0
+      ? this.folderCurrentPath
+      : activeRoot.path;
+    this.requestFolderListing(path);
+  }
+
+  private renderFolderRootOptions(): void {
+    if (!this.folderRootSelect) return;
+    const roots = this.getFolderRoots();
+    const activeRoot = this.getActiveRoot();
+    if (!roots.length) {
+      this.folderRootSelect.innerHTML = `<option value="">No folder selected</option>`;
+      this.folderRootSelect.value = "";
+    } else {
+      this.folderRootSelect.innerHTML = roots
+        .map((r) => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.label || r.path)}</option>`)
+        .join("");
+      this.folderRootSelect.value = activeRoot?.id ?? roots[0].id;
+    }
+    if (this.folderRemoveBtn) {
+      this.folderRemoveBtn.disabled = roots.length === 0;
+    }
+  }
+
+  private requestAddFolder(): void {
+    postMessage({ type: "browseResourceFolder" });
+  }
+
+  private addFolderRoot(path: string, name: string): void {
+    const normalized = path.replace(/\\/g, "/").toLowerCase();
+    const roots = this.getFolderRoots();
+    let existing = roots.find((r) => r.path.replace(/\\/g, "/").toLowerCase() === normalized);
+    if (!existing) {
+      existing = {
+        id: `folder-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+        label: name || path,
+        path,
+      };
+      roots.push(existing);
+      this.setFolderRoots(roots);
+    }
+    this.setActiveRootId(existing.id);
+    this.folderCurrentPath = existing.path;
+    this.renderFolderRootOptions();
+    this.requestFolderListing(existing.path);
+  }
+
+  private removeActiveFolderRoot(): void {
+    const activeRoot = this.getActiveRoot();
+    if (!activeRoot) return;
+    const roots = this.getFolderRoots().filter((r) => r.id !== activeRoot.id);
+    this.setFolderRoots(roots);
+    const next = roots[0] ?? null;
+    this.setActiveRootId(next?.id ?? "");
+    this.folderCurrentPath = next?.path ?? "";
+    this.folderListing = null;
+    this.renderFolderRootOptions();
+    if (next) {
+      this.requestFolderListing(next.path);
+    } else {
+      this.renderFolderPath();
+      this.renderFolderList();
+    }
+  }
+
+  private onFolderRootChanged(): void {
+    const id = this.folderRootSelect?.value ?? "";
+    if (!id) return;
+    const root = this.getFolderRoots().find((r) => r.id === id);
+    if (!root) return;
+    this.setActiveRootId(root.id);
+    this.folderCurrentPath = root.path;
+    this.requestFolderListing(root.path);
+  }
+
+  private navigateFolderUp(): void {
+    const parent = this.folderListing?.parent ?? "";
+    if (!parent) return;
+    const activeRoot = this.getActiveRoot();
+    if (activeRoot) {
+      const rootNorm = activeRoot.path.replace(/\\/g, "/").toLowerCase();
+      const currentNorm = (this.folderListing?.path ?? "").replace(/\\/g, "/").toLowerCase();
+      if (currentNorm === rootNorm) return;
+    }
+    this.requestFolderListing(parent);
+  }
+
+  private navigateFolderTo(path: string): void {
+    this.requestFolderListing(path);
+  }
+
+  private requestFolderListing(path: string): void {
+    if (!path) return;
+    this.folderLoading = true;
+    this.folderCurrentPath = path;
+    if (this.folderStatus) this.folderStatus.textContent = "Loading…";
+    if (this.folderList) {
+      this.folderList.innerHTML = `<div class="resource-browser-empty">Loading…</div>`;
+    }
+    postMessage({ type: "listResourceFolder", path });
+  }
+
+  private renderFolderPath(): void {
+    if (this.folderPathLabel) {
+      this.folderPathLabel.textContent = this.folderListing?.path ?? this.folderCurrentPath ?? "";
+    }
+    if (this.folderUpBtn) {
+      const activeRoot = this.getActiveRoot();
+      const atRoot = activeRoot
+        ? (this.folderListing?.path ?? "").replace(/\\/g, "/").toLowerCase() === activeRoot.path.replace(/\\/g, "/").toLowerCase()
+        : true;
+      this.folderUpBtn.disabled = !this.folderListing?.parent || atRoot;
+    }
+  }
+
+  private folderFileLibraryMatch(file: FolderListingFile): { inLibrary: boolean; id: string } {
+    const resources = uiState.resourceLibrary[file.resourceType] ?? [];
+    const target = file.path.replace(/\\/g, "/").toLowerCase();
+    const match = resources.find((res) => (res.filePath ?? "").replace(/\\/g, "/").toLowerCase() === target);
+    if (match) return { inLibrary: true, id: match.id };
+    if (file.alreadyInLibrary) return { inLibrary: true, id: file.libraryId ?? "" };
+    return { inLibrary: false, id: "" };
+  }
+
+  private renderFolderList(): void {
+    if (!this.folderList) return;
+    if (this.folderLoading) return;
+
+    const activeRoot = this.getActiveRoot();
+    if (!activeRoot) {
+      this.folderList.innerHTML = `<div class="resource-browser-empty">No folder selected. Click \u201CAdd Folder\u201D to browse a folder of NAM/IR/WAV files.</div>`;
+      if (this.folderStatus) this.folderStatus.textContent = "";
+      return;
+    }
+
+    const listing = this.folderListing;
+    if (!listing) {
+      this.folderList.innerHTML = `<div class="resource-browser-empty">Select a folder to browse.</div>`;
+      return;
+    }
+
+    const query = (this.folderSearch?.value ?? "").trim().toLowerCase();
+    const dirs = query
+      ? listing.dirs.filter((d) => d.name.toLowerCase().includes(query))
+      : listing.dirs;
+    const files = query
+      ? listing.files.filter((f) => f.name.toLowerCase().includes(query))
+      : listing.files;
+
+    if (this.folderStatus) {
+      const parts: string[] = [
+        `${listing.dirs.length} folder${listing.dirs.length === 1 ? "" : "s"}, ${listing.files.length} file${listing.files.length === 1 ? "" : "s"}`,
+      ];
+      if (listing.truncated) parts.push("(truncated)");
+      this.folderStatus.textContent = parts.join(" ");
+    }
+
+    const dirHtml = dirs.map((dir) => `
+      <div class="resource-browser-folder-entry" data-kind="dir" data-path="${escapeHtml(dir.path)}">
+        <div class="results-item resource-browser-item resource-browser-folder-dir-row">
+          <div class="results-item-main resource-browser-item-info">
+            <div class="results-item-title resource-browser-item-title">\uD83D\uDCC1 ${escapeHtml(dir.name)}</div>
+          </div>
+          <div class="resource-browser-item-actions">
+            <button class="resource-browser-folder-open" type="button" data-path="${escapeHtml(dir.path)}">Open</button>
+          </div>
+        </div>
+      </div>
+    `).join("");
+
+    const fileHtml = files.map((file) => this.renderFolderFileRow(file)).join("");
+
+    if (!dirHtml && !fileHtml) {
+      this.folderList.innerHTML = `<div class="resource-browser-empty">No matching items in this folder.</div>`;
+      return;
+    }
+    this.folderList.innerHTML = dirHtml + fileHtml;
+  }
+
+  private renderFolderFileRow(file: FolderListingFile): string {
+    const metadata = file.metadata ?? {};
+    const typeLabel = file.resourceType === "ir" ? "IR / Cab" : "NAM";
+    const match = this.folderFileLibraryMatch(file);
+    const badges: string[] = [`<span>${escapeHtml(typeLabel)}</span>`];
+
+    if (file.resourceType === "nam") {
+      const architecture = this.normalizeArchitectureBadge(metadata.architecture || "");
+      if (architecture) badges.push(`<span class="resource-browser-architecture-badge" title="Model architecture">${escapeHtml(architecture)}</span>`);
+      const gear = [metadata.gearMake, metadata.gearModel].filter(Boolean).join(" ");
+      if (gear) badges.push(`<span class="resource-browser-gear-desc" title="${escapeHtml(gear)}">${escapeHtml(gear)}</span>`);
+      const toneType = metadata.toneType ?? "";
+      if (toneType) badges.push(`<span class="resource-browser-tone-type">${escapeHtml(toneType.replace(/_/g, " "))}</span>`);
+      if (metadata.sampleRate) badges.push(`<span>${escapeHtml(metadata.sampleRate)} Hz</span>`);
+    } else {
+      if (metadata.sampleRate) badges.push(`<span>${escapeHtml(metadata.sampleRate)} Hz</span>`);
+      if (metadata.channels) badges.push(`<span>${escapeHtml(metadata.channels)} ch</span>`);
+      if (metadata.durationSec) badges.push(`<span>${escapeHtml(metadata.durationSec)} s</span>`);
+    }
+
+    const isFav = Boolean(match.id) && this.isResourceFavorite(match.id);
+    const favBtn = `<button class="resource-browser-item-fav-toggle resource-browser-folder-fav${isFav ? " is-active" : ""}" type="button" data-path="${escapeHtml(file.path)}" data-resource-type="${escapeHtml(file.resourceType)}" title="${isFav ? "Remove from favourites" : "Add to favourites"}" aria-pressed="${isFav ? "true" : "false"}" aria-label="Toggle favourite">${isFav ? "\u2605" : "\u2606"}</button>`;
+
+    const typeMatches = this.options?.resourceType === file.resourceType;
+    const isPreviewing = this.folderPreviewPath === file.path;
+    const previewBtn = typeMatches
+      ? `<button class="resource-browser-folder-preview${isPreviewing ? " is-active" : ""}" type="button" data-path="${escapeHtml(file.path)}" title="${isPreviewing ? "Stop preview" : "Preview in effect"}" aria-pressed="${isPreviewing ? "true" : "false"}">${isPreviewing ? "\u25A0 Stop" : "\u25B6 Preview"}</button>`
+      : "";
+
+    const isExpanded = this.expandedFolderItemPath === file.path;
+    const detailsBtn = `<button class="resource-browser-folder-details-btn" type="button" data-path="${escapeHtml(file.path)}" title="${isExpanded ? "Hide details" : "Show details"}" aria-expanded="${isExpanded ? "true" : "false"}" aria-label="File details">\u2139</button>`;
+
+    const selectBtn = typeMatches
+      ? `<button class="resource-browser-folder-select" type="button" data-path="${escapeHtml(file.path)}" data-resource-type="${escapeHtml(file.resourceType)}" title="Select and close">Select</button>`
+      : "";
+
+    return `
+      <div class="resource-browser-folder-entry${isExpanded ? " is-details-expanded" : ""}${isPreviewing ? " is-previewing" : ""}" data-kind="file" data-path="${escapeHtml(file.path)}">
+        <div class="results-item resource-browser-item resource-browser-folder-file-row">
+          <div class="results-item-main resource-browser-item-info">
+            <div class="results-item-title resource-browser-item-title">${escapeHtml(file.name)}</div>
+            <div class="results-item-meta resource-browser-item-meta">${badges.join("")}</div>
+          </div>
+          <div class="resource-browser-item-actions">
+            ${favBtn}
+            ${previewBtn}
+            ${detailsBtn}
+            ${selectBtn}
+          </div>
+        </div>
+        ${isExpanded ? this.renderFolderFileDetails(file) : ""}
+      </div>
+    `;
+  }
+
+  private renderFolderFileDetails(file: FolderListingFile): string {
+    const metadata = file.metadata ?? {};
+    const rows: string[] = [];
+    rows.push(`<tr><td class="resource-browser-details-label">File Path</td><td class="resource-browser-details-value resource-browser-details-mono">${escapeHtml(file.path)}</td></tr>`);
+    if (typeof file.sizeBytes === "number" && file.sizeBytes > 0) {
+      rows.push(`<tr><td class="resource-browser-details-label">Size</td><td class="resource-browser-details-value">${escapeHtml(formatBytes(file.sizeBytes))}</td></tr>`);
+    }
+    for (const [key, value] of Object.entries(metadata)) {
+      if (!value) continue;
+      const label = key.replace(/_/g, " ").replace(/([A-Z])/g, " $1").trim();
+      rows.push(`<tr><td class="resource-browser-details-label">${escapeHtml(label)}</td><td class="resource-browser-details-value">${escapeHtml(value)}</td></tr>`);
+    }
+    return `
+      <div class="resource-browser-item-details-panel">
+        <table class="resource-browser-details-table"><tbody>${rows.join("")}</tbody></table>
+      </div>
+    `;
+  }
+
+  private handleFolderClick(event: Event): void {
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+
+    const favBtn = target.closest(".resource-browser-folder-fav") as HTMLButtonElement | null;
+    if (favBtn) {
+      const path = favBtn.dataset.path ?? "";
+      const resourceType = (favBtn.dataset.resourceType ?? "") as ResourceType;
+      if (path && (resourceType === "nam" || resourceType === "ir")) {
+        this.toggleFolderFavourite(path, resourceType);
+      }
+      return;
+    }
+
+    const previewBtn = target.closest(".resource-browser-folder-preview") as HTMLButtonElement | null;
+    if (previewBtn) {
+      const path = previewBtn.dataset.path ?? "";
+      if (path) this.previewFolderFile(path);
+      return;
+    }
+
+    const selectBtn = target.closest(".resource-browser-folder-select") as HTMLButtonElement | null;
+    if (selectBtn) {
+      const path = selectBtn.dataset.path ?? "";
+      if (path) this.confirmFolderSelection(path);
+      return;
+    }
+
+    const detailsBtn = target.closest(".resource-browser-folder-details-btn") as HTMLButtonElement | null;
+    if (detailsBtn) {
+      const path = detailsBtn.dataset.path ?? "";
+      if (path) {
+        this.expandedFolderItemPath = this.expandedFolderItemPath === path ? null : path;
+        this.renderFolderList();
+      }
+      return;
+    }
+
+    const dirRow = target.closest('[data-kind="dir"]') as HTMLElement | null;
+    if (dirRow) {
+      const path = dirRow.dataset.path ?? "";
+      if (path) this.navigateFolderTo(path);
+    }
+  }
+
+  private buildFolderImportPayload(path: string, resourceType: ResourceType): Record<string, unknown> {
+    const listing = this.folderListing;
+    const file = listing?.files.find((f) => f.path === path);
+    const fileName = file?.name ?? path.split(/[\\/]/).pop() ?? path;
+    const category = listing?.name || "Folder";
+    return {
+      type: "saveLocalLibraryResource",
+      resourceType,
+      name: this.folderFileDisplayName(path),
+      category,
+      description: "",
+      filePath: path,
+      metadata: {
+        sourceFolder: this.getActiveRoot()?.path ?? listing?.path ?? "",
+        sourceFileName: fileName,
+        origin: "folder-browser",
+      },
+    };
+  }
+
+  private toggleFolderFavourite(path: string, resourceType: ResourceType): void {
+    const file = this.folderListing?.files.find((f) => f.path === path);
+    const match = file ? this.folderFileLibraryMatch(file) : { inLibrary: false, id: "" };
+    const currentlyFavorite = Boolean(match.id) && this.isResourceFavorite(match.id);
+
+    if (match.inLibrary && match.id) {
+      this.setResourceFavorite(match.id, !currentlyFavorite);
+      showNotification(currentlyFavorite ? "Removed from favourites" : "Added to favourites", this.folderFileDisplayName(path));
+    } else {
+      const pendingNorm = path.replace(/\\/g, "/").toLowerCase();
+      this.pendingFolderFavoritePaths.add(pendingNorm);
+      postMessage(this.buildFolderImportPayload(path, resourceType));
+      showNotification("Adding to favourites", this.folderFileDisplayName(path));
+      if (file) {
+        file.alreadyInLibrary = true;
+      }
+    }
+    this.renderLibraryList();
+    this.renderFolderList();
+  }
+
+  private folderFileDisplayName(path: string): string {
+    const file = this.folderListing?.files.find((f) => f.path === path);
+    const fileName = file?.name ?? path.split(/[\\/]/).pop() ?? path;
+    const baseName = fileName.replace(/\.[^.]+$/, "");
+    return ((file?.metadata?.namName || baseName) ?? baseName).trim() || baseName;
+  }
+
+  private previewFolderFile(path: string): void {
+    if (!this.options) return;
+
+    // Toggle off if already previewing this file.
+    if (this.folderPreviewPath === path) {
+      this.stopFolderPreview();
+      return;
+    }
+
+    // We now own the node output; clear any library preview tracking.
+    this.libraryPreviewActive = false;
+    this.folderPreviewActive = true;
+    this.folderPreviewPath = path;
+
+    postMessage({
+      type: "updateNodeResource",
+      nodeId: this.options.nodeId,
+      resourceType: this.options.resourceType,
+      resourceId: "",
+      filePath: path,
+      resourceIndex: this.options.resourceIndex ?? 0,
+    });
+
+    showNotification("Previewing", `${this.folderFileDisplayName(path)} - click Select to confirm`);
+    this.renderFolderList();
+  }
+
+  private stopFolderPreview(): void {
+    if (!this.folderPreviewActive || !this.options) {
+      this.folderPreviewActive = false;
+      this.folderPreviewPath = null;
+      return;
+    }
+
+    // Restore the resource that was applied before previewing.
+    postMessage({
+      type: "updateNodeResource",
+      nodeId: this.options.nodeId,
+      resourceType: this.options.resourceType,
+      resourceId: this.originalResourceId,
+      filePath: "",
+      resourceIndex: this.options.resourceIndex ?? 0,
+    });
+
+    this.folderPreviewActive = false;
+    this.folderPreviewPath = null;
+    this.renderFolderList();
+  }
+
+  private confirmFolderSelection(path: string): void {
+    if (!this.options) return;
+
+    const file = this.folderListing?.files.find((f) => f.path === path);
+    const match = file ? this.folderFileLibraryMatch(file) : { inLibrary: false, id: "" };
+
+    // Committing: don't revert the node on close.
+    this.folderPreviewActive = false;
+    this.folderPreviewPath = null;
+    this.libraryPreviewActive = false;
+
+    // If the file is already imported, select it by id as normal.
+    if (match.inLibrary && match.id) {
+      this.finalizeFolderSelection(match.id, this.folderFileDisplayName(path));
+      return;
+    }
+
+    // Otherwise import the file into the library (referencing it in place, no
+    // copy into app data), then select it once the import completes.
+    this.pendingFolderSelectPath = path;
+    postMessage(this.buildFolderImportPayload(path, this.options.resourceType));
+    showNotification("Importing", `${this.folderFileDisplayName(path)} - selecting...`);
+  }
+
+  private finalizeFolderSelection(resourceId: string, displayName: string): void {
+    if (!this.options) return;
+    this.pendingFolderSelectPath = null;
+    this.folderPreviewActive = false;
+    this.folderPreviewPath = null;
+    this.libraryPreviewActive = false;
+    this.options.onSelect(resourceId);
+    showNotification("Selected", displayName);
+    this.close();
+  }
+
   private confirmSelection(): void {
     if (!this.options || !this.selectedResourceId) {
       return;
@@ -1721,6 +2384,18 @@ export const resourceBrowserModal = new ResourceBrowserModal();
 function sanitizeFilename(raw: string): string {
   const trimmed = raw.trim() || "resource";
   return trimmed.replace(/[^a-z0-9-_\.]+/gi, "-");
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
 // Type definition for JSZip entries

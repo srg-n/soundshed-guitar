@@ -16,7 +16,7 @@ import { applyEnvironmentState, applyMetronomeState } from "./metronome.js";
 import { applyAutomationState, handleMidiLogEntry, handleMidiLearnCapture } from "./automationPanel.js";
 import { applyToneSharingAppSettings, registerInstalledToneSharingPackFromImport, handleToneSharingDeepLink } from "./toneSharingPanel.js";
 import { applyJamAppSettings } from "./jam.js";
-import type { GlobalSignalChainConfig, Preset, PresetFolder, ResourceRef, Setlist, UiSettings, CompositePreset } from "./types.js";
+import type { CompositePreset, GlobalSignalChainConfig, LibraryResource, Preset, PresetFolder, ResourceRef, Setlist, UiSettings } from "./types.js";
 import { EffectGuids } from "./effectGuids.js";
 import { migratePresetNodeTypes, setNodeParam } from "./presetV2.js";
 import { handleResourceDataMessage } from "./archiveUtils.js";
@@ -68,6 +68,65 @@ function normalizePresetResources(preset?: Preset | null): void {
 }
 
 let ignoreNextStatePresetId: string | null = null;
+
+function normalizeResourcePath(path: string): string {
+  return path.trim().replace(/\\/g, "/").toLowerCase();
+}
+
+function upsertImportedResourceInUiState(info: { id?: string; name?: string; resourceType?: string; filePath?: string }): void {
+  const resourceType = (info.resourceType ?? "").trim();
+  const resourceId = (info.id ?? "").trim();
+  if (!resourceType || !resourceId) return;
+
+  const currentList = uiState.resourceLibrary[resourceType] ?? [];
+  const importedPath = normalizeResourcePath(info.filePath ?? "");
+  const existingIndex = currentList.findIndex((resource) => {
+    if (resource.id === resourceId) return true;
+    return importedPath.length > 0 && normalizeResourcePath(resource.filePath ?? "") === importedPath;
+  });
+
+  const existing = existingIndex >= 0 ? currentList[existingIndex] : null;
+  const name = (info.name ?? "").trim() || existing?.name || resourceId;
+  const filePath = (info.filePath ?? "").trim() || existing?.filePath || "";
+
+  const nextResource: LibraryResource = {
+    id: resourceId,
+    name,
+    category: existing?.category ?? "Uncategorized",
+    description: existing?.description ?? "",
+    filePath,
+    hash: existing?.hash,
+    metadata: existing?.metadata,
+    fileMissing: existing?.fileMissing,
+  };
+
+  const nextList = [...currentList];
+  if (existingIndex >= 0) {
+    nextList[existingIndex] = nextResource;
+  } else {
+    nextList.push(nextResource);
+  }
+
+  uiState.resourceLibrary = {
+    ...uiState.resourceLibrary,
+    [resourceType]: nextList,
+  };
+}
+
+function removeResourceFromUiState(info: { id?: string; resourceType?: string }): void {
+  const resourceType = (info.resourceType ?? "").trim();
+  const resourceId = (info.id ?? "").trim();
+  if (!resourceType || !resourceId) return;
+
+  const currentList = uiState.resourceLibrary[resourceType] ?? [];
+  const nextList = currentList.filter((resource) => resource.id !== resourceId);
+  if (nextList.length === currentList.length) return;
+
+  uiState.resourceLibrary = {
+    ...uiState.resourceLibrary,
+    [resourceType]: nextList,
+  };
+}
 let ignoreNextStatePresetExpiresAtMs = 0;
 
 function markIgnoreNextStatePreset(id: string): void {
@@ -920,6 +979,7 @@ export function handleIncomingMessage(message: string): void {
     }
     case "resourceImported": {
       const info = payload as { id?: string; name?: string; resourceType?: string; filePath?: string };
+      upsertImportedResourceInUiState(info);
       appendLog(`resource imported ← ${info.name ?? "unknown"}`);
       showNotification("Resource imported", info.name ?? info.filePath ?? "");
       document.dispatchEvent(new CustomEvent("resource-browser:resource-imported", {
@@ -936,6 +996,32 @@ export function handleIncomingMessage(message: string): void {
       const info = payload as { message?: string; detail?: string };
       appendLog(`resource import failed ← ${info.message ?? "unknown"}`);
       showNotification(info.message ?? "Import failed", info.detail ?? "");
+      break;
+    }
+    case "resourceRemoved": {
+      const info = payload as { id?: string; resourceType?: string };
+      removeResourceFromUiState(info);
+      appendLog(`resource removed ← ${info.id ?? "unknown"}`);
+      document.dispatchEvent(new CustomEvent("resource-browser:resource-removed", {
+        detail: {
+          id: info.id ?? "",
+          resourceType: info.resourceType ?? "",
+        },
+      }));
+      break;
+    }
+    case "resourceFolderPicked": {
+      document.dispatchEvent(new CustomEvent("resource-browser:folder-picked", { detail: payload }));
+      break;
+    }
+    case "resourceFolderListing": {
+      document.dispatchEvent(new CustomEvent("resource-browser:folder-listing", { detail: payload }));
+      break;
+    }
+    case "resourceFolderListingFailed": {
+      const info = payload as { path?: string; message?: string };
+      appendLog(`folder listing failed ← ${info.message ?? "unknown"}`);
+      document.dispatchEvent(new CustomEvent("resource-browser:folder-listing-failed", { detail: payload }));
       break;
     }
     case "hostedPluginResourceLoadFailed": {

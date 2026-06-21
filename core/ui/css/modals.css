@@ -1269,6 +1269,79 @@
   border-color: var(--color-preset-favorite, #d8852f);
 }
 
+/* Folder browser tab action buttons */
+.resource-browser-folder-preview,
+.resource-browser-folder-select,
+.resource-browser-folder-fav,
+.resource-browser-folder-open {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-browser);
+  background: var(--bg-browser-input);
+  color: var(--modal-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.resource-browser-folder-preview:hover,
+.resource-browser-folder-select:hover,
+.resource-browser-folder-fav:hover,
+.resource-browser-folder-open:hover {
+  background: var(--bg-browser-hover);
+  color: var(--modal-text);
+}
+
+.resource-browser-folder-select {
+  border-color: var(--color-primary);
+  color: var(--modal-text);
+}
+
+.resource-browser-folder-select:hover {
+  background: var(--color-primary);
+  color: white;
+}
+
+.resource-browser-folder-preview.is-active {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.resource-browser-folder-fav:hover {
+  color: var(--color-preset-favorite, #d8852f);
+}
+
+.resource-browser-folder-details-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border-browser);
+  background: var(--bg-browser-input);
+  color: var(--modal-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.resource-browser-folder-details-btn:hover,
+.resource-browser-folder-entry.is-details-expanded .resource-browser-folder-details-btn {
+  background: var(--bg-browser-hover);
+  color: var(--modal-text);
+}
+
+.resource-browser-folder-entry.is-previewing .resource-browser-folder-file-row {
+  border-color: var(--color-primary);
+}
+
 /* Expandable details panel */
 .resource-browser-item-details-panel {
   border: 1px solid var(--border-browser);

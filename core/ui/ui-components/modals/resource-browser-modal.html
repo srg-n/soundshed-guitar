@@ -8,6 +8,7 @@
           <!-- Tab buttons -->
           <div class="resource-browser-tabs">
             <button class="resource-browser-tab-btn active" data-tab="library" type="button">Resource Library</button>
+            <button class="resource-browser-tab-btn" data-tab="folder" type="button">Folder</button>
             <button class="resource-browser-tab-btn" data-tab="tone3000" type="button">Tone 3000</button>
           </div>
           
@@ -22,6 +23,24 @@
               <button class="btn btn-secondary" id="resource-browser-library-browse" type="button">Local File..</button>
             </div>
             <div id="resource-browser-library-list" class="results results--compact resource-browser-list"></div>
+          </div>
+
+          <!-- Folder Tab Panel -->
+          <div class="resource-browser-tab-panel" data-tab-panel="folder">
+            <div class="resource-browser-filters resource-browser-folder-toolbar">
+              <select id="resource-browser-folder-root" title="Saved folders">
+                <option value="">No folder selected</option>
+              </select>
+              <button class="btn btn-secondary" id="resource-browser-folder-add" type="button" title="Add a folder">+ Add Folder</button>
+              <button class="btn btn-secondary" id="resource-browser-folder-remove" type="button" title="Remove the selected folder">Remove</button>
+              <input type="text" id="resource-browser-folder-search" placeholder="Filter files..." />
+            </div>
+            <div class="resource-browser-folder-breadcrumb">
+              <button class="btn btn-secondary" id="resource-browser-folder-up" type="button" title="Up one level">↑ Up</button>
+              <span id="resource-browser-folder-path" class="resource-browser-folder-path"></span>
+            </div>
+            <div id="resource-browser-folder-status" class="resource-browser-status"></div>
+            <div id="resource-browser-folder-list" class="results results--compact resource-browser-list resource-browser-folder-list"></div>
           </div>
           
           <!-- Tone3000 Tab Panel -->
