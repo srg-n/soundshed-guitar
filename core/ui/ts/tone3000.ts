@@ -337,7 +337,7 @@ export async function saveTone3000ApiKey(apiKey: string): Promise<boolean> {
     return true;
   }
 
-  await startSession(normalized);
+  await startSession(normalized, { force: true });
   return Boolean(uiState.tone3000Session?.accessToken);
 }
 

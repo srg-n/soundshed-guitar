@@ -2,7 +2,7 @@ import { uiState, clonePreset } from "./state.js";
 import { setAppSetting, postMessage } from "./bridge.js";
 import { appendLog } from "./logging.js";
 import { showNotification } from "./notifications.js";
-import { handleAppSettingUpdate } from "./tone3000.js";
+import { handleAppSettingUpdate, saveTone3000ApiKey } from "./tone3000.js";
 import { getTone3000ApiClientConfig } from "./tone3000Api.js";
 import { updateSignalDiagnosticsView, updateDSPPerformancePlot } from "./views.js";
 import { initTone3000Browser } from "./tone3000Browser.js";
@@ -1139,11 +1139,47 @@ async function saveApiKey(): Promise<void> {
     return;
   }
 
-  uiState.appSettings[API_KEY_SETTING] = apiKey;
-  setAppSetting(API_KEY_SETTING, apiKey);
-  appendLog("tone3000 api key saved");
+  // Remember the currently stored key so we can roll back if the new key fails auth.
+  const previousStored = getSettingValue(API_KEY_SETTING);
+  const rollbackKey = typeof previousStored === "string" && previousStored.trim()
+    ? previousStored.trim()
+    : null;
 
-  await handleAppSettingUpdate(API_KEY_SETTING, apiKey);
+  const saveBtn = saveButton as HTMLButtonElement | null;
+  saveBtn?.setAttribute("disabled", "true");
+  showNotification("Verifying Tone3000 API key\u2026");
+
+  try {
+    // saveTone3000ApiKey persists the key and verifies it by starting an authenticated
+    // Tone3000 session; it returns true only when authentication succeeds (or proxy mode).
+    const authenticated = await saveTone3000ApiKey(apiKey);
+    if (authenticated) {
+      appendLog("tone3000 api key saved and verified");
+      if (apiKeyInput) {
+        apiKeyInput.value = "";
+        apiKeyInput.placeholder = "API key stored";
+      }
+      showNotification("Tone3000 API key saved");
+      return;
+    }
+
+    // Authentication failed: roll back to the previously stored key so an invalid key
+    // is not retained or used for subsequent requests.
+    uiState.appSettings[API_KEY_SETTING] = rollbackKey;
+    setAppSetting(API_KEY_SETTING, rollbackKey);
+    await handleAppSettingUpdate(API_KEY_SETTING, rollbackKey);
+    if (apiKeyInput) {
+      apiKeyInput.placeholder = rollbackKey ? "API key stored" : "Enter your Tone3000 API key";
+    }
+    appendLog("tone3000 api key rejected (authentication failed)");
+    showNotification("Tone3000 API key is invalid");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    appendLog(`tone3000 api key verification error: ${message}`);
+    showNotification("Tone3000 API key is invalid");
+  } finally {
+    saveBtn?.removeAttribute("disabled");
+  }
 }
 
 async function clearApiKey(): Promise<void> {
