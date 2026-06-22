@@ -690,7 +690,8 @@ export function renderFloatingPlayer(): void {
   const dockActive = jam.player.minimized;
   setDockHostActive(dockActive);
   const dockRect = jam.player.minimized ? getDockHostRect() : null;
-  const width = jam.player.minimized ? Math.round(dockRect?.width ?? PLAYER_MINIMIZED_WIDTH) : jam.player.width;
+  const rawWidth = jam.player.minimized ? Math.round(dockRect?.width ?? PLAYER_MINIMIZED_WIDTH) : jam.player.width;
+  const width = Math.max(160, Math.min(rawWidth, window.innerWidth - PLAYER_PADDING * 2));
   const video = jam.player.currentVideo;
   // Embed via a first-party wrapper page served from our API origin. The app
   // WebView has an opaque origin on WebKit (macOS/Linux); YouTube refuses to
@@ -741,7 +742,11 @@ export function renderFloatingPlayer(): void {
     panel.classList.toggle("is-minimized", jam.player.minimized);
     panel.classList.toggle("is-docked", Boolean(dockRect));
     if (dockRect) {
-      panel.style.left = `${Math.round(dockRect.left)}px`;
+      // Keep the docked bar fully on-screen so its restore/close icons stay
+      // reachable even when the header is tight and the dock host overflows.
+      const maxLeft = Math.max(PLAYER_PADDING, window.innerWidth - width - PLAYER_PADDING);
+      const dockedLeft = Math.min(Math.max(PLAYER_PADDING, Math.round(dockRect.left)), maxLeft);
+      panel.style.left = `${dockedLeft}px`;
       panel.style.top = `${Math.round(dockRect.top)}px`;
     } else {
       panel.style.left = `${jam.player.x}px`;

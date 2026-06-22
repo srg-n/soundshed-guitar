@@ -466,7 +466,8 @@
 }
 
 @media (max-width: 760px) {
-  .jam-player-dock {
+  .jam-player-dock,
+  .jam-player-dock.is-active {
     display: none;
   }
 
