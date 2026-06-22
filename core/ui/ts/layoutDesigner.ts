@@ -12,6 +12,7 @@ import { showNotification } from "./notifications.js";
 import { showConfirm } from "./dialogs.js";
 import { arrayBufferToBase64 } from "./utils.js";
 import { renderCustomLayoutPreviewLayers, type LayoutResourceControlDef } from "./layoutRenderer.js";
+import { ensureLayoutImagesLoaded } from "./layoutImages.js";
 import { buildDefaultParamControlsHtml } from "./signalPath.js";
 import type { GraphNode } from "./types.js";
 import {
@@ -284,6 +285,10 @@ export class LayoutDesignerModal {
 
     if (!this.modal) return;
 
+    // Layout background images are loaded on demand; request them so the canvas
+    // can render any referenced backgrounds (a re-render is triggered on arrival).
+    ensureLayoutImagesLoaded();
+
     this.effectType = effectType;
     this.blendId = options?.blendId || "";
     const typeInfo = EffectTypeRegistry.get(effectType);
@@ -409,6 +414,13 @@ export class LayoutDesignerModal {
 
   onSave(callback: (layout: EffectLayout) => void): void {
     this.onSaveCallback = callback;
+  }
+
+  /** Re-render the canvas when layout images finish loading, if the designer is open. */
+  notifyImagesLoaded(): void {
+    if (this.modal && this.modal.style.display !== "none") {
+      this.renderCanvas();
+    }
   }
 
   onClose(callback: (didSave: boolean) => void): void {

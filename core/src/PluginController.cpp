@@ -2148,7 +2148,18 @@ PluginController::PluginController(IPluginHost& host)
         [this](const std::string& jsonMessage) { SendMessageToUI(jsonMessage); });
 }
 
-PluginController::~PluginController() = default;
+PluginController::~PluginController()
+{
+    // Supersede any in-flight folder scans so detached workers bail out
+    // promptly, then wait until every outstanding worker has finished before
+    // our members are destroyed (workers call SendMessageToUI through mHost and
+    // read mFolderScanGeneration, so they must not outlive us).
+    mFolderScanGeneration.fetch_add(1, std::memory_order_relaxed);
+    std::unique_lock<std::mutex> lock(mFolderScanDoneMutex);
+    mFolderScanDoneCv.wait(lock, [this]() {
+        return mActiveFolderScans.load(std::memory_order_relaxed) == 0;
+    });
+}
 
 void PluginController::Initialize()
 {
@@ -4693,6 +4704,7 @@ void PluginController::HandleSavePresetRequest(const nlohmann::json& payload)
         mActivePresetJson = PresetStorage::SerializeToJson(newPreset);
         mPendingStateBroadcast = true;
         SaveAppSettings();
+        InvalidateResourceUsageIndex();
 
         nlohmann::json reply;
         reply["type"] = "presetSaved";
@@ -4727,6 +4739,10 @@ void PluginController::HandleDeletePresetRequest(const nlohmann::json& payload)
     if (ec)
     {
         ReportErrorToUI("Failed to delete preset", presetId);
+    }
+    else
+    {
+        InvalidateResourceUsageIndex();
     }
 }
 
@@ -6205,41 +6221,79 @@ std::optional<std::string> PluginController::FindFirstPresetUsingResource(const 
     if (mActivePreset && presetUsesResource(*mActivePreset))
         return presetDisplayName(*mActivePreset);
 
-    // Check user presets
+    // Consult the cached disk/archive index (built once, reused until presets change).
+    EnsureResourceUsageDiskIndex();
+    const std::string key = resourceType + ":" + resourceId;
+    const auto it = mResourceUsageDiskIndex.find(key);
+    if (it != mResourceUsageDiskIndex.end())
+        return it->second;
+
+    return std::nullopt;
+}
+
+void PluginController::EnsureResourceUsageDiskIndex() const
+{
+    if (mResourceUsageDiskIndexValid)
+        return;
+
+    mResourceUsageDiskIndex.clear();
+
+    const auto indexPreset = [this](const Preset& preset)
+    {
+        std::string displayName = preset.name;
+        if (displayName.empty())
+            displayName = !preset.id.empty() ? preset.id : "Unnamed preset";
+
+        const auto indexGraph = [&](const SignalGraph& graph)
+        {
+            for (const auto& node : graph.nodes)
+            {
+                for (const auto& ref : node.resources)
+                {
+                    if (!ref.IsLibraryRef())
+                        continue;
+                    const std::string key = ref.resourceType + ":" + ref.resourceId;
+                    // Preserve first-found priority (user > factory > archive).
+                    mResourceUsageDiskIndex.emplace(key, displayName);
+                }
+            }
+        };
+
+        indexGraph(preset.graph);
+        for (const auto& scene : preset.scenes)
+            indexGraph(scene.graph);
+    };
+
+    // User presets first so they win ties.
     if (!mUserPresetsPath.empty() && std::filesystem::exists(mUserPresetsPath))
     {
         const auto userPresets = PresetStorage::LoadAllFromDirectory(mUserPresetsPath);
         for (const auto& preset : userPresets)
-        {
-            if (presetUsesResource(preset))
-                return presetDisplayName(preset);
-        }
+            indexPreset(preset);
     }
 
-    // Check factory presets
+    // Factory presets next.
     {
         const auto factoryDir = ResolveFactoryPresetDirectory(mHost, mResourceRoot);
         if (std::filesystem::exists(factoryDir))
         {
             const auto factoryPresets = PresetStorage::LoadAllFromDirectory(factoryDir);
             for (const auto& preset : factoryPresets)
-            {
-                if (presetUsesResource(preset))
-                    return presetDisplayName(preset);
-            }
+                indexPreset(preset);
         }
     }
 
-    // Check factory archive presets
-    {
-        for (const auto& [_, preset] : mFactoryArchivePresets)
-        {
-            if (presetUsesResource(preset))
-                return presetDisplayName(preset);
-        }
-    }
+    // Factory archive presets last.
+    for (const auto& [_, preset] : mFactoryArchivePresets)
+        indexPreset(preset);
 
-    return std::nullopt;
+    mResourceUsageDiskIndexValid = true;
+}
+
+void PluginController::InvalidateResourceUsageIndex()
+{
+    mResourceUsageDiskIndexValid = false;
+    mResourceUsageDiskIndex.clear();
 }
 
 void PluginController::HandleQueryResourceUsageRequest(const nlohmann::json& payload)
@@ -6380,39 +6434,67 @@ void PluginController::HandleBrowseResourceFolderRequest()
 void PluginController::HandleListResourceFolderRequest(const nlohmann::json& payload)
 {
     const std::string rawPath = payload.value("path", "");
-    if (rawPath.empty())
-    {
-        SendMessageToUI(nlohmann::json{{"type", "resourceFolderListingFailed"}, {"message", "Missing folder path"}}.dump());
-        return;
-    }
 
-    std::error_code ec;
-    std::filesystem::path dir(rawPath);
-    if (!std::filesystem::exists(dir, ec) || ec || !std::filesystem::is_directory(dir, ec))
-    {
-        SendMessageToUI(nlohmann::json{{"type", "resourceFolderListingFailed"}, {"path", rawPath}, {"message", "Folder not found"}}.dump());
-        return;
-    }
+    // Snapshot existing library (filePath -> id) on the message thread. This
+    // uses the lightweight path index (two string copies per entry, no metadata
+    // maps, no filesystem access, no canonicalization) so even a very large
+    // library can never freeze the UI. The worker normalizes/matches off-thread.
+    std::vector<std::pair<std::string, std::string>> libraryPaths = mResourceLibrary.GetResourcePathIndex();
 
+    // Supersede any in-flight scan, then spawn a detached worker. We never join
+    // on the message thread (which could block on a slow filesystem); detached
+    // workers observe the bumped generation and exit quickly, and the
+    // destructor waits for all of them via mFolderScanDoneCv.
+    const std::uint64_t generation = mFolderScanGeneration.fetch_add(1, std::memory_order_relaxed) + 1;
+    mActiveFolderScans.fetch_add(1, std::memory_order_relaxed);
+
+    try
+    {
+        std::thread worker(
+            [this, rawPath, libraryPaths = std::move(libraryPaths), generation]() mutable
+            {
+                ScanResourceFolderWorker(std::move(rawPath), std::move(libraryPaths), generation);
+                {
+                    std::lock_guard<std::mutex> lock(mFolderScanDoneMutex);
+                    mActiveFolderScans.fetch_sub(1, std::memory_order_relaxed);
+                }
+                mFolderScanDoneCv.notify_all();
+            });
+        worker.detach();
+    }
+    catch (const std::exception&)
+    {
+        // Spawning failed: undo the active-scan bump and report the error so the
+        // UI doesn't sit on "Loading…" forever. Never let the exception escape
+        // into the WebView native-function callback (which would skip its
+        // completion handler and can wedge the message pump).
+        {
+            std::lock_guard<std::mutex> lock(mFolderScanDoneMutex);
+            mActiveFolderScans.fetch_sub(1, std::memory_order_relaxed);
+        }
+        mFolderScanDoneCv.notify_all();
+        SendMessageToUI(nlohmann::json{{"type", "resourceFolderListingFailed"}, {"path", rawPath}, {"message", "Unable to start folder scan"}}.dump());
+    }
+}
+
+void PluginController::ScanResourceFolderWorker(std::string requestPath,
+                                                std::vector<std::pair<std::string, std::string>> libraryPaths,
+                                                std::uint64_t generation)
+{
+    const auto superseded = [this, generation]() {
+        return mFolderScanGeneration.load(std::memory_order_relaxed) != generation;
+    };
+
+    // Pure-lexical, no-filesystem normalization: lowercase + forward slashes +
+    // collapse of "."/".."/redundant separators. Unlike weakly_canonical this
+    // never touches the disk, so it can't stall on a slow/disconnected drive.
     const auto normalizePath = [](const std::filesystem::path& p) -> std::string {
-        std::error_code lec;
-        std::filesystem::path canonical = std::filesystem::weakly_canonical(p, lec);
-        if (lec)
-            canonical = p.lexically_normal();
-        std::string s = canonical.generic_string();
+        std::string s = p.lexically_normal().generic_string();
+        if (!s.empty() && s.back() == '/')
+            s.pop_back();
         std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         return s;
     };
-
-    // Map of existing library file paths so we can flag/import-link already-imported files.
-    std::map<std::string, const LibraryResource*> libraryByPath;
-    const auto allResources = mResourceLibrary.GetAllResources();
-    for (const auto& res : allResources)
-    {
-        if (res.filePath.empty())
-            continue;
-        libraryByPath.emplace(normalizePath(res.filePath), &res);
-    }
 
     const auto classify = [](const std::filesystem::path& p) -> std::string {
         std::string ext = p.extension().string();
@@ -6422,20 +6504,66 @@ void PluginController::HandleListResourceFolderRequest(const nlohmann::json& pay
         return std::string{};
     };
 
+    // Validate the requested path here (off the message thread) so even a slow
+    // exists()/is_directory() probe on a bad drive never freezes the UI.
+    if (requestPath.empty())
+    {
+        if (!superseded())
+            SendMessageToUI(nlohmann::json{{"type", "resourceFolderListingFailed"}, {"message", "Missing folder path"}}.dump());
+        return;
+    }
+
+    std::filesystem::path dir(requestPath);
+    std::error_code dec;
+    if (!std::filesystem::is_directory(dir, dec) || dec)
+    {
+        if (!superseded())
+            SendMessageToUI(nlohmann::json{{"type", "resourceFolderListingFailed"}, {"path", requestPath}, {"message", "Folder not found"}}.dump());
+        return;
+    }
+
+    // Build the (normalized path -> library id) lookup off-thread from the cheap
+    // snapshot captured on the message thread.
+    std::map<std::string, std::string> libraryIdByPath;
+    for (auto& entry : libraryPaths)
+    {
+        if (superseded())
+            return;
+        libraryIdByPath.emplace(normalizePath(std::filesystem::path(entry.first)), std::move(entry.second));
+    }
+
+    std::error_code ec;
     constexpr std::size_t kMaxEntries = 5000;
     std::vector<nlohmann::json> dirs;
     std::vector<nlohmann::json> files;
     bool truncated = false;
 
+    // Parallel list of (filesystem path, resourceType) for the second (metadata)
+    // pass. Kept separate so the cheap listing can be sent before any file is
+    // opened and parsed.
+    struct PendingFile { std::filesystem::path path; std::string resourceType; };
+    std::vector<PendingFile> pendingMetadata;
+
+    // ── Phase 1: enumerate the immediate level only (no file content reads) ──
+    // directory_iterator is intentionally non-recursive: we list just the folder
+    // the user navigated into. This is cheap even for large folders, so the UI
+    // gets a populated listing almost immediately.
     std::filesystem::directory_iterator it(dir, std::filesystem::directory_options::skip_permission_denied, ec);
     if (ec)
     {
-        SendMessageToUI(nlohmann::json{{"type", "resourceFolderListingFailed"}, {"path", rawPath}, {"message", "Unable to read folder"}}.dump());
+        if (!superseded())
+            SendMessageToUI(nlohmann::json{{"type", "resourceFolderListingFailed"}, {"path", requestPath}, {"message", "Unable to read folder"}}.dump());
         return;
     }
 
-    for (const auto& entry : it)
+    for (; it != std::filesystem::directory_iterator(); it.increment(ec))
     {
+        if (ec)
+            break; // Stop on iteration error rather than throwing on a detached thread.
+        if (superseded())
+            return;
+
+        const auto& entry = *it;
         if (dirs.size() + files.size() >= kMaxEntries)
         {
             truncated = true;
@@ -6465,47 +6593,26 @@ void PluginController::HandleListResourceFolderRequest(const nlohmann::json& pay
         const auto sizeBytes = std::filesystem::file_size(entryPath, sec);
         file["sizeBytes"] = sec ? 0 : static_cast<std::uint64_t>(sizeBytes);
 
-        const auto libIt = libraryByPath.find(normalizePath(entryPath));
-        if (libIt != libraryByPath.end() && libIt->second != nullptr)
+        const auto libIt = libraryIdByPath.find(normalizePath(entryPath));
+        if (libIt != libraryIdByPath.end())
         {
             file["alreadyInLibrary"] = true;
-            file["libraryId"] = libIt->second->id;
+            file["libraryId"] = libIt->second;
         }
         else
         {
             file["alreadyInLibrary"] = false;
         }
 
-        nlohmann::json metadata = nlohmann::json::object();
-        if (resourceType == "nam")
-        {
-            LibraryResource temp;
-            EnrichNamResourceMetadata(temp, entryPath);
-            for (const auto& [key, value] : temp.metadata)
-            {
-                if (!value.empty())
-                    metadata[key] = value;
-            }
-        }
-        else
-        {
-            const WavHeaderInfo wav = TryReadWavHeader(entryPath);
-            if (wav.valid)
-            {
-                if (wav.sampleRate > 0) metadata["sampleRate"] = std::to_string(wav.sampleRate);
-                if (wav.channels > 0) metadata["channels"] = std::to_string(wav.channels);
-                if (wav.bitsPerSample > 0) metadata["bitsPerSample"] = std::to_string(wav.bitsPerSample);
-                if (wav.durationSec > 0.0)
-                {
-                    char buf[32];
-                    std::snprintf(buf, sizeof(buf), "%.3f", wav.durationSec);
-                    metadata["durationSec"] = std::string(buf);
-                }
-            }
-        }
-        file["metadata"] = std::move(metadata);
+        // Metadata is filled in later (Phase 2) so the listing isn't blocked.
+        file["metadata"] = nlohmann::json::object();
+        file["metadataPending"] = true;
         files.push_back(std::move(file));
+        pendingMetadata.push_back({entryPath, resourceType});
     }
+
+    if (superseded())
+        return;
 
     const auto byName = [](const nlohmann::json& a, const nlohmann::json& b) {
         std::string an = a.value("name", "");
@@ -6522,16 +6629,90 @@ void PluginController::HandleListResourceFolderRequest(const nlohmann::json& pay
     if (!parentPath.empty() && parentPath != dir)
         parentStr = parentPath.generic_string();
 
+    const std::string folderPath = dir.generic_string();
+
     nlohmann::json msg;
     msg["type"] = "resourceFolderListing";
-    msg["path"] = dir.generic_string();
+    msg["path"] = folderPath;
     msg["parent"] = parentStr;
     const auto leaf = dir.filename();
-    msg["name"] = leaf.empty() ? dir.generic_string() : leaf.string();
+    msg["name"] = leaf.empty() ? folderPath : leaf.string();
     msg["dirs"] = dirs;
     msg["files"] = files;
     msg["truncated"] = truncated;
+    msg["metadataPending"] = !pendingMetadata.empty();
+
+    if (superseded())
+        return;
     SendMessageToUI(msg.dump());
+
+    // ── Phase 2: parse per-file metadata and stream it back in batches ──
+    // This is the expensive part (each file is opened/parsed). It runs after the
+    // listing is already on screen, so badges/details fill in progressively
+    // without ever blocking the UI.
+    constexpr std::size_t kMetadataBatchSize = 40;
+    nlohmann::json batch = nlohmann::json::array();
+
+    const auto flushBatch = [&]() {
+        if (batch.empty())
+            return true;
+        if (superseded())
+            return false;
+        SendMessageToUI(nlohmann::json{
+            {"type", "resourceFolderMetadata"},
+            {"path", folderPath},
+            {"items", batch}
+        }.dump());
+        batch = nlohmann::json::array();
+        return true;
+    };
+
+    for (const auto& pending : pendingMetadata)
+    {
+        if (superseded())
+            return;
+
+        nlohmann::json metadata = nlohmann::json::object();
+        if (pending.resourceType == "nam")
+        {
+            LibraryResource temp;
+            EnrichNamResourceMetadata(temp, pending.path);
+            for (const auto& [key, value] : temp.metadata)
+            {
+                if (!value.empty())
+                    metadata[key] = value;
+            }
+        }
+        else
+        {
+            const WavHeaderInfo wav = TryReadWavHeader(pending.path);
+            if (wav.valid)
+            {
+                if (wav.sampleRate > 0) metadata["sampleRate"] = std::to_string(wav.sampleRate);
+                if (wav.channels > 0) metadata["channels"] = std::to_string(wav.channels);
+                if (wav.bitsPerSample > 0) metadata["bitsPerSample"] = std::to_string(wav.bitsPerSample);
+                if (wav.durationSec > 0.0)
+                {
+                    char buf[32];
+                    std::snprintf(buf, sizeof(buf), "%.3f", wav.durationSec);
+                    metadata["durationSec"] = std::string(buf);
+                }
+            }
+        }
+
+        batch.push_back(nlohmann::json{
+            {"path", pending.path.generic_string()},
+            {"metadata", std::move(metadata)}
+        });
+
+        if (batch.size() >= kMetadataBatchSize)
+        {
+            if (!flushBatch())
+                return;
+        }
+    }
+
+    flushBatch();
 }
 
 void PluginController::HandleImportToneSharingPackRequest(const nlohmann::json& payload)
@@ -11964,6 +12145,7 @@ void PluginController::LoadFactoryPresetArchives()
     }
 
     SaveJsonFile(mFileSystem, ResolveFactoryArchiveStatePath(mFileSystem), factoryArchiveState);
+    InvalidateResourceUsageIndex();
 }
 
 void PluginController::LoadBlendLibrary()
@@ -12065,63 +12247,11 @@ void PluginController::LoadLayoutLibrary()
     nlohmann::json library;
     library["byEffectType"] = nlohmann::json::object();
     library["defaults"] = nlohmann::json::object();
+    // Layout images (base64-encoded backgrounds) are intentionally omitted here to keep
+    // app startup lightweight; they are loaded on demand via BuildLayoutImages() when the
+    // layout designer/manager requests them. Per-layout thumbnailDataUrl values remain
+    // embedded in each layout entry below since they are used for signal-path node avatars.
     library["images"] = nlohmann::json::array();
-
-    // Helper: load all images from a directory into the library image list.
-    const auto appendImagesFromDir = [&library](const std::filesystem::path& imagesDir)
-    {
-        if (!std::filesystem::exists(imagesDir))
-            return;
-
-        for (const auto& entry : std::filesystem::directory_iterator(imagesDir))
-        {
-            if (!entry.is_regular_file())
-                continue;
-
-            const auto ext = entry.path().extension().string();
-            if (ext != ".png" && ext != ".jpg" && ext != ".jpeg")
-                continue;
-
-            std::ifstream imageFile(entry.path(), std::ios::binary);
-            if (!imageFile) continue;
-
-            std::vector<std::uint8_t> imageData(
-                (std::istreambuf_iterator<char>(imageFile)),
-                std::istreambuf_iterator<char>());
-            imageFile.close();
-
-            const std::string base64Data = util::EncodeBase64(imageData);
-            std::string mimeType = "image/png";
-            if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
-            const std::string dataUrl = "data:" + mimeType + ";base64," + base64Data;
-
-            const std::string imageId = entry.path().stem().string();
-            auto& images = library["images"];
-            bool replaced = false;
-            if (images.is_array())
-            {
-                for (auto& existing : images)
-                {
-                    if (existing.is_object() && existing.value("imageId", std::string{}) == imageId)
-                    {
-                        existing["fileName"] = entry.path().filename().string();
-                        existing["dataUrl"] = dataUrl;
-                        replaced = true;
-                        break;
-                    }
-                }
-            }
-            if (!replaced)
-            {
-                nlohmann::json imageRef;
-                imageRef["imageId"] = imageId;
-                imageRef["fileName"] = entry.path().filename().string();
-                imageRef["dataUrl"] = dataUrl;
-                images.push_back(imageRef);
-            }
-        }
-    };
-
 
     // Build user layout library from the associations index.
     // Each layout lives in its own subfolder: layouts/content/<layoutId>/layout.json
@@ -12161,9 +12291,6 @@ void PluginController::LoadLayoutLibrary()
 
                     // Ensure layoutId is embedded for UI round-trip.
                     layoutJson["layoutId"] = layoutId;
-
-                    // Load images co-located with this layout.
-                    appendImagesFromDir(ResolveLayoutDir(mFileSystem, layoutId) / "images");
 
                     nlohmann::json layoutEntry;
                     layoutEntry["layout"] = layoutJson;
@@ -12236,63 +12363,7 @@ void PluginController::LoadLayoutLibrary()
 
                     // Load images referenced in the manifest and add them to the library image list.
                     const auto imagesDir = layoutFolder.path() / "images";
-                    if (archive.contains("images") && archive["images"].is_array()
-                        && std::filesystem::exists(imagesDir))
-                    {
-                        for (const auto& imgRef : archive["images"])
-                        {
-                            if (!imgRef.is_object())
-                                continue;
-                            const std::string imageId = imgRef.value("imageId", "");
-                            const std::string fileName = imgRef.value("fileName", "");
-                            if (imageId.empty() || fileName.empty())
-                                continue;
-
-                            const auto imgPath = imagesDir / fileName;
-                            if (!std::filesystem::exists(imgPath))
-                                continue;
-
-                            std::ifstream imgFile(imgPath, std::ios::binary);
-                            if (!imgFile)
-                                continue;
-
-                            std::vector<std::uint8_t> imgData(
-                                (std::istreambuf_iterator<char>(imgFile)),
-                                std::istreambuf_iterator<char>());
-                            imgFile.close();
-
-                            const std::string base64Data = util::EncodeBase64(imgData);
-                            const auto ext = imgPath.extension().string();
-                            std::string mimeType = "image/png";
-                            if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
-                            const std::string dataUrl = "data:" + mimeType + ";base64," + base64Data;
-
-                            // Replace existing entry or append.
-                            auto& images = library["images"];
-                            bool replaced = false;
-                            if (images.is_array())
-                            {
-                                for (auto& existing : images)
-                                {
-                                    if (existing.is_object() && existing.value("imageId", std::string{}) == imageId)
-                                    {
-                                        existing["fileName"] = fileName;
-                                        existing["dataUrl"] = dataUrl;
-                                        replaced = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            if (!replaced)
-                            {
-                                nlohmann::json imageRef;
-                                imageRef["imageId"] = imageId;
-                                imageRef["fileName"] = fileName;
-                                imageRef["dataUrl"] = dataUrl;
-                                images.push_back(imageRef);
-                            }
-                        }
-                    }
+                    (void)imagesDir; // Factory images are loaded on demand via BuildLayoutImages().
 
                     // Build the library entry and prepend it so user layouts (added below)
                     // can override/supplement without losing the factory entry.
@@ -12349,6 +12420,185 @@ void PluginController::LoadLayoutLibrary()
     SendMessageToUI(nlohmann::json{
         {"type", "layoutLibraryLoaded"},
         {"layoutLibrary", library}
+    }.dump());
+}
+
+nlohmann::json PluginController::BuildLayoutImages()
+{
+    nlohmann::json images = nlohmann::json::array();
+
+    // Helper: load all images from a directory into the image list.
+    const auto appendImagesFromDir = [&images](const std::filesystem::path& imagesDir)
+    {
+        if (!std::filesystem::exists(imagesDir))
+            return;
+
+        for (const auto& entry : std::filesystem::directory_iterator(imagesDir))
+        {
+            if (!entry.is_regular_file())
+                continue;
+
+            const auto ext = entry.path().extension().string();
+            if (ext != ".png" && ext != ".jpg" && ext != ".jpeg")
+                continue;
+
+            std::ifstream imageFile(entry.path(), std::ios::binary);
+            if (!imageFile) continue;
+
+            std::vector<std::uint8_t> imageData(
+                (std::istreambuf_iterator<char>(imageFile)),
+                std::istreambuf_iterator<char>());
+            imageFile.close();
+
+            const std::string base64Data = util::EncodeBase64(imageData);
+            std::string mimeType = "image/png";
+            if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
+            const std::string dataUrl = "data:" + mimeType + ";base64," + base64Data;
+
+            const std::string imageId = entry.path().stem().string();
+            bool replaced = false;
+            for (auto& existing : images)
+            {
+                if (existing.is_object() && existing.value("imageId", std::string{}) == imageId)
+                {
+                    existing["fileName"] = entry.path().filename().string();
+                    existing["dataUrl"] = dataUrl;
+                    replaced = true;
+                    break;
+                }
+            }
+            if (!replaced)
+            {
+                nlohmann::json imageRef;
+                imageRef["imageId"] = imageId;
+                imageRef["fileName"] = entry.path().filename().string();
+                imageRef["dataUrl"] = dataUrl;
+                images.push_back(imageRef);
+            }
+        }
+    };
+
+    // User layout images: one images/ folder per associated layoutId.
+    nlohmann::json settings = LoadEffectLayoutsSettings(mFileSystem);
+    if (settings.contains("associations") && settings["associations"].is_object())
+    {
+        for (auto it = settings["associations"].begin(); it != settings["associations"].end(); ++it)
+        {
+            const auto& assocEntry = it.value();
+            if (!assocEntry.is_object())
+                continue;
+
+            const auto ids = assocEntry.value("layoutIds", nlohmann::json::array());
+            if (!ids.is_array())
+                continue;
+
+            for (const auto& id : ids)
+            {
+                if (!id.is_string())
+                    continue;
+                const std::string layoutId = id.get<std::string>();
+                appendImagesFromDir(ResolveLayoutDir(mFileSystem, layoutId) / "images");
+            }
+        }
+    }
+
+    // Factory layout images: referenced via each layout's manifest.
+    {
+        const auto bundledRoot = mHost.GetBundledAssetsPath();
+        const auto factoryLayoutsDir = bundledRoot / "ui" / "assets" / "layouts";
+        if (std::filesystem::exists(factoryLayoutsDir))
+        {
+            for (const auto& layoutFolder : std::filesystem::directory_iterator(factoryLayoutsDir))
+            {
+                if (!layoutFolder.is_directory())
+                    continue;
+
+                const auto layoutJsonPath = layoutFolder.path() / "layout.json";
+                if (!std::filesystem::exists(layoutJsonPath))
+                    continue;
+
+                try
+                {
+                    std::ifstream input(layoutJsonPath);
+                    if (!input)
+                        continue;
+
+                    nlohmann::json archive;
+                    input >> archive;
+
+                    if (!archive.is_object() || !archive.contains("images") || !archive["images"].is_array())
+                        continue;
+
+                    const auto imagesDir = layoutFolder.path() / "images";
+                    if (!std::filesystem::exists(imagesDir))
+                        continue;
+
+                    for (const auto& imgRef : archive["images"])
+                    {
+                        if (!imgRef.is_object())
+                            continue;
+                        const std::string imageId = imgRef.value("imageId", "");
+                        const std::string fileName = imgRef.value("fileName", "");
+                        if (imageId.empty() || fileName.empty())
+                            continue;
+
+                        const auto imgPath = imagesDir / fileName;
+                        if (!std::filesystem::exists(imgPath))
+                            continue;
+
+                        std::ifstream imgFile(imgPath, std::ios::binary);
+                        if (!imgFile)
+                            continue;
+
+                        std::vector<std::uint8_t> imgData(
+                            (std::istreambuf_iterator<char>(imgFile)),
+                            std::istreambuf_iterator<char>());
+                        imgFile.close();
+
+                        const std::string base64Data = util::EncodeBase64(imgData);
+                        const auto ext = imgPath.extension().string();
+                        std::string mimeType = "image/png";
+                        if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
+                        const std::string dataUrl = "data:" + mimeType + ";base64," + base64Data;
+
+                        bool replaced = false;
+                        for (auto& existing : images)
+                        {
+                            if (existing.is_object() && existing.value("imageId", std::string{}) == imageId)
+                            {
+                                existing["fileName"] = fileName;
+                                existing["dataUrl"] = dataUrl;
+                                replaced = true;
+                                break;
+                            }
+                        }
+                        if (!replaced)
+                        {
+                            nlohmann::json imageRef;
+                            imageRef["imageId"] = imageId;
+                            imageRef["fileName"] = fileName;
+                            imageRef["dataUrl"] = dataUrl;
+                            images.push_back(imageRef);
+                        }
+                    }
+                }
+                catch (const std::exception& e)
+                {
+                    AppendSessionLog("Failed to load factory layout images from "
+                        + layoutFolder.path().generic_string() + ": " + e.what());
+                }
+            }
+        }
+    }
+
+    return images;
+}
+
+void PluginController::HandleRequestLayoutImagesRequest()
+{
+    SendMessageToUI(nlohmann::json{
+        {"type", "layoutImagesLoaded"},
+        {"images", BuildLayoutImages()}
     }.dump());
 }
 

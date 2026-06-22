@@ -13,6 +13,7 @@ import { postMessage } from "./bridge.js";
 import { showNotification } from "./notifications.js";
 import { appendLog } from "./logging.js";
 import { showConfirm } from "./dialogs.js";
+import { ensureLayoutImagesLoaded } from "./layoutImages.js";
 import type { LayoutLibraryEntry, EffectLayout } from "./layoutTypes.js";
 
 // ─────────────────────────────────────────────────────────────
@@ -36,6 +37,10 @@ let searchFilter = "";
 export function initLayoutManager(): void {
   if (initialized) return;
   initialized = true;
+
+  // Layout thumbnails/backgrounds are loaded on demand; request them when the
+  // Effect Layouts manager is first shown.
+  ensureLayoutImagesLoaded();
 
   layoutSearchInput?.addEventListener("input", () => {
     searchFilter = layoutSearchInput.value.toLowerCase();

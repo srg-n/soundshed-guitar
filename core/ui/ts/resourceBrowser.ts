@@ -75,6 +75,7 @@ interface FolderListingFile {
   alreadyInLibrary?: boolean;
   libraryId?: string;
   metadata?: Record<string, string>;
+  metadataPending?: boolean;
 }
 
 interface FolderListing {
@@ -182,6 +183,8 @@ export class ResourceBrowserModal {
   private previewLoading: PreviewLoadingState | null = null;
   private persistedStateByType: Partial<Record<ResourceType, PersistedResourceBrowserState>> = {};
   private resourceUsageInfo: Map<string, { inUse: boolean; presetName?: string }> = new Map();
+  private requestedUsageKeys: Set<string> = new Set();
+  private usageObserver: IntersectionObserver | null = null;
 
   private handleResourceImportedEvent = (event: Event): void => {
     const detail = (event as CustomEvent<ResourceImportedDetail>).detail;
@@ -292,9 +295,58 @@ export class ResourceBrowserModal {
       presetName: detail.presetName
     });
 
-    // Re-render the library list to show usage info
+    // Patch only the affected row in place to avoid a full re-render
+    // (and scroll reset) for every streamed usage response.
     if (this.libraryList && this.modal?.style.display === "flex") {
-      this.renderLibraryList();
+      this.updateRowUsage(resourceType, resourceId);
+    }
+  };
+
+  private updateRowUsage(resourceType: string, resourceId: string): void {
+    if (!this.libraryList || this.options?.resourceType !== resourceType) {
+      return;
+    }
+
+    let row: HTMLElement | null = null;
+    const rows = this.libraryList.querySelectorAll<HTMLElement>(".resource-browser-item-row[data-resource-id]");
+    for (const candidate of Array.from(rows)) {
+      if (candidate.dataset.resourceId === resourceId) {
+        row = candidate;
+        break;
+      }
+    }
+    if (!row) {
+      return;
+    }
+
+    const usage = this.resourceUsageInfo.get(`${resourceType}:${resourceId}`);
+    const isInUse = usage?.inUse ?? false;
+    const presetName = usage?.presetName ?? "";
+
+    const deleteBtn = row.querySelector<HTMLButtonElement>(".resource-browser-item-delete-btn");
+    if (deleteBtn) {
+      deleteBtn.disabled = isInUse;
+      deleteBtn.title = isInUse
+        ? `In use by preset: ${presetName}. Remove from preset before deleting.`
+        : "Delete from resource library";
+    }
+
+    const meta = row.querySelector(".resource-browser-item-meta");
+    if (meta) {
+      const existing = meta.querySelector(".resource-browser-in-use-badge");
+      if (isInUse) {
+        if (existing) {
+          (existing as HTMLElement).title = `In use by: ${presetName}`;
+        } else {
+          const badge = document.createElement("span");
+          badge.className = "resource-browser-in-use-badge";
+          badge.title = `In use by: ${presetName}`;
+          badge.textContent = "In use";
+          meta.appendChild(badge);
+        }
+      } else if (existing) {
+        existing.remove();
+      }
     }
   };
 
@@ -315,6 +367,39 @@ export class ResourceBrowserModal {
     this.folderCurrentPath = listing.path;
     this.renderFolderPath();
     this.renderFolderList();
+  };
+
+  private handleFolderMetadataEvent = (event: Event): void => {
+    const detail = (event as CustomEvent<{ path?: string; items?: Array<{ path?: string; metadata?: Record<string, string> }> }>).detail;
+    if (!detail || !Array.isArray(detail.items) || detail.items.length === 0) {
+      return;
+    }
+    const listing = this.folderListing;
+    if (!listing) {
+      return;
+    }
+    // Only apply if the metadata batch is for the directory currently shown;
+    // stale batches from a folder we navigated away from are ignored.
+    const norm = (p: string): string => p.replace(/\\/g, "/").toLowerCase();
+    if (typeof detail.path === "string" && norm(detail.path) !== norm(listing.path)) {
+      return;
+    }
+    const byPath = new Map<string, FolderListingFile>();
+    for (const file of listing.files) {
+      byPath.set(norm(file.path), file);
+    }
+    let changed = false;
+    for (const item of detail.items) {
+      if (!item || typeof item.path !== "string") continue;
+      const file = byPath.get(norm(item.path));
+      if (!file) continue;
+      file.metadata = item.metadata && typeof item.metadata === "object" ? item.metadata : {};
+      file.metadataPending = false;
+      changed = true;
+    }
+    if (changed) {
+      this.renderFolderList();
+    }
   };
 
   private handleFolderListingFailedEvent = (event: Event): void => {
@@ -477,6 +562,7 @@ export class ResourceBrowserModal {
     document.addEventListener("resource-browser:resource-removed", this.handleResourceRemovedEvent as EventListener);
     document.addEventListener("resource-browser:usage-info", this.handleUsageInfoEvent as EventListener);
     document.addEventListener("resource-browser:folder-listing", this.handleFolderListingEvent as EventListener);
+    document.addEventListener("resource-browser:folder-metadata", this.handleFolderMetadataEvent as EventListener);
     document.addEventListener("resource-browser:folder-listing-failed", this.handleFolderListingFailedEvent as EventListener);
     document.addEventListener("resource-browser:folder-picked", this.handleFolderPickedEvent as EventListener);
     this.syncAvailableTabs();
@@ -688,6 +774,9 @@ export class ResourceBrowserModal {
     
     // Clear cached usage info when modal closes
     this.resourceUsageInfo.clear();
+    this.requestedUsageKeys.clear();
+    this.usageObserver?.disconnect();
+    this.usageObserver = null;
     
     this.libraryPreviewActive = false;
     this.folderPreviewActive = false;
@@ -845,6 +934,27 @@ export class ResourceBrowserModal {
     return "";
   }
 
+  /// Resolves a NAM architecture badge (A1/A2), falling back to the NAM
+  /// top-level "architecture" token (e.g. "WaveNet" -> A1, "SlimmableContainer"
+  /// -> A2) when an explicit version is not present in the metadata.
+  private normalizeNamArchitectureBadge(raw: string): string {
+    const direct = this.normalizeArchitectureBadge(raw);
+    if (direct) {
+      return direct;
+    }
+    const normalized = raw.trim().toLowerCase();
+    if (!normalized) {
+      return "";
+    }
+    if (normalized.includes("slimmable")) {
+      return "A2";
+    }
+    if (normalized.includes("wavenet")) {
+      return "A1";
+    }
+    return "";
+  }
+
   private async copyTextToClipboard(value: string): Promise<void> {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(value);
@@ -979,18 +1089,7 @@ export class ResourceBrowserModal {
       return;
     }
 
-    // Query usage info for items that don't have it cached yet
-    for (const res of filtered) {
-      const key = `${resourceType}:${res.id}`;
-      if (!this.resourceUsageInfo.has(key)) {
-        postMessage({
-          type: "queryResourceUsage",
-          resourceType,
-          resourceId: res.id
-        });
-      }
-    }
-    
+    // Usage info is queried lazily as items scroll into view (see observeVisibleUsage).
     this.libraryList.innerHTML = filtered
       .map((res) => {
         const title = res.name?.trim() || res.id;
@@ -1073,8 +1172,58 @@ export class ResourceBrowserModal {
         `;
       })
       .join("");
+
+    this.observeVisibleUsage(resourceType);
   }
-  
+
+  // Lazily query "in use" status only for library rows that scroll into view.
+  // Rows in a hidden tab panel (display:none) never intersect, so switching to
+  // the Tone3000 tab triggers zero usage queries until the Library tab is shown.
+  private observeVisibleUsage(resourceType: string): void {
+    if (!this.libraryList) {
+      return;
+    }
+
+    if (typeof IntersectionObserver === "undefined") {
+      // Fallback: query everything (older runtimes only).
+      const rows = this.libraryList.querySelectorAll<HTMLElement>(".resource-browser-item-row[data-resource-id]");
+      rows.forEach((row) => this.requestUsageForRow(resourceType, row));
+      return;
+    }
+
+    this.usageObserver?.disconnect();
+    this.usageObserver = new IntersectionObserver((entries, observer) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) {
+          continue;
+        }
+        const row = entry.target as HTMLElement;
+        this.requestUsageForRow(resourceType, row);
+        observer.unobserve(row);
+      }
+    });
+
+    const rows = this.libraryList.querySelectorAll<HTMLElement>(".resource-browser-item-row[data-resource-id]");
+    rows.forEach((row) => this.usageObserver!.observe(row));
+  }
+
+  private requestUsageForRow(resourceType: string, row: HTMLElement): void {
+    const resourceId = row.dataset.resourceId;
+    if (!resourceId) {
+      return;
+    }
+    const key = `${resourceType}:${resourceId}`;
+    if (this.resourceUsageInfo.has(key) || this.requestedUsageKeys.has(key)) {
+      return;
+    }
+    this.requestedUsageKeys.add(key);
+    postMessage({
+      type: "queryResourceUsage",
+      resourceType,
+      resourceId
+    });
+  }
+
   private renderLibraryItemDetailsPanel(res: LibraryResource): string {
     const METADATA_LABELS: Record<string, string> = {
       provider: "Provider",
@@ -2188,7 +2337,12 @@ export class ResourceBrowserModal {
     const badges: string[] = [`<span>${escapeHtml(typeLabel)}</span>`];
 
     if (file.resourceType === "nam") {
-      const architecture = this.normalizeArchitectureBadge(metadata.architecture || "");
+      const architecture = this.normalizeNamArchitectureBadge(
+        metadata.architectureVersion
+        || metadata.architecture_version
+        || metadata.architecture
+        || "",
+      );
       if (architecture) badges.push(`<span class="resource-browser-architecture-badge" title="Model architecture">${escapeHtml(architecture)}</span>`);
       const gear = [metadata.gearMake, metadata.gearModel].filter(Boolean).join(" ");
       if (gear) badges.push(`<span class="resource-browser-gear-desc" title="${escapeHtml(gear)}">${escapeHtml(gear)}</span>`);
@@ -2199,6 +2353,10 @@ export class ResourceBrowserModal {
       if (metadata.sampleRate) badges.push(`<span>${escapeHtml(metadata.sampleRate)} Hz</span>`);
       if (metadata.channels) badges.push(`<span>${escapeHtml(metadata.channels)} ch</span>`);
       if (metadata.durationSec) badges.push(`<span>${escapeHtml(metadata.durationSec)} s</span>`);
+    }
+
+    if (file.metadataPending && badges.length <= 1) {
+      badges.push(`<span class="resource-browser-meta-pending" title="Reading metadata…">…</span>`);
     }
 
     const isFav = Boolean(match.id) && this.isResourceFavorite(match.id);

@@ -1796,25 +1796,20 @@ async function renderFeedRows(rows: ToneSharingRow[]): Promise<void> {
           const itemAccent = item.kind === "item" ? idAccentColor(item.id) : "#8f77ff";
           cardStyleFragments.push(`--tone-card-accent: ${itemAccent}`);
 
+          // Pack thumbnails are loaded lazily (only when the card scrolls into view) to
+          // avoid fetching every thumbnail up front when the Tones tab opens.
+          let lazyPackThumbnailUrl: string | null = null;
           if (item.kind === "pack") {
             cardClass += " tone-sharing-pack-hero";
-            const packForThumbnail: ToneSharingPack = {
-              id: item.id,
-              title: item.title,
-              thumbnailUrl: item.thumbnailUrl ?? (item.thumbnailAssetId ? `/packs/${item.id}/thumbnail` : null)
-            };
-            if (packForThumbnail.thumbnailUrl) {
-              try {
-                const thumbnailObjectUrl = await resolvePackThumbnailUrl(packForThumbnail);
-                cardStyleFragments.push(`--tone-pack-thumbnail: url('${thumbnailObjectUrl}')`);
-              } catch {
-              }
-            }
+            lazyPackThumbnailUrl = item.thumbnailUrl ?? (item.thumbnailAssetId ? `/packs/${item.id}/thumbnail` : null);
           }
 
           const isPreviewing = previewingItemId === item.id;
           const styleAttr = cardStyleFragments.length
             ? ` style="${escapeHtml(cardStyleFragments.join("; "))}"`
+            : "";
+          const lazyThumbAttr = lazyPackThumbnailUrl
+            ? ` data-pack-thumbnail="${escapeHtml(lazyPackThumbnailUrl)}"`
             : "";
           const reviewMode = browseMode === "review";
           const isInstalled = item.kind === "item"
@@ -1870,7 +1865,7 @@ async function renderFeedRows(rows: ToneSharingRow[]): Promise<void> {
                         ${renderToneIconButton({ kind: "action", value: "download", icon: "download", label: isInstalled ? "Pack already installed" : "Download pack", primary: true, disabled: isInstalled })}
                         ${renderToneIconButton({ kind: "action", value: "share", icon: "share", label: "Share pack" })}`;
           return `
-                  <div class="${cardClass}${isPreviewing ? " is-previewing" : ""}" data-kind="${item.kind}" data-id="${itemId}" data-title="${safeTitle}"${styleAttr}>
+                  <div class="${cardClass}${isPreviewing ? " is-previewing" : ""}" data-kind="${item.kind}" data-id="${itemId}" data-title="${safeTitle}"${styleAttr}${lazyThumbAttr}>
                     <div class="tone-sharing-card-item-content">
                       <div class="tone-sharing-card-item-header">
                         <div class="tone-sharing-card-item-title">${safeTitle}</div>
@@ -1906,7 +1901,63 @@ async function renderFeedRows(rows: ToneSharingRow[]): Promise<void> {
   );
 
   feed.innerHTML = rowHtml.join("");
+  observePackThumbnails(feed);
   updateBrowseFooter();
+}
+
+let packThumbnailObserver: IntersectionObserver | null = null;
+
+/**
+ * Lazily load pack hero thumbnails: each pack card carries a `data-pack-thumbnail`
+ * path and only fetches its image once it scrolls into (or near) the viewport.
+ */
+function observePackThumbnails(feed: HTMLElement): void {
+  packThumbnailObserver?.disconnect();
+  packThumbnailObserver = null;
+
+  const cards = Array.from(feed.querySelectorAll<HTMLElement>("[data-pack-thumbnail]"));
+  if (!cards.length) {
+    return;
+  }
+
+  const loadCardThumbnail = (card: HTMLElement): void => {
+    const thumbnailPath = card.dataset.packThumbnail;
+    card.removeAttribute("data-pack-thumbnail");
+    if (!thumbnailPath) {
+      return;
+    }
+    const pack: ToneSharingPack = {
+      id: card.dataset.id ?? "",
+      title: card.dataset.title ?? "",
+      thumbnailUrl: thumbnailPath,
+    };
+    void resolvePackThumbnailUrl(pack)
+      .then((objectUrl) => {
+        if (objectUrl) {
+          card.style.setProperty("--tone-pack-thumbnail", `url('${objectUrl}')`);
+        }
+      })
+      .catch(() => {});
+  };
+
+  if (typeof IntersectionObserver === "undefined") {
+    cards.forEach(loadCardThumbnail);
+    return;
+  }
+
+  packThumbnailObserver = new IntersectionObserver(
+    (entries, observer) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          const card = entry.target as HTMLElement;
+          observer.unobserve(card);
+          loadCardThumbnail(card);
+        }
+      }
+    },
+    { rootMargin: "200px" },
+  );
+  cards.forEach((card) => packThumbnailObserver?.observe(card));
 }
 
 function updateActiveSharedFilter(): void {
@@ -3944,6 +3995,14 @@ export function applyToneSharingAppSettings(settings?: Record<string, unknown>):
   }
 
   if (!changed) {
+    return;
+  }
+
+  // Applying persisted settings must not hit the Tone Sharing API while the Tones tab
+  // is inactive. If the panel has never been opened, just keep the applied state
+  // (sessionId/installedPacks); the network loads run when the tab is first activated
+  // via initializeToneSharingPanel(). Only refresh here when the panel is already live.
+  if (!toneSharingPanelInitialized) {
     return;
   }
 

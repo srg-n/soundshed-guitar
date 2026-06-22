@@ -5,6 +5,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #ifdef UpdateResource
@@ -52,6 +53,10 @@ namespace guitarfx
     [[nodiscard]] std::vector<LibraryResource> GetResourcesByType(const std::string& type) const;
     [[nodiscard]] std::vector<LibraryResource> GetResourcesByCategory(const std::string& type, const std::string& category) const;
     [[nodiscard]] std::vector<LibraryResource> GetAllResources() const;
+    // Lightweight (filePath, id) index for file-path matching. Avoids copying
+    // full resource structs (with their metadata maps) on hot paths such as the
+    // folder browser. Resources without a file path are skipped.
+    [[nodiscard]] std::vector<std::pair<std::string, std::string>> GetResourcePathIndex() const;
     [[nodiscard]] bool HasResource(const std::string& type, const std::string& id) const;
 
     // Resolution

@@ -145,6 +145,19 @@ namespace guitarfx
     return result;
   }
 
+  std::vector<std::pair<std::string, std::string>> ResourceLibrary::GetResourcePathIndex() const
+  {
+    std::vector<std::pair<std::string, std::string>> result;
+    result.reserve(mResources.size());
+    for (const auto& [key, resource] : mResources)
+    {
+      if (resource.filePath.empty())
+        continue;
+      result.emplace_back(resource.filePath.generic_string(), resource.id);
+    }
+    return result;
+  }
+
   bool ResourceLibrary::HasResource(const std::string& type, const std::string& id) const
   {
     return LookupResource(type, id).has_value();

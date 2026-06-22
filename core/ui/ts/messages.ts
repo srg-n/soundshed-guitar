@@ -28,6 +28,8 @@ import type { CompositeEffectDefinition } from "./compositeTypes.js";
 import { renderCompositeList, handleCompositeEditModeExited, handleCompositeEditStateUpdate } from "./compositeEditor.js";
 import { handleCustomEffectLibrary } from "./customEffects.js";
 import { renderLayoutList } from "./layoutManager.js";
+import { ensureLayoutImagesLoaded, markLayoutImagesLoaded, areLayoutImagesLoaded } from "./layoutImages.js";
+import type { LayoutImageRef } from "./layoutTypes.js";
 import { renderBlendList } from "./blendManager.js";
 import { handleCompositePresetList, handleCompositePresetSaved, handleCompositePresetLoaded } from "./multiPresetMixer.js";
 import { enterCompositeEditState, updateCompositeEditState, exitCompositeEditState } from "./state.js";
@@ -1028,6 +1030,10 @@ export function handleIncomingMessage(message: string): void {
       document.dispatchEvent(new CustomEvent("resource-browser:folder-listing", { detail: payload }));
       break;
     }
+    case "resourceFolderMetadata": {
+      document.dispatchEvent(new CustomEvent("resource-browser:folder-metadata", { detail: payload }));
+      break;
+    }
     case "resourceFolderListingFailed": {
       const info = payload as { path?: string; message?: string };
       appendLog(`folder listing failed ← ${info.message ?? "unknown"}`);
@@ -1446,7 +1452,17 @@ export function handleIncomingMessage(message: string): void {
     case "layoutLibraryLoaded": {
       const libraryPayload = payload as { layoutLibrary?: LayoutLibrary };
       if (libraryPayload.layoutLibrary) {
+        // Images are no longer shipped in this payload (loaded on demand). Preserve any
+        // images we already received so an open designer keeps its backgrounds, then
+        // refresh them if they had been loaded (picks up additions/removals).
+        const previousImages = uiState.layoutLibrary?.images ?? [];
         uiState.layoutLibrary = libraryPayload.layoutLibrary;
+        if ((!uiState.layoutLibrary.images || uiState.layoutLibrary.images.length === 0) && previousImages.length) {
+          uiState.layoutLibrary.images = previousImages;
+        }
+        if (areLayoutImagesLoaded()) {
+          ensureLayoutImagesLoaded(true);
+        }
         appendLog("Layout library loaded");
         renderLayoutList();
         // Ensure any open node params panel picks up the updated layout mapping.
@@ -1460,6 +1476,22 @@ export function handleIncomingMessage(message: string): void {
       appendLog(`Layout saved for ${displayKey ?? "effect"}${savePayload.layoutId ? ` (${savePayload.layoutId})` : ""}`);
       showNotification("Layout saved", "success");
       // layoutLibraryLoaded will follow and trigger a full refresh.
+      break;
+    }
+    case "layoutImagesLoaded": {
+      const imagesPayload = payload as { images?: LayoutImageRef[] };
+      const images = Array.isArray(imagesPayload.images) ? imagesPayload.images : [];
+      if (!uiState.layoutLibrary) {
+        uiState.layoutLibrary = { byEffectType: {}, defaults: {}, images: [] };
+      }
+      uiState.layoutLibrary.images = images;
+      markLayoutImagesLoaded();
+      appendLog(`Layout images loaded (${images.length})`);
+      renderLayoutList();
+      // Re-render the designer canvas so backgrounds appear once images arrive.
+      layoutDesigner.notifyImagesLoaded();
+      // Refresh the live signal-path node params panel so custom-layout backgrounds resolve.
+      refreshSelectedNodeParams();
       break;
     }
     case "layoutImageSelected": {

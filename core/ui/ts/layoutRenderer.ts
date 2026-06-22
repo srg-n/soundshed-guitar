@@ -8,6 +8,7 @@ import { uiState } from "./state.js";
 import { EffectTypeRegistry, type ParameterDef } from "./presetV2.js";
 import { renderIcon } from "./iconAssets.js";
 import { escapeHtml } from "./utils.js";
+import { ensureLayoutImagesLoaded } from "./layoutImages.js";
 import type {
   EffectLayout,
   LayoutControl,
@@ -71,6 +72,10 @@ function getLayoutImageUrl(imageId: string): string | null {
       return `layout-images/${image.fileName}`;
     }
   }
+  // Layout images are fetched on demand to keep app startup light. If they have not
+  // been loaded yet, request them; the layoutImagesLoaded handler re-renders so the
+  // background resolves on the next pass.
+  ensureLayoutImagesLoaded();
   return null;
 }
 

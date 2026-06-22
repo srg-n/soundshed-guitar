@@ -143,6 +143,11 @@ bool MessageDispatcher::DispatchLibraryAndComposite(PluginController& c,
         c.HandleSaveLayoutImageRequest(msg);
         return true;
     }
+    if (type == "requestLayoutImages")
+    {
+        c.HandleRequestLayoutImagesRequest();
+        return true;
+    }
     if (type == "cleanupResourceLibrary")
     {
         c.HandleCleanupResourceLibraryRequest(msg);

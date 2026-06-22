@@ -29,14 +29,17 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <filesystem>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace guitarfx
@@ -257,6 +260,7 @@ private:
     void HandleExportEffectLayoutRequest(const nlohmann::json& payload);
     void HandleBrowseLayoutImageRequest(const nlohmann::json& payload);
     void HandleSaveLayoutImageRequest(const nlohmann::json& payload);
+    void HandleRequestLayoutImagesRequest();
     void HandleCleanupResourceLibraryRequest(const nlohmann::json& payload);
     void HandleSaveCompositeDefinitionRequest(const nlohmann::json& payload);
     void HandleDeleteCompositeDefinitionRequest(const nlohmann::json& payload);
@@ -394,6 +398,8 @@ private:
     void RefreshWasmNodeDescriptor(GraphNode& node);
     [[nodiscard]] std::optional<std::filesystem::path> ResolveResourceRef(const ResourceRef& ref) const;
     [[nodiscard]] std::optional<std::string> FindFirstPresetUsingResource(const std::string& resourceType, const std::string& resourceId) const;
+    void EnsureResourceUsageDiskIndex() const;
+    void InvalidateResourceUsageIndex();
     void AppendUserLibraryResource(const LibraryResource& resource);
     void RemoveUserLibraryResource(const std::string& type, const std::string& id);
     void EnsureBasicGraph();
@@ -421,6 +427,9 @@ private:
     void SaveCustomEffectLibrary() const;
     void LoadCompositeLibrary();
     void LoadLayoutLibrary();
+    // Builds the (potentially heavy) base64-encoded layout image list on demand.
+    // Kept out of the startup LoadLayoutLibrary payload so app load stays lightweight.
+    [[nodiscard]] nlohmann::json BuildLayoutImages();
     void SaveLayoutToFile(const std::string& effectType, const nlohmann::json& layoutJson);
     [[nodiscard]] std::filesystem::path ResolveUiStoragePath(const std::string& filename) const;
     [[nodiscard]] nlohmann::json LoadUiStorageJson(const std::string& filename, const nlohmann::json& fallback) const;
@@ -467,6 +476,12 @@ private:
     std::filesystem::path mResourceRoot;
     std::filesystem::path mUserPresetsPath;
     std::map<std::string, Preset> mFactoryArchivePresets;
+
+    // Cached index of which disk/archive presets reference each library resource.
+    // Maps "resourceType:resourceId" -> first preset display name (user > factory > archive).
+    // Active preset is checked live and is not part of this cache.
+    mutable std::unordered_map<std::string, std::string> mResourceUsageDiskIndex;
+    mutable bool mResourceUsageDiskIndexValid{false};
 
     // Active preset state
     std::optional<Preset> mActivePreset;
@@ -693,6 +708,27 @@ private:
     AutomationSlotTable mAutomationSlots;
     int mSetlistCursorIndex = 0;
     int mSetlistBankSize = 8;
+
+    // Async resource folder browsing.
+    // The folder scan opens and parses metadata for every NAM/IR file in a
+    // directory, which is too slow to run on the UI/message thread. It runs on
+    // a detached background worker instead. The generation counter lets a newer
+    // request supersede an in-flight scan (stale results are dropped and the
+    // worker bails out early once it observes a newer generation).
+    //
+    // Crucially, the message-thread request handler performs *no* filesystem
+    // work and never blocks: it only snapshots cheap (filePath, id) strings and
+    // spawns the worker. All path validation/normalization (which can touch a
+    // slow or disconnected drive) happens on the worker. Workers are detached
+    // rather than joined on the message thread; teardown waits on a condition
+    // variable until every outstanding worker has finished.
+    void ScanResourceFolderWorker(std::string requestPath,
+                                  std::vector<std::pair<std::string, std::string>> libraryPaths,
+                                  std::uint64_t generation);
+    std::atomic<std::uint64_t> mFolderScanGeneration{0};
+    std::atomic<int> mActiveFolderScans{0};
+    std::mutex mFolderScanDoneMutex;
+    std::condition_variable mFolderScanDoneCv;
 };
 
 } // namespace guitarfx
