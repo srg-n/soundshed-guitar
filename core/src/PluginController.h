@@ -232,6 +232,8 @@ private:
     void HandleImportRemoteResourceRequest(const nlohmann::json& payload);
     void HandleSaveLocalLibraryResourceRequest(const nlohmann::json& payload);
     void HandleRemoveLocalLibraryResourceRequest(const nlohmann::json& payload);
+    void HandleDeleteLibraryResourceRequest(const nlohmann::json& payload);
+    void HandleQueryResourceUsageRequest(const nlohmann::json& payload);
     void HandleUpdateLibraryResourceRequest(const nlohmann::json& payload);
     void HandleBrowseLibraryResourcePathRequest(const nlohmann::json& payload);
     void HandleBrowseResourceFolderRequest();
@@ -391,6 +393,7 @@ private:
                                  bool applyPreset = true);
     void RefreshWasmNodeDescriptor(GraphNode& node);
     [[nodiscard]] std::optional<std::filesystem::path> ResolveResourceRef(const ResourceRef& ref) const;
+    [[nodiscard]] std::optional<std::string> FindFirstPresetUsingResource(const std::string& resourceType, const std::string& resourceId) const;
     void AppendUserLibraryResource(const LibraryResource& resource);
     void RemoveUserLibraryResource(const std::string& type, const std::string& id);
     void EnsureBasicGraph();

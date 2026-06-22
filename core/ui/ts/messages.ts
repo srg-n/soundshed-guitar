@@ -1010,6 +1010,16 @@ export function handleIncomingMessage(message: string): void {
       }));
       break;
     }
+    case "resourceDeleteFailed": {
+      const info = payload as { message?: string; detail?: string; presetName?: string };
+      appendLog(`resource delete failed ← ${info.message ?? "unknown"}`);
+      showNotification(info.message ?? "Resource delete failed", info.detail ?? info.presetName ?? "");
+      break;
+    }
+    case "resourceUsageInfo": {
+      document.dispatchEvent(new CustomEvent("resource-browser:usage-info", { detail: payload }));
+      break;
+    }
     case "resourceFolderPicked": {
       document.dispatchEvent(new CustomEvent("resource-browser:folder-picked", { detail: payload }));
       break;

@@ -181,6 +181,7 @@ export class ResourceBrowserModal {
   private toneModelsCache: Map<string, Tone3000Model[]> = new Map();
   private previewLoading: PreviewLoadingState | null = null;
   private persistedStateByType: Partial<Record<ResourceType, PersistedResourceBrowserState>> = {};
+  private resourceUsageInfo: Map<string, { inUse: boolean; presetName?: string }> = new Map();
 
   private handleResourceImportedEvent = (event: Event): void => {
     const detail = (event as CustomEvent<ResourceImportedDetail>).detail;
@@ -265,11 +266,36 @@ export class ResourceBrowserModal {
     const removedId = (detail?.id ?? "").trim();
     if (removedId) {
       this.setResourceFavorite(removedId, false);
+      if (this.selectedResourceId === removedId) {
+        this.selectedResourceId = "";
+        this.updateSelectButtonState();
+      }
     }
     if (this.folderList) {
       this.renderFolderList();
     }
     this.renderLibraryList();
+  };
+
+  private handleUsageInfoEvent = (event: Event): void => {
+    const detail = (event as CustomEvent<{ resourceType?: string; id?: string; inUse?: boolean; presetName?: string }>).detail;
+    const resourceType = (detail?.resourceType ?? "").trim();
+    const resourceId = (detail?.id ?? "").trim();
+    
+    if (!resourceType || !resourceId) {
+      return;
+    }
+
+    const key = `${resourceType}:${resourceId}`;
+    this.resourceUsageInfo.set(key, {
+      inUse: detail.inUse ?? false,
+      presetName: detail.presetName
+    });
+
+    // Re-render the library list to show usage info
+    if (this.libraryList && this.modal?.style.display === "flex") {
+      this.renderLibraryList();
+    }
   };
 
   private handleFolderListingEvent = (event: Event): void => {
@@ -449,6 +475,7 @@ export class ResourceBrowserModal {
     document.addEventListener(FEATURE_FLAGS_CHANGED_EVENT, () => this.handleFeatureFlagsChanged());
     document.addEventListener("resource-browser:resource-imported", this.handleResourceImportedEvent as EventListener);
     document.addEventListener("resource-browser:resource-removed", this.handleResourceRemovedEvent as EventListener);
+    document.addEventListener("resource-browser:usage-info", this.handleUsageInfoEvent as EventListener);
     document.addEventListener("resource-browser:folder-listing", this.handleFolderListingEvent as EventListener);
     document.addEventListener("resource-browser:folder-listing-failed", this.handleFolderListingFailedEvent as EventListener);
     document.addEventListener("resource-browser:folder-picked", this.handleFolderPickedEvent as EventListener);
@@ -658,6 +685,9 @@ export class ResourceBrowserModal {
         resourceIndex: this.options.resourceIndex ?? 0,
       });
     }
+    
+    // Clear cached usage info when modal closes
+    this.resourceUsageInfo.clear();
     
     this.libraryPreviewActive = false;
     this.folderPreviewActive = false;
@@ -948,6 +978,18 @@ export class ResourceBrowserModal {
       this.libraryList.innerHTML = `<div class="results-empty resource-browser-empty">No ${resourceType === "ir" ? "IRs" : "models"} match the current filters.</div>`;
       return;
     }
+
+    // Query usage info for items that don't have it cached yet
+    for (const res of filtered) {
+      const key = `${resourceType}:${res.id}`;
+      if (!this.resourceUsageInfo.has(key)) {
+        postMessage({
+          type: "queryResourceUsage",
+          resourceType,
+          resourceId: res.id
+        });
+      }
+    }
     
     this.libraryList.innerHTML = filtered
       .map((res) => {
@@ -995,6 +1037,16 @@ export class ResourceBrowserModal {
         
         const isFav = this.isResourceFavorite(res.id);
         const favoriteAction = `<button class="resource-browser-item-fav-toggle${isFav ? " is-active" : ""}" type="button" data-resource-id="${escapeHtml(res.id)}" title="${isFav ? "Remove from favourites" : "Add to favourites"}" aria-label="Toggle favorite">${isFav ? "★" : "☆"}</button>`;
+        
+        // Check if resource is in use
+        const usageKey = `${resourceType}:${res.id}`;
+        const usage = this.resourceUsageInfo.get(usageKey);
+        const isInUse = usage?.inUse ?? false;
+        const usagePresetName = usage?.presetName ?? "";
+        const deleteDisabled = isInUse ? " disabled" : "";
+        const deleteTitle = isInUse ? `In use by preset: ${escapeHtml(usagePresetName)}. Remove from preset before deleting.` : "Delete from resource library";
+        const deleteAction = `<button class="resource-browser-item-delete-btn"${deleteDisabled} type="button" data-resource-id="${escapeHtml(res.id)}" title="${deleteTitle}" aria-label="Delete from resource library"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>`;
+        const inUseIndicator = isInUse ? `<span class="resource-browser-in-use-badge" title="In use by: ${escapeHtml(usagePresetName)}">In use</span>` : "";
 
         const isDetailsExpanded = this.expandedLibraryItemId === res.id;
         const entryClass = `resource-browser-library-entry${isDetailsExpanded ? " is-details-expanded" : ""}`;
@@ -1005,13 +1057,14 @@ export class ResourceBrowserModal {
                 <div class="results-item-title resource-browser-item-title">${escapeHtml(title)}</div>
                 <div class="results-item-meta resource-browser-item-meta">
                   <span>${escapeHtml(categoryLabel)}</span>
-                  ${architectureBadge}${gearDescBadge}${toneTypeBadge}${providerBadge}${authorBadge}${sourceLinkBadge}${localPathBadge}
+                  ${architectureBadge}${gearDescBadge}${toneTypeBadge}${providerBadge}${authorBadge}${sourceLinkBadge}${localPathBadge}${inUseIndicator}
                 </div>
               </div>
               <div class="resource-browser-item-actions">
                 ${favoriteAction}
                 ${copyPathAction}
                 <button class="resource-browser-item-details-btn" type="button" data-resource-id="${escapeHtml(res.id)}" title="${isDetailsExpanded ? "Hide details" : "Show details"}" aria-expanded="${isDetailsExpanded ? "true" : "false"}" aria-label="Resource details">ℹ</button>
+                ${deleteAction}
                 <button class="resource-browser-item-select" type="button">${isSelected ? "✓ Selected" : "Select"}</button>
               </div>
             </div>
@@ -1130,6 +1183,34 @@ export class ResourceBrowserModal {
       if (resourceId) {
         void this.copyLocalLibraryPath(resourceId);
       }
+      return;
+    }
+
+    const deleteButton = target.closest(".resource-browser-item-delete-btn") as HTMLButtonElement | null;
+    if (deleteButton) {
+      // Skip if button is disabled (resource is in use)
+      if (deleteButton.disabled) {
+        return;
+      }
+      
+      const resourceId = deleteButton.dataset.resourceId ?? "";
+      if (!resourceId || !this.options) {
+        return;
+      }
+      const resources = uiState.resourceLibrary[this.options.resourceType] ?? [];
+      const resource = findResourceById(resources, resourceId);
+      const displayName = (resource?.name ?? "").trim() || resourceId;
+      const confirmed = window.confirm(
+        `Delete "${displayName}" from the Resource Library?\n\nIf this resource is used by any preset, deletion will be refused.`,
+      );
+      if (!confirmed) {
+        return;
+      }
+      postMessage({
+        type: "deleteLibraryResource",
+        resourceType: this.options.resourceType,
+        resourceId,
+      });
       return;
     }
     

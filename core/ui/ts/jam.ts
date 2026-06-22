@@ -601,6 +601,8 @@ function bindFloatingPlayerDrag(panel: HTMLElement, handle: HTMLElement): void {
   }
   handle.dataset.dragBound = "true";
   const jam = ensureJamState();
+
+  // Handle mouse dragging
   handle.addEventListener("mousedown", (event) => {
     if (jam.player.minimized) {
       return;
@@ -631,6 +633,43 @@ function bindFloatingPlayerDrag(panel: HTMLElement, handle: HTMLElement): void {
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
   });
+
+  // Handle touch dragging
+  handle.addEventListener("touchstart", (event) => {
+    if (jam.player.minimized) {
+      return;
+    }
+    if ((event.target as HTMLElement).closest("button")) {
+      return;
+    }
+    const touch = event.touches[0];
+    if (!touch) return;
+    
+    event.preventDefault();
+    const startX = touch.clientX;
+    const startY = touch.clientY;
+    const initialX = jam.player.x;
+    const initialY = jam.player.y;
+
+    const onMove = (moveEvent: TouchEvent) => {
+      const touch = moveEvent.touches[0];
+      if (!touch) return;
+      jam.player.x = initialX + (touch.clientX - startX);
+      jam.player.y = initialY + (touch.clientY - startY);
+      clampPlayerPosition(jam.player);
+      panel.style.left = `${jam.player.x}px`;
+      panel.style.top = `${jam.player.y}px`;
+    };
+
+    const onEnd = () => {
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onEnd);
+      persistPlayerUi();
+    };
+
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("touchend", onEnd);
+  }, { passive: false });
 }
 
 export function renderFloatingPlayer(): void {
@@ -654,7 +693,7 @@ export function renderFloatingPlayer(): void {
   const width = jam.player.minimized ? Math.round(dockRect?.width ?? PLAYER_MINIMIZED_WIDTH) : jam.player.width;
   const video = jam.player.currentVideo;
   const embedUrl = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(video.videoId)}?autoplay=1&rel=0&playsinline=1`;
-  const src = embedUrl; //`${getApiBaseUrl()}/corsproxy?url=${encodeURIComponent(embedUrl)}`;
+  const src = `${getApiBaseUrl()}/corsproxy?url=${encodeURIComponent(embedUrl)}`;
 
   let panel = root.querySelector<HTMLElement>(".jam-floating-player");
   const currentVideoId = panel?.dataset.videoId ?? "";

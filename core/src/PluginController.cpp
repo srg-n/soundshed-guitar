@@ -6089,6 +6089,185 @@ void PluginController::HandleRemoveLocalLibraryResourceRequest(const nlohmann::j
     }.dump());
 }
 
+void PluginController::HandleDeleteLibraryResourceRequest(const nlohmann::json& payload)
+{
+    const std::string resourceType = payload.value("resourceType", "");
+    const std::string resourceId = payload.value("resourceId", "");
+    if (resourceType.empty() || resourceId.empty())
+    {
+        SendMessageToUI(nlohmann::json{
+            {"type", "resourceDeleteFailed"},
+            {"message", "Resource delete failed"},
+            {"detail", "Missing resource id"}
+        }.dump());
+        return;
+    }
+
+    const auto resourceOpt = mResourceLibrary.LookupResource(resourceType, resourceId);
+    if (!resourceOpt)
+    {
+        SendMessageToUI(nlohmann::json{
+            {"type", "resourceDeleteFailed"},
+            {"message", "Resource delete failed"},
+            {"detail", "Resource not found"}
+        }.dump());
+        return;
+    }
+
+    const auto firstUsingPreset = FindFirstPresetUsingResource(resourceType, resourceId);
+    if (firstUsingPreset.has_value())
+    {
+        SendMessageToUI(nlohmann::json{
+            {"type", "resourceDeleteFailed"},
+            {"message", "Resource is in use"},
+            {"detail", "Used by preset: " + *firstUsingPreset},
+            {"resourceType", resourceType},
+            {"id", resourceId},
+            {"presetName", *firstUsingPreset}
+        }.dump());
+        return;
+    }
+
+    const auto settingsResourcesDir = mFileSystem.ResolveSettingsDirectory() / "resources" / "content";
+    const auto isUnderDirectory = [](const std::filesystem::path& candidate, const std::filesystem::path& base) {
+        std::error_code ec;
+        auto nc = std::filesystem::weakly_canonical(candidate, ec); if (ec) return false;
+        auto nb = std::filesystem::weakly_canonical(base, ec); if (ec) return false;
+        auto bi = nb.begin(); auto ci = nc.begin();
+        for (; bi != nb.end(); ++bi, ++ci) { if (ci == nc.end() || *bi != *ci) return false; }
+        return true;
+    };
+
+    const std::filesystem::path resourcePath = resourceOpt->filePath;
+    const bool shouldDeleteFile = !resourcePath.empty() && isUnderDirectory(resourcePath, settingsResourcesDir);
+    if (shouldDeleteFile)
+    {
+        std::error_code ec;
+        std::filesystem::remove(resourcePath, ec);
+        if (ec)
+        {
+            SendMessageToUI(nlohmann::json{
+                {"type", "resourceDeleteFailed"},
+                {"message", "Resource delete failed"},
+                {"detail", "Failed to delete stored file: " + resourcePath.string()}
+            }.dump());
+            return;
+        }
+    }
+
+    RemoveUserLibraryResource(resourceType, resourceId);
+    BroadcastState();
+
+    SendMessageToUI(nlohmann::json{
+        {"type", "resourceRemoved"},
+        {"resourceType", resourceType},
+        {"id", resourceId}
+    }.dump());
+}
+
+std::optional<std::string> PluginController::FindFirstPresetUsingResource(const std::string& resourceType, const std::string& resourceId) const
+{
+    const auto graphUsesResource = [&](const SignalGraph& graph) -> bool
+    {
+        for (const auto& node : graph.nodes)
+        {
+            for (const auto& ref : node.resources)
+            {
+                if (ref.IsLibraryRef() && ref.resourceType == resourceType && ref.resourceId == resourceId)
+                    return true;
+            }
+        }
+        return false;
+    };
+
+    const auto presetUsesResource = [&](const Preset& preset) -> bool
+    {
+        if (graphUsesResource(preset.graph))
+            return true;
+        for (const auto& scene : preset.scenes)
+        {
+            if (graphUsesResource(scene.graph))
+                return true;
+        }
+        return false;
+    };
+
+    const auto presetDisplayName = [](const Preset& preset) -> std::string
+    {
+        if (!preset.name.empty())
+            return preset.name;
+        if (!preset.id.empty())
+            return preset.id;
+        return "Unnamed preset";
+    };
+
+    // Check active preset
+    if (mActivePreset && presetUsesResource(*mActivePreset))
+        return presetDisplayName(*mActivePreset);
+
+    // Check user presets
+    if (!mUserPresetsPath.empty() && std::filesystem::exists(mUserPresetsPath))
+    {
+        const auto userPresets = PresetStorage::LoadAllFromDirectory(mUserPresetsPath);
+        for (const auto& preset : userPresets)
+        {
+            if (presetUsesResource(preset))
+                return presetDisplayName(preset);
+        }
+    }
+
+    // Check factory presets
+    {
+        const auto factoryDir = ResolveFactoryPresetDirectory(mHost, mResourceRoot);
+        if (std::filesystem::exists(factoryDir))
+        {
+            const auto factoryPresets = PresetStorage::LoadAllFromDirectory(factoryDir);
+            for (const auto& preset : factoryPresets)
+            {
+                if (presetUsesResource(preset))
+                    return presetDisplayName(preset);
+            }
+        }
+    }
+
+    // Check factory archive presets
+    {
+        for (const auto& [_, preset] : mFactoryArchivePresets)
+        {
+            if (presetUsesResource(preset))
+                return presetDisplayName(preset);
+        }
+    }
+
+    return std::nullopt;
+}
+
+void PluginController::HandleQueryResourceUsageRequest(const nlohmann::json& payload)
+{
+    const std::string resourceType = payload.value("resourceType", "");
+    const std::string resourceId = payload.value("resourceId", "");
+
+    if (resourceType.empty() || resourceId.empty())
+    {
+        SendMessageToUI(nlohmann::json{
+            {"type", "resourceUsageInfo"},
+            {"resourceType", resourceType},
+            {"id", resourceId},
+            {"inUse", false}
+        }.dump());
+        return;
+    }
+
+    const auto presetName = FindFirstPresetUsingResource(resourceType, resourceId);
+    SendMessageToUI(nlohmann::json{
+        {"type", "resourceUsageInfo"},
+        {"resourceType", resourceType},
+        {"id", resourceId},
+        {"inUse", presetName.has_value()},
+        {"presetName", presetName ? *presetName : ""}
+    }.dump());
+}
+
 void PluginController::HandleUpdateLibraryResourceRequest(const nlohmann::json& payload)
 {
     const std::string resourceType = payload.value("resourceType", "");
