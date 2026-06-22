@@ -1,0 +1,131 @@
+/* ===== Dark Theme (primary) =====
+ * Per-theme token overrides. Base/default tokens live in variables.css.
+ */
+
+.theme-dark {
+  /* Primary Colors */
+  --color-accent: #ff8850;
+  --color-accent-hover: #ff9860;
+  --color-accent-dark: #e86838;
+  
+  /* Background Colors */
+  --bg-primary: #111116;
+  --bg-secondary: #18181e;
+  --bg-tertiary: #1e1e25;
+  --bg-surface: #20202a;
+  --bg-elevated: #26262e;
+  
+  --bg-panel: #1c1c23;
+  --bg-card: #22222a;
+  --bg-input: #1e1e26;
+  
+  --bg-dark-primary: #111118;
+  --bg-dark-secondary: #18181e;
+  --bg-dark-tertiary: #1c1c22;
+  --bg-dark-surface: #20202a;
+  
+  --bg-footer: #141419;
+  --bg-header-dark: #0e0e13;
+  
+  --bg-fx-primary: #0c0c14;
+  --bg-fx-secondary: #141420;
+  --bg-fx-categories: #090910;
+  
+  /* Text Colors */
+  --text-primary: #ebebf4;
+  --text-secondary: #c8c8d8;
+  --text-tertiary: #a0a0b4;
+  --text-muted: #707082;
+  
+  --text-dark-primary: #f0f0f8;
+  --text-dark-secondary: #d0d0e0;
+  --text-dark-tertiary: #c0c0d0;
+  --text-dark-muted: #b0b0c0;
+  --text-dark-dimmed: #9898a8;
+  --text-dark-disabled: #7a7a90;
+  
+  /* Borders */
+  --border-light: #2c2c38;
+  --border-medium: #262630;
+  --border-strong: #1e1e28;
+  --border-dark: #181820;
+  --border-darker: #121218;
+  
+  --border-dark-light: #4a4a58;
+  --border-dark-medium: #3a3a48;
+  --border-dark-strong: #5a5a68;
+  
+  /* Controls */
+  --control-bg: #2e2e3a;
+  --control-knob-bg: #2e2e3a;
+  --control-border: #46465a;
+  --control-indicator: #d0d0e0;
+  --knob-ring-color: #2ec868;
+  --knob-ring-track: rgba(255,255,255,0.07);
+  --knob-body-highlight: rgba(255,255,255,0.10);
+  --knob-body-from: #454558;
+  --knob-body-to: #18181e;
+  
+  --amp-knob-bg: #30303e;
+  --amp-knob-border: #48485a;
+  
+  /* Toggle */
+  --toggle-bg: #50505e;
+  --toggle-border: #40404e;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.6);
+  --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.7);
+  
+  --shadow-inset-light: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --shadow-inset-dark: inset 0 -2px 0 rgba(0, 0, 0, 0.3);
+  
+  /* Overlays */
+  --overlay-light: rgba(255, 255, 255, 0.1);
+  --overlay-medium: rgba(255, 255, 255, 0.15);
+  --overlay-dark: rgba(0, 0, 0, 0.4);
+  --overlay-darker: rgba(0, 0, 0, 0.8);
+  
+  /* Special */
+  --color-preset-bg: #2a2520;
+  --color-preset-border: #403530;
+  --color-preset-favorite: #b89080;
+  --color-preset-text: #d8c8b8;
+  
+  --amp-glow: radial-gradient(ellipse, rgba(255, 136, 80, 0.4) 0%, transparent 70%);
+
+  --bg-browser-shell: rgba(16, 20, 32, 0.52);
+  --bg-browser-header: rgba(24, 30, 44, 0.64);
+  --bg-browser-sidebar: rgba(18, 24, 36, 0.6);
+  --bg-browser-card: rgba(58, 58, 58, 0.5);
+  --bg-browser-input: rgba(16, 22, 34, 0.72);
+  --bg-browser-hover: rgba(255, 255, 255, 0.1);
+  --bg-browser-selected: rgba(255, 136, 80, 0.16);
+  --border-browser: rgba(124, 136, 162, 0.42);
+  --border-browser-strong: rgba(146, 158, 184, 0.58);
+
+  /* Shared UI Tokens */
+  --accent-primary: var(--color-accent);
+  --bg-control: #28282f;
+  --button-bg: linear-gradient(180deg, #3a3a44 0%, #2e2e38 100%);
+  --button-text: #e0e0f0;
+  --button-border: #4a4a58;
+  --button-bg-hover: linear-gradient(180deg, #44444f 0%, #383843 100%);
+  --button-border-hover: #5a5a68;
+
+  /* Modal Surface Tokens */
+  --modal-bg: linear-gradient(180deg, #18181e 0%, #101014 100%);
+  --modal-bg-raised: linear-gradient(180deg, #28282f 0%, #1e1e25 100%);
+  --modal-text: #f0f0f8;
+  --modal-text-secondary: #d0d0e0;
+  --modal-text-muted: #b0b0c0;
+  --modal-border: #4a4a58;
+  --modal-border-medium: #3a3a48;
+  --modal-close-hover: rgba(255, 255, 255, 0.08);
+  --modal-input-bg: linear-gradient(180deg, #26262e 0%, #1c1c24 100%);
+  --modal-input-text: #f0f0f8;
+  --modal-input-border: #3a3a48;
+  --modal-input-placeholder: #b0b0c0;
+}

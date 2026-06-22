@@ -52,23 +52,6 @@
   padding: 8px 9px;
 }
 
-.tone-sharing-nav-btn {
-  background: transparent;
-  color: var(--text-secondary);
-  border: 1px solid color-mix(in srgb, var(--border-medium), transparent 10%);
-  border-radius: 9px;
-  padding: 8px 10px;
-  text-align: left;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.tone-sharing-nav-btn.active {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-primary), transparent 88%);
-  border-color: color-mix(in srgb, var(--accent-primary), transparent 35%);
-}
-
 .tone-sharing-main {
   display: flex;
   flex-direction: column;

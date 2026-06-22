@@ -520,7 +520,7 @@ export function renderDemoAudioControls(): string {
         <select id="demo-audio-select" class="themed-select">
           ${options}
         </select>
-        <button id="play-demo-audio" class="play-btn">
+        <button id="play-demo-audio" class="btn btn-primary">
           <span class="play-icon">▶</span>
           Play
         </button>

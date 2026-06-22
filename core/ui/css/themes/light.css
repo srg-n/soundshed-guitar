@@ -1,0 +1,79 @@
+/* ===== Light Theme =====
+ * Per-theme token overrides. Base/default tokens live in variables.css.
+ */
+
+.theme-light {
+  /* Primary Colors */
+  --color-accent: #d86428;
+  --color-accent-hover: #e87838;
+  --color-accent-dark: #b84818;
+  
+  /* Background Colors */
+  --bg-primary: #f2f3f6;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f7f8fa;
+  --bg-surface: #ffffff;
+  --bg-elevated: #ffffff;
+  
+  --bg-panel: #f7f8fa;
+  --bg-card: #ffffff;
+  --bg-input: #ffffff;
+  
+  --bg-dark-primary: #2e2e38;
+  --bg-dark-secondary: #282832;
+  --bg-dark-tertiary: #242430;
+  --bg-dark-surface: #36363e;
+  
+  --bg-footer: linear-gradient(180deg, #48484f 0%, #38383f 100%);
+  --bg-header-dark: #3a3a40;
+  
+  --bg-fx-primary: linear-gradient(180deg, #f5f6f9 0%, #e8eaef 100%);
+  --bg-fx-secondary: linear-gradient(180deg, #f8f9fb 0%, #eef0f4 100%);
+  --bg-fx-categories: linear-gradient(180deg, #eef0f4 0%, #e0e4ec 100%);
+  
+  /* Text Colors */
+  --text-primary: #111118;
+  --text-secondary: #30303e;
+  --text-tertiary: #58586a;
+  --text-muted: #80809a;
+  
+  /* Borders */
+  --border-light: #e6e8ee;
+  --border-medium: #dadce6;
+  --border-strong: #ccceda;
+  --border-dark: #bcbece;
+  --border-darker: #aeb0c0;
+
+  --bg-browser-shell: rgba(250, 252, 255, 0.54);
+  --bg-browser-header: rgba(244, 247, 252, 0.68);
+  --bg-browser-sidebar: rgba(240, 244, 250, 0.62);
+  --bg-browser-card: rgba(255, 255, 255, 0.58);
+  --bg-browser-input: rgba(255, 255, 255, 0.76);
+  --bg-browser-hover: rgba(255, 255, 255, 0.48);
+  --bg-browser-selected: rgba(216, 100, 40, 0.12);
+  --border-browser: rgba(180, 190, 210, 0.5);
+  --border-browser-strong: rgba(160, 172, 196, 0.66);
+
+  /* Shared UI Tokens */
+  --accent-primary: var(--color-accent);
+  --bg-control: #f0f2f6;
+  --button-bg: linear-gradient(180deg, #f5f6f8 0%, #eaecf0 100%);
+  --button-text: #1a1a20;
+  --button-border: #d0d4dc;
+  --button-bg-hover: linear-gradient(180deg, #eaecf0 0%, #dde0e6 100%);
+  --button-border-hover: #c2c6d0;
+
+  /* Modal Surface Tokens */
+  --modal-bg: #ffffff;
+  --modal-bg-raised: #f4f6f9;
+  --modal-text: #1a1a20;
+  --modal-text-secondary: #3a3a48;
+  --modal-text-muted: #7878a0;
+  --modal-border: #d8dce8;
+  --modal-border-medium: #e8eaef;
+  --modal-close-hover: rgba(0, 0, 0, 0.06);
+  --modal-input-bg: #ffffff;
+  --modal-input-text: #1a1a20;
+  --modal-input-border: #d0d4dc;
+  --modal-input-placeholder: #9898b0;
+}

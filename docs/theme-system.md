@@ -3,7 +3,11 @@
 ## Key Files
 - `core/ui/ts/theme-switcher.ts` — Core theme management logic
 - `core/ui/ts/theme-switcher-ui.ts` — Theme switcher UI component
-- `core/ui/css/variables.css` — CSS variable definitions for all themes
+- `core/ui/css/variables.css` — Base/default tokens (`:root`) shared by every theme
+- `core/ui/css/themes/light.css` — `.theme-light` token overrides
+- `core/ui/css/themes/dark.css` — `.theme-dark` token overrides (primary theme)
+- `core/ui/css/themes/classic.css` — `.theme-classic` (vintage) token overrides
+- `core/ui/css/components.css` — Canonical button/tab/icon-button classes
 - `scripts/convert-css-variables.ps1` — Batch conversion script for CSS files
 
 ## Overview
@@ -80,21 +84,45 @@ Components use variables instead of hardcoded colors:
 }
 ```
 
+## Canonical UI Components
+
+Core interactive controls have a single source of truth in
+`core/ui/css/components.css`. Reuse these classes instead of creating new
+per-feature button/tab styles — they are fully theme-driven, so every theme
+stays cohesive automatically. A semantic hook class (used by TypeScript) may be
+kept alongside the canonical class, e.g. `class="midi-tab-btn tab-btn tab-btn-underline"`.
+
+| Component | Base class | Modifiers |
+|-----------|-----------|-----------|
+| Button | `.btn` | `.btn-primary`, `.btn-secondary`, `.btn-danger`, `.btn-ghost`, `.btn-small`/`.btn-sm`, `.btn-large`, `.btn-block` |
+| Icon button | `.icon-btn` | `.icon-btn-accent`, `.icon-btn-sm`, state: `.active`/`.is-active` |
+| Tab | `.tab-btn` | `.tab-btn-underline`, `.tab-btn-vertical`, state: `.active`/`.is-active`/`[aria-selected="true"]` |
+
+Component-specific CSS files should only add layout/positioning tweaks (width,
+alignment, placement) on top of these classes. Button hover surfaces are driven
+by `--button-bg-hover` / `--button-border-hover` tokens in `variables.css`.
+
 ## Adding a New Theme
 
-1. Add theme block in `css/variables.css`:
+1. Create `css/themes/yourtheme.css` with the theme's token overrides:
    ```css
-   body.theme-yourtheme {
-     --color-primary: #yourcolor;
+   .theme-yourtheme {
+     --color-accent: #yourcolor;
      --bg-primary: #yourcolor;
      --text-primary: #yourcolor;
-     /* ... all variables */
+     /* ...only the tokens this theme overrides; the rest inherit from :root */
    }
    ```
 
-2. Update `theme-switcher.ts` to include the new theme in the cycle.
+2. Link it in `index.template.html` alongside the other `css/themes/*.css` files.
 
-3. Update `theme-switcher-ui.ts` if adding a menu option.
+3. Update `theme-switcher.ts` to include the new theme in the cycle.
+
+4. Update `theme-switcher-ui.ts` if adding a menu option.
+
+> Base/default token values live in `css/variables.css` (`:root`). Each theme
+> file only needs to override what differs, which keeps per-theme customization
+> easy to find and edit.
 
 ## Converting Existing CSS
 

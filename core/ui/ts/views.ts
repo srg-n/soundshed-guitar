@@ -711,9 +711,9 @@ export function renderPresetDetails(
           <p class="preset-description">${escapeHtml(preset.description ?? "")}</p>
         </div>
         <div class="preset-actions">
-          <button id="apply-preset" class="apply-btn">Apply Preset</button>
-          <button id="add-preset-to-mixer" class="apply-btn" title="Add this preset to the active mixer">Add to Mixer</button>
-          <button id="create-default-preset" class="apply-btn" title="Create a new preset from defaults">New Preset</button>
+          <button id="apply-preset" class="btn btn-primary">Apply Preset</button>
+          <button id="add-preset-to-mixer" class="btn btn-primary" title="Add this preset to the active mixer">Add to Mixer</button>
+          <button id="create-default-preset" class="btn btn-primary" title="Create a new preset from defaults">New Preset</button>
         </div>
       </div>
 

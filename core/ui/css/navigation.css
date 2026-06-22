@@ -78,35 +78,6 @@
   box-shadow: none !important;
 }
 
-.icon-btn {
-  width: 36px;
-  height: 36px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.icon-btn:hover {
-  background: var(--overlay-light);
-  color: var(--text-primary);
-}
-
-.icon-btn.active {
-  background: var(--overlay-medium);
-  color: var(--text-primary);
-}
-
-.icon-btn svg {
-  width: 18px;
-  height: 18px;
-}
-
 #fx-library-toggle {
   background: linear-gradient(180deg, #3a5a3a 0%, #2a4a2a 100%);
   border-color: #4a7a4a;

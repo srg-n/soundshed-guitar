@@ -968,26 +968,6 @@
 
 .resource-browser-tab-btn {
   flex: 1;
-  padding: 12px 16px;
-  border: none;
-  background: transparent;
-  color: var(--modal-text-muted);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  border-bottom: 2px solid transparent;
-}
-
-.resource-browser-tab-btn:hover {
-  color: var(--modal-text);
-  background: var(--bg-browser-hover);
-}
-
-.resource-browser-tab-btn.active {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
-  background: var(--bg-browser-selected);
 }
 
 .resource-browser-tab-panel {
@@ -2567,27 +2547,6 @@
   flex-shrink: 0;
 }
 
-.midi-tab-btn {
-  padding: 10px 20px;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--modal-text-muted);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: color 0.2s, border-color 0.2s;
-}
-
-.midi-tab-btn:hover {
-  color: var(--modal-text-secondary);
-}
-
-.midi-tab-btn.active {
-  color: var(--color-accent);
-  border-bottom-color: var(--color-accent);
-}
-
 .midi-tab-panel {
   display: none;
   overflow-y: auto;
@@ -2901,11 +2860,6 @@
 
 .midi-log-entry .midi-log-data {
   color: var(--modal-text-secondary);
-}
-
-.btn-small {
-  padding: 4px 10px;
-  font-size: 11px;
 }
 
 /* Inline clear buttons in mapping rows */
