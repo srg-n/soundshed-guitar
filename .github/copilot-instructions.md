@@ -84,3 +84,8 @@
 ## Communication
 - Keep updates concise and scoped; reference affected files.
 - If blockers or unexpected changes appear, pause and ask before proceeding.
+
+## Git Workflow
+- **Never auto-commit.** Always wait for explicit user approval before committing changes to git.
+- Users control the commit lifecycle: review diffs in the UI, approve changes, and trigger commits manually.
+- If you need to commit as part of a task, ask the user first and show them the diff before proceeding.

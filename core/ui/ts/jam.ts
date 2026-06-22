@@ -692,8 +692,11 @@ export function renderFloatingPlayer(): void {
   const dockRect = jam.player.minimized ? getDockHostRect() : null;
   const width = jam.player.minimized ? Math.round(dockRect?.width ?? PLAYER_MINIMIZED_WIDTH) : jam.player.width;
   const video = jam.player.currentVideo;
-  const embedUrl = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(video.videoId)}?autoplay=1&rel=0&playsinline=1`;
-  const src = `${getApiBaseUrl()}/corsproxy?url=${encodeURIComponent(embedUrl)}`;
+  // Embed via a first-party wrapper page served from our API origin. The app
+  // WebView has an opaque origin on WebKit (macOS/Linux); YouTube refuses to
+  // initialise when its immediate parent frame has such an origin. The wrapper
+  // gives the YouTube iframe a valid https parent origin so the player works.
+  const src = `${getApiBaseUrl()}/embed/youtube?v=${encodeURIComponent(video.videoId)}`;
 
   let panel = root.querySelector<HTMLElement>(".jam-floating-player");
   const currentVideoId = panel?.dataset.videoId ?? "";

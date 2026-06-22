@@ -27,6 +27,17 @@ namespace
              || url.startsWithIgnoreCase ("https://scalex.soundshed.com?");
     }
 
+    // The Jam view embeds YouTube through a first-party wrapper page served from
+    // the Soundshed API (see api /v1/embed/youtube). On WebKit backends the app
+    // WebView has an opaque origin, so YouTube only initialises when its parent
+    // frame has a real https origin. The wrapper must therefore stay inside the
+    // WebView rather than being kicked out to the system browser.
+    bool isSoundshedEmbedUrl (const juce::String& url)
+    {
+        return url.startsWithIgnoreCase ("https://api-guitar.soundshed.com/")
+               && url.containsIgnoreCase ("/embed/");
+    }
+
     juce::WebBrowserComponent::Options::Backend getPreferredBrowserBackend()
     {
 #if JUCE_WINDOWS
@@ -169,7 +180,7 @@ bool SinglePageBrowser::pageAboutToLoad (const juce::String& newURL)
         return true;
 
     // The Jam view embeds trusted tool/player pages that should remain inside the WebView.
-    if (isYouTubeUrl (newURL) || isScalexUrl (newURL))
+    if (isYouTubeUrl (newURL) || isScalexUrl (newURL) || isSoundshedEmbedUrl (newURL))
         return true;
 
     if (newURL.startsWith ("https://") || newURL.startsWith ("http://"))
@@ -209,7 +220,7 @@ void SinglePageBrowser::newWindowAttemptingToLoad (const juce::String& newURL)
 {
     // YouTube embeds frequently request popup windows for watch pages, sign-in, and
     // player chrome. Ignore those requests so the iframe remains in-place on macOS.
-    if (isYouTubeUrl (newURL))
+    if (isYouTubeUrl (newURL) || isSoundshedEmbedUrl (newURL))
         return;
 
     if (newURL.startsWith ("https://") || newURL.startsWith ("http://"))
