@@ -1504,7 +1504,7 @@ namespace guitarfx
     std::atomic<int> mPendingQuality{-1};
     bool mNormalizeIR = true;
     bool mAutoGainCompEnabled = true;
-    bool mLowLatency = false; // non-uniform (low-latency) convolution mode
+    bool mLowLatency = true; // non-uniform (low-latency) convolution mode
     bool mHasLoadedResource = false;
     bool mPrevHasSlotA = false;
     bool mPrevHasSlotB = false;
@@ -1604,7 +1604,7 @@ namespace guitarfx
         {"slotBPan",      "IR B Pan",       0.0,  -1.0,  1.0,     "amount", "IR B",  true},
         {"micRadialB",    "Mic B Radial",   0.0,  0.0,   1.0,     "amount", "IR B",  true},
         {"micProximityB", "Mic B Proximity",0.0,  0.0,   1.0,     "amount", "IR B",  true},
-        {"lowLatency",    "Low Latency",    0.0,  0.0,   1.0,     "toggle",  "Tone",      true},
+        {"lowLatency",    "Low Latency",    1.0,  0.0,   1.0,     "toggle",  "Tone",      true},
         {"quality",       "Quality",        1.0,  0.0,   3.0,     "enum",    "Tone",      true, 1.0, {"Economy","Standard","High","Full"}}}; // 0=Economy, 1=Standard, 2=High, 3=Full
 
     EffectRegistry::Instance().Register(info.type, info, []()

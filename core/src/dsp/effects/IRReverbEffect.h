@@ -323,6 +323,26 @@ namespace guitarfx
       return truncated;
     }
 
+    // Energy-preserving (unity-gain) normalisation factor based on the combined L2 norm,
+    // matching the IR cab path so reverb levels stay consistent across IR files.
+    static float ComputeL2NormGain(const std::vector<float> &a, const std::vector<float> &b,
+                                   const std::vector<float> *c = nullptr,
+                                   const std::vector<float> *d = nullptr)
+    {
+      double sumSq = 0.0;
+      for (const float s : a) sumSq += static_cast<double>(s) * s;
+      for (const float s : b) sumSq += static_cast<double>(s) * s;
+      if (c && d)
+      {
+        for (const float s : *c) sumSq += static_cast<double>(s) * s;
+        for (const float s : *d) sumSq += static_cast<double>(s) * s;
+      }
+      // Average across the two output channels so mono/stereo/true-stereo IRs all
+      // normalise to the same perceived level.
+      sumSq *= 0.5;
+      return sumSq > 1e-12 ? static_cast<float>(1.0 / std::sqrt(sumSq)) : 1.0f;
+    }
+
     static double Sinc(double x)
     {
       if (std::fabs(x) < 1e-9)
@@ -486,32 +506,6 @@ namespace guitarfx
         processedRL = TruncateAndFade(mImpulseRL, truncLength);
       }
 
-      // Normalize by peak amplitude in source-rate domain, before resampling, so that the
-      // same normalization factor is applied regardless of playback sample rate.
-      // (Normalizing post-resample would counteract the coefficient-area scaling in
-      // ResampleImpulseForConvolution and cause louder reverb at higher sample rates.)
-      {
-        float peak = 0.0f;
-        for (float s : processedLL) peak = std::max(peak, std::fabs(s));
-        for (float s : processedRR) peak = std::max(peak, std::fabs(s));
-        if (mHasTrueStereo)
-        {
-          for (float s : processedLR) peak = std::max(peak, std::fabs(s));
-          for (float s : processedRL) peak = std::max(peak, std::fabs(s));
-        }
-        if (peak > 1e-6f)
-        {
-          const float inv = 1.0f / peak;
-          for (float &s : processedLL) s *= inv;
-          for (float &s : processedRR) s *= inv;
-          if (mHasTrueStereo)
-          {
-            for (float &s : processedLR) s *= inv;
-            for (float &s : processedRL) s *= inv;
-          }
-        }
-      }
-
       if (std::abs(mIRSampleRate - mSampleRate) > 1.0)
       {
         ResampleImpulseForConvolution(processedLL, mIRSampleRate, mSampleRate);
@@ -520,6 +514,27 @@ namespace guitarfx
         {
           ResampleImpulseForConvolution(processedLR, mIRSampleRate, mSampleRate);
           ResampleImpulseForConvolution(processedRL, mIRSampleRate, mSampleRate);
+        }
+      }
+
+      // Energy (L2-norm) normalisation for unity-gain convolution, mirroring the IR cab path.
+      // Reverb IRs contain thousands of significant samples, so peak normalisation (scaling so
+      // the loudest sample == 1.0) leaves the summed convolution energy proportional to the
+      // tail density/length. Dense, bright IRs (e.g. EMT-140 style plates) then come out far
+      // louder than sparse ones. Normalising by the combined L2 norm makes the wet output
+      // level consistent across IR files and equal-energy to the input. Done AFTER resampling
+      // so the normalisation reflects the impulse that is actually convolved at playback rate,
+      // making the level independent of the source IR sample rate.
+      {
+        const float normGain = ComputeL2NormGain(processedLL, processedRR,
+                                                  mHasTrueStereo ? &processedLR : nullptr,
+                                                  mHasTrueStereo ? &processedRL : nullptr);
+        for (float &s : processedLL) s *= normGain;
+        for (float &s : processedRR) s *= normGain;
+        if (mHasTrueStereo)
+        {
+          for (float &s : processedLR) s *= normGain;
+          for (float &s : processedRL) s *= normGain;
         }
       }
 
@@ -607,7 +622,7 @@ namespace guitarfx
     std::atomic<double> mOutputGain{1.0};
     IRQuality mQuality = IRQuality::Standard;
     std::atomic<int> mPendingQuality{-1};
-    bool mLowLatency = false; // non-uniform (low-latency) convolution mode
+    bool mLowLatency = true; // non-uniform (low-latency) convolution mode
     std::atomic<float> mTone{1.0f};
     std::atomic<float> mToneCoef{1.0f};
     // Set true during convolver rebuild to let the audio thread bypass safely.
@@ -630,7 +645,7 @@ namespace guitarfx
         {"mix", "Mix", 0.3, 0.0, 1.0, "amount"},
         {"outputGain", "Output", 0.0, -24.0, 24.0, "dB"},
         {"tone", "Tone", 1.0, 0.0, 1.0, "amount"},
-        {"lowLatency", "Low Latency", 0.0, 0.0, 1.0, "toggle"},
+        {"lowLatency", "Low Latency", 1.0, 0.0, 1.0, "toggle"},
         {"quality", "Quality", 3.0, 0.0, 3.0, "enum", "", false, 1.0, {"Economy", "Standard", "High", "Full"}}};
 
     EffectRegistry::Instance().Register(info.type, info, []()
