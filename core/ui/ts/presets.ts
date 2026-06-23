@@ -4426,6 +4426,7 @@ export function updatePresetActionButtons(): void {
   const isNewPresetDraft = Boolean(hasActivePreset && isActivePresetNewDraft());
 
   if (editBtn) {
+    editBtn.hidden = isNewPresetDraft;
     editBtn.disabled = !canModify;
     editBtn.title = canModify
       ? (isNewPresetDraft ? "Set preset details before saving" : "Edit preset details")

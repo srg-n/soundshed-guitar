@@ -1,9 +1,36 @@
           <div class="preset-row preset-toolbar-row">
             <div class="preset-toolbar" aria-label="Preset actions">
               <div class="preset-toolbar-group">
-                <span class="preset-toolbar-group-label">Presets</span>
                 <div class="preset-actions">
-                  <button class="preset-action-btn" id="preset-random-btn" type="button" title="Load a random preset">
+                  <button class="preset-action-btn" id="preset-new-btn" type="button" title="Start a new preset from the default rig" aria-label="New preset">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <rect x="3" y="3" width="18" height="18" rx="4" />
+                      <line x1="12" y1="7" x2="12" y2="17" />
+                      <line x1="7" y1="12" x2="17" y2="12" />
+                    </svg>
+                    <span class="preset-action-btn-label preset-action-btn-label-essential">New</span>
+                  </button>
+                  <button class="preset-action-btn" id="preset-edit-btn" type="button" title="Edit preset details" aria-label="Edit preset details">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                  </button>
+                  <button class="preset-action-btn" id="preset-save-btn" type="button" title="Save changes to this preset" aria-label="Save preset">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                      <polyline points="17 21 17 13 7 13 7 21" />
+                      <polyline points="7 3 7 8 15 8" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <span class="preset-toolbar-separator" aria-hidden="true"></span>
+
+              <div class="preset-toolbar-group">
+                <div class="preset-actions">
+                  <button class="preset-action-btn" id="preset-random-btn" type="button" title="Load a random preset" aria-label="Load random preset">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                       <path d="M16 3h5v5" />
                       <path d="M4 20L21 3" />
@@ -11,15 +38,6 @@
                       <path d="M15 15l6 6" />
                       <path d="M4 4l5 5" />
                     </svg>
-                    <span class="preset-action-btn-label">Random</span>
-                  </button>
-                  <button class="preset-action-btn" id="preset-new-btn" type="button" title="Start a new preset from the default rig">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                      <rect x="3" y="3" width="18" height="18" rx="4" />
-                      <line x1="12" y1="7" x2="12" y2="17" />
-                      <line x1="7" y1="12" x2="17" y2="12" />
-                    </svg>
-                    <span class="preset-action-btn-label">New</span>
                   </button>
                 </div>
               </div>
@@ -27,32 +45,8 @@
               <span class="preset-toolbar-separator" aria-hidden="true"></span>
 
               <div class="preset-toolbar-group">
-                <span class="preset-toolbar-group-label">Manage</span>
                 <div class="preset-actions">
-                  <button class="preset-action-btn" id="preset-edit-btn" type="button" title="Edit preset details">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                    </svg>
-                    <span class="preset-action-btn-label">Edit</span>
-                  </button>
-                  <button class="preset-action-btn" id="preset-save-btn" type="button" title="Save changes to this preset">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                      <polyline points="17 21 17 13 7 13 7 21" />
-                      <polyline points="7 3 7 8 15 8" />
-                    </svg>
-                    <span class="preset-action-btn-label">Save</span>
-                  </button>
-                </div>
-              </div>
-
-              <span class="preset-toolbar-separator" aria-hidden="true"></span>
-
-              <div class="preset-toolbar-group">
-                <span class="preset-toolbar-group-label">Share</span>
-                <div class="preset-actions">
-                  <button class="preset-action-btn preset-action-btn-primary" id="preset-publish-btn" type="button" title="Publish this preset to Tone Sharing">
+                  <button class="preset-action-btn preset-action-btn-primary" id="preset-publish-btn" type="button" title="Publish this preset to Tone Sharing" aria-label="Publish preset to Tone Sharing">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                       <circle cx="18" cy="5" r="3" />
                       <circle cx="6" cy="12" r="3" />
@@ -60,7 +54,7 @@
                       <path d="M8.6 10.7l6.8-4.4" />
                       <path d="M8.6 13.3l6.8 4.4" />
                     </svg>
-                    <span class="preset-action-btn-label">Publish</span>
+                    <span class="preset-action-btn-label preset-action-btn-label-essential">Publish</span>
                   </button>
                 </div>
               </div>
@@ -70,13 +64,12 @@
               <div class="preset-toolbar-group preset-extra-actions">
                 
                 <div class="preset-actions">
-                  <button class="preset-action-btn preset-extra-actions-btn" id="preset-extra-actions-btn" type="button" title="Extra preset functions" aria-haspopup="menu" aria-expanded="false" aria-controls="preset-extra-actions-menu">
+                  <button class="preset-action-btn preset-extra-actions-btn" id="preset-extra-actions-btn" type="button" title="Extra preset functions" aria-label="Preset options" aria-haspopup="menu" aria-expanded="false" aria-controls="preset-extra-actions-menu">
                     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                       <circle cx="5" cy="12" r="1.75" />
                       <circle cx="12" cy="12" r="1.75" />
                       <circle cx="19" cy="12" r="1.75" />
                     </svg>
-                    <span class="preset-action-btn-label">Options</span>
                     <span class="preset-extra-actions-caret" aria-hidden="true">▾</span>
                   </button>
                 </div>

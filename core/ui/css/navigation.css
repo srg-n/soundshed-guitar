@@ -208,7 +208,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   flex: 1 1 100%;
   width: 100%;
   min-width: 0;
@@ -219,7 +219,7 @@
 .preset-toolbar-group {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
   max-width: 100%;
 }
@@ -243,7 +243,7 @@
 .preset-actions {
   display: flex;
   flex-wrap: nowrap;
-  gap: 3px;
+  gap: 4px;
   margin-left: 0;
 }
 
@@ -253,6 +253,7 @@
 
 .preset-action-btn {
   min-height: 28px;
+  min-width: 30px;
   border: 1px solid rgba(255,255,255,0.11);
   border-radius: 8px;
   background: rgba(255,255,255,0.07);
@@ -263,7 +264,7 @@
   justify-content: center;
   gap: 5px;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-  padding: 0 10px;
+  padding: 0 8px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -302,15 +303,21 @@
 
 .preset-action-btn-label {
   line-height: 1;
+  display: none;
+}
+
+.preset-action-btn-label-essential {
+  display: inline;
 }
 
 .preset-extra-actions-btn {
-  min-width: 74px;
+  min-width: 30px;
 }
 
 .preset-extra-actions-caret {
   font-size: 9px;
   line-height: 1;
+  margin-left: 2px;
   transition: transform 0.2s ease;
 }
 
@@ -786,7 +793,8 @@
 }
 
 @media (max-width: 1320px) {
-  .preset-action-btn-label {
+  .preset-action-btn-label,
+  .preset-action-btn-label-essential {
     display: none;
   }
 
