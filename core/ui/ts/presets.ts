@@ -1537,6 +1537,7 @@ function applyImportedPresetFolders(
   archiveFolders: PresetArchiveFolder[],
   presetIdMap: Map<string, string>,
   importedPresetIds: string[],
+  topLevelFolderName?: string,
 ): void {
   const folders = uiState.presetFolders ?? [];
   const assignedPresetIds = new Set<string>();
@@ -1575,7 +1576,14 @@ function applyImportedPresetFolders(
     });
   };
 
-  applyFolderNodes(folders, archiveFolders);
+  let targetFolders = folders;
+  if (topLevelFolderName?.trim()) {
+    const topLevelFolder = ensureChildFolder(folders, topLevelFolderName.trim());
+    targetFolders = topLevelFolder.children ?? [];
+    topLevelFolder.children = targetFolders;
+  }
+
+  applyFolderNodes(targetFolders, archiveFolders);
 
   if (assignedPresetIds.size > 0 || importedPresetIds.length > 0) {
     persistPresetFolders();
@@ -3963,10 +3971,14 @@ export async function importPresetArchive(
   uiState.activePresetId = latestPreset.id;
   const importedPresetIds = importedPresets.map((preset) => preset.id);
   const topLevelFolderName = options.topLevelFolderName?.trim();
-  if (topLevelFolderName) {
+  
+  if (presetFoldersToImport.length > 0) {
+    // Archive has folder structure: recreate it under a top-level folder
+    const folderName = topLevelFolderName || file.name.replace(/\.soundshed\.presets$/i, "").replace(/\.zip$/i, "") || "Imported Pack";
+    applyImportedPresetFolders(presetFoldersToImport, presetIdMap, importedPresetIds, folderName);
+  } else if (topLevelFolderName) {
+    // No folder structure in archive, but top-level folder name was provided
     assignImportedPresetsToTopLevelFolder(topLevelFolderName, importedPresetIds);
-  } else if (presetFoldersToImport.length > 0) {
-    applyImportedPresetFolders(presetFoldersToImport, presetIdMap, importedPresetIds);
   }
   populatePresetDropdown();
   renderPresetUI(clonePreset(latestPreset));
@@ -4226,6 +4238,15 @@ export function isUserPreset(presetId: string | null): boolean {
     || /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(presetId);
 }
 
+// Check if preset can be modified (user preset OR factory preset editing enabled)
+function canModifyPreset(presetId: string | null): boolean {
+  if (isUserPreset(presetId)) {
+    return true;
+  }
+  // Allow factory preset modification when feature flag is enabled
+  return isFeatureEnabled(Features.FactoryPresetArchives);
+}
+
 // Delete current preset
 export async function deleteCurrentPreset(): Promise<void> {
   const activePresetId = uiState.activePresetId;
@@ -4234,7 +4255,7 @@ export async function deleteCurrentPreset(): Promise<void> {
     return;
   }
 
-  if (!isUserPreset(activePresetId)) {
+  if (!canModifyPreset(activePresetId)) {
     showNotification("Error", "Cannot delete factory presets");
     return;
   }
@@ -4291,7 +4312,7 @@ export function saveOverwriteCurrentPreset(): void {
     return;
   }
 
-  if (!isUserPreset(activePresetId)) {
+  if (!canModifyPreset(activePresetId)) {
     showNotification("Error", "Cannot overwrite factory presets. Use 'Save As' instead.");
     return;
   }
@@ -4348,7 +4369,7 @@ export function openEditPresetModal(): void {
     return;
   }
 
-  if (!isUserPreset(activePresetId)) {
+  if (!canModifyPreset(activePresetId)) {
     showNotification("Error", "Cannot edit factory presets. Use 'Save As' instead.");
     return;
   }
@@ -4399,7 +4420,7 @@ export function updatePresetActionButtons(): void {
   const publishBtn = document.getElementById("preset-publish-btn") as HTMLButtonElement | null;
 
   const activePreset = uiState.presetCache.get(uiState.activePresetId ?? "") ?? null;
-  const canModify = isUserPreset(uiState.activePresetId);
+  const canModify = canModifyPreset(uiState.activePresetId);
   const toneSharingOrigin = getToneSharingOriginMetadata(activePreset);
   const hasActivePreset = Boolean(activePreset);
   const isNewPresetDraft = Boolean(hasActivePreset && isActivePresetNewDraft());

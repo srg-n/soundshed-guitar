@@ -8,7 +8,7 @@
             <div class="library-tab-panel active" id="library-tab-tone3000">
               <div class="settings-section">
                 <h3>Tone3000 Browser</h3>
-                 <p>Tone 3000 is a 3rd party website with community provided NAM Models and IRs. You can browse them here but the easiest way to hear them is to select a Neural FX or Neural Amp effect in your main signal chain and use the resource selector within those. </p>
+                 <p>Browse community NAM models and IRs from Tone3000. For fastest auditioning, use the resource selector directly on Neural FX and Neural Amp nodes in your signal chain.</p>
                 <div class="tone3000-search">
                   <input type="text" id="tone3000-search-input" placeholder="Search tones..." />
                   <select id="tone3000-sort-select" class="themed-select">
@@ -38,38 +38,45 @@
             <div class="library-tab-panel" id="library-tab-resources">
               <div class="settings-section">
                 <h3>Resource Library</h3>
-                <p>The resource library shows the list of items (NAM models, Impulse Responses) already imported for use in the app. </p>
-                <div class="equipment-library-filters">
+                <p>Manage imported NAM models and IRs used across presets and blends.</p>
+                <div class="equipment-library-filters equipment-library-filters-primary">
                   <input type="text" id="equipment-library-search" placeholder="Search models and IRs..." />
                   <select id="equipment-library-type">
                     <option value="all">All Types</option>
                     <option value="nam">Amp Models</option>
                     <option value="ir">Cab IRs</option>
                   </select>
-                  <select id="equipment-library-source">
-                    <option value="all">All Sources</option>
-                    <option value="built-in">Built-in</option>
-                    <option value="local">Local</option>
-                    <option value="tone3000">Tone3000</option>
-                    <option value="imported">Imported</option>
-                  </select>
-                  <select id="equipment-library-view">
-                    <option value="list">List View</option>
-                    <option value="grouped" selected>Group by Tone</option>
-                  </select>
-                  <select id="equipment-library-category">
-                    <option value="all">All Categories</option>
-                  </select>
                 </div>
-                <div class="settings-row" id="equipment-library-cleanup-row">
-                  <label for="equipment-library-cleanup-scope">Cleanup unused</label>
-                  <select id="equipment-library-cleanup-scope">
-                    <option value="all" selected>All types</option>
-                    <option value="nam">Amp models only</option>
-                    <option value="ir">IRs only</option>
-                  </select>
-                  <button id="equipment-library-cleanup-btn" type="button">Remove unused</button>
-                </div>
+                <details class="settings-disclosure settings-disclosure-inline">
+                  <summary>More filters and cleanup</summary>
+                  <div class="settings-disclosure-body">
+                    <div class="equipment-library-filters equipment-library-filters-advanced">
+                      <select id="equipment-library-source">
+                        <option value="all">All Sources</option>
+                        <option value="built-in">Built-in</option>
+                        <option value="local">Local</option>
+                        <option value="tone3000">Tone3000</option>
+                        <option value="imported">Imported</option>
+                      </select>
+                      <select id="equipment-library-view">
+                        <option value="list">List View</option>
+                        <option value="grouped" selected>Group by Tone</option>
+                      </select>
+                      <select id="equipment-library-category">
+                        <option value="all">All Categories</option>
+                      </select>
+                    </div>
+                    <div class="settings-row" id="equipment-library-cleanup-row">
+                      <label for="equipment-library-cleanup-scope">Cleanup unused</label>
+                      <select id="equipment-library-cleanup-scope">
+                        <option value="all" selected>All types</option>
+                        <option value="nam">Amp models only</option>
+                        <option value="ir">IRs only</option>
+                      </select>
+                      <button id="equipment-library-cleanup-btn" type="button">Remove unused</button>
+                    </div>
+                  </div>
+                </details>
                 <div class="equipment-library-summary" id="equipment-library-summary"></div>
                 <div class="results equipment-library-results" id="equipment-library-results">
                   <!-- Library results rendered by JS -->
