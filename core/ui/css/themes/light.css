@@ -78,3 +78,27 @@
   --modal-input-border: #d0d4dc;
   --modal-input-placeholder: #9898b0;
 }
+
+.theme-light select {
+  color-scheme: light;
+}
+
+.theme-light select option,
+.theme-light select optgroup {
+  background: var(--bg-input);
+  color: var(--text-primary);
+}
+
+.theme-light ::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+  border-color: var(--border-light);
+}
+
+.theme-light ::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-color: var(--border-light);
+}
+
+.theme-light ::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}

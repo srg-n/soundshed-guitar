@@ -133,9 +133,10 @@ by `--button-bg-hover` / `--button-border-hover` tokens in `variables.css`.
 
 4. Update `theme-switcher-ui.ts` if adding a menu option.
 
-> Base/default token values live in `css/variables.css` (`:root`). Each theme
-> file only needs to override what differs, which keeps per-theme customization
-> easy to find and edit.
+> Base/default token values live in `css/variables.css` (`:root`). Theme files
+> also own theme-specific component styling selectors (for example
+> `.theme-classic .footer-*` and per-theme scrollbar/input treatments), so
+> `base.css` stays theme-agnostic.
 
 ## Converting Existing CSS
 

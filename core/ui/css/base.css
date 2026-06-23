@@ -63,17 +63,6 @@ p {
   mask-size: contain;
 }
 
-body.theme-classic {
-  background-color: #5b3f29;
-  background-image:
-   radial-gradient(circle at 24% 14%, rgba(248, 213, 151, 0.12) 0%, rgba(248, 213, 151, 0) 42%), linear-gradient(180deg, rgb(149 84 42 / 64%) 0%, rgb(0 0 0 / 36%) 100%), url(../images/themes/steampunk2.png);
-  background-size: cover;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-blend-mode: screen, multiply, normal;
-  background-attachment: fixed;
-}
-
 .prevent-select {
   -webkit-user-select: none; /* Safari */
   -ms-user-select: none; /* IE 10 and IE 11 */
@@ -236,57 +225,6 @@ body:not(.is-standalone) .input-mode-control {
 .themed-select:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-.theme-dark input[type="text"],
-.theme-dark input[type="password"],
-.theme-dark input[type="number"],
-.theme-dark input[type="search"],
-.theme-dark input[type="email"],
-.theme-dark input[type="url"],
-.theme-dark textarea,
-.theme-dark select {
-  background: var(--bg-input);
-  color: var(--text-primary);
-  border-color: var(--border-dark);
-  color-scheme: dark;
-}
-
-.theme-light select {
-  color-scheme: light;
-}
-
-.theme-classic select {
-  color-scheme: light;
-}
-
-.theme-dark input[type="text"]::placeholder,
-.theme-dark input[type="password"]::placeholder,
-.theme-dark input[type="number"]::placeholder,
-.theme-dark input[type="search"]::placeholder,
-.theme-dark input[type="email"]::placeholder,
-.theme-dark input[type="url"]::placeholder,
-.theme-dark textarea::placeholder {
-  color: var(--text-muted);
-}
-
-.theme-dark select option,
-.theme-dark select optgroup {
-  /* Use a solid token; native option lists often ignore gradients. */
-  background: var(--bg-input);
-  color: var(--text-primary);
-}
-
-.theme-light select option,
-.theme-light select optgroup {
-  background: var(--bg-input);
-  color: var(--text-primary);
-}
-
-.theme-classic select option,
-.theme-classic select optgroup {
-  background: var(--bg-input);
-  color: var(--text-primary);
 }
 
 .themed-checkbox {
@@ -860,79 +798,6 @@ body:not(.is-standalone) .input-mode-control {
   transform: translateX(-50%) translateY(0);
 }
 
-.theme-classic .footer-bar {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-footer), #fff 5%) 0%, var(--bg-footer) 100%);
-  border-top: 1px solid color-mix(in srgb, var(--border-dark-medium), #000 12%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 244, 220, 0.18),
-    inset 0 -1px 0 rgba(68, 43, 27, 0.32);
-}
-
-.theme-classic .footer-btn {
-  color: var(--text-dark-tertiary);
-}
-
-.theme-classic .footer-btn:hover {
-  color: var(--text-dark-primary);
-}
-
-.theme-classic .footer-divider {
-  color: color-mix(in srgb, var(--text-dark-disabled), #000 10%);
-}
-
-.theme-classic .footer-play-btn,
-.theme-classic .footer-repeat-btn,
-.theme-classic .footer-debug-capture-btn,
-.theme-classic .footer-metronome-play-btn,
-.theme-classic .footer-demo-select {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-dark-secondary), #fff 5%) 0%, var(--bg-dark-secondary) 100%);
-  border-color: color-mix(in srgb, var(--border-dark-medium), #000 8%);
-  box-shadow: inset 0 1px 0 rgba(255, 244, 220, 0.1);
-}
-
-.theme-classic .footer-play-btn:hover,
-.theme-classic .footer-repeat-btn:hover,
-.theme-classic .footer-debug-capture-btn:hover,
-.theme-classic .footer-metronome-play-btn:hover:not(:disabled) {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-dark-tertiary), #fff 7%) 0%, var(--bg-dark-tertiary) 100%);
-  border-color: color-mix(in srgb, var(--border-dark-strong), #000 10%);
-}
-
-.theme-classic .footer-repeat-btn.is-active,
-.theme-classic .footer-metronome-play-btn.is-active {
-  color: var(--color-accent);
-  border-color: var(--color-accent);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 244, 220, 0.18),
-    0 0 0 1px rgba(222, 171, 111, 0.14);
-}
-
-.theme-classic .footer-demo-select:focus {
-  box-shadow: 0 0 0 2px rgba(222, 171, 111, 0.18);
-}
-
-.theme-classic .bpm-display.metronome-only:hover {
-  background: rgba(255, 244, 220, 0.1);
-}
-
-.theme-classic .footer-theme-label,
-.theme-classic .footer-hint {
-  color: var(--text-dark-muted);
-}
-
-.theme-classic .footer-bpm-panel {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-panel), #fff 5%) 0%, var(--bg-panel) 100%);
-  border-color: var(--border-dark-light);
-  box-shadow: 0 8px 18px rgba(45, 29, 18, 0.24);
-}
-
-.theme-classic .footer-bpm-field input {
-  border-color: var(--border-dark-medium);
-  background: color-mix(in srgb, var(--bg-dark-secondary), #fff 6%);
-  color: var(--text-dark-primary);
-}
-
 /* Global Drag State */
 body.fx-dragging .signal-path-nodes {
   background: var(--overlay-accent-light);
@@ -1181,67 +1046,6 @@ body.fx-dragging .signal-connector {
 /* Firefox */
 * {
   scrollbar-color: var(--border-medium) var(--bg-secondary);
-}
-
-/* Theme-specific scrollbar variations */
-.theme-light ::-webkit-scrollbar-track {
-  background: var(--bg-tertiary);
-  border-color: var(--border-light);
-}
-
-.theme-light ::-webkit-scrollbar-thumb {
-  background: var(--border-medium);
-  border-color: var(--border-light);
-}
-
-.theme-light ::-webkit-scrollbar-thumb:hover {
-  background: var(--border-strong);
-}
-
-.theme-dark ::-webkit-scrollbar-track {
-  background: var(--bg-dark-secondary);
-  border-color: var(--border-dark-light);
-}
-
-.theme-dark ::-webkit-scrollbar-thumb {
-  background: var(--border-dark-medium);
-  border-color: var(--border-dark-light);
-}
-
-.theme-dark ::-webkit-scrollbar-thumb:hover {
-  background: var(--border-dark-strong);
-}
-
-.theme-dark * {
-  scrollbar-color: var(--border-dark-medium) var(--bg-dark-secondary);
-}
-
-.theme-classic ::-webkit-scrollbar-track {
-  background: var(--bg-tertiary);
-  border-color: var(--border-light);
-}
-
-.theme-classic ::-webkit-scrollbar-thumb {
-  background: var(--border-medium);
-  border-color: var(--border-light);
-}
-
-.theme-classic ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-accent);
-}
-
-.theme-gritty ::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
-  border-color: var(--border-light);
-}
-
-.theme-gritty ::-webkit-scrollbar-thumb {
-  background: var(--border-medium);
-  border-color: var(--border-light);
-}
-
-.theme-gritty ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-accent);
 }
 
 /* Special scrollbar for dark panels */
