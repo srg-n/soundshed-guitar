@@ -6,6 +6,7 @@ import { importPackWithConfirmation } from "./presets.js";
 import { uiState } from "./state.js";
 import type { RiffCaptureState, RiffLibrary } from "./types.js";
 import { arrayBufferToBase64, parseWavMetadata } from "./utils.js";
+import { getPlaySvg, getStopSvg } from "./iconAssets.js";
 
 let capturedPreviewAnimationFrame: number | null = null;
 let capturedPreviewActive = false;
@@ -686,7 +687,7 @@ function renderCapturedPlayButton(): void {
   const hasAudio = Boolean(uiState.riffCapture?.hasAudio);
   const hideWhileRecording = Boolean(uiState.riffCapture?.active) || isArmed;
   playCaptureBtn.disabled = !hasAudio;
-  playCaptureBtn.textContent = capturedPreviewActive ? "■" : "▶";
+  playCaptureBtn.innerHTML = capturedPreviewActive ? getStopSvg() : getPlaySvg();
   playCaptureBtn.classList.add("riff-icon-btn");
   playCaptureBtn.classList.toggle("hidden", hideWhileRecording);
 
@@ -705,7 +706,7 @@ function renderRiffTakePreviewButtons(): void {
   buttons.forEach((button) => {
     const takeId = button.dataset.takeId ?? "";
     const active = Boolean(takeId) && takeId === activeRiffTakePreviewId;
-    button.textContent = active ? "■" : "▶";
+    button.innerHTML = active ? getStopSvg() : getPlaySvg();
   });
 }
 
@@ -814,7 +815,7 @@ function renderRiffCaptureStatus(): void {
       : "armed";
     status.textContent = `Armed · ${countIn} · waiting for signal…`;
     if (recordBtn) {
-      recordBtn.textContent = "■ Stop";
+      recordBtn.innerHTML = `${getStopSvg()} Stop`;
       recordBtn.classList.add("riff-record-btn", "armed");
       recordBtn.classList.remove("recording");
     }
@@ -828,7 +829,7 @@ function renderRiffCaptureStatus(): void {
       : `${capture.bars} bar(s)`;
     status.textContent = `Recording · ${barText} @ ${capture.tempoBpm.toFixed(1)} BPM`;
     if (recordBtn) {
-      recordBtn.textContent = "■ Stop";
+      recordBtn.innerHTML = `${getStopSvg()} Stop`;
       recordBtn.classList.add("riff-record-btn", "recording");
       recordBtn.classList.remove("armed");
     }
@@ -1443,7 +1444,7 @@ export function renderRiffLibraryPanel(): void {
             <div class="results-item-path equipment-library-item-path" title="${take?.filePath ?? ""}">${takeSummary}</div>
           </div>
           <div class="results-item-actions equipment-library-item-actions riff-library-actions">
-            <button class="equipment-library-browse riff-preview-btn riff-icon-btn" data-take-id="${take?.id ?? ""}" ${take ? "" : "disabled"} title="Preview" aria-label="Preview">▶</button>
+            <button class="equipment-library-browse riff-preview-btn riff-icon-btn" data-take-id="${take?.id ?? ""}" ${take ? "" : "disabled"} title="Preview" aria-label="Preview">${getPlaySvg()}</button>
             <button class="equipment-library-browse riff-icon-btn riff-edit-btn" data-riff-id="${riff.id}" data-take-id="${take?.id ?? ""}" title="Edit" aria-label="Edit"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
             <button class="equipment-library-browse riff-icon-btn riff-favorite-btn${riff.favorite ? " riff-fav-active" : ""}" data-riff-id="${riff.id}" data-favorite="${riff.favorite ? "true" : "false"}" title="${riff.favorite ? "Remove from favourites" : "Add to favourites"}" aria-label="${riff.favorite ? "Remove from favourites" : "Add to favourites"}"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="${riff.favorite ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
             <button class="equipment-library-browse riff-icon-btn riff-used-btn${riff.used ? " riff-used-active" : ""}" data-riff-id="${riff.id}" data-used="${riff.used ? "true" : "false"}" title="${riff.used ? "Mark as unused" : "Mark as used"}" aria-label="${riff.used ? "Mark as unused" : "Mark as used"}"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${riff.used ? "<circle cx=\"12\" cy=\"12\" r=\"10\"/><line x1=\"15\" y1=\"9\" x2=\"9\" y2=\"15\"/><line x1=\"9\" y1=\"9\" x2=\"15\" y2=\"15\"/>" : "<circle cx=\"12\" cy=\"12\" r=\"10\"/><polyline points=\"9 12 11 14 15 10\"/>"}</svg></button>

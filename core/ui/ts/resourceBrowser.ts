@@ -21,6 +21,7 @@ import {
   parseTone3000Pagination,
 } from "./tone3000Api.js";
 import { fetchTone3000Models, getTone3000ImageUrl } from "./tone3000Shared.js";
+import { getCheckmarkSvg, getPlaySvg, getStopSvg } from "./iconAssets.js";
 
 type ResourceBrowserOptions = {
   resourceType: "nam" | "ir";
@@ -1164,7 +1165,7 @@ export class ResourceBrowserModal {
                 ${copyPathAction}
                 <button class="resource-browser-item-details-btn" type="button" data-resource-id="${escapeHtml(res.id)}" title="${isDetailsExpanded ? "Hide details" : "Show details"}" aria-expanded="${isDetailsExpanded ? "true" : "false"}" aria-label="Resource details">ℹ</button>
                 ${deleteAction}
-                <button class="resource-browser-item-select" type="button">${isSelected ? "✓ Selected" : "Select"}</button>
+                <button class="resource-browser-item-select" type="button">${isSelected ? `${getCheckmarkSvg()} Selected` : "Select"}</button>
               </div>
             </div>
             ${isDetailsExpanded ? this.renderLibraryItemDetailsPanel(res) : ""}
@@ -1626,7 +1627,7 @@ export class ResourceBrowserModal {
             : isLoadingPreview
               ? "resource-browser-model is-preview-loading"
               : "resource-browser-model";
-          const previewLabel = isPreviewing ? "⏹ Stop" : isLoadingPreview ? "Loading..." : "▶ Preview";
+          const previewLabel = isPreviewing ? `${getStopSvg()} Stop` : isLoadingPreview ? "Loading..." : `${getPlaySvg()} Preview`;
           
           return `
             <div class="${previewClass}" data-model-id="${String(model.id)}">

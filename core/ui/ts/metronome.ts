@@ -2,6 +2,7 @@ import { uiState } from "./state.js";
 import { setMetronome } from "./bridge.js";
 import { GenericKnob, enhanceRangeInput } from "./controls.js";
 import type { EnvironmentState, MetronomeState } from "./types.js";
+import { getPlaySvg, getStopSvg } from "./iconAssets.js";
 
 const BPM_MIN = 30;
 const BPM_MAX = 300;
@@ -134,7 +135,7 @@ function syncMetronomeControls(): void {
   if (toggleButton) {
     const icon = toggleButton.querySelector<HTMLElement>(".metronome-play-icon");
     if (icon) {
-      icon.textContent = state.enabled ? "■" : "▶";
+      icon.innerHTML = state.enabled ? getStopSvg() : getPlaySvg();
     }
     toggleButton.disabled = !editable;
   }
@@ -142,7 +143,7 @@ function syncMetronomeControls(): void {
   if (footerMetronomeToggleButton) {
     const icon = footerMetronomeToggleButton.querySelector<HTMLElement>(".footer-metronome-play-icon");
     if (icon) {
-      icon.textContent = state.enabled ? "■" : "▶";
+      icon.innerHTML = state.enabled ? getStopSvg() : getPlaySvg();
     }
     footerMetronomeToggleButton.disabled = !editable;
     footerMetronomeToggleButton.classList.toggle("is-active", state.enabled);

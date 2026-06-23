@@ -10,6 +10,7 @@ import { postMessage } from "./bridge.js";
 import { uiState } from "./state.js";
 import type { AutomationSlot, AutomationRegistryEntry } from "./types.js";
 import { EffectTypeRegistry } from "./presetV2.js";
+import { getXMarkSvg } from "./iconAssets.js";
 
 let modalInitialized = false;
 let pendingLearnSlotId: string | null = null;
@@ -230,15 +231,15 @@ function renderSlotRow(slot: AutomationSlot, registry: AutomationRegistryEntry[]
     <div class="automation-slot-row" data-slot-id="${escapeHtml(slot.slotId)}">
       <span class="automation-slot-label">${escapeHtml(slot.label)}</span>
       <span class="automation-slot-address" title="${escapeHtml(slot.address)}">${escapeHtml(slot.address)} ${escapeHtml(rangeText)}</span>
-      <span class="automation-slot-midi">${escapeHtml(midiText)}${slot.midiMap ? ` <button class="automation-clear-btn automation-clear-midi" data-slot-id="${escapeHtml(slot.slotId)}" title="Clear MIDI mapping">✕</button>` : ""}</span>
-      <span class="automation-slot-key">${escapeHtml(keyText)}${(slot.keyMap && slot.keyMap.length > 0) ? ` <button class="automation-clear-btn automation-clear-key" data-slot-id="${escapeHtml(slot.slotId)}" title="Clear keyboard mapping">✕</button>` : ""}</span>
+      <span class="automation-slot-midi">${escapeHtml(midiText)}${slot.midiMap ? ` <button class="automation-clear-btn automation-clear-midi" data-slot-id="${escapeHtml(slot.slotId)}" title="Clear MIDI mapping">${getXMarkSvg()}</button>` : ""}</span>
+      <span class="automation-slot-key">${escapeHtml(keyText)}${(slot.keyMap && slot.keyMap.length > 0) ? ` <button class="automation-clear-btn automation-clear-key" data-slot-id="${escapeHtml(slot.slotId)}" title="Clear keyboard mapping">${getXMarkSvg()}</button>` : ""}</span>
       <div>
         <button class="automation-learn-btn ${isLearn ? "active" : ""}" data-slot-id="${escapeHtml(slot.slotId)}">
           ${isLearn ? "Listening…" : "Learn"}
         </button>
         ${entry?.isTrigger ? `<button class="automation-test-btn" data-slot-id="${escapeHtml(slot.slotId)}" title="Fire this command now">Test</button>` : ""}
         ${!slot.isDefault ? `<button class="automation-target-btn" data-slot-id="${escapeHtml(slot.slotId)}" title="Edit target parameter">${editingSlotId === slot.slotId ? "Close" : "Target"}</button>` : ""}
-        ${!slot.isDefault ? `<button class="automation-remove-btn" data-slot-id="${escapeHtml(slot.slotId)}">✕</button>` : ""}
+        ${!slot.isDefault ? `<button class="automation-remove-btn" data-slot-id="${escapeHtml(slot.slotId)}">${getXMarkSvg()}</button>` : ""}
       </div>
     </div>
   `;

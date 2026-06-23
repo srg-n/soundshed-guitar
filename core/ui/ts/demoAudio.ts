@@ -6,6 +6,7 @@ import { postMessage, renderDemoAudio, requestCaptureDebugSnapshot, setAppSettin
 import { sanitizeFilename } from "./archiveUtils.js";
 import type { DemoSample } from "./types.js";
 import { Features, isFeatureEnabled } from "./featureFlags.js";
+import { getPlaySvg, getStopSvg } from "./iconAssets.js";
 
 // Track whether demo audio is currently playing
 let demoAudioPlaying = false;
@@ -416,7 +417,7 @@ export function renderFooterDemoAudioControls(): string {
         ${options}
       </select>
       <button id="footer-play-demo-audio" class="footer-play-btn" title="Play demo audio">
-        <span class="play-icon">▶</span>
+        ${getPlaySvg()}
       </button>
       <button id="footer-demo-audio-repeat" class="footer-repeat-btn" title="Repeat demo audio" aria-pressed="false">
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -521,7 +522,7 @@ export function renderDemoAudioControls(): string {
           ${options}
         </select>
         <button id="play-demo-audio" class="btn btn-primary">
-          <span class="play-icon">▶</span>
+          ${getPlaySvg()}
           Play
         </button>
         <div class="demo-actions-wrap">
@@ -748,16 +749,16 @@ export function isDemoAudioPlaying(): boolean {
  * Update all play button icons to show play or stop state.
  */
 function updatePlayButtonIcons(playing: boolean): void {
-  const playIcon = playing ? "⏹" : "▶";
   const playTitle = playing ? "Stop demo audio" : "Play demo audio";
   
   // Update footer play button
   const footerBtn = document.getElementById("footer-play-demo-audio");
   if (footerBtn) {
-    const iconSpan = footerBtn.querySelector(".play-icon");
+    const iconSpan = footerBtn.querySelector("svg");
     if (iconSpan) {
-      iconSpan.textContent = playIcon;
+      iconSpan.remove();
     }
+    footerBtn.insertAdjacentHTML('afterbegin', playing ? getStopSvg() : getPlaySvg());
     footerBtn.title = playTitle;
     footerBtn.classList.toggle("is-playing", playing);
   }
@@ -765,12 +766,7 @@ function updatePlayButtonIcons(playing: boolean): void {
   // Update main play button
   const mainBtn = document.getElementById("play-demo-audio");
   if (mainBtn) {
-    const iconSpan = mainBtn.querySelector(".play-icon");
-    if (iconSpan) {
-      iconSpan.textContent = playIcon;
-    }
-    // Update the button text too
-    mainBtn.innerHTML = `<span class="play-icon">${playIcon}</span> ${playing ? "Stop" : "Play"}`;
+    mainBtn.innerHTML = `${playing ? getStopSvg() : getPlaySvg()} ${playing ? "Stop" : "Play"}`;
     mainBtn.title = playTitle;
     mainBtn.classList.toggle("is-playing", playing);
   }

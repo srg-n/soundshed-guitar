@@ -4,7 +4,7 @@ import { appendLog } from "./logging.js";
 import { showNotification } from "./notifications.js";
 import { handleAppSettingUpdate, saveTone3000ApiKey } from "./tone3000.js";
 import { getTone3000ApiClientConfig } from "./tone3000Api.js";
-import { updateSignalDiagnosticsView, updateDSPPerformancePlot } from "./views.js";
+import { updateSignalDiagnosticsView, scheduleDSPPerformancePlotUpdate } from "./views.js";
 import { initTone3000Browser } from "./tone3000Browser.js";
 import { getAudioFxLibrary, getIrLibrary } from "./dataLibraries.js";
 import { buildArchiveFileName, requestResourceData, sanitizeFilename, arrayBufferToBase64 } from "./archiveUtils.js";
@@ -659,7 +659,8 @@ export function activateEquipmentTab(tabId: string): void {
   });
 
   if (resolvedTabId === "performance") {
-    updateDSPPerformancePlot();
+    scheduleDSPPerformancePlotUpdate();
+    updateSignalDiagnosticsView();
   }
 
   updateSettingsViewState({ equipmentTab: resolvedTabId });

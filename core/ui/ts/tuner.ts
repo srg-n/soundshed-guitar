@@ -1,5 +1,6 @@
 import { postMessage } from "./bridge.js";
 import { appendLog } from "./logging.js";
+import { getCheckmarkSvg } from "./iconAssets.js";
 
 // Note names for display
 const NOTE_NAMES = ["C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb", "G", "G#/Ab", "A", "A#/Bb", "B"];
@@ -416,7 +417,7 @@ function updateTunerDisplay(data: TunerData): void {
 
   // Update cents indicator (flat/sharp arrow)
   if (Math.abs(centOffset) < 3) {
-    tunerCentsIndicator.textContent = "✓";
+    tunerCentsIndicator.innerHTML = getCheckmarkSvg();
     tunerCentsIndicator.style.color = "#40c080";
   } else if (centOffset < 0) {
     tunerCentsIndicator.textContent = "<";

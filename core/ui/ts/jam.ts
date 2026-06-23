@@ -8,6 +8,7 @@ import { getApiBaseUrl } from "./toneSharingPanel.js";
 import { isJamEnabled } from "./buildFlags.js";
 import { FEATURE_FLAGS_CHANGED_EVENT, Features, isFeatureEnabled, isJamExperienceEnabled } from "./featureFlags.js";
 import { renderRiffLibraryPanel } from "./riffLibrary.js";
+import { getXMarkSvg } from "./iconAssets.js";
 
 const API_KEY_SETTING = "jam.youtubeApiKey";
 const FAVORITES_SETTING = "jam.favorites";
@@ -711,7 +712,7 @@ export function renderFloatingPlayer(): void {
           </div>
           <div class="jam-floating-player-actions">
             <button type="button" id="jam-player-minimize"></button>
-            <button type="button" id="jam-player-close" aria-label="Close player" title="Close player">✕</button>
+            <button type="button" id="jam-player-close" aria-label="Close player" title="Close player">${getXMarkSvg()}</button>
           </div>
         </div>
         <div class="jam-floating-player-frame">

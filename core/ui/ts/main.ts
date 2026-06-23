@@ -9,7 +9,7 @@ import {
   renderActivePreset,
 } from "./presets.js";
 import { installFetchLogger, renderLogEntries } from "./logging.js";
-import { updateDSPPerformancePlot } from "./views.js";
+import { scheduleDSPPerformancePlotUpdate } from "./views.js";
 import { handleIncomingMessage } from "./messages.js";
 import { requestSignalPathTest } from "./presets.js";
 import { initializeTuner } from "./tuner.js";
@@ -216,7 +216,7 @@ async function bootstrap(): Promise<void> {
   });
 
   window.addEventListener("resize", () => {
-    updateDSPPerformancePlot();
+    scheduleDSPPerformancePlotUpdate();
   });
 
   const signalTestButton = document.getElementById("run-signal-test");
