@@ -12,17 +12,17 @@
 
 ## Overview
 
-GuitarFX uses a CSS variable-based theme system with five built-in themes. Theme preference persists via localStorage.
+GuitarFX uses a CSS variable-based theme system with three active themes (light, dark, vintage/classic). Theme preference persists via backend settings and is reflected in UI state.
 
 ## Available Themes
 
 | Theme | Class | Description |
 |-------|-------|-------------|
-| Default | (none) | Medium-contrast, cool grays |
 | Light | `.theme-light` | High brightness, clean, modern |
 | Dark | `.theme-dark` | Low brightness, reduced eye strain |
-| Classic 70s | `.theme-classic` | Warm vintage browns/ambers |
-| Worn Pedal | `.theme-gritty` | Gritty, worn metal textures |
+| Vintage | `.theme-classic` | Warm vintage browns/ambers |
+
+Legacy persisted values (`default`, `gritty`) are normalized to `dark` in `theme-switcher.ts` for backward compatibility.
 
 ## Usage
 
@@ -37,7 +37,7 @@ themeSwitcher.setTheme('dark');
 themeSwitcher.cycleTheme();
 
 // Get current theme
-const theme = themeSwitcher.getCurrentTheme(); // 'default', 'light', 'dark', 'classic', 'gritty'
+const theme = themeSwitcher.getCurrentTheme(); // 'light' | 'dark' | 'classic'
 ```
 
 ### UI Control
@@ -45,17 +45,17 @@ Click the 🎨 icon in the icon bar to cycle through themes.
 
 ## CSS Variables
 
-All colors are defined as CSS variables in `variables.css`:
+Theme tokens are defined in `variables.css` (`:root`) and selectively overridden by theme files:
 
 ```css
 :root {
   --color-primary: #e07848;
-  --bg-primary: #ffffff;
-  --text-primary: #3a3a40;
+  --bg-primary: #f0f2f5;
+  --text-primary: #1c1c24;
 }
 
-body.theme-dark {
-  --color-primary: #ff9d5c;
+.theme-dark {
+  --color-accent: #ff9d5c;
   --bg-primary: #1a1a20;
   --text-primary: #e0e0e8;
 }
@@ -65,13 +65,24 @@ body.theme-dark {
 
 | Category | Examples | Usage |
 |----------|----------|-------|
-| Primary colors | `--color-primary`, `--color-primary-dark` | Brand accent |
-| Backgrounds | `--bg-primary`, `--bg-secondary`, `--bg-panel` | Surface colors |
-| Text | `--text-primary`, `--text-secondary`, `--text-disabled` | Typography |
-| Borders | `--border-dark`, `--border-light` | Separators |
-| Controls | `--control-knob-bg`, `--control-toggle-bg-on` | UI controls |
-| Overlays | `--overlay-light`, `--overlay-dark` | Transparency layers |
-| Shadows | `--shadow-control`, `--shadow-hover` | Elevation |
+| Accent / semantic | `--color-accent`, `--color-success`, `--status-error-text` | Primary actions and semantic states |
+| Backgrounds | `--bg-primary`, `--bg-surface`, `--bg-panel`, `--bg-browser-shell` | App and panel surfaces |
+| Text | `--text-primary`, `--text-secondary`, `--text-dark-primary` | Typography and readable contrast |
+| Borders | `--border-light`, `--border-medium`, `--border-dark-medium` | Separators and control strokes |
+| Controls | `--control-bg`, `--knob-ring-color`, `--toggle-active` | Knobs, toggles, and interactive elements |
+| Overlays / shadows | `--overlay-light`, `--overlay-darker`, `--shadow-md` | Depth and transient visual layers |
+| Shared component tokens | `--accent-primary`, `--button-bg`, `--button-border-hover` | Canonical button/tab/icon-button styling |
+
+`--color-accent-rgb` is the primitive accent channel token. `--accent-primary-rgb`
+is the semantic alias consumed by existing component CSS (for selection outlines,
+drag-over states, and overlay mixes). Theme files should override
+`--color-accent-rgb` alongside `--color-accent`.
+
+### Hardening Notes
+
+- `variables.css` includes **legacy alias tokens** (for example `--accent`, `--border-color`, `--input-bg`) so older component CSS keeps rendering safely during refactors.
+- Dynamic hook tokens used by specific components (for example `--knob-pct`, `--mapped-angle`, `--icon-url`) have default values to avoid invalid-property rendering when runtime state is absent.
+- When introducing a new token in component CSS, add a `:root` default first, then override per theme only where needed.
 
 ### Component CSS
 Components use variables instead of hardcoded colors:
@@ -107,16 +118,18 @@ by `--button-bg-hover` / `--button-border-hover` tokens in `variables.css`.
 1. Create `css/themes/yourtheme.css` with the theme's token overrides:
    ```css
    .theme-yourtheme {
-     --color-accent: #yourcolor;
-     --bg-primary: #yourcolor;
-     --text-primary: #yourcolor;
+     --color-accent: #your-accent;
+     --bg-primary: #your-bg;
+     --text-primary: #your-text;
      /* ...only the tokens this theme overrides; the rest inherit from :root */
    }
    ```
 
 2. Link it in `index.template.html` alongside the other `css/themes/*.css` files.
 
-3. Update `theme-switcher.ts` to include the new theme in the cycle.
+3. Update `theme-switcher.ts`:
+   - add the theme to `ThemeName` and `THEME_LIST`
+   - remove/adjust any relevant legacy mapping in `LEGACY_THEME_MAP`
 
 4. Update `theme-switcher-ui.ts` if adding a menu option.
 
@@ -165,7 +178,7 @@ cmake --build juce/builds --config Debug --target SoundshedGuitar_Standalone
 | Issue | Solution |
 |-------|----------|
 | Theme not switching | Check `variables.css` loads first in `index.html` |
-| Some colors unchanged | Run conversion script or manually convert hardcoded values |
+| Some colors unchanged | Search for hardcoded values and convert to tokens; if using a legacy alias token, migrate toward canonical token names over time |
 | New component needs theming | Use existing variables; add new ones to all theme blocks |
 
 ## See Also

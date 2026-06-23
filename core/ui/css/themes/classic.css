@@ -4,9 +4,10 @@
 
 .theme-classic {
   /* Primary Colors - vintage amber with nickel contrast */
-  --color-accent: #efb15e;
-  --color-accent-hover: #f5c17a;
-  --color-accent-dark: #d59036;
+  --color-accent: #deab6f;
+  --color-accent-hover: #e8ba85;
+  --color-accent-dark: #c28a48;
+  --color-accent-rgb: 222, 171, 111;
 
   /* Success/Info - restrained seafoam nod to era pedals */
   --color-success: #6fae95;
@@ -83,39 +84,39 @@
   /* Shadows */
   --shadow-sm: 0 2px 4px rgba(65, 40, 24, 0.16);
   --shadow-md: 0 4px 8px rgba(65, 40, 24, 0.24);
-  --shadow-lg: 0 8px 32px rgba(65, 40, 24, 0.3);
-  --shadow-xl: 0 8px 32px rgba(65, 40, 24, 0.45);
+  --shadow-lg: 0 6px 24px rgba(65, 40, 24, 0.24);
+  --shadow-xl: 0 8px 26px rgba(65, 40, 24, 0.34);
 
-  --shadow-inset-light: inset 0 1px 0 rgba(255, 244, 219, 0.55);
+  --shadow-inset-light: inset 0 1px 0 rgba(255, 244, 219, 0.38);
   --shadow-inset-dark: inset 0 -2px 0 rgba(58, 35, 21, 0.2);
 
   /* Overlays */
-  --overlay-light: rgba(255, 244, 220, 0.24);
-  --overlay-medium: rgba(255, 244, 220, 0.38);
+  --overlay-light: rgba(255, 244, 220, 0.16);
+  --overlay-medium: rgba(255, 244, 220, 0.26);
   --overlay-dark: rgba(73, 49, 31, 0.3);
   --overlay-darker: rgba(50, 32, 20, 0.62);
 
   /* Special */
   --color-preset-bg: #faedd2;
   --color-preset-border: #d8b885;
-  --color-preset-favorite: #efb15e;
+  --color-preset-favorite: #deab6f;
   --color-preset-text: #4b331f;
 
-  --amp-glow: radial-gradient(ellipse, rgba(239, 177, 94, 0.34) 0%, transparent 70%);
+  --amp-glow: radial-gradient(ellipse, rgba(222, 171, 111, 0.22) 0%, transparent 72%);
 
   /* Node Colors */
   --node-input: #6fae95;
   --node-input-hover: #84bea8;
-  --node-output: #efb15e;
-  --node-output-hover: #f5c17a;
+  --node-output: #deab6f;
+  --node-output-hover: #e8ba85;
 
   --bg-browser-shell: rgba(62, 43, 28, 0.5);
   --bg-browser-header: rgba(79, 55, 36, 0.62);
   --bg-browser-sidebar: rgba(69, 47, 30, 0.56);
   --bg-browser-card: rgba(85, 57, 35, 0.42);
   --bg-browser-input: rgba(73, 50, 32, 0.7);
-  --bg-browser-hover: rgba(255, 244, 220, 0.18);
-  --bg-browser-selected: rgba(239, 177, 94, 0.22);
+  --bg-browser-hover: rgba(255, 244, 220, 0.12);
+  --bg-browser-selected: rgba(222, 171, 111, 0.16);
   --border-browser: rgba(188, 138, 91, 0.42);
   --border-browser-strong: rgba(205, 156, 108, 0.58);
 

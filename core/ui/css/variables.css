@@ -6,6 +6,8 @@
   --color-accent: #e07848;
   --color-accent-hover: #e88858;
   --color-accent-dark: #c85828;
+  --color-accent-rgb: 224, 120, 72;
+  --color-accent-light: var(--color-accent-hover);
   --color-primary: var(--color-accent);
   --color-primary-hover: var(--color-accent-hover);
   
@@ -166,6 +168,38 @@
 
   /* Shared UI Tokens */
   --accent-primary: var(--color-accent);
+  --accent: var(--color-accent);
+  --accent-color: var(--color-accent);
+  --accent-dark: var(--color-accent-dark);
+  --accent-secondary: var(--color-info);
+  --accent-primary-rgb: var(--color-accent-rgb);
+  --color-danger: var(--color-error);
+  --color-primary-dim: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  --text-light: var(--text-dark-primary);
+  --text-on-accent: #ffffff;
+  --status-error: var(--status-error-text);
+
+  /* Legacy Surface/Borders (fallback aliases for older component CSS) */
+  --bg-deep: var(--bg-dark-secondary);
+  --bg-dark-quaternary: var(--bg-dark-surface);
+  --input-bg: var(--bg-input);
+  --border: var(--border-medium);
+  --border-color: var(--border-medium);
+  --border-lighter: var(--border-light);
+  --border-accent: var(--color-accent);
+  --overlay-accent-light: color-mix(in srgb, var(--color-accent) 18%, transparent);
+
+  /* Dynamic/Optional Hook Tokens (safe defaults when not set by component logic) */
+  --effect-visual-bg: none;
+  --effect-visual-icon: none;
+  --effect-visual-icon-opacity: 0.08;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --meter-fill: 0%;
+  --vu-seg-off: color-mix(in srgb, var(--border-dark) 22%, transparent);
+  --icon-url: none;
+  --knob-pct: 0;
+  --mapped-angle: 0deg;
+
   --bg-control: #e8eaef;
   --button-bg: linear-gradient(180deg, #edeef2 0%, #dfe1e8 100%);
   --button-text: #3a3a40;

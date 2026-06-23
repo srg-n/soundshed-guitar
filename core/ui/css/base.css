@@ -66,7 +66,7 @@ p {
 body.theme-classic {
   background-color: #5b3f29;
   background-image:
-   radial-gradient(circle at 24% 14%, rgba(248, 213, 151, 0.22) 0%, rgba(248, 213, 151, 0) 48%), linear-gradient(180deg, rgb(170 89 36 / 86%) 0%, rgb(0 0 0 / 48%) 100%), url(../images/themes/steampunk2.png);
+   radial-gradient(circle at 24% 14%, rgba(248, 213, 151, 0.12) 0%, rgba(248, 213, 151, 0) 42%), linear-gradient(180deg, rgb(149 84 42 / 64%) 0%, rgb(0 0 0 / 36%) 100%), url(../images/themes/steampunk2.png);
   background-size: cover;
   background-repeat: no-repeat;
   background-position: center;
@@ -862,18 +862,11 @@ body:not(.is-standalone) .input-mode-control {
 
 .theme-classic .footer-bar {
   background:
-    repeating-linear-gradient(
-      90deg,
-      rgba(249, 232, 196, 0.08) 0px,
-      rgba(249, 232, 196, 0.08) 2px,
-      rgba(111, 76, 46, 0.06) 2px,
-      rgba(111, 76, 46, 0.06) 4px
-    ),
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-footer), #fff 7%) 0%, var(--bg-footer) 100%);
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-footer), #fff 5%) 0%, var(--bg-footer) 100%);
   border-top: 1px solid color-mix(in srgb, var(--border-dark-medium), #000 12%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 244, 220, 0.28),
-    inset 0 -1px 0 rgba(68, 43, 27, 0.45);
+    inset 0 1px 0 rgba(255, 244, 220, 0.18),
+    inset 0 -1px 0 rgba(68, 43, 27, 0.32);
 }
 
 .theme-classic .footer-btn {
@@ -882,7 +875,6 @@ body:not(.is-standalone) .input-mode-control {
 
 .theme-classic .footer-btn:hover {
   color: var(--text-dark-primary);
-  text-shadow: 0 0 8px rgba(216, 133, 47, 0.28);
 }
 
 .theme-classic .footer-divider {
@@ -894,16 +886,16 @@ body:not(.is-standalone) .input-mode-control {
 .theme-classic .footer-debug-capture-btn,
 .theme-classic .footer-metronome-play-btn,
 .theme-classic .footer-demo-select {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-dark-secondary), #fff 8%) 0%, var(--bg-dark-secondary) 100%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-dark-secondary), #fff 5%) 0%, var(--bg-dark-secondary) 100%);
   border-color: color-mix(in srgb, var(--border-dark-medium), #000 8%);
-  box-shadow: inset 0 1px 0 rgba(255, 244, 220, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 244, 220, 0.1);
 }
 
 .theme-classic .footer-play-btn:hover,
 .theme-classic .footer-repeat-btn:hover,
 .theme-classic .footer-debug-capture-btn:hover,
 .theme-classic .footer-metronome-play-btn:hover:not(:disabled) {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-dark-tertiary), #fff 10%) 0%, var(--bg-dark-tertiary) 100%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-dark-tertiary), #fff 7%) 0%, var(--bg-dark-tertiary) 100%);
   border-color: color-mix(in srgb, var(--border-dark-strong), #000 10%);
 }
 
@@ -912,16 +904,16 @@ body:not(.is-standalone) .input-mode-control {
   color: var(--color-accent);
   border-color: var(--color-accent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 244, 220, 0.24),
-    0 0 0 1px rgba(216, 133, 47, 0.2);
+    inset 0 1px 0 rgba(255, 244, 220, 0.18),
+    0 0 0 1px rgba(222, 171, 111, 0.14);
 }
 
 .theme-classic .footer-demo-select:focus {
-  box-shadow: 0 0 0 2px rgba(216, 133, 47, 0.25);
+  box-shadow: 0 0 0 2px rgba(222, 171, 111, 0.18);
 }
 
 .theme-classic .bpm-display.metronome-only:hover {
-  background: rgba(255, 244, 220, 0.14);
+  background: rgba(255, 244, 220, 0.1);
 }
 
 .theme-classic .footer-theme-label,
@@ -930,9 +922,9 @@ body:not(.is-standalone) .input-mode-control {
 }
 
 .theme-classic .footer-bpm-panel {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-panel), #fff 8%) 0%, var(--bg-panel) 100%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-panel), #fff 5%) 0%, var(--bg-panel) 100%);
   border-color: var(--border-dark-light);
-  box-shadow: 0 10px 26px rgba(45, 29, 18, 0.32);
+  box-shadow: 0 8px 18px rgba(45, 29, 18, 0.24);
 }
 
 .theme-classic .footer-bpm-field input {
