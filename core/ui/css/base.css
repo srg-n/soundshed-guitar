@@ -1010,28 +1010,29 @@ body.fx-dragging .signal-connector {
 
 /* ===== Modern Scrollbar Styles ===== */
 
-/* Webkit Browsers (Chrome, Safari, Edge) */
+/* Webkit Browsers (Chrome, Safari, Edge) — fully token-driven (see --sb-* in
+   variables.css; theme files override the tokens, components reuse them). */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: var(--sb-size);
+  height: var(--sb-size);
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
+  background: var(--sb-track);
   border-radius: 4px;
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--sb-track-border);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border-medium);
+  background: var(--sb-thumb);
   border-radius: 4px;
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--sb-thumb-border);
   transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--border-strong);
-  border-color: var(--border-medium);
+  background: var(--sb-thumb-hover);
+  border-color: var(--sb-thumb-hover-border);
 }
 
 ::-webkit-scrollbar-thumb:active {
@@ -1039,32 +1040,39 @@ body.fx-dragging .signal-connector {
 }
 
 ::-webkit-scrollbar-corner {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-light);
+  background: var(--sb-track);
+  border: 1px solid var(--sb-track-border);
 }
 
 /* Firefox */
 * {
-  scrollbar-color: var(--border-medium) var(--bg-secondary);
+  scrollbar-color: var(--sb-thumb) var(--sb-track);
 }
 
-/* Special scrollbar for dark panels */
-.dark-panel ::-webkit-scrollbar-track {
-  background: var(--bg-dark-secondary);
-  border-color: var(--border-dark-light);
+/* Thin scrollbar variant for dense panels/lists. Reuses the --sb-* color tokens
+   (so it themes automatically); only the geometry differs. Containers may set
+   --sb-track locally to match their own surface. */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-.dark-panel ::-webkit-scrollbar-thumb {
-  background: var(--border-dark-medium);
-  border-color: var(--border-dark-light);
+.scrollbar-thin::-webkit-scrollbar-track {
+  border-radius: 3px;
 }
 
-.dark-panel ::-webkit-scrollbar-thumb:hover {
-  background: var(--border-dark-strong);
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  border-radius: 3px;
 }
 
-.dark-panel * {
-  scrollbar-color: var(--border-dark-medium) var(--bg-dark-secondary);
+/* Force dark scrollbars within an otherwise light surface */
+.dark-panel {
+  --sb-track: var(--bg-dark-secondary);
+  --sb-track-border: var(--border-dark-light);
+  --sb-thumb: var(--border-dark-medium);
+  --sb-thumb-border: var(--border-dark-light);
+  --sb-thumb-hover: var(--border-dark-strong);
+  --sb-thumb-hover-border: var(--border-dark-light);
 }
 
 /* Hide scrollbars when not needed (optional enhancement) */

@@ -7,7 +7,7 @@
         </button>
       </div>
       <div class="fx-selector-content" x-data>
-        <div class="fx-selector-categories" id="fx-selector-categories">
+        <div class="fx-selector-categories scrollbar-thin" id="fx-selector-categories">
           <template x-for="cat in ($store.fxSelector ? $store.fxSelector.categories : [])" :key="cat.id">
             <div class="fx-category"
                  :class="{ active: $store.fxSelector.activeCategory === cat.id }"
@@ -25,7 +25,7 @@
                    :value="$store.fxSelector ? $store.fxSelector.searchFilter : ''" />
           </div>
           <p>Drag any effect into the signal chain. You can also drag effects around to move them in the chain. </p>
-          <div class="fx-selector-effects-list" id="fx-selector-effects-list">
+          <div class="fx-selector-effects-list scrollbar-thin" id="fx-selector-effects-list">
             <template x-for="fx in ($store.fxSelector ? $store.fxSelector.effects : [])" :key="fx.id || fx.type">
               <div class="fx-item"
                 :data-effect-type="fx.type"

@@ -1352,6 +1352,9 @@ function closeUserInputCalibrationToolbarMenu(): void {
     userInputCalibrationToolbarMenu.hidden = true;
   }
   userInputCalibrationToolbarTrigger?.setAttribute("aria-expanded", "false");
+  userInputCalibrationToolbarTrigger
+    ?.closest(".control-bar")
+    ?.classList.remove("has-open-calibration");
 }
 
 function openUserInputCalibrationToolbarMenu(): void {
@@ -1362,6 +1365,9 @@ function openUserInputCalibrationToolbarMenu(): void {
   userInputCalibrationToolbarMenu.hidden = false;
   positionUserInputCalibrationToolbarMenu();
   userInputCalibrationToolbarTrigger?.setAttribute("aria-expanded", "true");
+  userInputCalibrationToolbarTrigger
+    ?.closest(".control-bar")
+    ?.classList.add("has-open-calibration");
 }
 
 function toggleUserInputCalibrationToolbarMenu(): void {

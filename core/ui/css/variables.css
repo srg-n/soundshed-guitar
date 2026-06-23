@@ -138,6 +138,16 @@
   --shadow-inset-light: inset 0 1px 0 rgba(255, 255, 255, 0.5);
   --shadow-inset-dark: inset 0 -2px 0 rgba(0, 0, 0, 0.1);
 
+  /* Scrollbars (token-driven; themes override these, components reuse them).
+     Defaults match the light/base surface; theme files set the dark/vintage values. */
+  --sb-size: 8px;
+  --sb-track: var(--bg-secondary);
+  --sb-track-border: var(--border-light);
+  --sb-thumb: var(--border-medium);
+  --sb-thumb-border: var(--border-light);
+  --sb-thumb-hover: var(--border-strong);
+  --sb-thumb-hover-border: var(--border-medium);
+
   /* Layering (global / theme-independent — controls stacking order only) */
   --z-dropdown: 120;
   --z-popover: 900;

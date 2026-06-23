@@ -84,6 +84,28 @@ drag-over states, and overlay mixes). Theme files should override
 - Dynamic hook tokens used by specific components (for example `--knob-pct`, `--mapped-angle`, `--icon-url`) have default values to avoid invalid-property rendering when runtime state is absent.
 - When introducing a new token in component CSS, add a `:root` default first, then override per theme only where needed.
 
+### Theme rules must not change functional layering
+
+Structural/functional properties — `z-index`, and any property that **creates a stacking
+context** (`backdrop-filter`, `filter`, `opacity` < 1, `transform`, `mix-blend-mode`,
+`will-change`, `isolation: isolate`) — must be applied consistently across all themes, not
+in a single theme block. Adding such a property to an element in only one theme silently
+changes how descendant `z-index` resolves and can hide popovers/menus that work in other
+themes.
+
+Concrete example (fixed): `.theme-classic .control-bar` adds `backdrop-filter`, which turns
+the control bar into a stacking context. The input-calibration popover lives inside the bar,
+so in the classic theme its `z-index` was trapped within that context and rendered behind
+the main content — while light/dark (no `backdrop-filter` on the bar) were unaffected. The
+fix is structural and theme-independent: opening the popover toggles a `has-open-calibration`
+class on `.control-bar` that raises it to `var(--z-popover)` (the same mechanism the preset
+popover uses via `has-open-popover`), defined once in `navigation.css`. If a theme needs a
+stacking-context-creating effect on a container that hosts overlay UI, pair it with that lift
+in base CSS rather than relying on the descendant's own `z-index`.
+
+Use the `--z-*` tokens (`--z-dropdown`, `--z-popover`, `--z-modal`, `--z-modal-priority`) for
+global overlay layers; keep local sibling stacking (`z-index: 1/2/3`) as small literals.
+
 ### Component CSS
 Components use variables instead of hardcoded colors:
 
@@ -181,6 +203,7 @@ cmake --build juce/builds --config Debug --target SoundshedGuitar_Standalone
 | Theme not switching | Check `variables.css` loads first in `index.html` |
 | Some colors unchanged | Search for hardcoded values and convert to tokens; if using a legacy alias token, migrate toward canonical token names over time |
 | New component needs theming | Use existing variables; add new ones to all theme blocks |
+| Popover/menu hidden in one theme only | A theme-only stacking-context property (e.g. `backdrop-filter`) on an ancestor is trapping the overlay's `z-index`. Apply such properties across all themes and lift the container with a `--z-popover` class on open (see "Theme rules must not change functional layering"). |
 
 ## See Also
 - [User Interface](user-interface.md) — UI architecture

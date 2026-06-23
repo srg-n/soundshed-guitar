@@ -321,7 +321,6 @@ input[type="range"]:focus-visible {
 }
 
 
-
 .toggle-label {
   font-size: 10px;
   font-weight: 600;
@@ -458,15 +457,6 @@ input[type="range"]:focus-visible {
   border: 1px solid var(--border-medium);
   border-radius: 4px;
   cursor: pointer;
-}
-
-.theme-dark .input-channel-selector select {
-  color-scheme: dark;
-}
-
-.theme-light .input-channel-selector select,
-.theme-classic .input-channel-selector select {
-  color-scheme: light;
 }
 
 .input-channel-selector select:focus {
@@ -904,7 +894,7 @@ input[type="range"]:focus-visible {
   border: 1px solid var(--border-light);
   background: var(--bg-elevated, rgba(16, 18, 24, 0.98));
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.42);
-  z-index: 120;
+  z-index: var(--z-dropdown, 120);
 }
 
 .input-calibration-toolbar-menu[hidden] {

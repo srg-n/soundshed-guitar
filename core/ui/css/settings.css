@@ -276,18 +276,6 @@
   font-size: 12px;
 }
 
-.theme-dark .settings-row select,
-.theme-dark .settings-section select {
-  color-scheme: dark;
-}
-
-.theme-light .settings-row select,
-.theme-light .settings-section select,
-.theme-classic .settings-row select,
-.theme-classic .settings-section select {
-  color-scheme: light;
-}
-
 .settings-row select option,
 .settings-row select optgroup,
 .settings-section select option,
@@ -296,15 +284,6 @@
 .equipment-library-filters select optgroup {
   background: var(--bg-input);
   color: var(--text-primary);
-}
-
-.theme-dark .equipment-library-filters select {
-  color-scheme: dark;
-}
-
-.theme-light .equipment-library-filters select,
-.theme-classic .equipment-library-filters select {
-  color-scheme: light;
 }
 
 .settings-input-mode {
