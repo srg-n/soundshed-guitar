@@ -4,9 +4,9 @@
 
 .theme-light {
   /* Primary Colors */
-  --color-accent: #d86428;
-  --color-accent-hover: #e87838;
-  --color-accent-dark: #b84818;
+  --color-accent: #b5521e;
+  --color-accent-hover: #c66428;
+  --color-accent-dark: #964118;
   
   /* Background Colors */
   --bg-primary: #f2f3f6;
@@ -35,7 +35,7 @@
   --text-primary: #111118;
   --text-secondary: #30303e;
   --text-tertiary: #58586a;
-  --text-muted: #80809a;
+  --text-muted: #6f6f86;
   
   /* Borders */
   --border-light: #e6e8ee;
@@ -50,7 +50,7 @@
   --bg-browser-card: rgba(255, 255, 255, 0.58);
   --bg-browser-input: rgba(255, 255, 255, 0.76);
   --bg-browser-hover: rgba(255, 255, 255, 0.48);
-  --bg-browser-selected: rgba(216, 100, 40, 0.12);
+  --bg-browser-selected: rgba(181, 82, 30, 0.14);
   --border-browser: rgba(180, 190, 210, 0.5);
   --border-browser-strong: rgba(160, 172, 196, 0.66);
 

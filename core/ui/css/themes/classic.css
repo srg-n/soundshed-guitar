@@ -4,9 +4,9 @@
 
 .theme-classic {
   /* Primary Colors - vintage amber with nickel contrast */
-  --color-accent: #d8852f;
-  --color-accent-hover: #e6a34a;
-  --color-accent-dark: #b86a20;
+  --color-accent: #efb15e;
+  --color-accent-hover: #f5c17a;
+  --color-accent-dark: #d59036;
 
   /* Success/Info - restrained seafoam nod to era pedals */
   --color-success: #6fae95;
@@ -98,16 +98,16 @@
   /* Special */
   --color-preset-bg: #faedd2;
   --color-preset-border: #d8b885;
-  --color-preset-favorite: #d8852f;
+  --color-preset-favorite: #efb15e;
   --color-preset-text: #4b331f;
 
-  --amp-glow: radial-gradient(ellipse, rgba(216, 133, 47, 0.34) 0%, transparent 70%);
+  --amp-glow: radial-gradient(ellipse, rgba(239, 177, 94, 0.34) 0%, transparent 70%);
 
   /* Node Colors */
   --node-input: #6fae95;
   --node-input-hover: #84bea8;
-  --node-output: #d8852f;
-  --node-output-hover: #e6a34a;
+  --node-output: #efb15e;
+  --node-output-hover: #f5c17a;
 
   --bg-browser-shell: rgba(62, 43, 28, 0.5);
   --bg-browser-header: rgba(79, 55, 36, 0.62);
@@ -115,7 +115,7 @@
   --bg-browser-card: rgba(85, 57, 35, 0.42);
   --bg-browser-input: rgba(73, 50, 32, 0.7);
   --bg-browser-hover: rgba(255, 244, 220, 0.18);
-  --bg-browser-selected: rgba(216, 133, 47, 0.2);
+  --bg-browser-selected: rgba(239, 177, 94, 0.22);
   --border-browser: rgba(188, 138, 91, 0.42);
   --border-browser-strong: rgba(205, 156, 108, 0.58);
 
