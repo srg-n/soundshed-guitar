@@ -2348,7 +2348,7 @@ async function runAiLibrarySearch(query: string, resultsEl: HTMLElement): Promis
     const itemsHtml = data.items.slice(0, 8).map((item) => {
       const isInstalled = installedLookup.itemIds.has(item.id);
       return `
-      <div class="ai-tone-library-item" style="border-left: 3px solid ${idAccentColor(item.id)}">
+      <div class="ai-tone-library-item">
         <div class="ai-tone-library-item-info">
           <span class="ai-tone-library-item-title">${escapeHtml(item.title)}</span>
           <span class="ai-tone-library-item-type">${escapeHtml(item.type)}</span>
@@ -2449,7 +2449,7 @@ async function renderPackDetail(details: ToneSharingPackDetails): Promise<void> 
           (item) => {
             const isItemInstalled = installedLookup.itemIds.has(item.itemId);
             return `
-          <div class=\"tone-sharing-pack-preset-row\" data-item-id=\"${escapeHtml(item.itemId)}\" style=\"border-left: 3px solid ${idAccentColor(item.itemId)}\">
+          <div class=\"tone-sharing-pack-preset-row\" data-item-id=\"${escapeHtml(item.itemId)}\">
             <div class=\"tone-sharing-pack-preset-info\">
               <div class=\"tone-sharing-pack-preset-title\">${escapeHtml(item.title)}</div>
               ${item.type ? `<div class=\"tone-sharing-pack-preset-type\">${escapeHtml(item.type)}</div>` : ""}

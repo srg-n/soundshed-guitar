@@ -261,22 +261,32 @@
   justify-content: flex-start;
   text-align: left;
   width: 100%;
-  padding: 8px 10px;
-  border-radius: 9px;
-  border-color: color-mix(in srgb, var(--border-medium), transparent 10%);
+  padding: 9px 12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .tab-btn-vertical:hover {
-  background: var(--bg-browser-hover);
+  background: var(--bg-tertiary);
   color: var(--text-primary);
+  border-color: transparent;
+}
+
+.tab-btn-vertical:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
 }
 
 .tab-btn-vertical.active,
 .tab-btn-vertical.is-active,
 .tab-btn-vertical[aria-selected="true"] {
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-primary), transparent 88%);
-  border-color: color-mix(in srgb, var(--accent-primary), transparent 35%);
+  background: var(--bg-secondary);
+  border-color: var(--accent-primary);
   box-shadow: none;
+  font-weight: 600;
 }

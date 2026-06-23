@@ -1,20 +1,31 @@
 /* ===== FX Library Selector Panel ===== */
 
 .fx-selector-panel {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   background: var(--bg-browser-shell);
-  border-top: 1px solid var(--border-browser);
-  border-bottom: 1px solid var(--border-browser);
-  max-height: 250px;
+  border: 1px solid var(--border-browser);
+  border-radius: 8px;
+  max-height: 280px;
+  max-width: 700px;
+  width: 90vw;
   overflow: hidden;
-  transition: max-height 0.2s ease, border-color 0.2s ease;
+  transition: max-height 0.2s ease, border-color 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
+  z-index: 200;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  margin-top: 8px;
 }
 
 .fx-selector-panel.collapsed {
   max-height: 0;
-  border-top-color: transparent;
   border-bottom-color: transparent;
+  pointer-events: none;
+  transform: translateY(-100%);
+  opacity: 0;
 }
 
 .fx-selector-header {

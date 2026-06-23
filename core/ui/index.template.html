@@ -16,9 +16,6 @@
     }
   </style>
   <link rel="stylesheet" href="css/variables.css" />
-  <link rel="stylesheet" href="css/themes/light.css" />
-  <link rel="stylesheet" href="css/themes/dark.css" />
-  <link rel="stylesheet" href="css/themes/classic.css" />
   <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/components.css" />
   <link rel="stylesheet" href="css/controls.css" />
@@ -34,6 +31,9 @@
   <link rel="stylesheet" href="css/settings.css" />
   <link rel="stylesheet" href="css/tone-sharing.css" />
   <link rel="stylesheet" href="css/jam.css" />
+  <link rel="stylesheet" href="css/themes/light.css" />
+  <link rel="stylesheet" href="css/themes/dark.css" />
+  <link rel="stylesheet" href="css/themes/classic.css" />
 </head>
 
 <body>
@@ -44,9 +44,11 @@
 
     <!--#include:ui-components/control-bar.html-->
 
-    <!--#include:ui-components/signal-path-bar.html-->
+    <div style="position: relative;">
+      <!--#include:ui-components/signal-path-bar.html-->
 
-    <!--#include:ui-components/fx-selector-panel.html-->
+      <!--#include:ui-components/fx-selector-panel.html-->
+    </div>
 
     <!--#include:ui-components/main-content.html-->
 

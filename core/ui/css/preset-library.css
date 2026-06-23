@@ -360,9 +360,6 @@
 
 .preset-folder-tree,
 .preset-list {
-
-  border: 1px solid var(--border-dark);
-  border-radius: 10px;
   padding: 10px;
   overflow-y: auto;
   max-height: 420px;
@@ -405,7 +402,6 @@
 
 .preset-list .preset-item {
   border: 1px solid var(--border-dark);
-  border-left-width: 3px;
   border-radius: 8px;
   padding: 10px;
   margin-bottom: 8px;

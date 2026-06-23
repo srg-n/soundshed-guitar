@@ -25,14 +25,14 @@
   --color-warning: #d63031;
   
   /* Background Colors */
-  --bg-primary: #f0f2f5;
-  --bg-secondary: #f8f9fb;
-  --bg-tertiary: #f4f5f8;
+  --bg-primary: #f9fafb;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f3f4f6;
   --bg-surface: #ffffff;
   --bg-elevated: #ffffff;
   
   /* Panel Backgrounds */
-  --bg-panel: #f5f6f9;
+  --bg-panel: #f3f4f6;
   --bg-card: #ffffff;
   --bg-input: #ffffff;
   
@@ -72,10 +72,10 @@
   --status-error-text: color-mix(in srgb, var(--color-error) 82%, white);
   
   /* Text Colors */
-  --text-primary: #1c1c24;
-  --text-secondary: #4a4a58;
+  --text-primary: #111318;
+  --text-secondary: #4b5563;
   --text-tertiary: #6a6a78;
-  --text-muted: #9090a8;
+  --text-muted: #8a91a2;
   
   /* Dark Text Colors */
   --text-dark-primary: #e0e0f0;
@@ -86,11 +86,11 @@
   --text-dark-disabled: #6a6a80;
   
   /* Border Colors */
-  --border-light: #e4e6ec;
-  --border-medium: #d8dae4;
-  --border-strong: #c8cad6;
-  --border-dark: #b8bac8;
-  --border-darker: #a8aabc;
+  --border-light: #e5e7eb;
+  --border-medium: #d1d5db;
+  --border-strong: #bcc1cc;
+  --border-dark: #a8b0be;
+  --border-darker: #9099a8;
   
   /* Dark Border Colors */
   --border-dark-light: #4a4a58;
@@ -129,14 +129,17 @@
   --toggle-active: var(--color-accent);
   
   /* Shadow Colors */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.10);
-  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
-  --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.20);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.12);
   
   /* Inset Shadows */
   --shadow-inset-light: inset 0 1px 0 rgba(255, 255, 255, 0.5);
   --shadow-inset-dark: inset 0 -2px 0 rgba(0, 0, 0, 0.1);
+  
+  /* Focus Ring */
+  --focus-ring: 0 0 0 3px rgba(181, 82, 30, 0.15);
 
   /* Scrollbars (token-driven; themes override these, components reuse them).
      Defaults match the light/base surface; theme files set the dark/vintage values. */

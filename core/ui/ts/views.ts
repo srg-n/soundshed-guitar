@@ -450,7 +450,7 @@ export function renderPresetList(
         const isLoadingPreset = preset.id === uiState.presetLoadingId;
 
         return `
-        <article class="preset-item ${preset.id === activePresetId ? "active" : ""}${isLoadingPreset ? " loading" : ""}" data-id="${preset.id}" draggable="true" style="border-left: 3px solid ${idAccentColor(preset.id)}">
+        <article class="preset-item ${preset.id === activePresetId ? "active" : ""}${isLoadingPreset ? " loading" : ""}" data-id="${preset.id}" draggable="true">
           <header>
             <h3>${escapeHtml(preset.name)}</h3>
             ${addToMixerBtn}

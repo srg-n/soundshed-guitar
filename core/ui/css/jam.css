@@ -128,7 +128,6 @@
 }
 
 .jam-result-card {
-  --jam-card-accent: #5b8aff;
   display: flex;
   flex-direction: column;
   border-radius: 10px;
@@ -137,17 +136,6 @@
   background: linear-gradient(180deg, rgba(21, 27, 44, 0.92) 0%, rgba(10, 14, 26, 0.96) 100%);
   position: relative;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
-}
-
-.jam-result-card::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 1px;
-  z-index: 1;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--jam-card-accent), #fff 18%) 0%, color-mix(in srgb, var(--jam-card-accent), #000 10%) 100%);
-  opacity: 0.85;
 }
 
 /* ---- art / thumbnail ---- */
