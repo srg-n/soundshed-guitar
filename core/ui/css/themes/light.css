@@ -33,11 +33,11 @@
   --bg-fx-secondary: #f9fafb;
   --bg-fx-categories: #f0f1f3;
   
-  /* Text Colors */
+  /* Text Colors — ≥4.5:1 contrast on light backgrounds */
   --text-primary: #111318;
   --text-secondary: #4b5563;
   --text-tertiary: #6a6a78;
-  --text-muted: #8a91a2;
+  --text-muted: #6a7280;
   
   /* Borders - Cleaner hierarchy */
   --border-light: #e5e7eb;

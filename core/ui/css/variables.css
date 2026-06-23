@@ -1,6 +1,8 @@
 /* ===== CSS Variables - Theme System ===== */
 
-/* Default Theme (Dark) */
+/* Light Theme (Default) — baseline values used by light theme and theme-agnostic controls.
+   Dark and Classic themes provide full overrides via .theme-dark and .theme-classic selectors.
+*/
 :root {
   /* Primary Colors */
   --color-accent: #e07848;
@@ -24,7 +26,7 @@
   --color-error: #c86868;
   --color-warning: #d63031;
   
-  /* Background Colors */
+  /* Background Colors — Light Theme */
   --bg-primary: #f9fafb;
   --bg-secondary: #ffffff;
   --bg-tertiary: #f3f4f6;
@@ -71,11 +73,11 @@
   --status-error-border: color-mix(in srgb, var(--color-error) 45%, transparent);
   --status-error-text: color-mix(in srgb, var(--color-error) 82%, white);
   
-  /* Text Colors */
+  /* Text Colors — Light Theme (≥4.5:1 contrast on light backgrounds) */
   --text-primary: #111318;
   --text-secondary: #4b5563;
   --text-tertiary: #6a6a78;
-  --text-muted: #8a91a2;
+  --text-muted: #6a7280;
   
   /* Dark Text Colors */
   --text-dark-primary: #e0e0f0;
