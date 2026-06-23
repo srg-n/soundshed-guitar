@@ -222,8 +222,9 @@ namespace guitarfx
 
     // Recomputes all four biquad coefficient sets from the current band parameters.
     // Called once during Prepare() and again whenever SetParam() changes a value.
-    // Filter state is reset after each coefficient update to avoid transients that
-    // would arise from running new coefficients over stale delay-line history.
+    // Filter delay-line state is deliberately preserved across coefficient updates so
+    // live parameter changes transition smoothly without an audible click (see note
+    // at the end of this function).
     void UpdateCoefficients()
     {
       ClampBandParams();
@@ -243,13 +244,20 @@ namespace guitarfx
       mBands[3].isShelf = true;
       CalculateHighShelf(mBands[3]);
 
-      // After a coefficient change, the old delay-line values are inconsistent
-      // with the new filter shape and would produce an audible click or transient.
-      // Zeroing state is the safest approach for a guitar effect context.
+      // IMPORTANT: do NOT zero the delay lines here.
+      //
+      // Direct Form I state holds past input/output samples (x[n-1..2], y[n-1..2]),
+      // which remain dimensionally valid regardless of the coefficient values. All
+      // four band types here (peaking + RBJ shelves) are unconditionally stable, so
+      // swapping coefficients while preserving state lets the filter transition
+      // smoothly and continuously — the standard technique for click-free parameter
+      // automation. Zeroing the state instead discards the recent signal history and
+      // forces an abrupt output discontinuity, which is audible as a click/shear when
+      // the user drags an EQ control. State is only cleared on genuine discontinuities
+      // (Prepare()/Reset()) or on numerical overflow inside Process().
       for (auto &band : mBands)
       {
         SanitizeBandCoefficients(band); // replace non-finite coefficients with identity
-        ResetBandState(band);           // zero all delay lines
       }
     }
 
