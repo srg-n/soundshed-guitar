@@ -3,7 +3,7 @@ import { uiState, setFocusedMixerPresetId } from "./state.js";
 import { addActivePreset, removeActivePreset, setPresetMix, setPresetPan, setPresetMute, setPresetSolo, setMasterGain, setLimiterEnabled } from "./bridge.js";
 import { escapeHtml, idAccentColor } from "./utils.js";
 import { updateSignalPathClipIndicators, renderSignalPathBar } from "./signalPath.js";
-import { renderIcon } from "./iconAssets.js";
+import { renderIcon, getCheckmarkSvg, getXMarkSvg, getPlaySvg } from "./iconAssets.js";
 import { EffectGuids } from "./effectGuids.js";
 import { EffectTypeRegistry } from "./presetV2.js";
 import { enhanceRangeInput } from "./controls.js";
@@ -52,7 +52,7 @@ function renderParameterSection(): string {
     ? `
         <div class="test-results ${uiState.signalTest.passed ? "passed" : "failed"}">
           <div class="test-header">
-            <span class="test-icon">${uiState.signalTest.passed ? "✓" : "✗"}</span>
+            <span class="test-icon">${uiState.signalTest.passed ? getCheckmarkSvg() : getXMarkSvg()}</span>
             <span class="test-title">Signal Path Test</span>
             <span class="test-status">${uiState.signalTest.passed ? "Passed" : "Failed"}</span>
           </div>
@@ -131,7 +131,7 @@ function buildMixerMarkup(): string {
           <span class="mixer-row-name">${escapeHtml(presetName)}</span>
           <label class="toggle mini-toggle"><input type="checkbox" class="mixer-solo" ${ps.solo ? "checked" : ""}/> Solo</label>
           <label class="toggle mini-toggle"><input type="checkbox" class="mixer-mute" ${ps.mute ? "checked" : ""}/> Mute</label>
-          <button class="mixer-view-chain-btn icon-btn" title="View signal chain" type="button">▶</button>
+          <button class="mixer-view-chain-btn icon-btn" title="View signal chain" type="button">${getPlaySvg()}</button>
           <button class="mixer-remove-btn icon-btn" title="Remove from mixer" type="button">×</button>
         </div>
         <div class="mixer-controls">
@@ -444,7 +444,7 @@ export function renderPresetList(
         const inMixer = uiState.mixer?.activePresetIds.includes(preset.id) ?? false;
         const showMixerControls = isFeatureEnabled(Features.MultiRig);
         const addToMixerBtn = showMixerControls
-          ? `<button class="preset-add-to-mixer-btn${inMixer ? " in-mixer" : ""}" data-preset-id="${preset.id}" title="${inMixer ? "Already in mixer" : "Add to mixer"}" type="button">${inMixer ? "✓ In Mixer" : "+ Mixer"}</button>`
+          ? `<button class="preset-add-to-mixer-btn${inMixer ? " in-mixer" : ""}" data-preset-id="${preset.id}" title="${inMixer ? "Already in mixer" : "Add to mixer"}" type="button">${inMixer ? `${getCheckmarkSvg()} In Mixer` : "+ Mixer"}</button>`
           : "";
 
         const isLoadingPreset = preset.id === uiState.presetLoadingId;
@@ -514,7 +514,7 @@ export function renderPresetList(
               uiState.mixer.presets[pid] = { id: pid, mix: 1.0, pan: 0.0, mute: false, solo: false };
             }
           }
-          addBtn.textContent = "✓ In Mixer";
+          addBtn.innerHTML = `${getCheckmarkSvg()} In Mixer`;
           addBtn.classList.add("in-mixer");
           addBtn.title = "Remove from mixer";
           renderSignalPathBar();
@@ -786,9 +786,29 @@ export function renderPresetDetails(
   }
 }
 
+let dspPerformancePlotRafId: number | null = null;
+
+function isDSPPerformanceTabVisible(): boolean {
+  const panel = document.getElementById("equipment-tab-performance");
+  return Boolean(panel && panel.classList.contains("active") && !panel.hasAttribute("hidden"));
+}
+
+export function scheduleDSPPerformancePlotUpdate(): void {
+  if (dspPerformancePlotRafId !== null) {
+    return;
+  }
+
+  dspPerformancePlotRafId = window.requestAnimationFrame(() => {
+    dspPerformancePlotRafId = null;
+    updateDSPPerformancePlot();
+  });
+}
+
 export function updateDSPPerformancePlot(): void {
   const canvas = document.getElementById("performance-plot") as HTMLCanvasElement;
   if (!canvas) return;
+
+  if (!isDSPPerformanceTabVisible()) return;
 
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -1351,6 +1371,10 @@ let vuPeakHold: HTMLElement | null = null;
 let vuDbValue: HTMLElement | null = null;
 let vuPeakHoldDbfs = -Infinity;
 let vuPeakHoldTimer: ReturnType<typeof setTimeout> | null = null;
+let vuLastPeakDbfs: number | null = null;
+let vuLastActiveStates: boolean[] | null = null;
+let vuLastPeakHoldVisible = false;
+let vuLastPeakHoldTop: string | null = null;
 
 function updateInputVuMeter(levels: import("./types.js").SignalLevelMetrics | null): void {
   if (!vuSegments) {
@@ -1360,29 +1384,52 @@ function updateInputVuMeter(levels: import("./types.js").SignalLevelMetrics | nu
       : [];
     vuPeakHold = document.getElementById("vu-peak-hold");
     vuDbValue = document.getElementById("vu-db-value");
+    vuLastActiveStates = new Array(vuSegments.length).fill(false);
   }
 
   if (!vuSegments.length) return;
 
-  if (!levels || !isFinite(levels.peakDbfs)) {
-    vuSegments.forEach((s) => s.classList.remove("active"));
-    //if (vuDbValue) vuDbValue.textContent = "—";
-    if (vuPeakHold) vuPeakHold.classList.remove("visible");
+  const dbfs = levels && isFinite(levels.peakDbfs) ? levels.peakDbfs : null;
+
+  // Check if the value actually changed before updating
+  if (dbfs === vuLastPeakDbfs && dbfs === null) {
+    return; // Already null, no update needed
+  }
+
+  if (dbfs === null) {
+    // Fade out: update only if we had active segments
+    if (vuLastActiveStates?.some((active) => active)) {
+      vuSegments.forEach((s) => s.classList.remove("active"));
+      vuLastActiveStates.fill(false);
+    }
+    if (vuLastPeakHoldVisible && vuPeakHold) {
+      vuPeakHold.classList.remove("visible");
+      vuLastPeakHoldVisible = false;
+    }
+    vuLastPeakDbfs = null;
     return;
   }
 
-  const dbfs = levels.peakDbfs;
+  // Update segment indicators only if peak value changed significantly (rounded to 0.5 dB to reduce updates)
+  const roundedDbfs = Math.round(dbfs * 2) / 2;
+  const lastRoundedDbfs = vuLastPeakDbfs !== null ? Math.round(vuLastPeakDbfs * 2) / 2 : null;
 
-  // Light all segments whose threshold is ≤ current peak
-  vuSegments.forEach((seg, i) => {
-    const threshold = VU_SEGMENT_THRESHOLDS[i];
-    seg.classList.toggle("active", dbfs >= threshold);
-  });
+  if (roundedDbfs !== lastRoundedDbfs) {
+    // Compute new active states
+    const newActiveStates = VU_SEGMENT_THRESHOLDS.map((threshold) => dbfs >= threshold);
 
-  // dB readout
-  /*if (vuDbValue) {
-    vuDbValue.textContent = `${dbfs.toFixed(1)}`;
-  }*/
+    // Update only segments that changed state
+    vuSegments.forEach((seg, i) => {
+      const isNowActive = newActiveStates[i];
+      const wasActive = vuLastActiveStates?.[i] ?? false;
+      if (isNowActive !== wasActive) {
+        seg.classList.toggle("active", isNowActive);
+      }
+    });
+
+    vuLastActiveStates = newActiveStates;
+    vuLastPeakDbfs = dbfs;
+  }
 
   // Peak-hold tick: update if new peak is higher
   if (dbfs >= vuPeakHoldDbfs) {
@@ -1392,6 +1439,7 @@ function updateInputVuMeter(levels: import("./types.js").SignalLevelMetrics | nu
     vuPeakHoldTimer = setTimeout(() => {
       vuPeakHoldDbfs = -Infinity;
       if (vuPeakHold) vuPeakHold.classList.remove("visible");
+      vuLastPeakHoldVisible = false;
     }, 2000);
 
     // Position peak-hold tick at the top of the topmost lit segment.
@@ -1399,13 +1447,36 @@ function updateInputVuMeter(levels: import("./types.js").SignalLevelMetrics | nu
     const segHeight = 7; // px per segment (5px height + 2px gap)
     const firstLitIdx = vuSegments.findIndex((s) => s.classList.contains("active"));
     if (firstLitIdx >= 0 && vuPeakHold) {
-      vuPeakHold.style.top = `${firstLitIdx * segHeight}px`;
-      vuPeakHold.classList.add("visible");
+      const newTop = `${firstLitIdx * segHeight}px`;
+      if (newTop !== vuLastPeakHoldTop) {
+        vuPeakHold.style.top = newTop;
+        vuLastPeakHoldTop = newTop;
+      }
+      if (!vuLastPeakHoldVisible) {
+        vuPeakHold.classList.add("visible");
+        vuLastPeakHoldVisible = true;
+      }
     }
   }
 }
 
+// Cache for signal diagnostics view to prevent unnecessary DOM updates.
+let signalDiagnosticsLastInputPeakText: string | null = null;
+let signalDiagnosticsLastInputRmsText: string | null = null;
+let signalDiagnosticsLastInputHeadroomText: string | null = null;
+let signalDiagnosticsLastInputClipped: boolean | null = null;
+let signalDiagnosticsLastOutputPeakText: string | null = null;
+let signalDiagnosticsLastOutputRmsText: string | null = null;
+let signalDiagnosticsLastOutputHeadroomText: string | null = null;
+let signalDiagnosticsLastOutputClipped: boolean | null = null;
+let signalDiagnosticsLastDesignedPeakText: string | null = null;
+let signalDiagnosticsLastListHtml: string | null = null;
+
 export function updateSignalDiagnosticsView(): void {
+  if (!isDSPPerformanceTabVisible()) {
+    return;
+  }
+
   const diagnostics = uiState.signalDiagnostics;
 
   const statusEl = document.getElementById("signal-diagnostics-status");
@@ -1426,23 +1497,36 @@ export function updateSignalDiagnosticsView(): void {
   const listEl = document.getElementById("signal-diagnostics-list");
 
   if (!diagnostics) {
-    if (inputPeak) inputPeak.textContent = "—";
-    if (inputRms) inputRms.textContent = "—";
-    if (inputHeadroom) inputHeadroom.textContent = "—";
-    if (inputClip) {
-      inputClip.classList.remove("clip-on");
-      inputClip.classList.add("clip-off");
-      setClipStatusText(inputClip, "—");
+    // Only update if previously had diagnostics
+    if (signalDiagnosticsLastInputPeakText !== "—") {
+      if (inputPeak) inputPeak.textContent = "—";
+      if (inputRms) inputRms.textContent = "—";
+      if (inputHeadroom) inputHeadroom.textContent = "—";
+      if (inputClip) {
+        inputClip.classList.remove("clip-on");
+        inputClip.classList.add("clip-off");
+        setClipStatusText(inputClip, "—");
+      }
+      if (outputPeak) outputPeak.textContent = "—";
+      if (outputRms) outputRms.textContent = "—";
+      if (outputHeadroom) outputHeadroom.textContent = "—";
+      if (outputClip) {
+        outputClip.classList.remove("clip-on");
+        outputClip.classList.add("clip-off");
+        setClipStatusText(outputClip, "—");
+      }
+      if (listEl) listEl.innerHTML = "<div class=\"performance-detail-item\">Waiting for signal data.</div>";
+      signalDiagnosticsLastInputPeakText = "—";
+      signalDiagnosticsLastInputRmsText = "—";
+      signalDiagnosticsLastInputHeadroomText = "—";
+      signalDiagnosticsLastInputClipped = null;
+      signalDiagnosticsLastOutputPeakText = "—";
+      signalDiagnosticsLastOutputRmsText = "—";
+      signalDiagnosticsLastOutputHeadroomText = "—";
+      signalDiagnosticsLastOutputClipped = null;
+      signalDiagnosticsLastDesignedPeakText = "—";
+      signalDiagnosticsLastListHtml = null;
     }
-    if (outputPeak) outputPeak.textContent = "—";
-    if (outputRms) outputRms.textContent = "—";
-    if (outputHeadroom) outputHeadroom.textContent = "—";
-    if (outputClip) {
-      outputClip.classList.remove("clip-on");
-      outputClip.classList.add("clip-off");
-      setClipStatusText(outputClip, "—");
-    }
-    if (listEl) listEl.innerHTML = "<div class=\"performance-detail-item\">Waiting for signal data.</div>";
     return;
   }
 
@@ -1464,37 +1548,79 @@ export function updateSignalDiagnosticsView(): void {
   updateSignalPeakHold(diagnostics);
   const hold = uiState.signalPeakHold;
 
-  if (inputPeak) inputPeak.textContent = `${formatDb(hold?.input.peakDbfs ?? input.peakDbfs)} dBFS`;
-  if (inputRms) inputRms.textContent = `${formatDb(input.rmsDbfs)} dBFS`;
-  if (inputHeadroom) inputHeadroom.textContent = `${formatDb(input.headroomDb)} dB`;
-  if (inputClip) {
-    inputClip.classList.toggle("clip-on", input.clipped);
-    inputClip.classList.toggle("clip-off", !input.clipped);
-    setClipStatusText(inputClip, input.clipped ? `Clipping (${input.clipCount})` : "OK");
+  // Update input metrics only if changed
+  const inputPeakText = `${formatDb(hold?.input.peakDbfs ?? input.peakDbfs)} dBFS`;
+  if (inputPeakText !== signalDiagnosticsLastInputPeakText) {
+    if (inputPeak) inputPeak.textContent = inputPeakText;
+    signalDiagnosticsLastInputPeakText = inputPeakText;
   }
 
-  if (outputPeak) outputPeak.textContent = `${formatDb(hold?.output.peakDbfs ?? output.peakDbfs)} dBFS`;
-  if (outputRms) outputRms.textContent = `${formatDb(output.rmsDbfs)} dBFS`;
-  if (outputHeadroom) outputHeadroom.textContent = `${formatDb(output.headroomDb)} dB`;
-  if (outputClip) {
-    outputClip.classList.toggle("clip-on", output.clipped);
-    outputClip.classList.toggle("clip-off", !output.clipped);
-    setClipStatusText(outputClip, output.clipped ? `Clipping (${output.clipCount})` : "OK");
+  const inputRmsText = `${formatDb(input.rmsDbfs)} dBFS`;
+  if (inputRmsText !== signalDiagnosticsLastInputRmsText) {
+    if (inputRms) inputRms.textContent = inputRmsText;
+    signalDiagnosticsLastInputRmsText = inputRmsText;
+  }
+
+  const inputHeadroomText = `${formatDb(input.headroomDb)} dB`;
+  if (inputHeadroomText !== signalDiagnosticsLastInputHeadroomText) {
+    if (inputHeadroom) inputHeadroom.textContent = inputHeadroomText;
+    signalDiagnosticsLastInputHeadroomText = inputHeadroomText;
+  }
+
+  if (input.clipped !== signalDiagnosticsLastInputClipped) {
+    if (inputClip) {
+      inputClip.classList.toggle("clip-on", input.clipped);
+      inputClip.classList.toggle("clip-off", !input.clipped);
+      setClipStatusText(inputClip, input.clipped ? `Clipping (${input.clipCount})` : "OK");
+    }
+    signalDiagnosticsLastInputClipped = input.clipped;
+  }
+
+  // Update output metrics only if changed
+  const outputPeakText = `${formatDb(hold?.output.peakDbfs ?? output.peakDbfs)} dBFS`;
+  if (outputPeakText !== signalDiagnosticsLastOutputPeakText) {
+    if (outputPeak) outputPeak.textContent = outputPeakText;
+    signalDiagnosticsLastOutputPeakText = outputPeakText;
+  }
+
+  const outputRmsText = `${formatDb(output.rmsDbfs)} dBFS`;
+  if (outputRmsText !== signalDiagnosticsLastOutputRmsText) {
+    if (outputRms) outputRms.textContent = outputRmsText;
+    signalDiagnosticsLastOutputRmsText = outputRmsText;
+  }
+
+  const outputHeadroomText = `${formatDb(output.headroomDb)} dB`;
+  if (outputHeadroomText !== signalDiagnosticsLastOutputHeadroomText) {
+    if (outputHeadroom) outputHeadroom.textContent = outputHeadroomText;
+    signalDiagnosticsLastOutputHeadroomText = outputHeadroomText;
+  }
+
+  if (output.clipped !== signalDiagnosticsLastOutputClipped) {
+    if (outputClip) {
+      outputClip.classList.toggle("clip-on", output.clipped);
+      outputClip.classList.toggle("clip-off", !output.clipped);
+      setClipStatusText(outputClip, output.clipped ? `Clipping (${output.clipCount})` : "OK");
+    }
+    signalDiagnosticsLastOutputClipped = output.clipped;
   }
 
   // Update the designed peak input control
   const designedPeakCurrentEl = document.getElementById("designed-peak-current-value");
   const designedPeakStoredEl = document.getElementById("designed-peak-stored-value");
   const applyDesignedPeakBtn = document.getElementById("apply-designed-peak-btn") as HTMLButtonElement | null;
-  if (!diagnostics) {
-    if (designedPeakCurrentEl) designedPeakCurrentEl.textContent = "\u2014";
-    if (applyDesignedPeakBtn) applyDesignedPeakBtn.disabled = true;
-  } else {
-    const rawPeakDbfs = hold?.rawInput.peakDbfs ?? diagnostics.rawInput?.peakDbfs ?? input.peakDbfs;
-    if (designedPeakCurrentEl) designedPeakCurrentEl.textContent = `${formatDb(rawPeakDbfs)} dBFS`;
-    if (applyDesignedPeakBtn) applyDesignedPeakBtn.disabled = false;
-    if (applyDesignedPeakBtn) (applyDesignedPeakBtn as HTMLButtonElement & { _peakDbfs?: number })._peakDbfs = rawPeakDbfs;
+  
+  const rawPeakDbfs = hold?.rawInput.peakDbfs ?? diagnostics.rawInput?.peakDbfs ?? input.peakDbfs;
+  const designedPeakText = `${formatDb(rawPeakDbfs)} dBFS`;
+  if (designedPeakText !== signalDiagnosticsLastDesignedPeakText) {
+    if (designedPeakCurrentEl) designedPeakCurrentEl.textContent = designedPeakText;
+    signalDiagnosticsLastDesignedPeakText = designedPeakText;
   }
+  
+  if (applyDesignedPeakBtn) {
+    applyDesignedPeakBtn.disabled = false;
+    (applyDesignedPeakBtn as HTMLButtonElement & { _peakDbfs?: number })._peakDbfs = rawPeakDbfs;
+  }
+
   // Show stored value from active preset
   if (designedPeakStoredEl) {
     const activePreset = uiState.activePresetId
@@ -1603,7 +1729,8 @@ export function updateSignalDiagnosticsView(): void {
 
     const rows = inputRow + nodeRows;
 
-    listEl.innerHTML = `
+    // Only update list HTML if it has changed
+    const newListHtml = `
       <div class=\"signal-diagnostics-header\">
         <span class=\"signal-diagnostics-cell scope\">Scope</span>
         <span class=\"signal-diagnostics-cell node\">Node</span>
@@ -1618,6 +1745,11 @@ export function updateSignalDiagnosticsView(): void {
         ${rows}
       </div>
     `;
+
+    if (newListHtml !== signalDiagnosticsLastListHtml) {
+      listEl.innerHTML = newListHtml;
+      signalDiagnosticsLastListHtml = newListHtml;
+    }
   }
 
   updateInputVuMeter(diagnostics ? (diagnostics.rawInput ?? diagnostics.input) : null);
