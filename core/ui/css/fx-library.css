@@ -7,24 +7,27 @@
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
-  background: var(--bg-browser-shell);
-  border: 1px solid var(--border-browser);
-  border-radius: 8px;
-  max-height: 280px;
-  max-width: 700px;
-  width: 90vw;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  max-height: min(48vh, 360px);
+  max-width: 860px;
+  width: min(94vw, 860px);
   overflow: hidden;
-  transition: max-height 0.2s ease, border-color 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
+  transform-origin: top center;
+  clip-path: inset(0 0 0 0 round 12px);
+  opacity: 1;
+  transition: border-color 0.18s ease, transform 0.18s ease, opacity 0.18s ease, clip-path 0.18s ease;
   z-index: 200;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  margin-top: 8px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+  margin-top: 10px;
 }
 
 .fx-selector-panel.collapsed {
-  max-height: 0;
   border-bottom-color: transparent;
   pointer-events: none;
-  transform: translateY(-100%);
+  transform: translateX(-50%) translateY(-10px) scaleY(0.92);
+  clip-path: inset(0 0 100% 0 round 12px);
   opacity: 0;
 }
 
@@ -34,8 +37,8 @@
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background: var(--bg-browser-header);
-  border-bottom: 1px solid var(--border-browser);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
   cursor: pointer;
 }
@@ -46,8 +49,8 @@
   justify-content: center;
   width: 24px;
   height: 24px;
-  border: 1px solid var(--border-browser);
-  background: var(--bg-browser-card);
+  border: 1px solid var(--border-medium);
+  background: var(--bg-card);
   color: var(--text-primary);
   border-radius: 6px;
   cursor: pointer;
@@ -92,10 +95,10 @@
 
 
 .fx-selector-categories {
-  width: 180px;
+  width: 208px;
   flex-shrink: 0;
-  background: var(--bg-browser-sidebar);
-  border-right: 1px solid var(--border-browser);
+  background: var(--bg-tertiary);
+  border-right: 1px solid var(--border-light);
   overflow-y: auto;
   padding: 8px 0;
 }
@@ -105,19 +108,21 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--bg-panel);
 }
 
 .fx-selector-search {
   padding: 8px 16px;
-  border-bottom: 1px solid var(--border-browser);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
 }
 
 .fx-selector-search input {
   width: 100%;
   padding: 8px 12px;
-  background: var(--bg-browser-input);
-  border: 1px solid var(--border-browser);
+  background: var(--bg-input);
+  border: 1px solid var(--border-medium);
   border-radius: 6px;
   color: var(--text-primary);
   font-size: 12px;
@@ -137,6 +142,7 @@
   flex: 1;
   overflow-y: auto;
   padding: 12px;
+  background: var(--bg-panel);
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -145,7 +151,7 @@
 
 .fx-selector-categories,
 .fx-selector-effects-list {
-  --sb-track: var(--bg-browser-sidebar);
+  --sb-track: var(--bg-tertiary);
 }
 
 /* FX Category Tab */
@@ -156,18 +162,21 @@
   padding: 10px 12px;
   cursor: pointer;
   background: transparent;
-  border-left: 3px solid transparent;
-  transition: all 0.2s;
-  margin: 2px 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  margin: 2px 8px;
 }
 
 .fx-category:hover {
   background: var(--overlay-light);
+  border-color: color-mix(in srgb, var(--category-color, var(--color-accent)) 24%, transparent);
 }
 
 .fx-category.active {
   background: var(--bg-browser-selected);
-  border-left-color: var(--category-color, var(--color-accent));
+  border-color: color-mix(in srgb, var(--category-color, var(--color-accent)) 48%, var(--border-browser));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--category-color, var(--color-accent)) 18%, transparent);
 }
 
 .fx-category-icon {
@@ -211,19 +220,21 @@
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: var(--bg-browser-card);
-  border: 1px solid var(--border-browser);
-  border-left: 3px solid var(--category-color, var(--color-accent));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--category-color, var(--color-accent)) 10%, transparent) 0%, transparent 34%),
+    var(--bg-card);
+  border: 1px solid var(--border-light);
   border-radius: 6px;
   cursor: grab;
-  transition: all 0.2s;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--category-color, var(--color-accent)) 14%, transparent);
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
   flex: 0 0 calc(33.333% - 6px);
   min-width: 140px;
 }
 
 .fx-item:hover {
-  background: var(--bg-browser-hover);
-  border-color: var(--border-browser-strong);
+  background: color-mix(in srgb, var(--bg-card) 88%, var(--color-accent) 12%);
+  border-color: var(--border-medium);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px var(--overlay-darker);
 }
@@ -309,4 +320,3 @@
   background: var(--color-success-glow);
   color: var(--color-success-light);
 }
-

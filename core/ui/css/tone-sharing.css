@@ -142,33 +142,6 @@
   border-color: var(--accent-primary);
 }
 
-.tone-sharing-icon-btn {
-  background: transparent;
-  border: 1px solid var(--border-medium);
-  border-radius: 8px;
-  padding: 5px 8px;
-  cursor: pointer;
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1;
-}
-
-.tone-sharing-icon-btn:hover {
-  color: var(--text-primary);
-}
-
-.tone-sharing-endpoint {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 0;
-  flex-shrink: 0;
-}
-
-.tone-sharing-endpoint--hidden {
-  display: none;
-}
-
 .tone-sharing-active-filter {
   display: flex;
   align-items: center;
@@ -223,11 +196,6 @@
   border-bottom: 1px solid color-mix(in srgb, var(--border-light), transparent 20%);
 }
 
-.tone-sharing-endpoint input {
-  flex: 1;
-  min-width: 200px;
-}
-
 .tone-sharing-card {
   background: color-mix(in srgb, var(--bg-panel), #000 8%);
   border: 1px solid var(--border-medium);
@@ -266,8 +234,7 @@
 }
 
 .tone-sharing-grid-form label,
-.tone-sharing-auth-row label,
-.tone-sharing-endpoint label {
+.tone-sharing-auth-row label {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -277,8 +244,7 @@
 .tone-sharing-grid-form input,
 .tone-sharing-grid-form select,
 .tone-sharing-grid-form textarea,
-.tone-sharing-auth-row input,
-.tone-sharing-endpoint input {
+.tone-sharing-auth-row input {
   width: 100%;
   background: var(--bg-input);
   border: 1px solid var(--border-medium);
@@ -1048,6 +1014,10 @@
   min-height: 36px;
 }
 
+.tone-sharing-avatar-preview-wrap[hidden] {
+  display: none;
+}
+
 .tone-sharing-avatar-preview {
   width: 44px;
   height: 44px;
@@ -1384,10 +1354,6 @@
 
   .tone-sharing-community-search label {
     flex-basis: 100%;
-  }
-
-  .tone-sharing-endpoint input {
-    min-width: 140px;
   }
 
   .tone-sharing-community-search input {

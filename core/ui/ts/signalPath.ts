@@ -1793,12 +1793,12 @@ export function updateSelectedNodePeakMeter(): void {
   if (!metrics || !Number.isFinite(metrics.peakDbfs)) {
     rail.classList.add("is-inactive");
     rail.title = "No diagnostics data for this node";
-    meter.style.setProperty("--meter-fill", "0%");
+    meter.style.setProperty("--meter-fill-scale", "0");
     return;
   }
 
   const normalized = normalizePeakDbfsForShellMeter(metrics.peakDbfs);
-  meter.style.setProperty("--meter-fill", `${(normalized * 100).toFixed(1)}%`);
+  meter.style.setProperty("--meter-fill-scale", normalized.toFixed(3));
 
   if (metrics.clipped || metrics.peakDbfs >= -0.3) {
     rail.classList.add("is-clipped");
@@ -3313,7 +3313,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
           <button class="close-params-btn" type="button" aria-label="Close effect panel" title="Close effect panel">×</button>
         </div>
         <div class="default-effect-shell-rail" aria-hidden="true">
-          <span class="default-effect-shell-meter" style="--meter-fill: 0%"></span>
+          <span class="default-effect-shell-meter" style="--meter-fill-scale: 0"></span>
         </div>
         <div class="default-effect-shell-content${equipmentImage ? " has-equipment-image" : ""}">
           ${shellEquipmentPanel}
@@ -5162,4 +5162,3 @@ function handleResourceGroupDrop(
     category: payload.category,
   });
 }
-

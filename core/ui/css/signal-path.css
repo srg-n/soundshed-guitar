@@ -237,9 +237,13 @@
   flex: 1;
   min-width: 170px;
   max-width: 260px;
-  border-left: 4px solid var(--accent, #666);
   padding: 6px 10px 6px 8px;
-  background: var(--bg-secondary);
+  border: 1px solid color-mix(in srgb, var(--accent, #666) 28%, var(--border-medium));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent, #666) 12%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent, #666) 9%, transparent) 0%, transparent 42%),
+    var(--bg-secondary);
+  border-radius: 8px;
 }
 .iml-strip + .iml-strip {
   border-right: 1px solid var(--border-medium);
@@ -569,12 +573,14 @@
 .signal-node.drag-over::before {
   content: "";
   position: absolute;
-  left: -8px;
+  left: -10px;
   top: 50%;
   transform: translateY(-50%);
-  border-right: 8px solid var(--node-drag-over);
-  border-top: 6px solid transparent;
-  border-bottom: 6px solid transparent;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--node-drag-over);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--node-drag-over) 24%, transparent);
 }
 
 /* Layout thumbnail avatar — small card at top-left of node */
@@ -806,7 +812,7 @@
 }
 
 .signal-connector {
-  width: 20px;
+  width: 32px;
   height: 1.5px;
   background: var(--color-success);
   border-radius: 2px;
@@ -819,12 +825,13 @@
 .signal-connector::after {
   content: "";
   position: absolute;
-  right: -3px;
+  right: -2px;
   top: 50%;
   transform: translateY(-50%);
-  border-left: 5px solid var(--text-secondary);
-  border-top: 3px solid transparent;
-  border-bottom: 3px solid transparent;
+  width: 8px;
+  height: 8px;
+  background: var(--text-secondary);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
 }
 
 .signal-connector.drag-over {
@@ -942,13 +949,16 @@
 }
 
 .parallel-branch {
+  --parallel-branch-accent: var(--color-primary);
   display: flex;
   align-items: center;
   gap: 0;
   padding: 4px 8px;
-  background: rgba(46, 46, 56, 0.5);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--parallel-branch-accent) 12%, rgba(46, 46, 56, 0.66)) 0%, rgba(46, 46, 56, 0.5) 38%, rgba(46, 46, 56, 0.44) 100%);
   border-radius: 6px;
-  border-left: 3px solid var(--color-primary);
+  border: 1px solid color-mix(in srgb, var(--parallel-branch-accent) 34%, rgba(255, 255, 255, 0.12));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--parallel-branch-accent) 14%, transparent);
   position: relative;
 }
 
@@ -972,10 +982,10 @@
   display: none;
 }
 
-.parallel-branch:nth-child(1) { border-left-color: var(--color-primary); }
-.parallel-branch:nth-child(2) { border-left-color: #48a8e0; }
-.parallel-branch:nth-child(3) { border-left-color: #48e078; }
-.parallel-branch:nth-child(4) { border-left-color: #e048a8; }
+.parallel-branch:nth-child(1) { --parallel-branch-accent: var(--color-primary); }
+.parallel-branch:nth-child(2) { --parallel-branch-accent: #48a8e0; }
+.parallel-branch:nth-child(3) { --parallel-branch-accent: #48e078; }
+.parallel-branch:nth-child(4) { --parallel-branch-accent: #e048a8; }
 
 /* Stretch the last connector in each parallel branch to fill the remaining width */
 .parallel-branch > .signal-connector-wrapper:last-child {
@@ -1825,10 +1835,12 @@
 .default-effect-shell-meter::after {
   content: "";
   display: block;
-  width: var(--meter-fill, 0%);
+  width: 100%;
   height: 100%;
   border-radius: inherit;
-  transition: width 0.12s ease-out, background 0.12s ease-out, opacity 0.12s ease-out;
+  transform-origin: left center;
+  transform: scaleX(var(--meter-fill-scale, 0));
+  transition: transform 0.12s ease-out, background 0.12s ease-out, opacity 0.12s ease-out;
   background: linear-gradient(90deg, rgba(72, 222, 170, 0.55) 0%, rgba(255, 94, 94, 0.92) 100%);
 }
 
@@ -2904,6 +2916,28 @@
   flex-shrink: 0;
 }
 
+.signal-connector-wrapper::after {
+  content: "";
+  position: absolute;
+  left: 40%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-success) 32%, var(--border-medium));
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M8 3.5v9M3.5 8h9' stroke='%23d7dde9' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") center / 10px 10px no-repeat,
+    color-mix(in srgb, var(--bg-secondary) 76%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--bg-primary) 55%, transparent),
+    0 4px 10px rgba(0, 0, 0, 0.18);
+  opacity: 0.72;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+  z-index: 9;
+}
+
 .signal-add-btn {
   position: absolute;
   left: 50%;
@@ -2925,6 +2959,13 @@
   opacity: 0;
   z-index: 10;
   padding: 0;
+}
+
+.signal-connector-wrapper:hover::after,
+.signal-connector-wrapper:focus-within::after,
+.signal-connector-wrapper.drag-over::after {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.82);
 }
 
 .signal-connector-wrapper:hover .signal-add-btn,
@@ -3012,15 +3053,17 @@
   gap: 10px;
   padding: 8px 16px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
   color: var(--text-primary);
-  border-left: 3px solid transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  margin: 0 8px;
 }
 
 .effect-dropdown-item:hover {
   background: linear-gradient(90deg, color-mix(in srgb, var(--category-color) 18%, transparent) 0%, transparent 100%);
-  padding-left: 20px;
-  border-left-color: var(--category-color);
+  border-color: color-mix(in srgb, var(--category-color) 42%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--category-color) 12%, transparent);
 }
 
 .effect-dropdown-icon {

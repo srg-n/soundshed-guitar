@@ -465,13 +465,15 @@ function setProfileAvatarPreview(source: string | null): void {
 
   const resolved = source?.trim() ?? "";
   if (!resolved) {
-    image.removeAttribute("src");
-    wrap.style.display = "none";
+    image.src = "data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=";
+    image.setAttribute("aria-hidden", "true");
+    wrap.hidden = true;
     return;
   }
 
   image.src = resolved;
-  wrap.style.display = "";
+  image.removeAttribute("aria-hidden");
+  wrap.hidden = false;
 }
 
 function setProfileFieldsFromUser(user: ToneSharingUser | null): void {
@@ -685,10 +687,6 @@ function setPublishPackBusy(busy: boolean, message?: string): void {
 
 function normalizeSettingString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function persistToneSharingApiBase(_value: string): void {
-  // API base is fixed; user-configured overrides are intentionally ignored.
 }
 
 function persistToneSharingSession(value: string): void {
@@ -1206,14 +1204,6 @@ function updateAuthButtonVisibility(): void {
     closeToneSharingPublishPresetModal();
     closePackModal();
   }
-}
-
-function normalizeBase(input: string): string {
-  const trimmed = input.trim();
-  if (!trimmed) {
-    return "https://api-guitar.soundshed.com/v1";
-  }
-  return trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
 }
 
 function normalizeCreatorHandle(raw: unknown): string | null {
@@ -3958,10 +3948,6 @@ function restoreLocalState(): void {
     persistInstalledPacks();
   }
 
-  const apiInput = element<HTMLInputElement>("tone-sharing-api-base");
-  if (apiInput) {
-    apiInput.value = state.apiBase;
-  }
 }
 
 export function applyToneSharingAppSettings(settings?: Record<string, unknown>): void {
@@ -4015,27 +4001,6 @@ export function applyToneSharingAppSettings(settings?: Record<string, unknown>):
 }
 
 function bindTopControls(): void {
-  element<HTMLButtonElement>("tone-sharing-api-toggle")?.addEventListener("click", () => {
-    const row = element<HTMLElement>("tone-sharing-endpoint-row");
-    if (row) {
-      row.classList.toggle("tone-sharing-endpoint--hidden");
-    }
-  });
-
-  const refreshButton = element<HTMLButtonElement>("tone-sharing-refresh");
-  const apiInput = element<HTMLInputElement>("tone-sharing-api-base");
-  if (refreshButton && apiInput) {
-    refreshButton.addEventListener("click", async () => {
-      activeSharedTarget = null;
-      updateActiveSharedFilter();
-      state.apiBase = normalizeBase(apiInput.value);
-      persistToneSharingApiBase(state.apiBase);
-      clearPackThumbnailObjectUrls();
-      await loadAuthSession();
-      await Promise.all([loadBrowse(), loadMine()]);
-    });
-  }
-
   // Account chip opens sign-in modal
   element<HTMLButtonElement>("tone-sharing-account-btn")?.addEventListener("click", () => {
     openToneSharingSignInModal();

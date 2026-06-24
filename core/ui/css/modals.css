@@ -986,10 +986,19 @@
 }
 
 .resource-browser-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
   font-size: 11px;
   color: var(--color-primary);
   margin-bottom: 8px;
   min-height: 16px;
+}
+
+.resource-browser-status-count,
+.resource-browser-status-note {
+  white-space: nowrap;
 }
 
 .resource-browser-list,
