@@ -1473,10 +1473,6 @@ let signalDiagnosticsLastDesignedPeakText: string | null = null;
 let signalDiagnosticsLastListHtml: string | null = null;
 
 export function updateSignalDiagnosticsView(): void {
-  if (!isDSPPerformanceTabVisible()) {
-    return;
-  }
-
   const diagnostics = uiState.signalDiagnostics;
 
   const statusEl = document.getElementById("signal-diagnostics-status");
