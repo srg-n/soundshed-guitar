@@ -11,6 +11,7 @@ import { uiState } from "./state.js";
 import { postMessage, setAppSetting } from "./bridge.js";
 import { ensureTone3000Session, isTone3000AuthReady, tone3000AuthenticatedFetch } from "./tone3000.js";
 import { showNotification } from "./notifications.js";
+import { showConfirm } from "./dialogs.js";
 import { arrayBufferToBase64, escapeHtml, findResourceById } from "./utils.js";
 import { FEATURE_FLAGS_CHANGED_EVENT, Features, isFeatureEnabled } from "./featureFlags.js";
 import type { AppSettingValue, LibraryResource } from "./types.js";
@@ -517,7 +518,7 @@ export class ResourceBrowserModal {
     this.libraryBrowseBtn?.addEventListener("click", () => this.browseForLibraryFile());
     
     // Library item click
-    this.libraryList?.addEventListener("click", (event) => this.handleLibraryClick(event));
+    this.libraryList?.addEventListener("click", (event) => void this.handleLibraryClick(event));
 
     // Folder tab events
     this.folderAddBtn?.addEventListener("click", () => this.requestAddFolder());
@@ -1302,7 +1303,7 @@ export class ResourceBrowserModal {
     `;
   }
 
-  private handleLibraryClick(event: Event): void {
+  private async handleLibraryClick(event: Event): Promise<void> {
     const target = event.target as HTMLElement | null;
     if (!target) {
       return;
@@ -1350,8 +1351,9 @@ export class ResourceBrowserModal {
       const resources = uiState.resourceLibrary[this.options.resourceType] ?? [];
       const resource = findResourceById(resources, resourceId);
       const displayName = (resource?.name ?? "").trim() || resourceId;
-      const confirmed = window.confirm(
-        `Delete "${displayName}" from the Resource Library?\n\nIf this resource is used by any preset, deletion will be refused.`,
+      const confirmed = await showConfirm(
+        `Delete "${displayName}" from the Resource Library?\n\nIf the file was stored by the app it will be removed, files in other locations remain on disk.`,
+        "Delete Resource",
       );
       if (!confirmed) {
         return;
@@ -1970,6 +1972,7 @@ export class ResourceBrowserModal {
       }
     }
   }
+
   
   private async importTone3000Resource(
     tone: Tone3000Tone,
@@ -2303,10 +2306,11 @@ export class ResourceBrowserModal {
 
     if (this.folderStatus) {
       const parts: string[] = [
-        `${listing.dirs.length} folder${listing.dirs.length === 1 ? "" : "s"}, ${listing.files.length} file${listing.files.length === 1 ? "" : "s"}`,
+        `<span class="resource-browser-status-count">${listing.dirs.length} folder${listing.dirs.length === 1 ? "" : "s"}</span>`,
+        `<span class="resource-browser-status-count">${listing.files.length} file${listing.files.length === 1 ? "" : "s"}</span>`,
       ];
-      if (listing.truncated) parts.push("(truncated)");
-      this.folderStatus.textContent = parts.join(" ");
+      if (listing.truncated) parts.push(`<span class="resource-browser-status-note">(truncated)</span>`);
+      this.folderStatus.innerHTML = parts.join("");
     }
 
     const dirHtml = dirs.map((dir) => `

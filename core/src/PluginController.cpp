@@ -6340,6 +6340,17 @@ void PluginController::HandleUpdateLibraryResourceRequest(const nlohmann::json& 
     }
 
     LibraryResource updated = *existing;
+    const std::string fileNameValue = payload.value("fileName", "");
+    const std::string inlineData = payload.value("data", "");
+    const auto settingsResourcesDir = mFileSystem.ResolveSettingsDirectory() / "resources" / "content";
+    const auto isUnderDirectory = [](const std::filesystem::path& candidate, const std::filesystem::path& base) {
+        std::error_code ec;
+        auto nc = std::filesystem::weakly_canonical(candidate, ec); if (ec) return false;
+        auto nb = std::filesystem::weakly_canonical(base, ec); if (ec) return false;
+        auto bi = nb.begin(); auto ci = nc.begin();
+        for (; bi != nb.end(); ++bi, ++ci) { if (ci == nc.end() || *bi != *ci) return false; }
+        return true;
+    };
     if (payload.contains("name"))
         updated.name = payload.value("name", updated.name);
     if (payload.contains("category"))
@@ -6376,6 +6387,62 @@ void PluginController::HandleUpdateLibraryResourceRequest(const nlohmann::json& 
             updated.metadata["sourceFileName"] = updatedPath.filename().string();
         }
     }
+
+    if (!inlineData.empty())
+    {
+        const std::vector<std::uint8_t> decodedBytes = util::DecodeBase64(inlineData);
+        if (decodedBytes.empty())
+        {
+            ReportErrorToUI("Resource update failed", "Invalid file data");
+            return;
+        }
+
+        std::filesystem::path targetPath = updated.filePath;
+        const bool hasExistingPath = !targetPath.empty();
+        if (!hasExistingPath)
+        {
+            ReportErrorToUI("Resource update failed", "Existing resource file path is missing");
+            return;
+        }
+
+        const auto extensionForType = [&](const std::string& type) {
+            if (type == "ir") return std::string{".wav"};
+            if (type == "wasm") return std::string{".wasm"};
+            if (type == "nam") return std::string{".nam"};
+            return std::string{".bin"};
+        };
+
+        if (!fileNameValue.empty())
+        {
+            std::string resolvedName = util::SanitizeFilename(fileNameValue);
+            if (resolvedName.empty())
+                resolvedName = "resource" + extensionForType(resourceType);
+            if (resolvedName.find('.') == std::string::npos)
+                resolvedName += extensionForType(resourceType);
+            targetPath = updated.filePath.parent_path() / resolvedName;
+        }
+
+        [[maybe_unused]] const auto ensuredTargetDir = mFileSystem.EnsureDirectory(targetPath.parent_path());
+        if (!WriteFile(targetPath, decodedBytes))
+        {
+            ReportErrorToUI("Resource update failed", "Failed to write replacement file");
+            return;
+        }
+
+        const std::filesystem::path previousPath = updated.filePath;
+        updated.filePath = targetPath;
+        updated.hash = mHasher.HashFile(targetPath);
+        updated.metadata["sourceFileName"] = targetPath.filename().string();
+
+        if (previousPath != targetPath && !previousPath.empty() && isUnderDirectory(previousPath, settingsResourcesDir))
+        {
+            std::error_code ec;
+            std::filesystem::remove(previousPath, ec);
+        }
+    }
+
+    if (resourceType == "nam")
+        EnrichNamResourceMetadata(updated, updated.filePath);
 
     mResourceLibrary.UpdateResource(resourceType, resourceId, updated);
     AppendUserLibraryResource(updated);

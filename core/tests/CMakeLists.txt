@@ -11,6 +11,7 @@ set(TEST_SOURCES
     PresetDSPLoadingTests.cpp
     PresetManagementWorkflowTests.cpp
     PresetStorageTests.cpp
+    ResourceLibraryDeleteWorkflowTests.cpp
     ResourcePreviewWorkflowTests.cpp
     RealtimeConvolverTests.cpp
     SampleRateConverterTests.cpp

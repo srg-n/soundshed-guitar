@@ -120,8 +120,7 @@ export function initializeDialogModals(): void {
   };
 
   window.confirm = (message?: string) => {
-    console.warn("window.confirm is disabled; use showConfirm() instead.");
-    void showConfirm(String(message ?? ""));
+    void showConfirm("bug: window.confirm is disabled; use showConfirm() instead");
     return false;
   };
 }
