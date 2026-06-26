@@ -109,6 +109,8 @@ const hostedPluginPendingLoads = new Map<string, HostedPluginPendingLoad>();
 const HOSTED_PLUGIN_PENDING_LOAD_MAX_AGE_MS = 120000;
 const HOSTED_PLUGIN_FAVORITES_SETTING = "plugins.hostFavorites";
 const HOSTED_PLUGIN_NAME_COLLATOR = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
+const analyzerSpectrogramHistoryByNode = new Map<string, number[][]>();
+const ANALYZER_SPECTROGRAM_HISTORY_FRAMES = 160;
 
 const NODE_BYPASS_DRAG_DISTANCE_PX = 36;
 const NODE_BYPASS_DRAG_DIRECTION_RATIO = 1.2;
@@ -1748,7 +1750,7 @@ export function refreshSelectedNodeParams(): void {
   showNodeParamsPanel(node, activePreset);
 }
 
-function getSelectedNodeDiagnostics(): import("./types.js").SignalLevelMetrics | null {
+function getSelectedNodeDiagnosticsEntry(): import("./types.js").SignalLevelNodeMetrics | null {
   if (!selectedNodeId) {
     return null;
   }
@@ -1759,14 +1761,33 @@ function getSelectedNodeDiagnostics(): import("./types.js").SignalLevelMetrics |
   }
 
   if (selectedNodeId === "__input__") {
-    return diagnostics.input ?? null;
+    if (!diagnostics.input) {
+      return null;
+    }
+    return {
+      scope: "pre",
+      nodeId: "__input__",
+      nodeType: "input",
+      levels: diagnostics.input,
+    };
   }
   if (selectedNodeId === "__output__") {
-    return diagnostics.output ?? null;
+    if (!diagnostics.output) {
+      return null;
+    }
+    return {
+      scope: "post",
+      nodeId: "__output__",
+      nodeType: "output",
+      levels: diagnostics.output,
+    };
   }
 
-  const nodeMetrics = diagnostics.nodes.find((entry) => entry.nodeId === selectedNodeId);
-  return nodeMetrics?.levels ?? null;
+  return diagnostics.nodes.find((entry) => entry.nodeId === selectedNodeId) ?? null;
+}
+
+function getSelectedNodeDiagnostics(): import("./types.js").SignalLevelMetrics | null {
+  return getSelectedNodeDiagnosticsEntry()?.levels ?? null;
 }
 
 function normalizePeakDbfsForShellMeter(peakDbfs: number): number {
@@ -1805,6 +1826,146 @@ export function updateSelectedNodePeakMeter(): void {
   }
 
   rail.title = `Node peak: ${metrics.peakDbfs.toFixed(1)} dBFS · Headroom: ${metrics.headroomDb.toFixed(1)} dB`;
+}
+
+function formatAnalyzerNumeric(value: number, unit: string, fractionDigits = 1): string {
+  if (!Number.isFinite(value)) {
+    return "—";
+  }
+  return `${value.toFixed(fractionDigits)} ${unit}`;
+}
+
+function percentFsToDbfs(percentFs: number): number {
+  if (!Number.isFinite(percentFs)) {
+    return Number.NaN;
+  }
+  const linear = Math.max(0, Math.min(1, percentFs / 100));
+  if (linear <= 1.0e-9) {
+    return -120;
+  }
+  return 20 * Math.log10(linear);
+}
+
+function drawAnalyzerSpectrogram(canvas: HTMLCanvasElement, history: number[][], minDbfs: number, maxDbfs: number): void {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return;
+  }
+
+  const width = Math.max(1, Math.floor(canvas.clientWidth || 1));
+  const height = Math.max(1, Math.floor(canvas.clientHeight || 1));
+  const dpr = window.devicePixelRatio || 1;
+  const targetWidth = Math.max(1, Math.round(width * dpr));
+  const targetHeight = Math.max(1, Math.round(height * dpr));
+  if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+  }
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "rgba(8, 10, 18, 0.92)";
+  ctx.fillRect(0, 0, width, height);
+
+  if (!history.length) {
+    return;
+  }
+
+  const bins = history[0]?.length ?? 0;
+  if (!bins) {
+    return;
+  }
+
+  const dbRange = Math.max(1, maxDbfs - minDbfs);
+  const columns = Math.min(width, history.length);
+  const start = Math.max(0, history.length - columns);
+  const rowHeight = height / bins;
+
+  for (let x = 0; x < columns; ++x) {
+    const frame = history[start + x];
+    if (!Array.isArray(frame)) {
+      continue;
+    }
+    for (let y = 0; y < bins; ++y) {
+      const db = Number(frame[y]);
+      const norm = Math.max(0, Math.min(1, (db - minDbfs) / dbRange));
+      if (norm <= 0.001) {
+        continue;
+      }
+      const hue = 230 - Math.round(norm * 190);
+      const saturation = 76 + Math.round(norm * 18);
+      const lightness = 12 + Math.round(norm * 56);
+      ctx.fillStyle = `hsl(${hue} ${saturation}% ${lightness}%)`;
+      ctx.fillRect(x, height - (y + 1) * rowHeight, 1, Math.max(1, rowHeight + 0.5));
+    }
+  }
+}
+
+export function updateSelectedNodeAnalyzerPanel(): void {
+  const analyzerPanel = nodeParamsPanelElement?.querySelector<HTMLElement>(".input-analyzer-panel");
+  if (!analyzerPanel || !selectedNodeId) {
+    return;
+  }
+
+  const diagnostics = getSelectedNodeDiagnosticsEntry();
+  const analyzer = diagnostics?.analyzer;
+  const levels = analyzer?.levels;
+  const spectrogram = analyzer?.spectrogram;
+
+  const peakPercentEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="peakPercent"]');
+  const rmsPercentEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="rmsPercent"]');
+  const rmsDbuEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="rmsDbu"]');
+  const rmsDbvEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="rmsDbv"]');
+  const rmsVoltsEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="rmsVolts"]');
+  const peakDbfsEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="peakDbfs"]');
+  const rmsDbfsEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="rmsDbfs"]');
+  const updatedAtEl = analyzerPanel.querySelector<HTMLElement>(".input-analyzer-updated");
+  const canvas = analyzerPanel.querySelector<HTMLCanvasElement>(".input-analyzer-spectrogram-canvas");
+
+  if (!levels || !spectrogram || !Array.isArray(spectrogram.binsDb)) {
+    if (peakPercentEl) peakPercentEl.textContent = "—";
+    if (rmsPercentEl) rmsPercentEl.textContent = "—";
+    if (rmsDbuEl) rmsDbuEl.textContent = "—";
+    if (rmsDbvEl) rmsDbvEl.textContent = "—";
+    if (rmsVoltsEl) rmsVoltsEl.textContent = "—";
+    if (peakDbfsEl) peakDbfsEl.textContent = "—";
+    if (rmsDbfsEl) rmsDbfsEl.textContent = "—";
+    if (updatedAtEl) updatedAtEl.textContent = "Waiting for live analyzer data…";
+    if (canvas) {
+      drawAnalyzerSpectrogram(canvas, [], -120, 0);
+    }
+    return;
+  }
+
+  if (peakPercentEl) peakPercentEl.textContent = formatAnalyzerNumeric(levels.peakPercent, "%");
+  if (rmsPercentEl) rmsPercentEl.textContent = formatAnalyzerNumeric(levels.rmsPercent, "%");
+  if (rmsDbuEl) rmsDbuEl.textContent = formatAnalyzerNumeric(levels.rmsDbu, "dBu");
+  if (rmsDbvEl) rmsDbvEl.textContent = formatAnalyzerNumeric(levels.rmsDbv, "dBV");
+  if (rmsVoltsEl) rmsVoltsEl.textContent = formatAnalyzerNumeric(levels.rmsVolts, "Vrms", 3);
+  if (peakDbfsEl) peakDbfsEl.textContent = formatAnalyzerNumeric(percentFsToDbfs(levels.peakPercent), "dBFS");
+  if (rmsDbfsEl) rmsDbfsEl.textContent = formatAnalyzerNumeric(percentFsToDbfs(levels.rmsPercent), "dBFS");
+
+  if (updatedAtEl) {
+    updatedAtEl.textContent = Number.isFinite(spectrogram.generatedAtMs)
+      ? `Updated: ${new Date(Number(spectrogram.generatedAtMs)).toLocaleTimeString()}`
+      : "Updated: live";
+  }
+
+  const history = analyzerSpectrogramHistoryByNode.get(selectedNodeId) ?? [];
+  history.push(spectrogram.binsDb.slice());
+  while (history.length > ANALYZER_SPECTROGRAM_HISTORY_FRAMES) {
+    history.shift();
+  }
+  analyzerSpectrogramHistoryByNode.set(selectedNodeId, history);
+
+  if (canvas) {
+    drawAnalyzerSpectrogram(
+      canvas,
+      history,
+      Number.isFinite(spectrogram.minDbfs) ? spectrogram.minDbfs : -120,
+      Number.isFinite(spectrogram.maxDbfs) ? spectrogram.maxDbfs : 0,
+    );
+  }
 }
 
 type EdgeRef = SignalPathEdgeRef & { gain: number };
@@ -3233,6 +3394,30 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
     </button>
   ` : "";
   const equipmentImage = getEffectVisualizationEquipmentImage(node);
+  const isInputAnalyzerNode = EffectTypeRegistry.resolve(node.type) === EffectGuids.kInputAnalyzer;
+  if (isInputAnalyzerNode) {
+    analyzerSpectrogramHistoryByNode.delete(node.id);
+  }
+  const analyzerSection = isInputAnalyzerNode ? `
+    <section class="default-effect-section input-analyzer-panel" data-node-id="${node.id}">
+      <div class="input-analyzer-header">
+        <div class="input-analyzer-title">Signal Analyzer</div>
+        <div class="input-analyzer-updated">Waiting for live analyzer data…</div>
+      </div>
+      <div class="input-analyzer-stats-grid">
+        <div class="input-analyzer-stat"><span class="input-analyzer-label">Peak (dBFS)</span><span class="input-analyzer-value" data-analyzer-field="peakDbfs">—</span></div>
+        <div class="input-analyzer-stat"><span class="input-analyzer-label">RMS (dBFS)</span><span class="input-analyzer-value" data-analyzer-field="rmsDbfs">—</span></div>
+        <div class="input-analyzer-stat"><span class="input-analyzer-label">Peak (%FS)</span><span class="input-analyzer-value" data-analyzer-field="peakPercent">—</span></div>
+        <div class="input-analyzer-stat"><span class="input-analyzer-label">RMS (%FS)</span><span class="input-analyzer-value" data-analyzer-field="rmsPercent">—</span></div>
+        <div class="input-analyzer-stat"><span class="input-analyzer-label">RMS (dBu)</span><span class="input-analyzer-value" data-analyzer-field="rmsDbu">—</span></div>
+        <div class="input-analyzer-stat"><span class="input-analyzer-label">RMS (dBV)</span><span class="input-analyzer-value" data-analyzer-field="rmsDbv">—</span></div>
+        <div class="input-analyzer-stat"><span class="input-analyzer-label">RMS (Vrms)</span><span class="input-analyzer-value" data-analyzer-field="rmsVolts">—</span></div>
+      </div>
+      <div class="input-analyzer-spectrogram-wrap">
+        <canvas class="input-analyzer-spectrogram-canvas" aria-label="Live spectrogram"></canvas>
+      </div>
+    </section>
+  ` : "";
   const shellEquipmentPanel = equipmentImage ? `
     <aside class="default-effect-shell-equipment-panel" aria-hidden="true">
       <img class="default-effect-shell-equipment-image" src="${equipmentImage}" alt="" loading="lazy" decoding="async" />
@@ -3242,6 +3427,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
     ${fullRigCabModelNote}
     ${layoutIncludesResourceControls ? "" : resourceSelector}
     ${customEffectActions}
+    ${analyzerSection}
     ${eqVisualizer}
     ${mixerInputControls}
     <div class="default-effect-section default-effect-section-controls default-effect-section-custom-layout">
@@ -3279,6 +3465,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
       ${fullRigCabModelNote}
       ${layoutIncludesResourceControls ? "" : resourceSelector}
       ${customEffectActions}
+      ${analyzerSection}
       ${eqVisualizer}
       ${mixerInputControls}
       <div class="default-effect-section default-effect-section-controls">
@@ -3344,6 +3531,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
   bindParamTabs();
   applyCustomLayoutScaling(nodeParamsPanelElement);
   updateSelectedNodePeakMeter();
+  updateSelectedNodeAnalyzerPanel();
 }
 
 /**

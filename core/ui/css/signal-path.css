@@ -1939,6 +1939,7 @@
 .default-effect-shell .node-param-group-block,
 .default-effect-shell .eq-visualizer,
 .default-effect-shell .mixer-inputs-section,
+.default-effect-shell .input-analyzer-panel,
 .default-effect-shell .node-resource-selector {
   position: relative;
   padding: 16px;
@@ -2039,6 +2040,76 @@
   color: rgba(255, 245, 230, 0.92);
   font-size: 11px;
   line-height: 1.35;
+}
+
+.input-analyzer-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.input-analyzer-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.input-analyzer-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(220, 227, 243, 0.74);
+}
+
+.input-analyzer-updated {
+  font-size: 10px;
+  color: rgba(201, 209, 225, 0.68);
+}
+
+.input-analyzer-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.input-analyzer-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(170, 183, 214, 0.1);
+  background: linear-gradient(180deg, rgba(8, 12, 20, 0.72) 0%, rgba(15, 18, 28, 0.62) 100%);
+}
+
+.input-analyzer-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(194, 203, 222, 0.66);
+}
+
+.input-analyzer-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(239, 244, 255, 0.94);
+}
+
+.input-analyzer-spectrogram-wrap {
+  border-radius: 12px;
+  border: 1px solid rgba(170, 183, 214, 0.14);
+  background: linear-gradient(180deg, rgba(9, 12, 19, 0.92) 0%, rgba(11, 14, 22, 0.86) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  padding: 8px;
+}
+
+.input-analyzer-spectrogram-canvas {
+  display: block;
+  width: 100%;
+  height: 170px;
+  border-radius: 8px;
 }
 
 .default-effect-shell .plugin-host-load-error {

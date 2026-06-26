@@ -1467,6 +1467,22 @@ namespace guitarfx
       node.levels.peak = entry.peak;
       node.levels.rms = entry.rms;
       node.levels.clipCount = entry.clipCount;
+      if (entry.analyzer)
+      {
+        NodeSignalLevel::AnalyzerTelemetry analyzer;
+        analyzer.peakPercent = entry.analyzer->peakPercent;
+        analyzer.rmsPercent = entry.analyzer->rmsPercent;
+        analyzer.rmsDbu = entry.analyzer->rmsDbu;
+        analyzer.rmsDbv = entry.analyzer->rmsDbv;
+        analyzer.rmsVolts = entry.analyzer->rmsVolts;
+        analyzer.spectrogramBinsDb = entry.analyzer->spectrogramBinsDb;
+        analyzer.spectrogramMinDbfs = entry.analyzer->spectrogramMinDbfs;
+        analyzer.spectrogramMaxDbfs = entry.analyzer->spectrogramMaxDbfs;
+        analyzer.spectrogramMinFrequencyHz = entry.analyzer->spectrogramMinFrequencyHz;
+        analyzer.spectrogramMaxFrequencyHz = entry.analyzer->spectrogramMaxFrequencyHz;
+        analyzer.generatedAtMs = entry.analyzer->generatedAtMs;
+        node.analyzer = std::move(analyzer);
+      }
       snapshot.nodes.push_back(std::move(node));
     }
 
@@ -1484,6 +1500,22 @@ namespace guitarfx
         node.levels.peak = entry.peak;
         node.levels.rms = entry.rms;
         node.levels.clipCount = entry.clipCount;
+        if (entry.analyzer)
+        {
+          NodeSignalLevel::AnalyzerTelemetry analyzer;
+          analyzer.peakPercent = entry.analyzer->peakPercent;
+          analyzer.rmsPercent = entry.analyzer->rmsPercent;
+          analyzer.rmsDbu = entry.analyzer->rmsDbu;
+          analyzer.rmsDbv = entry.analyzer->rmsDbv;
+          analyzer.rmsVolts = entry.analyzer->rmsVolts;
+          analyzer.spectrogramBinsDb = entry.analyzer->spectrogramBinsDb;
+          analyzer.spectrogramMinDbfs = entry.analyzer->spectrogramMinDbfs;
+          analyzer.spectrogramMaxDbfs = entry.analyzer->spectrogramMaxDbfs;
+          analyzer.spectrogramMinFrequencyHz = entry.analyzer->spectrogramMinFrequencyHz;
+          analyzer.spectrogramMaxFrequencyHz = entry.analyzer->spectrogramMaxFrequencyHz;
+          analyzer.generatedAtMs = entry.analyzer->generatedAtMs;
+          node.analyzer = std::move(analyzer);
+        }
         snapshot.nodes.push_back(std::move(node));
       }
     }
@@ -1498,6 +1530,22 @@ namespace guitarfx
       node.levels.peak = entry.peak;
       node.levels.rms = entry.rms;
       node.levels.clipCount = entry.clipCount;
+      if (entry.analyzer)
+      {
+        NodeSignalLevel::AnalyzerTelemetry analyzer;
+        analyzer.peakPercent = entry.analyzer->peakPercent;
+        analyzer.rmsPercent = entry.analyzer->rmsPercent;
+        analyzer.rmsDbu = entry.analyzer->rmsDbu;
+        analyzer.rmsDbv = entry.analyzer->rmsDbv;
+        analyzer.rmsVolts = entry.analyzer->rmsVolts;
+        analyzer.spectrogramBinsDb = entry.analyzer->spectrogramBinsDb;
+        analyzer.spectrogramMinDbfs = entry.analyzer->spectrogramMinDbfs;
+        analyzer.spectrogramMaxDbfs = entry.analyzer->spectrogramMaxDbfs;
+        analyzer.spectrogramMinFrequencyHz = entry.analyzer->spectrogramMinFrequencyHz;
+        analyzer.spectrogramMaxFrequencyHz = entry.analyzer->spectrogramMaxFrequencyHz;
+        analyzer.generatedAtMs = entry.analyzer->generatedAtMs;
+        node.analyzer = std::move(analyzer);
+      }
       snapshot.nodes.push_back(std::move(node));
     }
 

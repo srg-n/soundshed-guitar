@@ -3,6 +3,7 @@
 #include "dsp/EffectRegistry.h"
 #include "dsp/EffectGuids.h"
 #include "dsp/effects/MixerEffect.h"
+#include "dsp/effects/InputAnalyzerEffect.h"
 #include "dsp/effects/CompositeEffectProcessor.h"
 #include "resources/ResourceLibrary.h"
 
@@ -1213,6 +1214,33 @@ namespace guitarfx
       entry.rms = state.rms.load(std::memory_order_relaxed);
       entry.clipCount = state.clipCount.load(std::memory_order_relaxed);
       entry.channelCount = state.hasInput ? (state.hasStereoSignal ? 2 : 1) : 0;
+      const auto *analyzerEffect = state.processor
+        ? dynamic_cast<const InputAnalyzerEffect *>(state.processor.get())
+        : nullptr;
+      if (analyzerEffect)
+      {
+        const auto snapshot = analyzerEffect->GetTelemetrySnapshot();
+        NodeSignalLevel::AnalyzerTelemetry analyzer;
+        analyzer.peakPercent = snapshot.peakPercent;
+        analyzer.rmsPercent = snapshot.rmsPercent;
+        analyzer.rmsDbu = snapshot.rmsDbu;
+        analyzer.rmsDbv = snapshot.rmsDbv;
+        analyzer.rmsVolts = snapshot.rmsVolts;
+        analyzer.spectrogramBinsDb.reserve(InputAnalyzerEffect::kSpectrogramBins);
+        for (int i = 0; i < InputAnalyzerEffect::kSpectrogramBins; ++i)
+        {
+          analyzer.spectrogramBinsDb.push_back(snapshot.spectrogramBinsDb[static_cast<std::size_t>(i)]);
+        }
+        analyzer.spectrogramMinDbfs = InputAnalyzerEffect::kSpectrogramMinDbfs;
+        analyzer.spectrogramMaxDbfs = InputAnalyzerEffect::kSpectrogramMaxDbfs;
+        analyzer.spectrogramMinFrequencyHz = InputAnalyzerEffect::kSpectrogramMinFrequencyHz;
+        analyzer.spectrogramMaxFrequencyHz = InputAnalyzerEffect::kSpectrogramMaxFrequencyHz;
+        analyzer.generatedAtMs = snapshot.generatedAtMs;
+        if (snapshot.valid)
+        {
+          entry.analyzer = std::move(analyzer);
+        }
+      }
       result.push_back(std::move(entry));
     }
 

@@ -87,6 +87,7 @@ All UUID constants are defined in `core/src/dsp/EffectGuids.h`. The table below 
 | `kSynthSaw` | `608e846e-0e60-4064-9c83-37c0df573c38` | `synth_saw` |
 | `kSplitter` | `f5f2541b-fcea-4cfd-9e62-eeddf583ef4e` | `splitter` |
 | `kMixer` | `d7d1e40f-9c79-4582-9a82-d5fa5bbbfb97` | `mixer` |
+| `kInputAnalyzer` | `2ea17ea3-8f2a-4eea-8e14-babf0d8be5a6` | `input_analyzer` |
 
 ### Backward Compatibility via Aliases
 
@@ -136,7 +137,7 @@ EffectProcessor* processor = EffectRegistry::Create("amp_nam");
 | `pitch` | Pitch manipulation | Pitch shift, transpose, octave |
 | `delay` | Time-based delay | Digital delay, doubler |
 | `reverb` | Reverberation | Room, chamber, spring, advanced, IR, ambient |
-| `utility` | Utility processing | Gain, splitter, mixer |
+| `utility` | Utility processing | Gain, splitter, mixer, signal analyzer |
 | `synth` | Synthesized tones | Synth saw |
 
 ## Effect Processor Interface
@@ -419,6 +420,15 @@ Creates parallel paths by inserting a splitter and an auto-join mixer.
 **Notes**:
 - The `splitter` effect is user-addable.
 - The `mixer` node is inserted automatically to rejoin branches and is not shown in the FX list.
+
+### Signal Analyzer (`input_analyzer`)
+Pass-through utility node that renders live diagnostics for the signal entering the node.
+
+| Output | Description |
+|--------|-------------|
+| dBFS | Live peak/RMS in dBFS |
+| Converted units | Peak/RMS as %FS plus RMS dBu/dBV/Vrms |
+| Spectrogram | Rolling FFT-based spectrogram of node input audio |
 
 ## Resource References
 

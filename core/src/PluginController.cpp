@@ -91,7 +91,8 @@ namespace
 
     /// Maximum number of DSP performance stats messages sent to the UI per second.
     /// Adjust this to trade display update rate against IPC overhead.
-    constexpr int kDspStatsRateHz = 5;
+    constexpr int kDspPerformanceStatsRateHz = 5;
+    constexpr int kSignalDiagnosticsRateHz = 20;
 
     // ── Metronome constants ─────────────────────────────────────────
 
@@ -13193,6 +13194,29 @@ void PluginController::SendSignalDiagnosticsToUI()
         };
     };
 
+    auto buildAnalyzerJson = [](const MultiPresetMixer::NodeSignalLevel::AnalyzerTelemetry& analyzer)
+    {
+        nlohmann::json levels;
+        levels["peakPercent"] = analyzer.peakPercent;
+        levels["rmsPercent"] = analyzer.rmsPercent;
+        levels["rmsDbu"] = analyzer.rmsDbu;
+        levels["rmsDbv"] = analyzer.rmsDbv;
+        levels["rmsVolts"] = analyzer.rmsVolts;
+
+        nlohmann::json spectrogram;
+        spectrogram["binsDb"] = analyzer.spectrogramBinsDb;
+        spectrogram["minDbfs"] = analyzer.spectrogramMinDbfs;
+        spectrogram["maxDbfs"] = analyzer.spectrogramMaxDbfs;
+        spectrogram["minFrequencyHz"] = analyzer.spectrogramMinFrequencyHz;
+        spectrogram["maxFrequencyHz"] = analyzer.spectrogramMaxFrequencyHz;
+        spectrogram["generatedAtMs"] = analyzer.generatedAtMs;
+
+        nlohmann::json result;
+        result["levels"] = std::move(levels);
+        result["spectrogram"] = std::move(spectrogram);
+        return result;
+    };
+
     msg["rawInput"] = buildLevelJson(snapshot.rawInput);
     msg["input"] = buildLevelJson(snapshot.input);
     msg["output"] = buildLevelJson(snapshot.output);
@@ -13207,6 +13231,10 @@ void PluginController::SendSignalDiagnosticsToUI()
         node["nodeType"] = n.nodeType;
         node["channelCount"] = n.channelCount;
         node["levels"] = buildLevelJson(n.levels);
+        if (n.analyzer)
+        {
+            node["analyzer"] = buildAnalyzerJson(*n.analyzer);
+        }
         nodes.push_back(node);
     }
     msg["nodes"] = nodes;

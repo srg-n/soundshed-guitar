@@ -10,7 +10,7 @@ import { updateDSPPerformancePlot, updateSignalDiagnosticsView } from "./views.j
 import { refreshSettingsView, handleUserInputCalibrationDiagnosticsUpdate } from "./settings.js";
 import { applyRiffCaptureProgress, applyRiffCaptureState, applyRiffLibraryState, handleCapturedPreviewComplete, handleRiffPreviewPlayback, handleSavedRiffPreviewComplete, renderRiffLibraryPanel } from "./riffLibrary.js";
 import { getRiffLibrary, postMessage } from "./bridge.js";
-import { handleHostedPluginResourceLoadFailed, handleHostedPluginResourceLoadCompleted, handleNodeResourceBrowseCancelled, refreshSelectedNodeParams, renderSignalPathBar, updateSelectedNodePeakMeter } from "./signalPath.js";
+import { handleHostedPluginResourceLoadFailed, handleHostedPluginResourceLoadCompleted, handleNodeResourceBrowseCancelled, refreshSelectedNodeParams, renderSignalPathBar, updateSelectedNodeAnalyzerPanel, updateSelectedNodePeakMeter } from "./signalPath.js";
 import { refreshFxSelector } from "./fxSelector.js";
 import { applyEnvironmentState, applyMetronomeState } from "./metronome.js";
 import { applyAutomationState, handleMidiLogEntry, handleMidiLearnCapture } from "./automationPanel.js";
@@ -179,6 +179,7 @@ function flushTelemetryUiUpdates(): void {
     updateSignalDiagnosticsView();
     handleUserInputCalibrationDiagnosticsUpdate();
     updateSelectedNodePeakMeter();
+    updateSelectedNodeAnalyzerPanel();
     refreshSavePresetModalPeakInfoIfOpen();
     telemetryUiPendingSignalDiagnostics = false;
   }

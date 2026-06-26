@@ -76,6 +76,7 @@ namespace guitarfx
     constexpr const char* kPluginHost      = "7ebf3f9a-bf7d-4f1c-b11c-73a4b3c27546";
     constexpr const char* kSplitter        = "f5f2541b-fcea-4cfd-9e62-eeddf583ef4e";
     constexpr const char* kMixer           = "d7d1e40f-9c79-4582-9a82-d5fa5bbbfb97";
+    constexpr const char* kInputAnalyzer   = "2ea17ea3-8f2a-4eea-8e14-babf0d8be5a6";
 
     // ── Synth ─────────────────────────────────────────────────────────────
     constexpr const char* kSynthSaw        = "608e846e-0e60-4064-9c83-37c0df573c38";

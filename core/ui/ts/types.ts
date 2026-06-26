@@ -397,6 +397,29 @@ export interface SignalLevelNodeMetrics {
   nodeType: string;
   channelCount?: number;
   levels: SignalLevelMetrics;
+  analyzer?: InputAnalyzerTelemetry;
+}
+
+export interface InputAnalyzerLevelTelemetry {
+  peakPercent: number;
+  rmsPercent: number;
+  rmsDbu: number;
+  rmsDbv: number;
+  rmsVolts: number;
+}
+
+export interface InputAnalyzerSpectrogramTelemetry {
+  binsDb: number[];
+  minDbfs: number;
+  maxDbfs: number;
+  minFrequencyHz: number;
+  maxFrequencyHz: number;
+  generatedAtMs?: number;
+}
+
+export interface InputAnalyzerTelemetry {
+  levels: InputAnalyzerLevelTelemetry;
+  spectrogram: InputAnalyzerSpectrogramTelemetry;
 }
 
 export interface SignalLevelDiagnostics {

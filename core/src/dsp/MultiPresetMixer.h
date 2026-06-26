@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <condition_variable>
 #include <functional>
 #include <mutex>
@@ -61,12 +62,28 @@ namespace guitarfx
 
     struct NodeSignalLevel
     {
+      struct AnalyzerTelemetry
+      {
+        double peakPercent = 0.0;
+        double rmsPercent = 0.0;
+        double rmsDbu = 0.0;
+        double rmsDbv = 0.0;
+        double rmsVolts = 0.0;
+        std::vector<float> spectrogramBinsDb;
+        double spectrogramMinDbfs = -120.0;
+        double spectrogramMaxDbfs = 0.0;
+        double spectrogramMinFrequencyHz = 20.0;
+        double spectrogramMaxFrequencyHz = 20000.0;
+        std::uint64_t generatedAtMs = 0;
+      };
+
       std::string scope; // pre, post, preset
       std::string presetId;
       std::string nodeId;
       std::string nodeType;
       int channelCount = 0;
       SignalLevelStats levels;
+      std::optional<AnalyzerTelemetry> analyzer;
     };
 
     struct SignalDiagnosticsSnapshot

@@ -68,6 +68,7 @@ export const EffectGuids = {
   kSynthSaw:             "608e846e-0e60-4064-9c83-37c0df573c38",
   kSplitter:             "f5f2541b-fcea-4cfd-9e62-eeddf583ef4e",
   kMixer:                "d7d1e40f-9c79-4582-9a82-d5fa5bbbfb97",
+  kInputAnalyzer:        "2ea17ea3-8f2a-4eea-8e14-babf0d8be5a6",
 } as const;
 
 export type EffectGuid = typeof EffectGuids[keyof typeof EffectGuids];
@@ -120,6 +121,9 @@ export const EFFECT_ALIAS_MAP: Record<string, string> = {
   synth_saw:             EffectGuids.kSynthSaw,
   splitter:              EffectGuids.kSplitter,
   mixer:                 EffectGuids.kMixer,
+  input_analyzer:        EffectGuids.kInputAnalyzer,
+  analyzer_input:        EffectGuids.kInputAnalyzer,
+  audio_analyzer:        EffectGuids.kInputAnalyzer,
 };
 
 /**

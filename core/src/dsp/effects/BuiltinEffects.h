@@ -35,6 +35,7 @@
 #include "dsp/effects/IRCabEffect.h"
 #include "dsp/effects/IRReverbEffect.h"
 #include "dsp/effects/MixerEffect.h"
+#include "dsp/effects/InputAnalyzerEffect.h"
 #include "dsp/effects/SimpleCabEffect.h"
 #include "dsp/effects/CompositeEffectProcessor.h"
 #if defined(GUITARFX_ENABLE_WASM_EFFECTS)
@@ -61,6 +62,7 @@ namespace guitarfx
 
     // Utility effects
     RegisterGainEffect();
+    RegisterInputAnalyzerEffect();
 #if defined(GUITARFX_ENABLE_WASM_EFFECTS)
     RegisterWasmEffect();
 #endif

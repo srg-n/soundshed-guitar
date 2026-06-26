@@ -113,6 +113,7 @@ const effectIcons: Record<string, IconKey> = {
   [EffectGuids.kGain]:             "megaphone",
   [EffectGuids.kSplitter]:         "split",
   [EffectGuids.kMixer]:            "mixer",
+  [EffectGuids.kInputAnalyzer]:    "microscope",
   [EffectGuids.kLimiterBrickwall]: "bolt",
 };
 
