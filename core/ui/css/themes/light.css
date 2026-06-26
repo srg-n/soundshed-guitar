@@ -397,6 +397,55 @@
   color: rgba(45, 61, 90, 0.92);
 }
 
+.theme-light .effect-visualization .mixer-inputs-section {
+  background: #ffffff;
+  border-color: var(--border-light);
+}
+
+.theme-light .effect-visualization .mixer-inputs-header {
+  color: rgba(69, 83, 110, 0.72);
+  border-bottom-color: var(--border-light);
+}
+
+.theme-light .effect-visualization .mixer-input-group {
+  background: #ffffff;
+  border-color: var(--border-light);
+}
+
+.theme-light .effect-visualization .mixer-input-header {
+  border-bottom-color: var(--border-light);
+}
+
+.theme-light .effect-visualization .mixer-input-label,
+.theme-light .effect-visualization .node-param-label {
+  color: rgba(69, 83, 110, 0.72);
+}
+
+.theme-light .effect-visualization .mixer-mute-label,
+.theme-light .effect-visualization .mixer-no-inputs {
+  color: rgba(69, 83, 110, 0.72);
+}
+
+.theme-light .effect-visualization .mixer-inputs-section .node-param-knob {
+  border-width: 1px;
+  border-color: var(--border-medium);
+  background: #f3f4f6;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.theme-light .effect-visualization .mixer-inputs-section .node-param-knob::after {
+  content: none;
+}
+
+.theme-light .effect-visualization .mixer-inputs-section .node-param-knob .knob-indicator {
+  width: 3px;
+  height: 10px;
+  top: 5px;
+  border-radius: 2px;
+  background: var(--control-indicator);
+  box-shadow: none;
+}
+
 .theme-light .default-effect-shell .node-param-knob {
   border-width: 1px;
   border-color: var(--border-medium);
