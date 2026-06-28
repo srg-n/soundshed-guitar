@@ -22,9 +22,10 @@ namespace
 class TestHost final : public guitarfx::IPluginHost
 {
 public:
-    explicit TestHost(fs::path userDataPath, fs::path bundledAssetsPath = {})
+    explicit TestHost(fs::path userDataPath, fs::path bundledAssetsPath = {}, bool standalone = false)
         : mUserDataPath(std::move(userDataPath))
         , mBundledAssetsPath(bundledAssetsPath.empty() ? mUserDataPath : std::move(bundledAssetsPath))
+        , mStandalone(standalone)
     {
     }
 
@@ -73,11 +74,17 @@ public:
         return 512;
     }
 
+    [[nodiscard]] bool IsStandalone() const override
+    {
+        return mStandalone;
+    }
+
     std::vector<std::string> sentMessages;
 
 private:
     fs::path mUserDataPath;
     fs::path mBundledAssetsPath;
+    bool mStandalone = false;
 };
 
 void SetSettingsEnvRoot(const fs::path& root)
@@ -912,6 +919,65 @@ bool TestLoadPresetRetiresNamInputAutoLeveling()
     return true;
 }
 
+bool TestLoadPresetPreservesDisabledNamCalibrationToggle()
+{
+    const auto tempRoot = fs::temp_directory_path() / "soundshed_guitar_test_nam_use_calibration";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot);
+    SetSettingsEnvRoot(tempRoot);
+
+    TestHost host(tempRoot);
+    guitarfx::PluginController controller(host);
+    controller.Initialize();
+
+    auto preset = BuildPreset("p-nam-use-calibration-disabled", "NAM Use Calibration Disabled");
+    auto* ampNode = preset.graph.FindNode("amp");
+    if (!ampNode)
+    {
+        std::cerr << "Failed to build NAM test node\n";
+        return false;
+    }
+
+    ampNode->params["useCalibration"] = 0.0;
+    ampNode->params["calibrationInputLevel"] = -12.0;
+
+    nlohmann::json message;
+    message["type"] = "loadPreset";
+    message["preset"] = nlohmann::json::parse(guitarfx::PresetStorage::SerializeToJson(preset));
+    message["presetId"] = preset.id;
+    controller.HandleUIMessage(message.dump());
+
+    const auto& active = controller.GetActivePreset();
+    if (!active)
+    {
+        std::cerr << "No active preset after NAM toggle-preservation load\n";
+        return false;
+    }
+
+    const auto* loadedAmp = active->graph.FindNode("amp");
+    if (!loadedAmp)
+    {
+        std::cerr << "Loaded preset missing NAM node\n";
+        return false;
+    }
+
+    const auto calIt = loadedAmp->params.find("useCalibration");
+    if (calIt == loadedAmp->params.end() || std::abs(calIt->second - 0.0) > 1e-9)
+    {
+        std::cerr << "NAM useCalibration should preserve an explicit disabled state on preset load\n";
+        return false;
+    }
+
+    if (loadedAmp->params.count("calibrationInputLevel") || loadedAmp->params.count("calibrationOutputLevel"))
+    {
+        std::cerr << "Legacy NAM calibration params should be removed on preset load\n";
+        return false;
+    }
+
+    return true;
+}
+
 bool TestLoadAppSettingsAppliesUserInputCalibrationProfile()
 {
     const fs::path sandbox = fs::temp_directory_path() / "guitarfx-preset-management-tests" / "user-input-calibration";
@@ -1531,6 +1597,115 @@ bool TestFactoryPresetArchiveStartupImport()
     return true;
 }
 
+bool TestStandaloneDeserializeStateIgnoresEmbeddedPresetSnapshot()
+{
+    const fs::path sandbox = fs::temp_directory_path() / "guitarfx-preset-management-tests" / "standalone-deserialize-ignore";
+    std::error_code ec;
+    fs::remove_all(sandbox, ec);
+    fs::create_directories(sandbox, ec);
+    SetSettingsEnvRoot(sandbox);
+
+    const fs::path settingsPath = sandbox / "Soundshed Guitar" / "data" / "v1" / "settings" / "app.json";
+    fs::create_directories(settingsPath.parent_path(), ec);
+    {
+        nlohmann::json settings = nlohmann::json::object();
+        settings["lastPresetId"] = "saved-preset";
+        settings["audio.nam.interfaceCalibrationLevelDbu"] = 12.0;
+        std::ofstream output(settingsPath);
+        output << settings.dump(2);
+    }
+
+    const fs::path userPresetDir = sandbox / "Soundshed Guitar" / "data" / "v1" / "presets" / "user";
+    fs::create_directories(userPresetDir, ec);
+
+    auto savedPreset = BuildPreset("saved-preset", "Saved Preset");
+    auto* savedAmp = savedPreset.graph.FindNode("amp");
+    if (!savedAmp)
+    {
+        std::cerr << "Saved preset is missing NAM node\n";
+        return false;
+    }
+    savedAmp->params["drive"] = 0.25;
+    if (!guitarfx::PresetStorage::SaveToFile(savedPreset, userPresetDir / "saved-preset.json"))
+    {
+        std::cerr << "Failed to write saved preset file\n";
+        return false;
+    }
+
+    TestHost host(sandbox, {}, true);
+    guitarfx::PluginController controller(host);
+    controller.Initialize();
+
+    const auto& restored = controller.GetActivePreset();
+    if (!restored || restored->id != "saved-preset")
+    {
+        std::cerr << "Standalone startup did not restore the saved preset\n";
+        return false;
+    }
+
+    const auto* restoredAmp = restored->graph.FindNode("amp");
+    if (!restoredAmp)
+    {
+        std::cerr << "Standalone startup restored preset without NAM node\n";
+        return false;
+    }
+    const auto restoredDriveIt = restoredAmp->params.find("drive");
+    if (restoredDriveIt == restoredAmp->params.end() || std::abs(restoredDriveIt->second - 0.25) > 1e-9)
+    {
+        std::cerr << "Standalone startup restored unexpected drive value\n";
+        return false;
+    }
+
+    auto unsavedSnapshot = savedPreset;
+    unsavedSnapshot.name = "Unsaved Snapshot";
+    auto* unsavedAmp = unsavedSnapshot.graph.FindNode("amp");
+    if (!unsavedAmp)
+    {
+        std::cerr << "Unsaved snapshot is missing NAM node\n";
+        return false;
+    }
+    unsavedAmp->params["drive"] = 0.75;
+
+    nlohmann::json incomingState = nlohmann::json::object();
+    incomingState["presetId"] = "saved-preset";
+    incomingState["preset"] = nlohmann::json::parse(guitarfx::PresetStorage::SerializeToJson(unsavedSnapshot));
+    incomingState["appSettings"] = nlohmann::json::object({{"audio.nam.interfaceCalibrationLevelDbu", 6.0}});
+
+    controller.DeserializeState(incomingState.dump());
+
+    const auto& afterDeserialize = controller.GetActivePreset();
+    if (!afterDeserialize)
+    {
+        std::cerr << "Active preset unexpectedly cleared after standalone deserialize\n";
+        return false;
+    }
+
+    const auto* afterAmp = afterDeserialize->graph.FindNode("amp");
+    if (!afterAmp)
+    {
+        std::cerr << "Active preset missing NAM node after standalone deserialize\n";
+        return false;
+    }
+
+    const auto afterDriveIt = afterAmp->params.find("drive");
+    if (afterDeserialize->name != "Saved Preset"
+        || afterDriveIt == afterAmp->params.end()
+        || std::abs(afterDriveIt->second - 0.25) > 1e-9)
+    {
+        std::cerr << "Standalone deserialize should not apply embedded preset snapshot\n";
+        return false;
+    }
+
+    const auto& appSettings = controller.GetAppSettings();
+    if (std::abs(appSettings.value("audio.nam.interfaceCalibrationLevelDbu", 0.0) - 12.0) > 1e-9)
+    {
+        std::cerr << "Standalone deserialize should not overwrite app settings from host state\n";
+        return false;
+    }
+
+    return true;
+}
+
 } // namespace
 
 int main()
@@ -1549,12 +1724,14 @@ int main()
     run("Load preset remaps hosted plugin resource by stable id", TestLoadPresetRemapsHostedPluginResourceByStableId());
     run("Load preset restores unified level state", TestLoadPresetRestoresUnifiedLevelState());
     run("Load preset retires NAM input auto-leveling", TestLoadPresetRetiresNamInputAutoLeveling());
+    run("Load preset preserves disabled NAM calibration toggle", TestLoadPresetPreservesDisabledNamCalibrationToggle());
     run("Load app settings applies user input calibration", TestLoadAppSettingsAppliesUserInputCalibrationProfile());
     run("User input calibration training bypasses active profile", TestUserInputCalibrationTrainingBypassesActiveProfileWithoutPersistingSelection());
     run("Save preset uses global chain levels", TestSavePresetUsesGlobalChainLevels());
     run("Save/Get/Delete preset workflow", TestSaveGetDeletePresetWorkflow());
     run("Save As creates new preset id", TestSaveAsCreatesNewPresetId());
     run("Factory preset archive startup import", TestFactoryPresetArchiveStartupImport());
+    run("Standalone ignores embedded host snapshot", TestStandaloneDeserializeStateIgnoresEmbeddedPresetSnapshot());
     run("Riff library path normalization", TestRiffLibraryPathNormalization());
     run("Optimized NAM metadata alias parsing", TestOptimizedNamMetadataAliasParsing());
 

@@ -69,6 +69,8 @@ namespace guitarfx
         double rmsDbu = 0.0;
         double rmsDbv = 0.0;
         double rmsVolts = 0.0;
+        bool stereo = false;
+        int activeChannelCount = 0;
         std::vector<float> spectrogramBinsDb;
         double spectrogramMinDbfs = -120.0;
         double spectrogramMaxDbfs = 0.0;

@@ -194,6 +194,7 @@ namespace guitarfx
     inst.executor.SetResourceLibrary(mResourceLibrary);
     inst.executor.SetGraph(normalizedPreset.graph);
     inst.executor.SetSignalDiagnosticsEnabled(mSignalDiagnosticsEnabled.load(std::memory_order_acquire));
+    inst.executor.SetNamInputModeMono(mMonoMode);
     inst.complexityScore = EstimateGraphComplexityScore(inst.executor.GetNodeTypes());
 
     if (mPrepared)
@@ -304,6 +305,7 @@ namespace guitarfx
     inst.executor.SetResourceLibrary(mResourceLibrary);
     inst.executor.SetGraph(normalizedPreset.graph); // CreateProcessors + LoadResources here
     inst.executor.SetSignalDiagnosticsEnabled(mSignalDiagnosticsEnabled.load(std::memory_order_acquire));
+    inst.executor.SetNamInputModeMono(mMonoMode);
     inst.complexityScore = EstimateGraphComplexityScore(inst.executor.GetNodeTypes());
 
     if (mPrepared)
@@ -1065,23 +1067,32 @@ namespace guitarfx
       mRawInputLevels.clipCount.store(rawStats.clipCount, std::memory_order_relaxed);
     }
 
-    if (mMonoMode && processInL && processInR)
+    if (mMonoMode && (processInL || processInR))
     {
-      // Apply mono mode: select input channel or sum to mono
+      // Apply mono mode: produce dual-mono buffers even when only one live
+      // hardware input channel is present.
+      const bool standaloneInputPath = !mHostControlledInput;
       for (int i = 0; i < numSamples; ++i)
       {
-        float monoSample;
+        const float leftSample = processInL ? processInL[i] : 0.0f;
+        const float rightSample = processInR ? processInR[i] : 0.0f;
+
+        float monoSample = 0.0f;
         if (mInputChannel == 0)
         {
-          monoSample = processInL[i]; // Left only
+          monoSample = leftSample; // Left only
         }
         else if (mInputChannel == 1)
         {
-          monoSample = processInR[i]; // Right only
+          monoSample = rightSample; // Right only
         }
         else
         {
-          monoSample = (processInL[i] + processInR[i]) * 0.5f; // Sum
+          // Match NAM Gateway standalone input semantics:
+          // sum live inputs directly (no DAW-style averaging).
+          monoSample = standaloneInputPath
+            ? (leftSample + rightSample)
+            : ((leftSample + rightSample) * 0.5f);
         }
         mTempInL[static_cast<std::size_t>(i)] = monoSample;
         mTempInR[static_cast<std::size_t>(i)] = monoSample;
@@ -1161,6 +1172,10 @@ namespace guitarfx
       }
     }
 
+    const bool namInputModeMono = mMonoMode;
+    mPreChainExecutor.SetNamInputModeMono(namInputModeMono);
+    mPostChainExecutor.SetNamInputModeMono(namInputModeMono);
+
     // ==========================================================================
     // GLOBAL PRE-CHAIN: Input → Noise Gate → Transpose
     // ==========================================================================
@@ -1214,7 +1229,10 @@ namespace guitarfx
 
     // Avoid nested parallelism: if mixer-level fan-out is active, run each preset graph serially.
     for (auto &inst : mInstances)
+    {
+      inst.executor.SetNamInputModeMono(namInputModeMono);
       inst.executor.SetParallelLevelsEnabled(!useParallel);
+    }
 
     if (useParallel)
     {
@@ -1475,6 +1493,8 @@ namespace guitarfx
         analyzer.rmsDbu = entry.analyzer->rmsDbu;
         analyzer.rmsDbv = entry.analyzer->rmsDbv;
         analyzer.rmsVolts = entry.analyzer->rmsVolts;
+        analyzer.stereo = entry.analyzer->stereo;
+        analyzer.activeChannelCount = entry.analyzer->activeChannelCount;
         analyzer.spectrogramBinsDb = entry.analyzer->spectrogramBinsDb;
         analyzer.spectrogramMinDbfs = entry.analyzer->spectrogramMinDbfs;
         analyzer.spectrogramMaxDbfs = entry.analyzer->spectrogramMaxDbfs;
@@ -1508,6 +1528,8 @@ namespace guitarfx
           analyzer.rmsDbu = entry.analyzer->rmsDbu;
           analyzer.rmsDbv = entry.analyzer->rmsDbv;
           analyzer.rmsVolts = entry.analyzer->rmsVolts;
+          analyzer.stereo = entry.analyzer->stereo;
+          analyzer.activeChannelCount = entry.analyzer->activeChannelCount;
           analyzer.spectrogramBinsDb = entry.analyzer->spectrogramBinsDb;
           analyzer.spectrogramMinDbfs = entry.analyzer->spectrogramMinDbfs;
           analyzer.spectrogramMaxDbfs = entry.analyzer->spectrogramMaxDbfs;
@@ -1538,6 +1560,8 @@ namespace guitarfx
         analyzer.rmsDbu = entry.analyzer->rmsDbu;
         analyzer.rmsDbv = entry.analyzer->rmsDbv;
         analyzer.rmsVolts = entry.analyzer->rmsVolts;
+        analyzer.stereo = entry.analyzer->stereo;
+        analyzer.activeChannelCount = entry.analyzer->activeChannelCount;
         analyzer.spectrogramBinsDb = entry.analyzer->spectrogramBinsDb;
         analyzer.spectrogramMinDbfs = entry.analyzer->spectrogramMinDbfs;
         analyzer.spectrogramMaxDbfs = entry.analyzer->spectrogramMaxDbfs;

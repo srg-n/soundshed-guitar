@@ -110,7 +110,27 @@ struct AmpToneBiquad
     a1 = (-2.0 * cosw)     / a0;
     a2 = (1.0 - alpha / A) / a0;
   }
+
+  // High-pass filter used for the post-model DC blocker.
+  void SetHighPass(double freqHz, double Q, double sampleRate)
+  {
+    static constexpr double kPi = 3.14159265358979323846;
+    const double w0 = 2.0 * kPi * freqHz / sampleRate;
+    const double cosw = std::cos(w0);
+    const double sinw = std::sin(w0);
+    const double alpha = sinw / (2.0 * Q);
+    const double a0 = 1.0 + alpha;
+    b0 = (1.0 + cosw) * 0.5 / a0;
+    b1 = -(1.0 + cosw) / a0;
+    b2 = (1.0 + cosw) * 0.5 / a0;
+    a1 = (-2.0 * cosw) / a0;
+    a2 = (1.0 - alpha) / a0;
+  }
 };
+
+inline bool gEnableNamPostDcBlocker = true;
+static constexpr double kNamPostDcBlockerFrequencyHz = 5.0;
+static constexpr double kNamPostDcBlockerQ = 0.7071067811865476;
 
 /**
  * NAM core-backed amp effect with tone controls.
@@ -158,6 +178,7 @@ public:
       mMidFilter[ch].Reset();
       mTrebleFilter[ch].Reset();
       mPresenceFilter[ch].Reset();
+      mPostDcBlocker[ch].Reset();
     }
   }
 
@@ -194,6 +215,7 @@ public:
       const float dryMix = 1.0f - wetMix;
       const bool wetOnly = wetMix >= 0.9999f;
       const bool toneNeutral = IsToneStackNeutral();
+      const bool applyPostDcBlocker = gEnableNamPostDcBlocker;
 
       ProcessModels(numSamples);
 
@@ -203,10 +225,17 @@ public:
       {
         for (int i = 0; i < numSamples; ++i)
         {
+          float outL = static_cast<float>(mOutputBufferL[i]);
+          float outR = static_cast<float>(mOutputBufferR[i]);
+          if (applyPostDcBlocker)
+          {
+            outL = mPostDcBlocker[0].Process(outL);
+            outR = mPostDcBlocker[1].Process(outR);
+          }
           if (outputs[0])
-            outputs[0][i] = static_cast<float>(mOutputBufferL[i]);
+            outputs[0][i] = outL;
           if (outputs[1])
-            outputs[1][i] = static_cast<float>(mOutputBufferR[i]);
+            outputs[1][i] = outR;
         }
         return;
       }
@@ -215,8 +244,15 @@ public:
       {
         for (int i = 0; i < numSamples; ++i)
         {
-          float outL = static_cast<float>(mOutputBufferL[i]) * outputGainF;
-          float outR = static_cast<float>(mOutputBufferR[i]) * outputGainF;
+          float outL = static_cast<float>(mOutputBufferL[i]);
+          float outR = static_cast<float>(mOutputBufferR[i]);
+          if (applyPostDcBlocker)
+          {
+            outL = mPostDcBlocker[0].Process(outL);
+            outR = mPostDcBlocker[1].Process(outR);
+          }
+          outL *= outputGainF;
+          outR *= outputGainF;
           if (!wetOnly)
           {
             outL = mDryBufferL[i] * dryMix + outL * wetMix;
@@ -237,6 +273,8 @@ public:
         outL = mMidFilter[0].Process(outL);
         outL = mTrebleFilter[0].Process(outL);
         outL = mPresenceFilter[0].Process(outL);
+        if (applyPostDcBlocker)
+          outL = mPostDcBlocker[0].Process(outL);
         outL *= outputGainF;
         if (!wetOnly)
           outL = mDryBufferL[i] * dryMix + outL * wetMix;
@@ -246,6 +284,8 @@ public:
         outR = mMidFilter[1].Process(outR);
         outR = mTrebleFilter[1].Process(outR);
         outR = mPresenceFilter[1].Process(outR);
+        if (applyPostDcBlocker)
+          outR = mPostDcBlocker[1].Process(outR);
         outR *= outputGainF;
         if (!wetOnly)
           outR = mDryBufferR[i] * dryMix + outR * wetMix;
@@ -300,6 +340,7 @@ public:
       const float dryMix = 1.0f - wetMix;
       const bool wetOnly = wetMix >= 0.9999f;
       const bool toneNeutral = IsToneStackNeutral();
+      const bool applyPostDcBlocker = gEnableNamPostDcBlocker;
 
       ProcessModelMono(numSamples);
 
@@ -308,7 +349,12 @@ public:
       if (toneNeutral && wetOnly && NearlyEqual(mOutputGain, 1.0))
       {
         for (int i = 0; i < numSamples; ++i)
-          output[i] = static_cast<float>(mOutputBufferL[i]);
+        {
+          float out = static_cast<float>(mOutputBufferL[i]);
+          if (applyPostDcBlocker)
+            out = mPostDcBlocker[0].Process(out);
+          output[i] = out;
+        }
         return;
       }
 
@@ -316,7 +362,10 @@ public:
       {
         for (int i = 0; i < numSamples; ++i)
         {
-          float out = static_cast<float>(mOutputBufferL[i]) * outputGainF;
+          float out = static_cast<float>(mOutputBufferL[i]);
+          if (applyPostDcBlocker)
+            out = mPostDcBlocker[0].Process(out);
+          out *= outputGainF;
           if (!wetOnly)
             out = mDryBufferL[i] * dryMix + out * wetMix;
           output[i] = out;
@@ -331,6 +380,8 @@ public:
         out = mMidFilter[0].Process(out);
         out = mTrebleFilter[0].Process(out);
         out = mPresenceFilter[0].Process(out);
+        if (applyPostDcBlocker)
+          out = mPostDcBlocker[0].Process(out);
         out *= outputGainF;
         if (!wetOnly)
           out = mDryBufferL[i] * dryMix + out * wetMix;
@@ -569,8 +620,7 @@ private:
   double mOutputGain = 1.0;
   double mMix = 1.0;
   // When true, input and output gains are auto-corrected using model metadata
-  // dBu fields and the interface calibration level (set by the controller for
-  // the first NAM in the chain).
+  // dBu fields and the interface calibration level injected by the controller.
   bool mUseCalibration = true;
   std::optional<double> mModelInputLevel;
   std::optional<double> mModelOutputLevel;
@@ -588,6 +638,7 @@ private:
   AmpToneBiquad mMidFilter[2];
   AmpToneBiquad mTrebleFilter[2];
   AmpToneBiquad mPresenceFilter[2];
+  AmpToneBiquad mPostDcBlocker[2];
 
   [[nodiscard]] static bool NearlyEqual(double a, double b, double epsilon = 1.0e-6)
   {
@@ -635,7 +686,7 @@ private:
 
     // Input: delta = calibrationInputLevel(dBu) - model.inputLevel(dBu)
     // Mirrors NeuralAmpModelerPlugin _SetInputGain(). Requires both interface
-    // calibration (first NAM only) and model input-level metadata.
+    // calibration and model input-level metadata.
     if (mModelInputLevel.has_value() && mCalibrationInputLevel.has_value())
     {
       const double raw = *mCalibrationInputLevel - *mModelInputLevel;
@@ -690,6 +741,8 @@ private:
 
     mInputResampler.Prepare(mSampleRate, mModelSampleRate, mMaxBlockSize, SampleRateConversionQuality::HighPerformance);
     mOutputResampler.Prepare(mModelSampleRate, mSampleRate, mMaxModelBlockSize, SampleRateConversionQuality::HighPerformance);
+    mPostDcBlocker[0].SetHighPass(kNamPostDcBlockerFrequencyHz, kNamPostDcBlockerQ, mSampleRate);
+    mPostDcBlocker[1].SetHighPass(kNamPostDcBlockerFrequencyHz, kNamPostDcBlockerQ, mSampleRate);
 
     if (mModelLeft)
       mModelLeft->Reset(mModelSampleRate, mMaxModelBlockSize);

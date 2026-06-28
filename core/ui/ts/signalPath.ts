@@ -1835,6 +1835,18 @@ function formatAnalyzerNumeric(value: number, unit: string, fractionDigits = 1):
   return `${value.toFixed(fractionDigits)} ${unit}`;
 }
 
+function formatAnalyzerChannelMode(levels: import("./types.js").InputAnalyzerLevelTelemetry): string {
+  const isStereo = typeof levels.channelMode === "string"
+    ? levels.channelMode.toLowerCase() === "stereo"
+    : Boolean(levels.stereo);
+  const label = isStereo ? "Stereo" : "Mono";
+  const channels = levels.activeChannelCount;
+  if (Number.isFinite(channels) && (channels as number) > 0) {
+    return `${label} (${channels} ch)`;
+  }
+  return label;
+}
+
 function percentFsToDbfs(percentFs: number): number {
   if (!Number.isFinite(percentFs)) {
     return Number.NaN;
@@ -1917,6 +1929,7 @@ export function updateSelectedNodeAnalyzerPanel(): void {
   const rmsDbuEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="rmsDbu"]');
   const rmsDbvEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="rmsDbv"]');
   const rmsVoltsEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="rmsVolts"]');
+  const channelModeEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="channelMode"]');
   const peakDbfsEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="peakDbfs"]');
   const rmsDbfsEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="rmsDbfs"]');
   const updatedAtEl = analyzerPanel.querySelector<HTMLElement>(".input-analyzer-updated");
@@ -1928,6 +1941,7 @@ export function updateSelectedNodeAnalyzerPanel(): void {
     if (rmsDbuEl) rmsDbuEl.textContent = "—";
     if (rmsDbvEl) rmsDbvEl.textContent = "—";
     if (rmsVoltsEl) rmsVoltsEl.textContent = "—";
+    if (channelModeEl) channelModeEl.textContent = "—";
     if (peakDbfsEl) peakDbfsEl.textContent = "—";
     if (rmsDbfsEl) rmsDbfsEl.textContent = "—";
     if (updatedAtEl) updatedAtEl.textContent = "Waiting for live analyzer data…";
@@ -1942,6 +1956,7 @@ export function updateSelectedNodeAnalyzerPanel(): void {
   if (rmsDbuEl) rmsDbuEl.textContent = formatAnalyzerNumeric(levels.rmsDbu, "dBu");
   if (rmsDbvEl) rmsDbvEl.textContent = formatAnalyzerNumeric(levels.rmsDbv, "dBV");
   if (rmsVoltsEl) rmsVoltsEl.textContent = formatAnalyzerNumeric(levels.rmsVolts, "Vrms", 3);
+  if (channelModeEl) channelModeEl.textContent = formatAnalyzerChannelMode(levels);
   if (peakDbfsEl) peakDbfsEl.textContent = formatAnalyzerNumeric(percentFsToDbfs(levels.peakPercent), "dBFS");
   if (rmsDbfsEl) rmsDbfsEl.textContent = formatAnalyzerNumeric(percentFsToDbfs(levels.rmsPercent), "dBFS");
 
@@ -3412,6 +3427,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
         <div class="input-analyzer-stat"><span class="input-analyzer-label">RMS (dBu)</span><span class="input-analyzer-value" data-analyzer-field="rmsDbu">—</span></div>
         <div class="input-analyzer-stat"><span class="input-analyzer-label">RMS (dBV)</span><span class="input-analyzer-value" data-analyzer-field="rmsDbv">—</span></div>
         <div class="input-analyzer-stat"><span class="input-analyzer-label">RMS (Vrms)</span><span class="input-analyzer-value" data-analyzer-field="rmsVolts">—</span></div>
+        <div class="input-analyzer-stat"><span class="input-analyzer-label">Channels</span><span class="input-analyzer-value" data-analyzer-field="channelMode">—</span></div>
       </div>
       <div class="input-analyzer-spectrogram-wrap">
         <canvas class="input-analyzer-spectrogram-canvas" aria-label="Live spectrogram"></canvas>

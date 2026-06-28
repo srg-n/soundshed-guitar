@@ -406,6 +406,9 @@ export interface InputAnalyzerLevelTelemetry {
   rmsDbu: number;
   rmsDbv: number;
   rmsVolts: number;
+  stereo?: boolean;
+  activeChannelCount?: number;
+  channelMode?: string;
 }
 
 export interface InputAnalyzerSpectrogramTelemetry {

@@ -141,6 +141,27 @@ namespace guitarfx
       return true;
     }
 
+    // Returns true when a channel carries no meaningful signal. A mono source on a
+    // stereo bus (e.g. a guitar wired to input 1) leaves the second channel at
+    // digital silence or just its noise floor; both sit well below this threshold,
+    // while real program material is comfortably above it.
+    bool BufferIsEffectivelySilent(const float *buffer, int numSamples)
+    {
+      if (!buffer)
+      {
+        return true;
+      }
+      constexpr float kSilenceThreshold = 1.0e-4f; // ~-80 dBFS
+      for (int i = 0; i < numSamples; ++i)
+      {
+        if (std::abs(buffer[i]) > kSilenceThreshold)
+        {
+          return false;
+        }
+      }
+      return true;
+    }
+
     bool NodeMayProduceStereo(const std::string &type, const std::string &category)
     {
       if (type == kNodeTypeInput || type == kNodeTypeOutput ||
@@ -150,6 +171,18 @@ namespace guitarfx
       }
 
       return category == "mod" || category == "delay" || category == "reverb";
+    }
+
+    bool IsNamNodeType(const std::string& type)
+    {
+      return type == EffectGuids::kAmpNam
+        || type == EffectGuids::kAmpNamOptimized
+        || type == EffectGuids::kAmpNamBlend
+        || type == EffectGuids::kFxNam
+        || type == "amp_nam"
+        || type == "amp_nam_optimized"
+        || type == "amp_nam_blend"
+        || type == "fx_nam";
     }
 
     int ScoreNodeTypeForParallelWork(const std::string &type)
@@ -741,7 +774,13 @@ namespace guitarfx
         state.hasInput = true;
         const bool leftLive = (inputs[0] != nullptr);
         const bool rightLive = (inputs[1] != nullptr);
-        state.hasStereoSignal = leftLive && rightLive && !BuffersAreEffectivelyMono(inputs[0], inputs[1], numSamples);
+        // A mono source presented on a stereo bus (guitar on input 1, input 2 left
+        // silent) must be reported as mono so downstream mono-capable nodes (e.g. NAM
+        // amps) run a single model instead of processing a dead channel. The signal is
+        // only genuinely stereo when the right channel carries its own content.
+        const bool rightCarriesSignal = rightLive && !BufferIsEffectivelySilent(inputs[1], numSamples);
+        state.hasStereoSignal = leftLive && rightCarriesSignal
+          && !BuffersAreEffectivelyMono(inputs[0], inputs[1], numSamples);
         if (diagnosticsEnabled)
         {
           const auto stats = ComputeLevelStats(state.bufferLeft.data(), state.bufferRight.data(), numSamples);
@@ -973,10 +1012,11 @@ namespace guitarfx
 
     if (state->processor && state->hasInput)
     {
+      const bool forceNamMonoByInputMode = mNamInputModeMono && IsNamNodeType(state->type);
       const bool nodeCanMono = state->processor->SupportsMonoProcessing()
         && !NodeMayProduceStereo(state->type, state->category)
         && !state->processor->ProducesStereoOutput()
-        && !incomingStereoSignal;
+        && (!incomingStereoSignal || forceNamMonoByInputMode);
 
       if (nodeType == kNodeTypeSplitter || nodeType == kNodeTypeOutput)
       {
@@ -1226,6 +1266,8 @@ namespace guitarfx
         analyzer.rmsDbu = snapshot.rmsDbu;
         analyzer.rmsDbv = snapshot.rmsDbv;
         analyzer.rmsVolts = snapshot.rmsVolts;
+        analyzer.stereo = snapshot.stereo;
+        analyzer.activeChannelCount = snapshot.activeChannelCount;
         analyzer.spectrogramBinsDb.reserve(InputAnalyzerEffect::kSpectrogramBins);
         for (int i = 0; i < InputAnalyzerEffect::kSpectrogramBins; ++i)
         {

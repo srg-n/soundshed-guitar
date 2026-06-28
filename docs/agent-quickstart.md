@@ -43,6 +43,9 @@ If you only load a few files, use these:
 2. Resolve via ResourceLibrary; fall back to embeddedId or filePath.
 3. Validate file existence and log errors on failure.
 4. Update docs/data-models.md if behavior changes.
+5. NAM calibration policy: interface calibration input level is injected for all
+   calibratable NAM nodes with valid model resources; per-node `useCalibration`
+   still controls whether metadata-based auto-gain is active.
 
 ## Realtime Safety and Validation
 

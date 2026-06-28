@@ -7,6 +7,7 @@ set(TEST_SOURCES
     EffectProcessorTests.cpp
     IRConvolutionTests.cpp
     MultiPresetMixerTests.cpp
+    NamCalibrationProbe.cpp
     NAMPerformanceBenchmark.cpp
     PresetDSPLoadingTests.cpp
     PresetManagementWorkflowTests.cpp

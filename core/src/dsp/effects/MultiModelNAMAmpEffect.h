@@ -806,7 +806,7 @@ private:
       selection.weightLower, selection.weightUpper);
 
     // Input: delta = calibrationInputLevel(dBu) - model.inputLevel(dBu)
-    // Requires calibrationInputLevel to be set by controller (first NAM only).
+    // Requires calibrationInputLevel to be set by controller.
     if (blendedInputLevel.has_value() && mCalibrationInputLevel.has_value())
     {
       const double raw = *mCalibrationInputLevel - *blendedInputLevel;

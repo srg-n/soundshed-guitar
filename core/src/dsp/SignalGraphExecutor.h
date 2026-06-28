@@ -45,6 +45,8 @@ namespace guitarfx
         double rmsDbu = 0.0;
         double rmsDbv = 0.0;
         double rmsVolts = 0.0;
+        bool stereo = false;
+        int activeChannelCount = 0;
         std::vector<float> spectrogramBinsDb;
         double spectrogramMinDbfs = -120.0;
         double spectrogramMaxDbfs = 0.0;
@@ -97,6 +99,7 @@ namespace guitarfx
     // Global settings
     void SetInputTrim(double dB) { mInputTrim = dB; }
     void SetOutputTrim(double dB) { mOutputTrim = dB; }
+    void SetNamInputModeMono(bool mono) { mNamInputModeMono = mono; }
 
     // Push the current tempo (BPM) to all nodes that have requiresTempo == true.
     // Call this once per audio block before Process().
@@ -172,6 +175,7 @@ namespace guitarfx
 
     std::atomic<bool> mSignalDiagnosticsEnabled{true};
     std::atomic<bool> mParallelLevelsEnabled{true};
+    bool mNamInputModeMono = false;
 
     // Parallel node processing within one graph level.
     static constexpr int kMaxParallelWorkers = 7;

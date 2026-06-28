@@ -63,7 +63,7 @@ In simple terms: if the sound gets louder or quieter while you edit the rig, it 
 
 NAM effects apply a single dBu‑based calibration stage using model metadata.
 
-- **Input calibration**: `gain = calibrationInputLevel_dBu − model.inputLevel_dBu`. Matches the interface reference level to the model's expected input. Only active for the first NAM in the chain (where the interface calibration level is known).
+- **Input calibration**: `gain = calibrationInputLevel_dBu − model.inputLevel_dBu`. Matches the interface reference level to the model's expected input. Active for each NAM node that has calibration enabled and a loaded model.
 - **Output calibration**: `gain = model.outputLevel_dBu − calibrationInputLevel_dBu`. Reconstructs the real‑world output level so downstream effects see consistent drive regardless of which model is loaded.
 - Both corrections are clamped to ±24 dB and combined with the user's manual input/output gain knobs.
 - The **Use Calibration** advanced toggle (on by default) can be disabled to bypass all automatic correction, leaving only the manual gain controls active.

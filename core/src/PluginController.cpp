@@ -348,9 +348,10 @@ namespace
             || type == "fx_nam";
     }
 
-    // NAM types eligible for input calibration (amp + FX). Only the first NAM-based
-    // effect in the chain path receives calibration — fx_nam is included because a
-    // pedal/FX capture may be the sole NAM node in the chain, receiving raw guitar.
+    // NAM types eligible for interface calibration injection (amp + FX).
+    // Each calibratable NAM node with a loaded model can receive the shared
+    // interface calibration value; per-node useCalibration still governs whether
+    // metadata-based auto-gain is actually applied in the DSP effect.
     bool IsNamCalibratableEffectType(const std::string& type)
     {
         return type == guitarfx::EffectGuids::kAmpNam
@@ -361,6 +362,16 @@ namespace
             || type == "amp_nam_blend"
             || type == guitarfx::EffectGuids::kFxNam
             || type == "fx_nam";
+    }
+
+    bool HasValidNamResource(const guitarfx::GraphNode& node)
+    {
+        for (const auto& resource : node.resources)
+        {
+            if (resource.IsValid())
+                return true;
+        }
+        return false;
     }
 
     const guitarfx::GraphNode* FindNodeByIdOrType(const guitarfx::SignalGraph& graph,
@@ -3092,57 +3103,40 @@ void PluginController::ApplyNamInterfaceCalibrationFromAppSettings()
 
     const auto it = mAppSettings.find(kNamInterfaceCalibrationLevelDbuSettingKey);
     double calLevel = std::numeric_limits<double>::quiet_NaN();
-    if (autoCalibrationEnabled && it != mAppSettings.end() && it->is_number())
+    if (autoCalibrationEnabled)
     {
-        const double raw = it->get<double>();
-        if (raw >= kNamInterfaceCalibrationLevelDbuMin && raw <= kNamInterfaceCalibrationLevelDbuMax)
-            calLevel = raw;
+        if (it != mAppSettings.end() && it->is_number())
+        {
+            const double raw = it->get<double>();
+            if (raw >= kNamInterfaceCalibrationLevelDbuMin && raw <= kNamInterfaceCalibrationLevelDbuMax)
+                calLevel = raw;
+            else
+                calLevel = kNamInterfaceCalibrationLevelDbuDefault;
+        }
+        else
+        {
+            // Setting absent — use the default, mirroring the UI's fallback behaviour.
+            // This ensures calibration is active from the first run even before the user
+            // has visited Settings and explicitly saved the value.
+            calLevel = kNamInterfaceCalibrationLevelDbuDefault;
+        }
     }
     mNamInterfaceCalibrationLevelDbu = calLevel;
 
     if (!mActivePresetId.empty() && mActivePreset)
     {
         const auto& graph = mActivePreset->graph;
-
-        // Build the set of NAM effect node IDs so we can test incoming edges.
-        std::unordered_set<std::string> namNodeIds;
-        for (const auto& node : graph.nodes)
-        {
-            if (IsNamEffectType(node.type))
-                namNodeIds.insert(node.id);
-        }
-
-        // A NAM node should receive interface calibration only if it is the
-        // first NAM in the signal chain — i.e. none of its incoming edges come
-        // from another NAM node. A second (or later) NAM receives the digital
-        // output of the previous model, so its input_level_dbu metadata has no
-        // relation to the analogue interface reference level.
-        auto hasNamPredecessor = [&](const std::string& nodeId) -> bool
-        {
-            for (const auto& edge : graph.edges)
-            {
-                if (edge.to == nodeId && namNodeIds.count(edge.from))
-                    return true;
-            }
-            return false;
-        };
-
+        const bool hasCalibrationValue = std::isfinite(calLevel);
         const double clearValue = std::numeric_limits<double>::quiet_NaN();
         std::lock_guard<std::mutex> lock(mDSPMutex);
-        for (const auto& nodeId : namNodeIds)
+        for (const auto& node : graph.nodes)
         {
-            const bool isFirstNam = !hasNamPredecessor(nodeId);
-            if (std::isfinite(calLevel) && isFirstNam)
-            {
-                mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "calibrationInputLevel", calLevel);
-                mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "useCalibration", 1.0);
-            }
-            else
-            {
-                // Not the first NAM in the chain (or calibration disabled):
-                // clear any previously set calibration so auto-gain correction is off.
-                mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "calibrationInputLevel", clearValue);
-            }
+            if (!IsNamCalibratableEffectType(node.type))
+                continue;
+
+            const double calibrationToInject =
+                hasCalibrationValue ? calLevel : clearValue;
+            mPresetMixer.SetNodeParam(mActivePresetId, node.id, "calibrationInputLevel", calibrationToInject);
         }
     }
 }
@@ -3323,6 +3317,13 @@ std::string PluginController::SerializeState() const
 
 void PluginController::DeserializeState(const std::string& json)
 {
+    if (mHost.IsStandalone())
+    {
+        // Standalone startup should restore from app settings + preset files
+        // (LoadLastSessionState), not host-serialized transient preset state.
+        return;
+    }
+
     try
     {
         auto state = nlohmann::json::parse(json);
@@ -3668,7 +3669,7 @@ void PluginController::OnIdle()
 
     // Periodic updates
     mDSPPerformanceUpdateCounter++;
-    if (mDSPPerformanceUpdateCounter >= 60 / kDspStatsRateHz) // fire at kDspStatsRateHz; actual sends are rate-limited below
+    if (mDSPPerformanceUpdateCounter >= 60 / kDspPerformanceStatsRateHz) // fire at kDspPerformanceStatsRateHz; actual sends are rate-limited below
     {
         mDSPPerformanceUpdateCounter = 0;
         RequestPerformanceStatsToUI();
@@ -3679,7 +3680,7 @@ void PluginController::OnIdle()
     if (mSignalDiagnosticsEnabled.load(std::memory_order_acquire))
     {
         mSignalDiagnosticsUpdateCounter++;
-        if (mSignalDiagnosticsUpdateCounter >= 60 / kDspStatsRateHz)
+        if (mSignalDiagnosticsUpdateCounter >= 60 / kSignalDiagnosticsRateHz)
         {
             mSignalDiagnosticsUpdateCounter = 0;
             RequestSignalDiagnosticsToUI();
@@ -10747,7 +10748,8 @@ void PluginController::ApplyPreset(const Preset& preset)
         node.params.erase("clampAutoGain");
         node.params.erase("useAutoLevel");
         ClearNamCalibrationParams(node);
-        node.params["useCalibration"] = 1.0;
+        if (!node.params.contains("useCalibration"))
+            node.params["useCalibration"] = 1.0;
     }
 
     // Hydrate blend node resources (model refs + blendMode) from the blend library.
@@ -10831,48 +10833,20 @@ void PluginController::ApplyPreset(const Preset& preset)
                 mTunerDataPending.store(true, std::memory_order_release);
             });
 
-        // Apply global interface calibration level to NAM effect nodes (overrides preset
-        // params; calibrationInputLevel is not stored in preset data).
-        // A NAM node should receive interface calibration only if it is the
-        // first NAM in the signal chain — i.e. none of its incoming edges come
-        // from another NAM node. A second (or later) NAM receives the digital
-        // output of the previous model, so its input_level_dbu metadata has no
-        // relation to the analogue interface reference level.
-        if (std::isfinite(mNamInterfaceCalibrationLevelDbu))
+        // Apply global interface calibration level to all calibratable NAM
+        // effect nodes (overrides preset params; calibrationInputLevel is not
+        // stored in preset data). We inject even when a model is not currently
+        // resolved so the value is already present once the model loads.
+        const bool hasCalibrationValue = std::isfinite(mNamInterfaceCalibrationLevelDbu);
+        const double clearValue = std::numeric_limits<double>::quiet_NaN();
+        for (const auto& node : normalizedPreset.graph.nodes)
         {
-            std::unordered_set<std::string> namNodeIds;
-            for (const auto& node : normalizedPreset.graph.nodes)
-            {
-                if (IsNamEffectType(node.type))
-                    namNodeIds.insert(node.id);
-            }
+            if (!IsNamCalibratableEffectType(node.type))
+                continue;
 
-            auto hasNamPredecessor = [&](const std::string& nodeId) -> bool
-            {
-                for (const auto& edge : normalizedPreset.graph.edges)
-                {
-                    if (edge.to == nodeId && namNodeIds.count(edge.from))
-                        return true;
-                }
-                return false;
-            };
-
-            const double clearValue = std::numeric_limits<double>::quiet_NaN();
-            for (const auto& node : normalizedPreset.graph.nodes)
-            {
-                if (!IsNamEffectType(node.type)) continue;
-
-                const bool isFirstNam = !hasNamPredecessor(node.id);
-                if (isFirstNam)
-                {
-                    mPresetMixer.SetNodeParam(initialSlotId, node.id, "calibrationInputLevel", mNamInterfaceCalibrationLevelDbu);
-                    mPresetMixer.SetNodeParam(initialSlotId, node.id, "useCalibration", 1.0);
-                }
-                else
-                {
-                    mPresetMixer.SetNodeParam(initialSlotId, node.id, "calibrationInputLevel", clearValue);
-                }
-            }
+            const double calibrationToInject =
+                hasCalibrationValue ? mNamInterfaceCalibrationLevelDbu : clearValue;
+            mPresetMixer.SetNodeParam(initialSlotId, node.id, "calibrationInputLevel", calibrationToInject);
         }
     }
 
@@ -11587,15 +11561,27 @@ void PluginController::ResetNamNodeLevelState(const std::string& nodeId)
     if (!node || !IsNamEffectType(node->type)) return;
 
     ClearNamCalibrationParams(*node);
-    node->params["useCalibration"] = 1.0;
+    if (!node->params.contains("useCalibration"))
+        node->params["useCalibration"] = 1.0;
     mActivePresetJson = PresetStorage::SerializeToJson(*mActivePreset);
     mPendingStateBroadcast = true;
 
     if (!mActivePresetId.empty())
     {
         const double clearValue = std::numeric_limits<double>::quiet_NaN();
-        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "calibrationInputLevel", clearValue);
-        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "useCalibration", 1.0);
+        const auto useCalibrationIt = node->params.find("useCalibration");
+        const double useCalibrationValue =
+            (useCalibrationIt != node->params.end() && useCalibrationIt->second <= 0.5) ? 0.0 : 1.0;
+        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "useCalibration", useCalibrationValue);
+
+        // Re-inject current interface calibration level for this NAM node.
+        // Keep this value resident even if no model is currently resolved so
+        // calibration takes effect immediately when a model loads.
+        const double calLevelToInject =
+            std::isfinite(mNamInterfaceCalibrationLevelDbu)
+                ? mNamInterfaceCalibrationLevelDbu
+                : clearValue;
+        mPresetMixer.SetNodeParam(mActivePresetId, nodeId, "calibrationInputLevel", calLevelToInject);
     }
 }
 
@@ -13158,7 +13144,7 @@ void PluginController::TrySendPendingSignalDiagnosticsToUI()
     if (!mPendingSignalDiagnosticsUpdate)
         return;
 
-    constexpr auto kMinSignalDiagnosticsInterval = std::chrono::milliseconds(1000 / kDspStatsRateHz);
+    constexpr auto kMinSignalDiagnosticsInterval = std::chrono::milliseconds(1000 / kSignalDiagnosticsRateHz);
     const auto now = std::chrono::steady_clock::now();
     if (mLastSignalDiagnosticsUpdateSentAt.time_since_epoch().count() != 0
         && (now - mLastSignalDiagnosticsUpdateSentAt) < kMinSignalDiagnosticsInterval)
@@ -13202,6 +13188,9 @@ void PluginController::SendSignalDiagnosticsToUI()
         levels["rmsDbu"] = analyzer.rmsDbu;
         levels["rmsDbv"] = analyzer.rmsDbv;
         levels["rmsVolts"] = analyzer.rmsVolts;
+        levels["stereo"] = analyzer.stereo;
+        levels["activeChannelCount"] = analyzer.activeChannelCount;
+        levels["channelMode"] = analyzer.stereo ? "stereo" : "mono";
 
         nlohmann::json spectrogram;
         spectrogram["binsDb"] = analyzer.spectrogramBinsDb;
@@ -13252,7 +13241,7 @@ void PluginController::TrySendPendingPerformanceStatsToUI()
     if (!mPendingPerformanceStatsUpdate)
         return;
 
-    constexpr auto kMinPerformanceStatsInterval = std::chrono::milliseconds(1000 / kDspStatsRateHz);
+    constexpr auto kMinPerformanceStatsInterval = std::chrono::milliseconds(1000 / kDspPerformanceStatsRateHz);
     const auto now = std::chrono::steady_clock::now();
     if (mLastPerformanceStatsUpdateSentAt.time_since_epoch().count() != 0
         && (now - mLastPerformanceStatsUpdateSentAt) < kMinPerformanceStatsInterval)
