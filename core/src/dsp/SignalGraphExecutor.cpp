@@ -1266,6 +1266,10 @@ namespace guitarfx
         analyzer.rmsDbu = snapshot.rmsDbu;
         analyzer.rmsDbv = snapshot.rmsDbv;
         analyzer.rmsVolts = snapshot.rmsVolts;
+        analyzer.loudnessValid = snapshot.loudnessValid;
+        analyzer.momentaryLufs = snapshot.momentaryLufs;
+        analyzer.shortTermLufs = snapshot.shortTermLufs;
+        analyzer.integratedLufs = snapshot.integratedLufs;
         analyzer.stereo = snapshot.stereo;
         analyzer.activeChannelCount = snapshot.activeChannelCount;
         analyzer.spectrogramBinsDb.reserve(InputAnalyzerEffect::kSpectrogramBins);

@@ -12,6 +12,7 @@
 #include <thread>
 #include <array>
 #include <cstdint>
+#include <limits>
 #include <optional>
 
 namespace guitarfx
@@ -45,6 +46,10 @@ namespace guitarfx
         double rmsDbu = 0.0;
         double rmsDbv = 0.0;
         double rmsVolts = 0.0;
+        bool loudnessValid = false;
+        double momentaryLufs = -std::numeric_limits<double>::infinity();
+        double shortTermLufs = -std::numeric_limits<double>::infinity();
+        double integratedLufs = -std::numeric_limits<double>::infinity();
         bool stereo = false;
         int activeChannelCount = 0;
         std::vector<float> spectrogramBinsDb;

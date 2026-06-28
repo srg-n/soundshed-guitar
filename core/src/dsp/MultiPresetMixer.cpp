@@ -1493,6 +1493,10 @@ namespace guitarfx
         analyzer.rmsDbu = entry.analyzer->rmsDbu;
         analyzer.rmsDbv = entry.analyzer->rmsDbv;
         analyzer.rmsVolts = entry.analyzer->rmsVolts;
+        analyzer.loudnessValid = entry.analyzer->loudnessValid;
+        analyzer.momentaryLufs = entry.analyzer->momentaryLufs;
+        analyzer.shortTermLufs = entry.analyzer->shortTermLufs;
+        analyzer.integratedLufs = entry.analyzer->integratedLufs;
         analyzer.stereo = entry.analyzer->stereo;
         analyzer.activeChannelCount = entry.analyzer->activeChannelCount;
         analyzer.spectrogramBinsDb = entry.analyzer->spectrogramBinsDb;
@@ -1533,6 +1537,10 @@ namespace guitarfx
           analyzer.rmsDbu = entry.analyzer->rmsDbu;
           analyzer.rmsDbv = entry.analyzer->rmsDbv;
           analyzer.rmsVolts = entry.analyzer->rmsVolts;
+          analyzer.loudnessValid = entry.analyzer->loudnessValid;
+          analyzer.momentaryLufs = entry.analyzer->momentaryLufs;
+          analyzer.shortTermLufs = entry.analyzer->shortTermLufs;
+          analyzer.integratedLufs = entry.analyzer->integratedLufs;
           analyzer.stereo = entry.analyzer->stereo;
           analyzer.activeChannelCount = entry.analyzer->activeChannelCount;
           analyzer.spectrogramBinsDb = entry.analyzer->spectrogramBinsDb;
@@ -1570,6 +1578,10 @@ namespace guitarfx
         analyzer.rmsDbu = entry.analyzer->rmsDbu;
         analyzer.rmsDbv = entry.analyzer->rmsDbv;
         analyzer.rmsVolts = entry.analyzer->rmsVolts;
+        analyzer.loudnessValid = entry.analyzer->loudnessValid;
+        analyzer.momentaryLufs = entry.analyzer->momentaryLufs;
+        analyzer.shortTermLufs = entry.analyzer->shortTermLufs;
+        analyzer.integratedLufs = entry.analyzer->integratedLufs;
         analyzer.stereo = entry.analyzer->stereo;
         analyzer.activeChannelCount = entry.analyzer->activeChannelCount;
         analyzer.spectrogramBinsDb = entry.analyzer->spectrogramBinsDb;

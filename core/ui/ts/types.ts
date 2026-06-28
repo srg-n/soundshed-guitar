@@ -406,6 +406,10 @@ export interface InputAnalyzerLevelTelemetry {
   rmsDbu: number;
   rmsDbv: number;
   rmsVolts: number;
+  loudnessValid?: boolean;
+  momentaryLufs?: number;
+  shortTermLufs?: number;
+  integratedLufs?: number;
   stereo?: boolean;
   activeChannelCount?: number;
   channelMode?: string;

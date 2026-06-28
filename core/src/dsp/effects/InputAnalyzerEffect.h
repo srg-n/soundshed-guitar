@@ -11,6 +11,8 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <limits>
+#include <vector>
 
 namespace guitarfx
 {
@@ -41,11 +43,58 @@ namespace guitarfx
       double rmsDbu = 0.0;
       double rmsDbv = 0.0;
       double rmsVolts = 0.0;
+      bool loudnessValid = false;
+      double momentaryLufs = -std::numeric_limits<double>::infinity();
+      double shortTermLufs = -std::numeric_limits<double>::infinity();
+      double integratedLufs = -std::numeric_limits<double>::infinity();
       bool stereo = false;
       int activeChannelCount = 0;
       std::array<float, kSpectrogramBins> spectrogramBinsDb{};
       std::array<float, kBarkBands> barkBandsDb{};
       std::uint64_t generatedAtMs = 0;
+    };
+
+    struct BiquadCoefficients
+    {
+      double b0 = 1.0;
+      double b1 = 0.0;
+      double b2 = 0.0;
+      double a1 = 0.0;
+      double a2 = 0.0;
+    };
+
+    struct BiquadFilter
+    {
+      double b0 = 1.0;
+      double b1 = 0.0;
+      double b2 = 0.0;
+      double a1 = 0.0;
+      double a2 = 0.0;
+      double z1 = 0.0;
+      double z2 = 0.0;
+
+      void Set(const BiquadCoefficients &coeffs)
+      {
+        b0 = coeffs.b0;
+        b1 = coeffs.b1;
+        b2 = coeffs.b2;
+        a1 = coeffs.a1;
+        a2 = coeffs.a2;
+      }
+
+      void Reset()
+      {
+        z1 = 0.0;
+        z2 = 0.0;
+      }
+
+      double Process(double input)
+      {
+        const double output = (b0 * input) + z1;
+        z1 = (b1 * input) - (a1 * output) + z2;
+        z2 = (b2 * input) - (a2 * output);
+        return output;
+      }
     };
 
     void Prepare(double sampleRate, int maxBlockSize) override
@@ -56,6 +105,7 @@ namespace guitarfx
       }
       mSampleRate = sampleRate;
       mMaxBlockSize = maxBlockSize;
+      ConfigureLoudnessAnalysis();
       Reset();
     }
 
@@ -67,12 +117,32 @@ namespace guitarfx
       mRmsDbu.store(0.0, std::memory_order_relaxed);
       mRmsDbv.store(0.0, std::memory_order_relaxed);
       mRmsVolts.store(0.0, std::memory_order_relaxed);
+      mLoudnessValid.store(false, std::memory_order_relaxed);
+      mMomentaryLufs.store(-std::numeric_limits<double>::infinity(), std::memory_order_relaxed);
+      mShortTermLufs.store(-std::numeric_limits<double>::infinity(), std::memory_order_relaxed);
+      mIntegratedLufs.store(-std::numeric_limits<double>::infinity(), std::memory_order_relaxed);
       mActiveChannelCount.store(0, std::memory_order_relaxed);
       mStereoSignal.store(false, std::memory_order_relaxed);
       mStereoLatched = false;
       mGeneratedAtMs.store(0, std::memory_order_relaxed);
       mSmoothedPeakLinear = 0.0;
       mSmoothedRmsLinear = 0.0;
+      mLoudnessSampleCount = 0;
+      mNextIntegratedBlockSample = mMomentaryWindowSamples;
+      mMomentaryFilledSamples = 0;
+      mShortTermFilledSamples = 0;
+      mMomentaryWriteIndex = 0;
+      mShortTermWriteIndex = 0;
+      mMomentaryWindowEnergy = 0.0;
+      mShortTermWindowEnergy = 0.0;
+      mLoudnessBlockCount = 0;
+      mLoudnessBlockWriteIndex = 0;
+      mLeftLoudnessFilter1.Reset();
+      mLeftLoudnessFilter2.Reset();
+      mRightLoudnessFilter1.Reset();
+      mRightLoudnessFilter2.Reset();
+      std::fill(mMomentaryEnergyRing.begin(), mMomentaryEnergyRing.end(), 0.0);
+      std::fill(mShortTermEnergyRing.begin(), mShortTermEnergyRing.end(), 0.0);
       for (auto &bin : mSpectrogramBinsDb)
       {
         bin.store(static_cast<float>(kSpectrogramMinDbfs), std::memory_order_relaxed);
@@ -237,6 +307,8 @@ namespace guitarfx
       mActiveChannelCount.store(static_cast<int>(activeChannelCount), std::memory_order_relaxed);
       mStereoSignal.store(stereoSignal, std::memory_order_relaxed);
 
+      UpdateLoudnessAnalysis(leftIn, rightIn, numSamples);
+
       const int sampleWindow = std::max(1, numSamples);
       const double logRange = std::log(kSpectrogramMaxFrequencyHz / kSpectrogramMinFrequencyHz);
       constexpr float kSmoothing = 0.72f;
@@ -321,6 +393,10 @@ namespace guitarfx
       snapshot.rmsDbu = mRmsDbu.load(std::memory_order_relaxed);
       snapshot.rmsDbv = mRmsDbv.load(std::memory_order_relaxed);
       snapshot.rmsVolts = mRmsVolts.load(std::memory_order_relaxed);
+      snapshot.loudnessValid = mLoudnessValid.load(std::memory_order_relaxed);
+      snapshot.momentaryLufs = mMomentaryLufs.load(std::memory_order_relaxed);
+      snapshot.shortTermLufs = mShortTermLufs.load(std::memory_order_relaxed);
+      snapshot.integratedLufs = mIntegratedLufs.load(std::memory_order_relaxed);
       snapshot.activeChannelCount = mActiveChannelCount.load(std::memory_order_relaxed);
       snapshot.stereo = mStereoSignal.load(std::memory_order_relaxed);
       for (int i = 0; i < kSpectrogramBins; ++i)
@@ -347,6 +423,12 @@ namespace guitarfx
     static constexpr double kRmsReleaseSeconds = 0.35;
     static constexpr double kStereoEnterRatio = 0.05;
     static constexpr double kStereoExitRatio = 0.02;
+    static constexpr double kMomentaryWindowSeconds = 0.4;
+    static constexpr double kShortTermWindowSeconds = 3.0;
+    static constexpr double kLoudnessHopSeconds = 0.1;
+    static constexpr double kLoudnessAbsoluteGateLufs = -70.0;
+    static constexpr double kLoudnessRelativeGateDb = -10.0;
+    static constexpr std::size_t kLoudnessHistoryBlocks = 4096;
     static constexpr std::array<double, static_cast<std::size_t>(kBarkBands + 1)> kBarkBandEdgesHz{
       20.0, 100.0, 200.0, 300.0, 400.0, 510.0, 630.0, 770.0, 920.0, 1080.0, 1270.0, 1480.0,
       1720.0, 2000.0, 2320.0, 2700.0, 3150.0, 3700.0, 4400.0, 5300.0, 6400.0, 7700.0, 9500.0,
@@ -358,6 +440,59 @@ namespace guitarfx
       if (linear <= kMinLinear || !std::isfinite(linear))
         return kSpectrogramMinDbfs;
       return 20.0 * std::log10(linear);
+    }
+
+    static double LufsToMeanSquare(double lufs)
+    {
+      if (!std::isfinite(lufs))
+      {
+        return 0.0;
+      }
+      return std::pow(10.0, (lufs + 0.691) / 10.0);
+    }
+
+    static double MeanSquareToLufs(double meanSquare)
+    {
+      if (!std::isfinite(meanSquare) || meanSquare <= kMinLinear)
+      {
+        return -std::numeric_limits<double>::infinity();
+      }
+      return -0.691 + 10.0 * std::log10(meanSquare);
+    }
+
+    static BiquadCoefficients DesignKWeightingHighShelf(double sampleRate)
+    {
+      constexpr double kGainDb = 3.99984385397;
+      constexpr double kQ = 0.7071752369554193;
+      constexpr double kFc = 1681.9744509555319;
+      const double K = std::tan(3.14159265358979323846 * kFc / sampleRate);
+      const double Vh = std::pow(10.0, kGainDb / 20.0);
+      const double Vb = std::pow(Vh, 0.499666774155);
+      const double a0 = 1.0 + K / kQ + K * K;
+
+      BiquadCoefficients coeffs;
+      coeffs.b0 = (Vh + Vb * K / kQ + K * K) / a0;
+      coeffs.b1 = 2.0 * (K * K - Vh) / a0;
+      coeffs.b2 = (Vh - Vb * K / kQ + K * K) / a0;
+      coeffs.a1 = 2.0 * (K * K - 1.0) / a0;
+      coeffs.a2 = (1.0 - K / kQ + K * K) / a0;
+      return coeffs;
+    }
+
+    static BiquadCoefficients DesignKWeightingHighPass(double sampleRate)
+    {
+      constexpr double kQ = 0.5003270373253953;
+      constexpr double kFc = 38.13547087613982;
+      const double K = std::tan(3.14159265358979323846 * kFc / sampleRate);
+      const double a0 = 1.0 + K / kQ + K * K;
+
+      BiquadCoefficients coeffs;
+      coeffs.b0 = 1.0 / a0;
+      coeffs.b1 = -2.0 / a0;
+      coeffs.b2 = 1.0 / a0;
+      coeffs.a1 = 2.0 * (K * K - 1.0) / a0;
+      coeffs.a2 = (1.0 - K / kQ + K * K) / a0;
+      return coeffs;
     }
 
     static int FindBarkBandIndex(double frequencyHz)
@@ -376,6 +511,176 @@ namespace guitarfx
         }
       }
       return kBarkBands - 1;
+    }
+
+    void ConfigureLoudnessAnalysis()
+    {
+      mMomentaryWindowSamples = std::max<std::size_t>(1, static_cast<std::size_t>(std::lround(mSampleRate * kMomentaryWindowSeconds)));
+      mShortTermWindowSamples = std::max<std::size_t>(1, static_cast<std::size_t>(std::lround(mSampleRate * kShortTermWindowSeconds)));
+      mLoudnessHopSamples = std::max<std::size_t>(1, static_cast<std::size_t>(std::lround(mSampleRate * kLoudnessHopSeconds)));
+
+      mMomentaryEnergyRing.assign(mMomentaryWindowSamples, 0.0);
+      mShortTermEnergyRing.assign(mShortTermWindowSamples, 0.0);
+
+      const auto highShelf = DesignKWeightingHighShelf(mSampleRate);
+      const auto highPass = DesignKWeightingHighPass(mSampleRate);
+      mLeftLoudnessFilter1.Set(highShelf);
+      mLeftLoudnessFilter2.Set(highPass);
+      mRightLoudnessFilter1.Set(highShelf);
+      mRightLoudnessFilter2.Set(highPass);
+    }
+
+    void UpdateLoudnessAnalysis(const float *leftIn, const float *rightIn, int numSamples)
+    {
+      if (numSamples <= 0)
+      {
+        return;
+      }
+
+      for (int i = 0; i < numSamples; ++i)
+      {
+        const double leftSample = leftIn ? static_cast<double>(leftIn[i]) : 0.0;
+        const double rightSample = rightIn ? static_cast<double>(rightIn[i]) : 0.0;
+
+        const double leftFiltered = mLeftLoudnessFilter2.Process(mLeftLoudnessFilter1.Process(leftSample));
+        const double rightFiltered = mRightLoudnessFilter2.Process(mRightLoudnessFilter1.Process(rightSample));
+        const double sampleEnergy = (leftFiltered * leftFiltered) + (rightFiltered * rightFiltered);
+
+        PushWindowEnergy(
+          sampleEnergy,
+          mMomentaryEnergyRing,
+          mMomentaryWindowEnergy,
+          mMomentaryWriteIndex,
+          mMomentaryFilledSamples,
+          mMomentaryWindowSamples);
+        PushWindowEnergy(
+          sampleEnergy,
+          mShortTermEnergyRing,
+          mShortTermWindowEnergy,
+          mShortTermWriteIndex,
+          mShortTermFilledSamples,
+          mShortTermWindowSamples);
+
+        ++mLoudnessSampleCount;
+
+        if (mMomentaryFilledSamples >= mMomentaryWindowSamples)
+        {
+          mMomentaryLufs.store(MeanSquareToLufs(mMomentaryWindowEnergy / static_cast<double>(mMomentaryWindowSamples)), std::memory_order_relaxed);
+          mShortTermLufs.store(MeanSquareToLufs(mShortTermWindowEnergy / static_cast<double>(mShortTermWindowSamples)), std::memory_order_relaxed);
+          mLoudnessValid.store(true, std::memory_order_relaxed);
+        }
+
+        while (mMomentaryFilledSamples >= mMomentaryWindowSamples &&
+               mLoudnessSampleCount >= mNextIntegratedBlockSample)
+        {
+          AppendIntegratedBlock(mMomentaryLufs.load(std::memory_order_relaxed));
+          mNextIntegratedBlockSample += mLoudnessHopSamples;
+        }
+      }
+    }
+
+    static void PushWindowEnergy(double sampleEnergy,
+                                 std::vector<double> &ring,
+                                 double &windowEnergy,
+                                 std::size_t &writeIndex,
+                                 std::size_t &filledSamples,
+                                 std::size_t windowSamples)
+    {
+      if (ring.size() != windowSamples || windowSamples == 0)
+      {
+        return;
+      }
+
+      if (filledSamples < windowSamples)
+      {
+        ring[writeIndex] = sampleEnergy;
+        windowEnergy += sampleEnergy;
+        ++filledSamples;
+      }
+      else
+      {
+        windowEnergy += sampleEnergy - ring[writeIndex];
+        ring[writeIndex] = sampleEnergy;
+      }
+
+      ++writeIndex;
+      if (writeIndex >= windowSamples)
+      {
+        writeIndex = 0;
+      }
+    }
+
+    void AppendIntegratedBlock(double blockLufs)
+    {
+      if (!std::isfinite(blockLufs))
+      {
+        return;
+      }
+
+      mLoudnessBlocks[mLoudnessBlockWriteIndex] = blockLufs;
+      if (mLoudnessBlockCount < kLoudnessHistoryBlocks)
+      {
+        ++mLoudnessBlockCount;
+      }
+      mLoudnessBlockWriteIndex = (mLoudnessBlockWriteIndex + 1) % kLoudnessHistoryBlocks;
+      RecomputeIntegratedLoudness();
+    }
+
+    void RecomputeIntegratedLoudness()
+    {
+      if (mLoudnessBlockCount == 0)
+      {
+        mIntegratedLufs.store(-std::numeric_limits<double>::infinity(), std::memory_order_relaxed);
+        return;
+      }
+
+      std::array<double, kLoudnessHistoryBlocks> energies{};
+      std::size_t validCount = 0;
+      for (std::size_t i = 0; i < mLoudnessBlockCount; ++i)
+      {
+        const std::size_t index = (mLoudnessBlockWriteIndex + kLoudnessHistoryBlocks - mLoudnessBlockCount + i) % kLoudnessHistoryBlocks;
+        const double lufs = mLoudnessBlocks[index];
+        if (!std::isfinite(lufs) || lufs < kLoudnessAbsoluteGateLufs)
+        {
+          continue;
+        }
+        energies[validCount++] = LufsToMeanSquare(lufs);
+      }
+
+      if (validCount == 0)
+      {
+        mIntegratedLufs.store(-std::numeric_limits<double>::infinity(), std::memory_order_relaxed);
+        return;
+      }
+
+      double absEnergySum = 0.0;
+      for (std::size_t i = 0; i < validCount; ++i)
+      {
+        absEnergySum += energies[i];
+      }
+      const double absAverageEnergy = absEnergySum / static_cast<double>(validCount);
+      const double relativeGateLufs = MeanSquareToLufs(absAverageEnergy) + kLoudnessRelativeGateDb;
+
+      double gatedEnergySum = 0.0;
+      std::size_t gatedCount = 0;
+      for (std::size_t i = 0; i < validCount; ++i)
+      {
+        const double lufs = MeanSquareToLufs(energies[i]);
+        if (lufs > relativeGateLufs)
+        {
+          gatedEnergySum += energies[i];
+          ++gatedCount;
+        }
+      }
+
+      if (gatedCount == 0)
+      {
+        mIntegratedLufs.store(-std::numeric_limits<double>::infinity(), std::memory_order_relaxed);
+        return;
+      }
+
+      const double integratedEnergy = gatedEnergySum / static_cast<double>(gatedCount);
+      mIntegratedLufs.store(MeanSquareToLufs(integratedEnergy), std::memory_order_relaxed);
     }
 
     static double BallisticAlpha(double deltaSeconds, double timeConstantSeconds)
@@ -412,6 +717,10 @@ namespace guitarfx
     std::atomic<double> mRmsDbu{0.0};
     std::atomic<double> mRmsDbv{0.0};
     std::atomic<double> mRmsVolts{0.0};
+    std::atomic<bool> mLoudnessValid{false};
+    std::atomic<double> mMomentaryLufs{-std::numeric_limits<double>::infinity()};
+    std::atomic<double> mShortTermLufs{-std::numeric_limits<double>::infinity()};
+    std::atomic<double> mIntegratedLufs{-std::numeric_limits<double>::infinity()};
     std::atomic<int> mActiveChannelCount{0};
     std::atomic<bool> mStereoSignal{false};
     std::array<std::atomic<float>, kSpectrogramBins> mSpectrogramBinsDb{};
@@ -420,6 +729,26 @@ namespace guitarfx
     double mSmoothedPeakLinear = 0.0;
     double mSmoothedRmsLinear = 0.0;
     bool mStereoLatched = false;
+    std::size_t mMomentaryWindowSamples = 1;
+    std::size_t mShortTermWindowSamples = 1;
+    std::size_t mLoudnessHopSamples = 1;
+    std::size_t mLoudnessSampleCount = 0;
+    std::size_t mNextIntegratedBlockSample = 1;
+    std::size_t mMomentaryFilledSamples = 0;
+    std::size_t mShortTermFilledSamples = 0;
+    std::size_t mMomentaryWriteIndex = 0;
+    std::size_t mShortTermWriteIndex = 0;
+    std::size_t mLoudnessBlockCount = 0;
+    std::size_t mLoudnessBlockWriteIndex = 0;
+    double mMomentaryWindowEnergy = 0.0;
+    double mShortTermWindowEnergy = 0.0;
+    std::vector<double> mMomentaryEnergyRing;
+    std::vector<double> mShortTermEnergyRing;
+    std::array<double, kLoudnessHistoryBlocks> mLoudnessBlocks{};
+    BiquadFilter mLeftLoudnessFilter1;
+    BiquadFilter mLeftLoudnessFilter2;
+    BiquadFilter mRightLoudnessFilter1;
+    BiquadFilter mRightLoudnessFilter2;
   };
 
   inline void RegisterInputAnalyzerEffect()

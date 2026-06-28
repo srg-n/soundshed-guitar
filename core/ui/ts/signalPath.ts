@@ -1847,6 +1847,13 @@ function formatAnalyzerChannelMode(levels: import("./types.js").InputAnalyzerLev
   return label;
 }
 
+function formatAnalyzerLufs(value: number | undefined, enabled = true): string {
+  if (!enabled || !Number.isFinite(value)) {
+    return "—";
+  }
+  return `${value!.toFixed(1)} LUFS`;
+}
+
 function percentFsToDbfs(percentFs: number): number {
   if (!Number.isFinite(percentFs)) {
     return Number.NaN;
@@ -1973,6 +1980,9 @@ export function updateSelectedNodeAnalyzerPanel(): void {
   const rmsDbuEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="rmsDbu"]');
   const rmsDbvEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="rmsDbv"]');
   const rmsVoltsEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="rmsVolts"]');
+  const momentaryLufsEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="momentaryLufs"]');
+  const shortTermLufsEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="shortTermLufs"]');
+  const integratedLufsEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="integratedLufs"]');
   const channelModeEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="channelMode"]');
   const peakDbfsEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="peakDbfs"]');
   const rmsDbfsEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="rmsDbfs"]');
@@ -1986,6 +1996,9 @@ export function updateSelectedNodeAnalyzerPanel(): void {
     if (rmsDbuEl) rmsDbuEl.textContent = "—";
     if (rmsDbvEl) rmsDbvEl.textContent = "—";
     if (rmsVoltsEl) rmsVoltsEl.textContent = "—";
+    if (momentaryLufsEl) momentaryLufsEl.textContent = "—";
+    if (shortTermLufsEl) shortTermLufsEl.textContent = "—";
+    if (integratedLufsEl) integratedLufsEl.textContent = "—";
     if (channelModeEl) channelModeEl.textContent = "—";
     if (peakDbfsEl) peakDbfsEl.textContent = "—";
     if (rmsDbfsEl) rmsDbfsEl.textContent = "—";
@@ -2004,6 +2017,9 @@ export function updateSelectedNodeAnalyzerPanel(): void {
   if (rmsDbuEl) rmsDbuEl.textContent = formatAnalyzerNumeric(levels.rmsDbu, "dBu");
   if (rmsDbvEl) rmsDbvEl.textContent = formatAnalyzerNumeric(levels.rmsDbv, "dBV");
   if (rmsVoltsEl) rmsVoltsEl.textContent = formatAnalyzerNumeric(levels.rmsVolts, "Vrms", 3);
+  if (momentaryLufsEl) momentaryLufsEl.textContent = formatAnalyzerLufs(levels.momentaryLufs, levels.loudnessValid !== false);
+  if (shortTermLufsEl) shortTermLufsEl.textContent = formatAnalyzerLufs(levels.shortTermLufs, levels.loudnessValid !== false);
+  if (integratedLufsEl) integratedLufsEl.textContent = formatAnalyzerLufs(levels.integratedLufs, levels.loudnessValid !== false);
   if (channelModeEl) channelModeEl.textContent = formatAnalyzerChannelMode(levels);
   if (peakDbfsEl) peakDbfsEl.textContent = formatAnalyzerNumeric(percentFsToDbfs(levels.peakPercent), "dBFS");
   if (rmsDbfsEl) rmsDbfsEl.textContent = formatAnalyzerNumeric(percentFsToDbfs(levels.rmsPercent), "dBFS");
@@ -3483,6 +3499,9 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
         <div class="input-analyzer-stat"><span class="input-analyzer-label">RMS (dBu)</span><span class="input-analyzer-value" data-analyzer-field="rmsDbu">—</span></div>
         <div class="input-analyzer-stat"><span class="input-analyzer-label">RMS (dBV)</span><span class="input-analyzer-value" data-analyzer-field="rmsDbv">—</span></div>
         <div class="input-analyzer-stat"><span class="input-analyzer-label">RMS (Vrms)</span><span class="input-analyzer-value" data-analyzer-field="rmsVolts">—</span></div>
+        <div class="input-analyzer-stat"><span class="input-analyzer-label">Momentary (LUFS)</span><span class="input-analyzer-value" data-analyzer-field="momentaryLufs">—</span></div>
+        <div class="input-analyzer-stat"><span class="input-analyzer-label">Short-term (LUFS)</span><span class="input-analyzer-value" data-analyzer-field="shortTermLufs">—</span></div>
+        <div class="input-analyzer-stat"><span class="input-analyzer-label">Integrated (LUFS)</span><span class="input-analyzer-value" data-analyzer-field="integratedLufs">—</span></div>
         <div class="input-analyzer-stat"><span class="input-analyzer-label">Channels</span><span class="input-analyzer-value" data-analyzer-field="channelMode">—</span></div>
       </div>
       <div class="input-analyzer-spectrogram-wrap">

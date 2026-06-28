@@ -13188,6 +13188,10 @@ void PluginController::SendSignalDiagnosticsToUI()
         levels["rmsDbu"] = analyzer.rmsDbu;
         levels["rmsDbv"] = analyzer.rmsDbv;
         levels["rmsVolts"] = analyzer.rmsVolts;
+        levels["loudnessValid"] = analyzer.loudnessValid;
+        levels["momentaryLufs"] = analyzer.momentaryLufs;
+        levels["shortTermLufs"] = analyzer.shortTermLufs;
+        levels["integratedLufs"] = analyzer.integratedLufs;
         levels["stereo"] = analyzer.stereo;
         levels["activeChannelCount"] = analyzer.activeChannelCount;
         levels["channelMode"] = analyzer.stereo ? "stereo" : "mono";
