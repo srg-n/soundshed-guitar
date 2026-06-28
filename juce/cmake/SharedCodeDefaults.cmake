@@ -17,7 +17,7 @@ if (MSVC)
     endif()
     string(TOLOWER "${_guitarfx_windows_arch}" _guitarfx_windows_arch)
 
-    if(_guitarfx_windows_arch MATCHES "^(x64|amd64|x86_64)$" AND GUITARFX_MSVC_HAS_ARCH_AVX2)
+    if(GUITARFX_CORE_ENABLE_AVX2 AND _guitarfx_windows_arch MATCHES "^(x64|amd64|x86_64)$" AND GUITARFX_MSVC_HAS_ARCH_AVX2)
         target_compile_options(SharedCode INTERFACE $<$<CONFIG:RELEASE>:/arch:AVX2>)
         target_compile_options(SharedCode INTERFACE $<$<CONFIG:RelWithDebInfo>:/arch:AVX2>)
     elseif(_guitarfx_windows_arch MATCHES "^(arm64|arm64ec|aarch64)$")

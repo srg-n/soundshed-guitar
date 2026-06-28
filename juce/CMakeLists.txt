@@ -28,6 +28,7 @@ set(BUNDLE_ID "com.soundshed.guitar")
 # Valid choices: AAX Unity VST VST3 AU AUv3 Standalone LV2
 set(FORMATS Standalone AU AAX VST3)
 option(GUITARFX_ENABLE_LV2 "Build the LV2 plugin target on Linux" OFF)
+option(GUITARFX_CORE_ENABLE_AVX2 "Enable AVX2 compile flags for x64 Release/RelWithDebInfo builds" ON)
 
 if(LINUX AND GUITARFX_ENABLE_LV2)
     list(APPEND FORMATS LV2)
@@ -592,6 +593,52 @@ if(WIN32)
         SKIP_RETURN_CODE 77
         LABELS "pluginscan"
         TIMEOUT 600
+    )
+
+    add_executable(NamCalibrationProbeGatewayTests
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/NamCalibrationProbeGatewayTests.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/source/JuceHostedPluginEffect.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/source/JuceHostedPluginEffect.h"
+    )
+
+    target_include_directories(NamCalibrationProbeGatewayTests
+        PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/source"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../core/tests"
+    )
+
+    target_compile_definitions(NamCalibrationProbeGatewayTests
+        PRIVATE
+            JUCE_PLUGINHOST_VST3=1
+            JUCE_VST3_CAN_REPLACE_VST2=0
+            GUITARFX_ENABLE_PLUGIN_HOST_TEST_API=1
+            GUITARFX_TEST_RESOURCES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../core/tests/testdata"
+    )
+
+    target_link_libraries(NamCalibrationProbeGatewayTests
+        PRIVATE
+            SoundshedGuitarCore
+            nlohmann_json::nlohmann_json
+            juce_audio_utils
+            juce_audio_processors
+            juce_dsp
+            juce_gui_basics
+            juce_gui_extra
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_lto_flags
+            juce::juce_recommended_warning_flags
+    )
+
+    set_target_properties(NamCalibrationProbeGatewayTests PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED ON
+        FOLDER "GuitarFX/Tests"
+    )
+
+    add_test(NAME NamCalibrationProbeGatewayTests COMMAND NamCalibrationProbeGatewayTests)
+    set_tests_properties(NamCalibrationProbeGatewayTests PROPERTIES
+        SKIP_RETURN_CODE 77
+        TIMEOUT 900
     )
 endif()
 
