@@ -2981,6 +2981,7 @@
 /* ===== Signal Add Button (+ between nodes) ===== */
 
 .signal-connector-wrapper {
+  --signal-add-anchor-x: 40%;
   position: relative;
   display: flex;
   align-items: center;
@@ -2990,7 +2991,7 @@
 .signal-connector-wrapper::after {
   content: "";
   position: absolute;
-  left: 40%;
+  left: var(--signal-add-anchor-x);
   top: 50%;
   width: 14px;
   height: 14px;
@@ -3011,7 +3012,7 @@
 
 .signal-add-btn {
   position: absolute;
-  left: 50%;
+  left: var(--signal-add-anchor-x);
   top: 50%;
   transform: translate(-50%, -50%);
   width: 24px;
