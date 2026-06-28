@@ -36,6 +36,8 @@ namespace guitarfx
       double rmsDbu = 0.0;
       double rmsDbv = 0.0;
       double rmsVolts = 0.0;
+      bool stereo = false;
+      int activeChannelCount = 0;
       std::array<float, kSpectrogramBins> spectrogramBinsDb{};
       std::uint64_t generatedAtMs = 0;
     };
@@ -59,6 +61,9 @@ namespace guitarfx
       mRmsDbu.store(0.0, std::memory_order_relaxed);
       mRmsDbv.store(0.0, std::memory_order_relaxed);
       mRmsVolts.store(0.0, std::memory_order_relaxed);
+      mActiveChannelCount.store(0, std::memory_order_relaxed);
+      mStereoSignal.store(false, std::memory_order_relaxed);
+      mStereoLatched = false;
       mGeneratedAtMs.store(0, std::memory_order_relaxed);
       mSmoothedPeakLinear = 0.0;
       mSmoothedRmsLinear = 0.0;
@@ -106,23 +111,26 @@ namespace guitarfx
 
       if (!hasSignalInput || numSamples <= 0)
       {
+        mActiveChannelCount.store(0, std::memory_order_relaxed);
+        mStereoSignal.store(false, std::memory_order_relaxed);
+        mStereoLatched = false;
         mTelemetryValid.store(false, std::memory_order_relaxed);
         return;
       }
 
-      double peak = 0.0;
-      double sumSquares = 0.0;
-      std::size_t sampleCount = 0;
+      double leftPeak = 0.0;
+      double rightPeak = 0.0;
+      double leftSumSquares = 0.0;
+      double rightSumSquares = 0.0;
 
       if (leftIn)
       {
         for (int i = 0; i < numSamples; ++i)
         {
           const double value = static_cast<double>(leftIn[i]);
-          peak = std::max(peak, std::abs(value));
-          sumSquares += value * value;
+          leftPeak = std::max(leftPeak, std::abs(value));
+          leftSumSquares += value * value;
         }
-        sampleCount += static_cast<std::size_t>(numSamples);
       }
 
       if (rightIn)
@@ -130,12 +138,61 @@ namespace guitarfx
         for (int i = 0; i < numSamples; ++i)
         {
           const double value = static_cast<double>(rightIn[i]);
-          peak = std::max(peak, std::abs(value));
-          sumSquares += value * value;
+          rightPeak = std::max(rightPeak, std::abs(value));
+          rightSumSquares += value * value;
         }
-        sampleCount += static_cast<std::size_t>(numSamples);
       }
 
+      constexpr double kActiveChannelThreshold = 1.0e-7;
+      const bool leftActive = leftIn && leftPeak > kActiveChannelThreshold;
+      const bool rightActive = rightIn && rightPeak > kActiveChannelThreshold;
+      const bool hasActiveSignal = leftActive || rightActive;
+      if (!hasActiveSignal)
+      {
+        mActiveChannelCount.store(0, std::memory_order_relaxed);
+        mStereoSignal.store(false, std::memory_order_relaxed);
+        mStereoLatched = false;
+        mTelemetryValid.store(false, std::memory_order_relaxed);
+        return;
+      }
+
+      // Determine whether the measured signal carries distinct left/right
+      // content. A single active channel, or two channels with effectively
+      // identical (dual-mono) content, is reported as mono. Hysteresis on the
+      // side-to-reference energy ratio prevents flicker near the threshold.
+      bool stereoSignal = false;
+      if (leftActive && rightActive)
+      {
+        double diffSumSquares = 0.0;
+        for (int i = 0; i < numSamples; ++i)
+        {
+          const double diff = static_cast<double>(leftIn[i]) - static_cast<double>(rightIn[i]);
+          diffSumSquares += diff * diff;
+        }
+        const double inv = 1.0 / static_cast<double>(numSamples);
+        const double leftRms = std::sqrt(leftSumSquares * inv);
+        const double rightRms = std::sqrt(rightSumSquares * inv);
+        const double diffRms = std::sqrt(diffSumSquares * inv);
+        const double referenceRms = std::max(leftRms, rightRms);
+        const double ratio = referenceRms > kMinLinear ? diffRms / referenceRms : 0.0;
+        mStereoLatched = mStereoLatched
+          ? ratio > kStereoExitRatio
+          : ratio > kStereoEnterRatio;
+        stereoSignal = mStereoLatched;
+      }
+      else
+      {
+        mStereoLatched = false;
+      }
+
+      const double peak = std::max(leftPeak, rightPeak);
+      const double sumSquares =
+        (leftActive ? leftSumSquares : 0.0) +
+        (rightActive ? rightSumSquares : 0.0);
+      const std::size_t activeChannelCount =
+        static_cast<std::size_t>(leftActive ? 1 : 0) +
+        static_cast<std::size_t>(rightActive ? 1 : 0);
+      const std::size_t sampleCount = static_cast<std::size_t>(numSamples) * activeChannelCount;
       const double rms = sampleCount > 0
         ? std::sqrt(sumSquares / static_cast<double>(sampleCount))
         : 0.0;
@@ -167,6 +224,8 @@ namespace guitarfx
       mRmsDbu.store(rmsDbu, std::memory_order_relaxed);
       mRmsDbv.store(rmsDbv, std::memory_order_relaxed);
       mRmsVolts.store(std::max(0.0, rmsVolts), std::memory_order_relaxed);
+      mActiveChannelCount.store(static_cast<int>(activeChannelCount), std::memory_order_relaxed);
+      mStereoSignal.store(stereoSignal, std::memory_order_relaxed);
 
       const int sampleWindow = std::max(1, numSamples);
       const double logRange = std::log(kSpectrogramMaxFrequencyHz / kSpectrogramMinFrequencyHz);
@@ -187,9 +246,13 @@ namespace guitarfx
 
         for (int i = 0; i < sampleWindow; ++i)
         {
-          const double left = leftIn ? static_cast<double>(leftIn[i]) : 0.0;
-          const double right = rightIn ? static_cast<double>(rightIn[i]) : left;
-          const double mono = 0.5 * (left + right);
+          const double left = leftActive ? static_cast<double>(leftIn[i]) : 0.0;
+          const double right = rightActive ? static_cast<double>(rightIn[i]) : left;
+          double mono = left;
+          if (leftActive && rightActive)
+            mono = 0.5 * (left + right);
+          else if (!leftActive && rightActive)
+            mono = right;
           const double window = 0.5 - 0.5 * std::cos((2.0 * kPi * static_cast<double>(i)) / static_cast<double>(sampleWindow));
           s0 = (mono * window) + coeff * s1 - s2;
           s2 = s1;
@@ -226,6 +289,8 @@ namespace guitarfx
       snapshot.rmsDbu = mRmsDbu.load(std::memory_order_relaxed);
       snapshot.rmsDbv = mRmsDbv.load(std::memory_order_relaxed);
       snapshot.rmsVolts = mRmsVolts.load(std::memory_order_relaxed);
+      snapshot.activeChannelCount = mActiveChannelCount.load(std::memory_order_relaxed);
+      snapshot.stereo = mStereoSignal.load(std::memory_order_relaxed);
       for (int i = 0; i < kSpectrogramBins; ++i)
       {
         snapshot.spectrogramBinsDb[static_cast<std::size_t>(i)] =
@@ -243,6 +308,8 @@ namespace guitarfx
     static constexpr double kPeakReleaseSeconds = 0.30;
     static constexpr double kRmsAttackSeconds = 0.06;
     static constexpr double kRmsReleaseSeconds = 0.35;
+    static constexpr double kStereoEnterRatio = 0.05;
+    static constexpr double kStereoExitRatio = 0.02;
 
     static double ToDbfs(double linear)
     {
@@ -285,10 +352,13 @@ namespace guitarfx
     std::atomic<double> mRmsDbu{0.0};
     std::atomic<double> mRmsDbv{0.0};
     std::atomic<double> mRmsVolts{0.0};
+    std::atomic<int> mActiveChannelCount{0};
+    std::atomic<bool> mStereoSignal{false};
     std::array<std::atomic<float>, kSpectrogramBins> mSpectrogramBinsDb{};
     std::atomic<std::uint64_t> mGeneratedAtMs{0};
     double mSmoothedPeakLinear = 0.0;
     double mSmoothedRmsLinear = 0.0;
+    bool mStereoLatched = false;
   };
 
   inline void RegisterInputAnalyzerEffect()
