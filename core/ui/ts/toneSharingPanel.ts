@@ -691,11 +691,9 @@ function normalizeSettingString(value: unknown): string {
 
 function persistToneSharingSession(value: string): void {
   if (value) {
-    localStorage.setItem(storageKeys.sessionId, value);
     setAppSetting(storageKeys.sessionId, value);
     return;
   }
-  localStorage.removeItem(storageKeys.sessionId);
   setAppSetting(storageKeys.sessionId, null);
 }
 
@@ -3922,12 +3920,8 @@ function restoreLocalState(): void {
   const appSettings = uiState.appSettings ?? {};
   const persistedSession = normalizeSettingString(appSettings[storageKeys.sessionId]);
   const persistedInstalled = appSettings[storageKeys.installedPacks];
-  const storedSession = localStorage.getItem(storageKeys.sessionId);
   if (persistedSession) {
     state.sessionId = persistedSession;
-  } else if (storedSession) {
-    state.sessionId = storedSession;
-    setAppSetting(storageKeys.sessionId, state.sessionId);
   }
 
   const parseInstalled = (value: unknown): InstalledPackMetadata[] => {
