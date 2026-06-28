@@ -1277,6 +1277,15 @@ namespace guitarfx
         analyzer.spectrogramMaxDbfs = InputAnalyzerEffect::kSpectrogramMaxDbfs;
         analyzer.spectrogramMinFrequencyHz = InputAnalyzerEffect::kSpectrogramMinFrequencyHz;
         analyzer.spectrogramMaxFrequencyHz = InputAnalyzerEffect::kSpectrogramMaxFrequencyHz;
+        analyzer.barkBandsDb.reserve(InputAnalyzerEffect::kBarkBands);
+        for (int i = 0; i < InputAnalyzerEffect::kBarkBands; ++i)
+        {
+          analyzer.barkBandsDb.push_back(snapshot.barkBandsDb[static_cast<std::size_t>(i)]);
+        }
+        analyzer.barkMinDbfs = InputAnalyzerEffect::kBarkMinDbfs;
+        analyzer.barkMaxDbfs = InputAnalyzerEffect::kBarkMaxDbfs;
+        analyzer.barkMinFrequencyHz = InputAnalyzerEffect::kBarkMinFrequencyHz;
+        analyzer.barkMaxFrequencyHz = InputAnalyzerEffect::kBarkMaxFrequencyHz;
         analyzer.generatedAtMs = snapshot.generatedAtMs;
         if (snapshot.valid)
         {

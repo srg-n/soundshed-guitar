@@ -430,6 +430,7 @@ Pass-through utility node that renders live diagnostics for the signal entering 
 | Converted units | Peak/RMS as %FS plus RMS dBu/dBV/Vrms |
 | Channels | Whether the measured signal is mono or stereo (`channelMode`/`stereo` + `activeChannelCount`). Two channels carrying identical/dual-mono content report as mono; distinct L/R content reports as stereo |
 | Spectrogram | Rolling FFT-based spectrogram of node input audio |
+| Bark perception | 24-band Bark critical-band energy visualization for perceptual frequency weighting insight |
 
 ## Resource References
 

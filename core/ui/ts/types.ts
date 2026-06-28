@@ -423,6 +423,16 @@ export interface InputAnalyzerSpectrogramTelemetry {
 export interface InputAnalyzerTelemetry {
   levels: InputAnalyzerLevelTelemetry;
   spectrogram: InputAnalyzerSpectrogramTelemetry;
+  bark?: InputAnalyzerBarkTelemetry;
+}
+
+export interface InputAnalyzerBarkTelemetry {
+  bandsDb: number[];
+  minDbfs: number;
+  maxDbfs: number;
+  minFrequencyHz: number;
+  maxFrequencyHz: number;
+  generatedAtMs?: number;
 }
 
 export interface SignalLevelDiagnostics {

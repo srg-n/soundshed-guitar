@@ -1913,6 +1913,49 @@ function drawAnalyzerSpectrogram(canvas: HTMLCanvasElement, history: number[][],
   }
 }
 
+function drawAnalyzerBarkBands(canvas: HTMLCanvasElement, bandsDb: number[], minDbfs: number, maxDbfs: number): void {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return;
+  }
+
+  const width = Math.max(1, Math.floor(canvas.clientWidth || 1));
+  const height = Math.max(1, Math.floor(canvas.clientHeight || 1));
+  const dpr = window.devicePixelRatio || 1;
+  const targetWidth = Math.max(1, Math.round(width * dpr));
+  const targetHeight = Math.max(1, Math.round(height * dpr));
+  if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+  }
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "rgba(8, 10, 18, 0.92)";
+  ctx.fillRect(0, 0, width, height);
+
+  if (!Array.isArray(bandsDb) || !bandsDb.length) {
+    return;
+  }
+
+  const barCount = bandsDb.length;
+  const barGap = 1;
+  const barWidth = Math.max(1, (width - (barCount - 1) * barGap) / barCount);
+  const dbRange = Math.max(1, maxDbfs - minDbfs);
+
+  for (let i = 0; i < barCount; ++i) {
+    const db = Number(bandsDb[i]);
+    const normalized = Math.max(0, Math.min(1, (db - minDbfs) / dbRange));
+    const barHeight = Math.max(0, normalized * height);
+    const x = i * (barWidth + barGap);
+    const hue = 232 - Math.round(normalized * 168);
+    const saturation = 76 + Math.round(normalized * 14);
+    const lightness = 14 + Math.round(normalized * 58);
+    ctx.fillStyle = `hsl(${hue} ${saturation}% ${lightness}%)`;
+    ctx.fillRect(x, height - barHeight, barWidth, barHeight);
+  }
+}
+
 export function updateSelectedNodeAnalyzerPanel(): void {
   const analyzerPanel = nodeParamsPanelElement?.querySelector<HTMLElement>(".input-analyzer-panel");
   if (!analyzerPanel || !selectedNodeId) {
@@ -1923,6 +1966,7 @@ export function updateSelectedNodeAnalyzerPanel(): void {
   const analyzer = diagnostics?.analyzer;
   const levels = analyzer?.levels;
   const spectrogram = analyzer?.spectrogram;
+  const bark = analyzer?.bark;
 
   const peakPercentEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="peakPercent"]');
   const rmsPercentEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="rmsPercent"]');
@@ -1934,6 +1978,7 @@ export function updateSelectedNodeAnalyzerPanel(): void {
   const rmsDbfsEl = analyzerPanel.querySelector<HTMLElement>('[data-analyzer-field="rmsDbfs"]');
   const updatedAtEl = analyzerPanel.querySelector<HTMLElement>(".input-analyzer-updated");
   const canvas = analyzerPanel.querySelector<HTMLCanvasElement>(".input-analyzer-spectrogram-canvas");
+  const barkCanvas = analyzerPanel.querySelector<HTMLCanvasElement>(".input-analyzer-bark-canvas");
 
   if (!levels || !spectrogram || !Array.isArray(spectrogram.binsDb)) {
     if (peakPercentEl) peakPercentEl.textContent = "—";
@@ -1947,6 +1992,9 @@ export function updateSelectedNodeAnalyzerPanel(): void {
     if (updatedAtEl) updatedAtEl.textContent = "Waiting for live analyzer data…";
     if (canvas) {
       drawAnalyzerSpectrogram(canvas, [], -120, 0);
+    }
+    if (barkCanvas) {
+      drawAnalyzerBarkBands(barkCanvas, [], -96, 0);
     }
     return;
   }
@@ -1979,6 +2027,14 @@ export function updateSelectedNodeAnalyzerPanel(): void {
       history,
       Number.isFinite(spectrogram.minDbfs) ? spectrogram.minDbfs : -120,
       Number.isFinite(spectrogram.maxDbfs) ? spectrogram.maxDbfs : 0,
+    );
+  }
+  if (barkCanvas) {
+    drawAnalyzerBarkBands(
+      barkCanvas,
+      Array.isArray(bark?.bandsDb) ? bark.bandsDb : [],
+      Number.isFinite(bark?.minDbfs) ? Number(bark?.minDbfs) : -96,
+      Number.isFinite(bark?.maxDbfs) ? Number(bark?.maxDbfs) : 0,
     );
   }
 }
@@ -3431,6 +3487,10 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
       </div>
       <div class="input-analyzer-spectrogram-wrap">
         <canvas class="input-analyzer-spectrogram-canvas" aria-label="Live spectrogram"></canvas>
+      </div>
+      <div class="input-analyzer-bark-wrap">
+        <div class="input-analyzer-bark-title">Bark Perception</div>
+        <canvas class="input-analyzer-bark-canvas" aria-label="Bark-band perception"></canvas>
       </div>
     </section>
   ` : "";

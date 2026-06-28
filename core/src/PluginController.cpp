@@ -13200,9 +13200,18 @@ void PluginController::SendSignalDiagnosticsToUI()
         spectrogram["maxFrequencyHz"] = analyzer.spectrogramMaxFrequencyHz;
         spectrogram["generatedAtMs"] = analyzer.generatedAtMs;
 
+        nlohmann::json bark;
+        bark["bandsDb"] = analyzer.barkBandsDb;
+        bark["minDbfs"] = analyzer.barkMinDbfs;
+        bark["maxDbfs"] = analyzer.barkMaxDbfs;
+        bark["minFrequencyHz"] = analyzer.barkMinFrequencyHz;
+        bark["maxFrequencyHz"] = analyzer.barkMaxFrequencyHz;
+        bark["generatedAtMs"] = analyzer.generatedAtMs;
+
         nlohmann::json result;
         result["levels"] = std::move(levels);
         result["spectrogram"] = std::move(spectrogram);
+        result["bark"] = std::move(bark);
         return result;
     };
 

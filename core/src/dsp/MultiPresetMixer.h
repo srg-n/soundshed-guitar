@@ -76,6 +76,11 @@ namespace guitarfx
         double spectrogramMaxDbfs = 0.0;
         double spectrogramMinFrequencyHz = 20.0;
         double spectrogramMaxFrequencyHz = 20000.0;
+        std::vector<float> barkBandsDb;
+        double barkMinDbfs = -96.0;
+        double barkMaxDbfs = 0.0;
+        double barkMinFrequencyHz = 20.0;
+        double barkMaxFrequencyHz = 15500.0;
         std::uint64_t generatedAtMs = 0;
       };
 

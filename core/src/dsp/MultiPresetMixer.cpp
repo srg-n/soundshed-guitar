@@ -1500,6 +1500,11 @@ namespace guitarfx
         analyzer.spectrogramMaxDbfs = entry.analyzer->spectrogramMaxDbfs;
         analyzer.spectrogramMinFrequencyHz = entry.analyzer->spectrogramMinFrequencyHz;
         analyzer.spectrogramMaxFrequencyHz = entry.analyzer->spectrogramMaxFrequencyHz;
+        analyzer.barkBandsDb = entry.analyzer->barkBandsDb;
+        analyzer.barkMinDbfs = entry.analyzer->barkMinDbfs;
+        analyzer.barkMaxDbfs = entry.analyzer->barkMaxDbfs;
+        analyzer.barkMinFrequencyHz = entry.analyzer->barkMinFrequencyHz;
+        analyzer.barkMaxFrequencyHz = entry.analyzer->barkMaxFrequencyHz;
         analyzer.generatedAtMs = entry.analyzer->generatedAtMs;
         node.analyzer = std::move(analyzer);
       }
@@ -1535,6 +1540,11 @@ namespace guitarfx
           analyzer.spectrogramMaxDbfs = entry.analyzer->spectrogramMaxDbfs;
           analyzer.spectrogramMinFrequencyHz = entry.analyzer->spectrogramMinFrequencyHz;
           analyzer.spectrogramMaxFrequencyHz = entry.analyzer->spectrogramMaxFrequencyHz;
+          analyzer.barkBandsDb = entry.analyzer->barkBandsDb;
+          analyzer.barkMinDbfs = entry.analyzer->barkMinDbfs;
+          analyzer.barkMaxDbfs = entry.analyzer->barkMaxDbfs;
+          analyzer.barkMinFrequencyHz = entry.analyzer->barkMinFrequencyHz;
+          analyzer.barkMaxFrequencyHz = entry.analyzer->barkMaxFrequencyHz;
           analyzer.generatedAtMs = entry.analyzer->generatedAtMs;
           node.analyzer = std::move(analyzer);
         }
@@ -1567,6 +1577,11 @@ namespace guitarfx
         analyzer.spectrogramMaxDbfs = entry.analyzer->spectrogramMaxDbfs;
         analyzer.spectrogramMinFrequencyHz = entry.analyzer->spectrogramMinFrequencyHz;
         analyzer.spectrogramMaxFrequencyHz = entry.analyzer->spectrogramMaxFrequencyHz;
+        analyzer.barkBandsDb = entry.analyzer->barkBandsDb;
+        analyzer.barkMinDbfs = entry.analyzer->barkMinDbfs;
+        analyzer.barkMaxDbfs = entry.analyzer->barkMaxDbfs;
+        analyzer.barkMinFrequencyHz = entry.analyzer->barkMinFrequencyHz;
+        analyzer.barkMaxFrequencyHz = entry.analyzer->barkMaxFrequencyHz;
         analyzer.generatedAtMs = entry.analyzer->generatedAtMs;
         node.analyzer = std::move(analyzer);
       }

@@ -2112,6 +2112,30 @@
   border-radius: 8px;
 }
 
+.input-analyzer-bark-wrap {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(170, 183, 214, 0.14);
+  background: linear-gradient(180deg, rgba(9, 12, 19, 0.92) 0%, rgba(11, 14, 22, 0.86) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.input-analyzer-bark-title {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(194, 203, 222, 0.72);
+}
+
+.input-analyzer-bark-canvas {
+  display: block;
+  width: 100%;
+  height: 92px;
+  border-radius: 8px;
+}
+
 .default-effect-shell .plugin-host-load-error {
   display: grid;
   gap: 4px;

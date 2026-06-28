@@ -23,10 +23,15 @@ namespace guitarfx
   {
   public:
     static constexpr int kSpectrogramBins = 64;
+    static constexpr int kBarkBands = 24;
     static constexpr double kSpectrogramMinDbfs = -120.0;
     static constexpr double kSpectrogramMaxDbfs = 0.0;
     static constexpr double kSpectrogramMinFrequencyHz = 20.0;
     static constexpr double kSpectrogramMaxFrequencyHz = 20000.0;
+    static constexpr double kBarkMinDbfs = -96.0;
+    static constexpr double kBarkMaxDbfs = 0.0;
+    static constexpr double kBarkMinFrequencyHz = 20.0;
+    static constexpr double kBarkMaxFrequencyHz = 15500.0;
 
     struct TelemetrySnapshot
     {
@@ -39,6 +44,7 @@ namespace guitarfx
       bool stereo = false;
       int activeChannelCount = 0;
       std::array<float, kSpectrogramBins> spectrogramBinsDb{};
+      std::array<float, kBarkBands> barkBandsDb{};
       std::uint64_t generatedAtMs = 0;
     };
 
@@ -70,6 +76,10 @@ namespace guitarfx
       for (auto &bin : mSpectrogramBinsDb)
       {
         bin.store(static_cast<float>(kSpectrogramMinDbfs), std::memory_order_relaxed);
+      }
+      for (auto &band : mBarkBandsDb)
+      {
+        band.store(static_cast<float>(kBarkMinDbfs), std::memory_order_relaxed);
       }
     }
 
@@ -231,6 +241,8 @@ namespace guitarfx
       const double logRange = std::log(kSpectrogramMaxFrequencyHz / kSpectrogramMinFrequencyHz);
       constexpr float kSmoothing = 0.72f;
       constexpr float kOneMinusSmoothing = 1.0f - kSmoothing;
+      std::array<double, kBarkBands> barkPowerByBand{};
+      std::array<int, kBarkBands> barkSampleCounts{};
 
       for (int bin = 0; bin < kSpectrogramBins; ++bin)
       {
@@ -261,10 +273,30 @@ namespace guitarfx
 
         const double power = std::max(0.0, (s1 * s1) + (s2 * s2) - (coeff * s1 * s2));
         const double magnitude = std::sqrt(power) / static_cast<double>(sampleWindow);
+        const int barkBand = FindBarkBandIndex(freq);
+        if (barkBand >= 0)
+        {
+          barkPowerByBand[static_cast<std::size_t>(barkBand)] += magnitude * magnitude;
+          barkSampleCounts[static_cast<std::size_t>(barkBand)] += 1;
+        }
         const float magnitudeDb = static_cast<float>(std::clamp(ToDbfs(magnitude), kSpectrogramMinDbfs, kSpectrogramMaxDbfs));
         const float previous = mSpectrogramBinsDb[static_cast<std::size_t>(bin)].load(std::memory_order_relaxed);
         const float smoothed = previous * kSmoothing + magnitudeDb * kOneMinusSmoothing;
         mSpectrogramBinsDb[static_cast<std::size_t>(bin)].store(smoothed, std::memory_order_relaxed);
+      }
+
+      constexpr float kBarkSmoothing = 0.68f;
+      constexpr float kBarkOneMinusSmoothing = 1.0f - kBarkSmoothing;
+      for (int band = 0; band < kBarkBands; ++band)
+      {
+        const int count = barkSampleCounts[static_cast<std::size_t>(band)];
+        const double barkMagnitude = count > 0
+          ? std::sqrt(barkPowerByBand[static_cast<std::size_t>(band)] / static_cast<double>(count))
+          : 0.0;
+        const float barkDb = static_cast<float>(std::clamp(ToDbfs(barkMagnitude), kBarkMinDbfs, kBarkMaxDbfs));
+        const float previous = mBarkBandsDb[static_cast<std::size_t>(band)].load(std::memory_order_relaxed);
+        const float smoothed = previous * kBarkSmoothing + barkDb * kBarkOneMinusSmoothing;
+        mBarkBandsDb[static_cast<std::size_t>(band)].store(smoothed, std::memory_order_relaxed);
       }
 
       mGeneratedAtMs.store(
@@ -296,6 +328,11 @@ namespace guitarfx
         snapshot.spectrogramBinsDb[static_cast<std::size_t>(i)] =
           mSpectrogramBinsDb[static_cast<std::size_t>(i)].load(std::memory_order_relaxed);
       }
+      for (int i = 0; i < kBarkBands; ++i)
+      {
+        snapshot.barkBandsDb[static_cast<std::size_t>(i)] =
+          mBarkBandsDb[static_cast<std::size_t>(i)].load(std::memory_order_relaxed);
+      }
       snapshot.generatedAtMs = mGeneratedAtMs.load(std::memory_order_relaxed);
       return snapshot;
     }
@@ -310,12 +347,35 @@ namespace guitarfx
     static constexpr double kRmsReleaseSeconds = 0.35;
     static constexpr double kStereoEnterRatio = 0.05;
     static constexpr double kStereoExitRatio = 0.02;
+    static constexpr std::array<double, static_cast<std::size_t>(kBarkBands + 1)> kBarkBandEdgesHz{
+      20.0, 100.0, 200.0, 300.0, 400.0, 510.0, 630.0, 770.0, 920.0, 1080.0, 1270.0, 1480.0,
+      1720.0, 2000.0, 2320.0, 2700.0, 3150.0, 3700.0, 4400.0, 5300.0, 6400.0, 7700.0, 9500.0,
+      12000.0, 15500.0
+    };
 
     static double ToDbfs(double linear)
     {
       if (linear <= kMinLinear || !std::isfinite(linear))
         return kSpectrogramMinDbfs;
       return 20.0 * std::log10(linear);
+    }
+
+    static int FindBarkBandIndex(double frequencyHz)
+    {
+      if (!std::isfinite(frequencyHz) || frequencyHz < kBarkBandEdgesHz.front() || frequencyHz > kBarkBandEdgesHz.back())
+      {
+        return -1;
+      }
+      for (int band = 0; band < kBarkBands; ++band)
+      {
+        const double low = kBarkBandEdgesHz[static_cast<std::size_t>(band)];
+        const double high = kBarkBandEdgesHz[static_cast<std::size_t>(band + 1)];
+        if (frequencyHz >= low && frequencyHz < high)
+        {
+          return band;
+        }
+      }
+      return kBarkBands - 1;
     }
 
     static double BallisticAlpha(double deltaSeconds, double timeConstantSeconds)
@@ -355,6 +415,7 @@ namespace guitarfx
     std::atomic<int> mActiveChannelCount{0};
     std::atomic<bool> mStereoSignal{false};
     std::array<std::atomic<float>, kSpectrogramBins> mSpectrogramBinsDb{};
+    std::array<std::atomic<float>, kBarkBands> mBarkBandsDb{};
     std::atomic<std::uint64_t> mGeneratedAtMs{0};
     double mSmoothedPeakLinear = 0.0;
     double mSmoothedRmsLinear = 0.0;
