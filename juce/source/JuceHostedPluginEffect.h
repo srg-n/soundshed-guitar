@@ -46,6 +46,7 @@ namespace guitarfx
 
         [[nodiscard]] std::string GetType() const override { return "plugin_host"; }
         [[nodiscard]] std::string GetCategory() const override { return "utility"; }
+        [[nodiscard]] bool ProducesStereoOutput() const override { return true; }
 
 #if defined(GUITARFX_ENABLE_PLUGIN_HOST_TEST_API)
         [[nodiscard]] juce::AudioPluginInstance* GetHostedPluginForTesting() const { return mPlugin.get(); }
