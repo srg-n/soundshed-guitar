@@ -45,7 +45,11 @@
           
           <!-- Tone3000 Tab Panel -->
           <div class="resource-browser-tab-panel" data-tab-panel="tone3000">
-            <div class="resource-browser-filters">
+            <div class="resource-browser-tone3000-mode-tabs">
+              <button class="resource-browser-tone3000-mode-tab active" id="resource-browser-tone3000-mode-search-tab" type="button" aria-pressed="true">Search</button>
+              <button class="resource-browser-tone3000-mode-tab" id="resource-browser-tone3000-mode-favorites-tab" type="button" aria-pressed="false" title="Favorites are available only when using your own Tone3000 API key">Favourites</button>
+            </div>
+            <div class="resource-browser-filters" id="resource-browser-tone3000-search-controls">
               <input type="text" id="resource-browser-tone3000-search" placeholder="Search amps and pedals..." />
               <button class="btn btn-secondary" id="resource-browser-tone3000-search-btn" type="button">Search</button>
               <select id="resource-browser-tone3000-category">

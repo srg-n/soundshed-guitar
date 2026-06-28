@@ -814,6 +814,33 @@
   margin-bottom: 12px;
 }
 
+.tone3000-mode-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.tone3000-mode-tab {
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-browser);
+  background: var(--bg-browser-card);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tone3000-mode-tab:hover {
+  border-color: var(--border-browser-focus);
+}
+
+.tone3000-mode-tab.active {
+  background: var(--bg-browser-selected);
+  border-color: var(--border-browser-focus);
+}
+
 .tone3000-search input {
   flex: 1;
   padding: 8px 10px;

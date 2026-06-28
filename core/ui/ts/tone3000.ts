@@ -40,6 +40,13 @@ export function isTone3000ProxyModeEnabled(): boolean {
   return isProxyModeActive();
 }
 
+export function isTone3000ByokEnabled(): boolean {
+  if (isProxyModeActive()) {
+    return false;
+  }
+  return Boolean(getApiKeyFromSettings()) || Boolean(uiState.tone3000Session?.accessToken);
+}
+
 export function isTone3000AuthReady(): boolean {
   if (isProxyModeActive()) {
     return true;

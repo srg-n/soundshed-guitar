@@ -9,7 +9,12 @@
 
 import { uiState } from "./state.js";
 import { postMessage, setAppSetting } from "./bridge.js";
-import { ensureTone3000Session, isTone3000AuthReady, tone3000AuthenticatedFetch } from "./tone3000.js";
+import {
+  ensureTone3000Session,
+  isTone3000AuthReady,
+  isTone3000ByokEnabled,
+  tone3000AuthenticatedFetch,
+} from "./tone3000.js";
 import { showNotification } from "./notifications.js";
 import { showConfirm } from "./dialogs.js";
 import { arrayBufferToBase64, escapeHtml, findResourceById } from "./utils.js";
@@ -17,6 +22,7 @@ import { FEATURE_FLAGS_CHANGED_EVENT, Features, isFeatureEnabled } from "./featu
 import type { AppSettingValue, LibraryResource } from "./types.js";
 import type { Tone3000Architecture, Tone3000Model, Tone3000Tone } from "./tone3000ApiTypes.js";
 import {
+  buildTone3000FavoritesUrl,
   buildTone3000SearchUrl,
   extractTone3000Tones,
   parseTone3000Pagination,
@@ -98,6 +104,7 @@ interface PersistedResourceBrowserState {
   tone3000Category: string;
   tone3000Sort: string;
   tone3000Architecture: string;
+  tone3000FavoritesOnly?: boolean;
   tone3000Page: number;
   tone3000TotalPages: number;
   tone3000Tones: Tone3000Tone[];
@@ -162,6 +169,9 @@ export class ResourceBrowserModal {
   private expandedFolderItemPath: string | null = null;
   
   // Tone3000 tab elements
+  private tone3000ModeSearchTab: HTMLButtonElement | null = null;
+  private tone3000ModeFavoritesTab: HTMLButtonElement | null = null;
+  private tone3000SearchControls: HTMLElement | null = null;
   private tone3000Search: HTMLInputElement | null = null;
   private tone3000SearchBtn: HTMLButtonElement | null = null;
   private tone3000Category: HTMLSelectElement | null = null;
@@ -179,6 +189,7 @@ export class ResourceBrowserModal {
   private tone3000Tones: Tone3000Tone[] = [];
   private tone3000Page = 1;
   private tone3000TotalPages = 1;
+  private tone3000FavoritesOnly = false;
   private expandedToneId: string | null = null;
   private expandedToneSection: "models" | "details" = "models";
   private toneModelsCache: Map<string, Tone3000Model[]> = new Map();
@@ -464,6 +475,9 @@ export class ResourceBrowserModal {
     this.folderList = document.getElementById("resource-browser-folder-list");
     
     // Tone3000 tab elements
+    this.tone3000ModeSearchTab = document.getElementById("resource-browser-tone3000-mode-search-tab") as HTMLButtonElement | null;
+    this.tone3000ModeFavoritesTab = document.getElementById("resource-browser-tone3000-mode-favorites-tab") as HTMLButtonElement | null;
+    this.tone3000SearchControls = document.getElementById("resource-browser-tone3000-search-controls");
     this.tone3000Search = document.getElementById("resource-browser-tone3000-search") as HTMLInputElement | null;
     this.tone3000SearchBtn = document.getElementById("resource-browser-tone3000-search-btn") as HTMLButtonElement | null;
     this.tone3000Category = document.getElementById("resource-browser-tone3000-category") as HTMLSelectElement | null;
@@ -535,6 +549,22 @@ export class ResourceBrowserModal {
       }
     });
     this.tone3000SearchBtn?.addEventListener("click", () => void this.runTone3000Search());
+    this.tone3000ModeSearchTab?.addEventListener("click", () => {
+      if (this.tone3000FavoritesOnly) {
+        this.tone3000FavoritesOnly = false;
+        this.syncTone3000ModeUi();
+        this.saveCurrentStateForResourceType();
+        void this.runTone3000Search(1);
+      }
+    });
+    this.tone3000ModeFavoritesTab?.addEventListener("click", () => {
+      if (!this.tone3000FavoritesOnly) {
+        this.tone3000FavoritesOnly = true;
+        this.syncTone3000ModeUi();
+        this.saveCurrentStateForResourceType();
+        void this.runTone3000Search(1);
+      }
+    });
     this.tone3000Category?.addEventListener("change", () => void this.runTone3000Search());
     this.tone3000Sort?.addEventListener("change", () => void this.runTone3000Search());
     this.tone3000Architecture?.addEventListener("change", () => {
@@ -581,6 +611,7 @@ export class ResourceBrowserModal {
       tone3000Category: isIr ? "ir" : "amp",
       tone3000Sort: "popular",
       tone3000Architecture: isIr ? "all" : "2",
+      tone3000FavoritesOnly: false,
       tone3000Page: 1,
       tone3000TotalPages: 1,
       tone3000Tones: [],
@@ -614,6 +645,7 @@ export class ResourceBrowserModal {
     persisted.tone3000Category = this.tone3000Category?.value ?? (resourceType === "ir" ? "ir" : "amp");
     persisted.tone3000Sort = this.tone3000Sort?.value ?? "popular";
     persisted.tone3000Architecture = this.tone3000Architecture?.value ?? (resourceType === "ir" ? "all" : "2");
+    persisted.tone3000FavoritesOnly = this.tone3000FavoritesOnly;
     persisted.tone3000Page = this.tone3000Page;
     persisted.tone3000TotalPages = this.tone3000TotalPages;
     persisted.tone3000Tones = [...this.tone3000Tones];
@@ -650,6 +682,9 @@ export class ResourceBrowserModal {
       this.tone3000Architecture.value = persisted.tone3000Architecture;
     }
 
+    this.tone3000FavoritesOnly = Boolean(persisted.tone3000FavoritesOnly);
+    this.syncTone3000ModeUi();
+
     if (this.libraryCategory) {
       const hasOption = Array.from(this.libraryCategory.options).some((option) => option.value === persisted.libraryCategory);
       this.libraryCategory.value = hasOption ? persisted.libraryCategory : "all";
@@ -668,6 +703,34 @@ export class ResourceBrowserModal {
     this.tone3000Tones = [...persisted.tone3000Tones];
     this.expandedToneId = persisted.expandedToneId;
     this.toneModelsCache = new Map(persisted.toneModelsCache);
+  }
+
+  private canUseTone3000FavoritesMode(): boolean {
+    return isTone3000ByokEnabled();
+  }
+
+  private syncTone3000ModeUi(): void {
+    const enabled = this.canUseTone3000FavoritesMode();
+    if (this.tone3000ModeFavoritesTab) {
+      this.tone3000ModeFavoritesTab.classList.toggle("active", this.tone3000FavoritesOnly);
+      this.tone3000ModeFavoritesTab.setAttribute("aria-pressed", this.tone3000FavoritesOnly ? "true" : "false");
+      this.tone3000ModeFavoritesTab.title = enabled
+        ? "Show your Tone3000 favorites"
+        : "Favorites require your own Tone3000 API key in Settings";
+    }
+
+    if (this.tone3000ModeSearchTab) {
+      this.tone3000ModeSearchTab.classList.toggle("active", !this.tone3000FavoritesOnly);
+      this.tone3000ModeSearchTab.setAttribute("aria-pressed", !this.tone3000FavoritesOnly ? "true" : "false");
+    }
+
+    if (this.tone3000SearchControls) {
+      this.tone3000SearchControls.style.display = this.tone3000FavoritesOnly ? "none" : "";
+    }
+  }
+
+  private renderFavoritesPrompt(): string {
+    return `<div class="resource-browser-empty">To view your favourites, add your own Tone3000 API key under Settings.</div>`;
   }
 
   private browseForLibraryFile(): void {
@@ -728,7 +791,9 @@ export class ResourceBrowserModal {
       if (this.tone3000Tones.length > 0) {
         this.renderTone3000List();
       } else {
-        this.tone3000List.innerHTML = `<div class="resource-browser-empty">Enter a search query to browse Tone3000.</div>`;
+        this.tone3000List.innerHTML = this.tone3000FavoritesOnly
+          ? `<div class="resource-browser-empty">No favorite tones found. Favorite tones on Tone3000 first, then refresh.</div>`
+          : `<div class="resource-browser-empty">Enter a search query to browse Tone3000.</div>`;
       }
     }
     this.updateTone3000Pagination(false);
@@ -1421,7 +1486,16 @@ export class ResourceBrowserModal {
     if (!this.tone3000List || !this.options) {
       return;
     }
+
+    this.syncTone3000ModeUi();
     
+    const useFavoritesMode = this.canUseTone3000FavoritesMode() && this.tone3000FavoritesOnly;
+    if (this.tone3000FavoritesOnly && !this.canUseTone3000FavoritesMode()) {
+      this.tone3000List.innerHTML = this.renderFavoritesPrompt();
+      this.updateTone3000Pagination(false);
+      return;
+    }
+
     await ensureTone3000Session();
     if (!isTone3000AuthReady()) {
       this.tone3000List.innerHTML = `<div class="resource-browser-empty">Add a Tone3000 API key in Settings to browse.</div>`;
@@ -1441,44 +1515,50 @@ export class ResourceBrowserModal {
         page_size: "20",
       });
       
-      if (this.tone3000Query) {
-        params.set("query", this.tone3000Query);
-      }
-      
-      // Set gear filter based on category
-      const categoryValue = this.options?.resourceType === "ir"
-        ? "ir"
-        : (this.tone3000Category?.value ?? this.options?.tone3000CategoryFilter ?? "amp");
-      if (categoryValue === "ir") {
-        params.set("gear", "ir");
-      } else if (categoryValue === "pedal") {
-        params.set("gear", "pedal");
-      } else if (categoryValue === "preamp") {
-        params.set("gear", "outboard");
-      } else if (categoryValue === "full-rig") {
-        params.set("gear", "full-rig");
-      } else {
-        params.set("gear", "amp");
-      }
-      
-      // Set sort
-      const sortValue = this.tone3000Sort?.value ?? "popular";
-      if (sortValue === "popular") {
-        params.set("sort", "downloads-all-time");
-      } else if (sortValue === "recent") {
-        params.set("sort", "newest");
-      } else if (sortValue === "trending") {
-        params.set("sort", "trending");
-      }
+      if (!useFavoritesMode) {
+        if (this.tone3000Query) {
+          params.set("query", this.tone3000Query);
+        }
+        
+        // Set gear filter based on category
+        const categoryValue = this.options?.resourceType === "ir"
+          ? "ir"
+          : (this.tone3000Category?.value ?? this.options?.tone3000CategoryFilter ?? "amp");
+        if (categoryValue === "ir") {
+          params.set("gear", "ir");
+        } else if (categoryValue === "pedal") {
+          params.set("gear", "pedal");
+        } else if (categoryValue === "preamp") {
+          params.set("gear", "outboard");
+        } else if (categoryValue === "full-rig") {
+          params.set("gear", "full-rig");
+        } else {
+          params.set("gear", "amp");
+        }
+        
+        // Set sort
+        const sortValue = this.tone3000Sort?.value ?? "popular";
+        if (sortValue === "popular") {
+          params.set("sort", "downloads-all-time");
+        } else if (sortValue === "recent") {
+          params.set("sort", "newest");
+        } else if (sortValue === "trending") {
+          params.set("sort", "trending");
+        }
 
-      const architecture = this.getSelectedArchitecture();
-      if (architecture) {
-        params.set("architecture", architecture);
+        const architecture = this.getSelectedArchitecture();
+        if (architecture) {
+          params.set("architecture", architecture);
+        }
       }
       
-      const response = await tone3000AuthenticatedFetch(buildTone3000SearchUrl(params));
+      const endpoint = useFavoritesMode ? buildTone3000FavoritesUrl(params) : buildTone3000SearchUrl(params);
+      const response = await tone3000AuthenticatedFetch(endpoint);
       
       if (!response.ok) {
+        if (useFavoritesMode && (response.status === 401 || response.status === 403 || response.status === 404)) {
+          throw new Error("Favorites are only available in BYOK direct API mode.");
+        }
         throw new Error(`Search failed: ${response.status}`);
       }
       
@@ -1532,7 +1612,10 @@ export class ResourceBrowserModal {
     }
     
     if (!this.tone3000Tones.length) {
-      this.tone3000List.innerHTML = `<div class="resource-browser-empty">No tones found. Try a different search.</div>`;
+      const emptyLabel = this.tone3000FavoritesOnly
+        ? "No favorite tones found. Favorite tones on Tone3000 first, then refresh."
+        : "No tones found. Try a different search.";
+      this.tone3000List.innerHTML = `<div class="resource-browser-empty">${escapeHtml(emptyLabel)}</div>`;
       return;
     }
     

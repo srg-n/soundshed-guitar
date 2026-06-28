@@ -159,6 +159,10 @@ export function buildTone3000SearchUrl(params: URLSearchParams): string {
   return buildTone3000ApiUrl("tones/search", params);
 }
 
+export function buildTone3000FavoritesUrl(params: URLSearchParams): string {
+  return buildTone3000ApiUrl("tones/favorited", params);
+}
+
 export function parseTone3000Pagination(
   data: Tone3000PaginatedLike | undefined,
   currentPage: number,

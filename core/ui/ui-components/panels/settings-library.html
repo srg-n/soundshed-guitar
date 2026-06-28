@@ -9,7 +9,11 @@
               <div class="settings-section">
                 <h3>Tone3000 Browser</h3>
                  <p>Browse community NAM models and IRs from Tone3000. For fastest auditioning, use the resource selector directly on Neural FX and Neural Amp nodes in your signal chain.</p>
-                <div class="tone3000-search">
+                <div class="tone3000-mode-tabs">
+                  <button id="tone3000-mode-search-tab" class="tone3000-mode-tab active" type="button" aria-pressed="true">Search</button>
+                  <button id="tone3000-mode-favorites-tab" class="tone3000-mode-tab" type="button" aria-pressed="false" title="Favorites are available only when using your own Tone3000 API key">Favourites</button>
+                </div>
+                <div class="tone3000-search" id="tone3000-search-controls">
                   <input type="text" id="tone3000-search-input" placeholder="Search tones..." />
                   <select id="tone3000-sort-select" class="themed-select">
                     <option value="popular">Most Popular</option>

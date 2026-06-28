@@ -1235,6 +1235,34 @@
   border-color: var(--color-preset-favorite, #d8852f);
 }
 
+.resource-browser-tone3000-mode-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.resource-browser-tone3000-mode-tab {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-browser);
+  background: var(--bg-browser-input);
+  color: var(--modal-text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.resource-browser-tone3000-mode-tab:hover {
+  border-color: var(--border-browser-focus);
+}
+
+.resource-browser-tone3000-mode-tab.active {
+  background: var(--bg-browser-selected);
+  border-color: var(--border-browser-focus);
+}
+
 /* Folder browser tab action buttons */
 .resource-browser-folder-preview,
 .resource-browser-folder-select,

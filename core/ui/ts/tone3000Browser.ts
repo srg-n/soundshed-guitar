@@ -2,7 +2,12 @@ import { uiState } from "./state.js";
 import { appendLog } from "./logging.js";
 import { showNotification } from "./notifications.js";
 import { postMessage } from "./bridge.js";
-import { ensureTone3000Session, isTone3000AuthReady, tone3000AuthenticatedFetch } from "./tone3000.js";
+import {
+  ensureTone3000Session,
+  isTone3000AuthReady,
+  isTone3000ByokEnabled,
+  tone3000AuthenticatedFetch,
+} from "./tone3000.js";
 import { escapeHtml } from "./utils.js";
 import { openBlendEditorWithDefinition } from "./signalPath.js";
 import { Tone3000DetailsView } from "./tone3000DetailsView.js";
@@ -14,6 +19,7 @@ import {
 } from "./tone3000Shared.js";
 import type { Tone3000Gear, Tone3000Model, Tone3000Platform, Tone3000Tone } from "./tone3000ApiTypes.js";
 import {
+  buildTone3000FavoritesUrl,
   buildTone3000SearchUrl,
   extractTone3000Tones,
   parseTone3000Pagination,
@@ -23,9 +29,12 @@ const PAGE_SIZE = 25;
 
 const categoryListEl = document.getElementById("tone3000-category-list");
 const resultsEl = document.getElementById("tone3000-results");
+const searchControlsEl = document.getElementById("tone3000-search-controls");
 const searchInputEl = document.getElementById("tone3000-search-input") as HTMLInputElement | null;
 const sortSelectEl = document.getElementById("tone3000-sort-select") as HTMLSelectElement | null;
 const searchButtonEl = document.getElementById("tone3000-search-button");
+const searchModeTabEl = document.getElementById("tone3000-mode-search-tab") as HTMLButtonElement | null;
+const favoritesModeTabEl = document.getElementById("tone3000-mode-favorites-tab") as HTMLButtonElement | null;
 const paginationEl = document.getElementById("tone3000-pagination");
 const prevButtonEl = document.getElementById("tone3000-prev-btn") as HTMLButtonElement | null;
 const nextButtonEl = document.getElementById("tone3000-next-btn") as HTMLButtonElement | null;
@@ -52,6 +61,39 @@ let currentTones: Tone3000Tone[] = [];
 let currentPage = 1;
 let totalPages = 1;
 let detailsView: Tone3000DetailsView | null = null;
+let favoritesMode = false;
+
+function canUseFavoritesMode(): boolean {
+  return isTone3000ByokEnabled();
+}
+
+function syncBrowseModeUi(): void {
+  const enabled = canUseFavoritesMode();
+  if (favoritesModeTabEl) {
+    favoritesModeTabEl.classList.toggle("active", favoritesMode);
+    favoritesModeTabEl.setAttribute("aria-pressed", favoritesMode ? "true" : "false");
+    favoritesModeTabEl.title = enabled
+      ? "Show your Tone3000 favorites"
+      : "Favorites require your own Tone3000 API key in Settings";
+  }
+
+  if (searchModeTabEl) {
+    searchModeTabEl.classList.toggle("active", !favoritesMode);
+    searchModeTabEl.setAttribute("aria-pressed", !favoritesMode ? "true" : "false");
+  }
+
+  if (searchControlsEl) {
+    searchControlsEl.style.display = favoritesMode ? "none" : "";
+  }
+
+  if (categoryListEl) {
+    categoryListEl.style.display = favoritesMode ? "none" : "";
+  }
+}
+
+function renderFavoritesPrompt(): string {
+  return `<div class="tone3000-empty">To view your favourites, add your own Tone3000 API key under Settings.</div>`;
+}
 
 function getToneImportStatus(tone: Tone3000Tone): { status: "imported" | "partial" | "none"; importedCount: number } {
   const toneId = String(tone.id);
@@ -123,6 +165,11 @@ function getToneInitials(label: string): string {
  * called externally (e.g. from the AI Tone Search panel).
  */
 export function setTone3000Search(query: string, categoryId?: string): void {
+  if (favoritesMode) {
+    favoritesMode = false;
+    syncBrowseModeUi();
+  }
+
   if (categoryId) {
     const next = CATEGORIES.find((cat) => cat.id === categoryId);
     if (next) {
@@ -193,6 +240,20 @@ export function initTone3000Browser(): void {
     });
   }
   searchButtonEl?.addEventListener("click", () => void runSearch());
+  searchModeTabEl?.addEventListener("click", () => {
+    if (favoritesMode) {
+      favoritesMode = false;
+      syncBrowseModeUi();
+      void runSearch(1);
+    }
+  });
+  favoritesModeTabEl?.addEventListener("click", () => {
+    if (!favoritesMode) {
+      favoritesMode = true;
+      syncBrowseModeUi();
+      void runSearch(1);
+    }
+  });
   searchInputEl?.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       void runSearch();
@@ -241,7 +302,16 @@ function renderCategories(): void {
 async function runSearch(page = 1): Promise<void> {
   if (!resultsEl) return;
 
-  activeQuery = searchInputEl?.value.trim() ?? "";
+  syncBrowseModeUi();
+
+  const useFavoritesMode = favoritesMode;
+  if (useFavoritesMode && !canUseFavoritesMode()) {
+    resultsEl.innerHTML = renderFavoritesPrompt();
+    updatePagination(false);
+    return;
+  }
+
+  activeQuery = useFavoritesMode ? "" : (searchInputEl?.value.trim() ?? "");
   currentPage = page;
   await ensureTone3000Session();
 
@@ -258,33 +328,41 @@ async function runSearch(page = 1): Promise<void> {
       page: String(page),
       page_size: PAGE_SIZE.toString(),
     });
-    if (activeQuery) {
-      params.set("query", activeQuery);
-    }
-    if (activeCategory.gear) {
-      params.set("gear", activeCategory.gear);
-    }
-    const sortValue = sortSelectEl?.value ?? "popular";
-    if (sortValue === "popular") {
-      params.set("sort", "downloads-all-time");
-    } else if (sortValue === "recent") {
-      params.set("sort", "newest");
-    } else if (sortValue === "trending") {
-      params.set("sort", "trending");
-    } else if (sortValue === "name") {
-      params.set("sort", "best-match");
+    if (!useFavoritesMode) {
+      if (activeQuery) {
+        params.set("query", activeQuery);
+      }
+      if (activeCategory.gear) {
+        params.set("gear", activeCategory.gear);
+      }
+      const sortValue = sortSelectEl?.value ?? "popular";
+      if (sortValue === "popular") {
+        params.set("sort", "downloads-all-time");
+      } else if (sortValue === "recent") {
+        params.set("sort", "newest");
+      } else if (sortValue === "trending") {
+        params.set("sort", "trending");
+      } else if (sortValue === "name") {
+        params.set("sort", "best-match");
+      }
     }
 
-    const response = await tone3000AuthenticatedFetch(buildTone3000SearchUrl(params));
+    const endpoint = useFavoritesMode ? buildTone3000FavoritesUrl(params) : buildTone3000SearchUrl(params);
+    const response = await tone3000AuthenticatedFetch(endpoint);
 
     if (!response.ok) {
+      if (useFavoritesMode && (response.status === 401 || response.status === 403 || response.status === 404)) {
+        throw new Error("Favorites are only available in BYOK direct API mode.");
+      }
       throw new Error(`Search failed: ${response.status}`);
     }
 
     const data = await response.json();
     const tones = extractTone3000Tones(data);
 
-    const filtered = activeCategory.platform
+    const filtered = useFavoritesMode
+      ? tones
+      : activeCategory.platform
       ? tones.filter((tone) => {
           const platform = (tone.platform ?? "").toLowerCase();
           const platforms = (tone as { platforms?: string[] }).platforms;
@@ -335,7 +413,10 @@ function renderResults(tones: Tone3000Tone[]): void {
   currentTones = tones;
 
   if (!tones.length) {
-    resultsEl.innerHTML = `<div class="tone3000-empty">No tones found in this category.</div>`;
+    const emptyLabel = favoritesMode
+      ? "No favorite tones found. Favorite tones on Tone3000 first, then refresh."
+      : "No tones found in this category.";
+    resultsEl.innerHTML = `<div class="tone3000-empty">${escapeHtml(emptyLabel)}</div>`;
     return;
   }
 
@@ -437,5 +518,3 @@ async function importToneModels(button: HTMLButtonElement, tone: Tone3000Tone): 
     renderResults(currentTones);
   }
 }
-
-
