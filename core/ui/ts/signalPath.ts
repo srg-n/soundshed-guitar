@@ -386,11 +386,20 @@ function selectNodeForPreset(preset: Preset, presetChanged: boolean): void {
     return getNodeCategory(node) === lastSelectedNodeCategory;
   };
 
+  const findFirstNamAmpNode = (): GraphNode | undefined =>
+    nodes.find((node) =>
+      node.type === EffectGuids.kAmpNam
+      || node.type === EffectGuids.kAmpNamOptimized
+      || node.type === EffectGuids.kAmpNamBlend
+      || node.type === "amp_nam"
+      || node.type === "amp_nam_optimized"
+      || node.type === "amp_nam_blend");
+
   let replacement: GraphNode | undefined;
 
-  // On first render of a newly selected preset, prefer the first optimized NAM amp node.
-  if (presetChanged) {
-    replacement = nodes.find((node) => node.type === EffectGuids.kAmpNamOptimized || node.type === "amp_nam_optimized");
+  // Prefer the first NAM amp node on first render for a preset or when no prior selection is available.
+  if (presetChanged || selectedNodeId === null) {
+    replacement = findFirstNamAmpNode();
   }
 
   if (!replacement && lastSelectedNodeType) {
@@ -1610,6 +1619,9 @@ function handleSignalPathShortcutKeyDown(event: KeyboardEvent): void {
 }
 
 document.addEventListener("keydown", handleSignalPathShortcutKeyDown, true);
+document.addEventListener("resource-browser:navigation-cache-updated", () => {
+  refreshSelectedNodeParams();
+});
 
 function updateNodeDragPoint(event: DragEvent): void {
   if (Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
@@ -3247,6 +3259,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
           resourceIndex,
           exposedResourceId: exposedResource.resourceId,
           allowBrowseFile: canBrowseFile,
+          currentResourceId: current.id,
           currentDisplayName: displayName,
           currentFilePath: current.filePath,
           isMissing,
@@ -3368,6 +3381,37 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
         && !current.filePath
         && !getLibraryResource(resourceType, current.id);
       const missingClass = isMissing ? "resource-picker-label is-missing" : "resource-picker-label";
+      const navResourceType = resourceType === "nam" || resourceType === "ir" ? resourceType : null;
+      const prevSelection = navResourceType
+        ? resourceBrowserModal.getAdjacentResourceSelection(navResourceType, current.id ?? "", current.filePath ?? "", -1)
+        : null;
+      const nextSelection = navResourceType
+        ? resourceBrowserModal.getAdjacentResourceSelection(navResourceType, current.id ?? "", current.filePath ?? "", 1)
+        : null;
+      const navPrevButton = navResourceType ? `
+        <button
+          type="button"
+          class="preset-action-btn resource-nav-btn resource-nav-prev-btn"
+          data-node-id="${node.id}"
+          data-resource-type="${navResourceType}"
+          ${indexAttr}
+          data-nav-direction="prev"
+          title="Previous resource"
+          aria-label="Previous resource"${prevSelection ? "" : " disabled"}
+        >${renderIcon("arrow-left", "resource-nav-icon")}</button>
+      ` : "";
+      const navNextButton = navResourceType ? `
+        <button
+          type="button"
+          class="preset-action-btn resource-nav-btn resource-nav-next-btn"
+          data-node-id="${node.id}"
+          data-resource-type="${navResourceType}"
+          ${indexAttr}
+          data-nav-direction="next"
+          title="Next resource"
+          aria-label="Next resource"${nextSelection ? "" : " disabled"}
+        >${renderIcon("arrow-right", "resource-nav-icon")}</button>
+      ` : "";
       const hostedPluginOpenButton = resourceType === "plugin"
         ? `<button type="button" class="resource-picker-btn plugin-host-open-btn" data-node-id="${node.id}" ${hasCurrentSelection ? "" : "disabled"}>Open Plugin</button>`
         : "";
@@ -3384,6 +3428,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
         resourceType,
         resourceIndex: index,
         allowBrowseFile: true,
+        currentResourceId: current.id,
         currentDisplayName: displayName,
         currentFilePath: current.filePath,
         isMissing,
@@ -3400,6 +3445,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
                 data-resource-type="${resourceType}"
                 ${indexAttr}
               >Browse</button>
+              ${navPrevButton}
               <div
                 class="${missingClass}"
                 data-node-id="${node.id}"
@@ -3407,6 +3453,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
                 ${indexAttr}
                 title="${escapeHtml(displayName)}"
               >${escapeHtml(displayName)}</div>
+              ${navNextButton}
               <button
                 class="resource-clear-btn"
                 data-node-id="${node.id}"
@@ -4241,6 +4288,44 @@ function updateEqVisualization(node: GraphNode): void {
 }
 
 function bindResourceControls(node: GraphNode, preset: Preset): void {
+  const syncResourceNavigationButtons = (
+    nodeId: string,
+    resourceType: "nam" | "ir",
+    resourceIndex: number,
+    exposedResourceId: string | undefined,
+    currentResourceId: string,
+    currentFilePath: string,
+  ): void => {
+    const prevButton = nodeParamsPanelElement?.querySelector<HTMLButtonElement>(
+      `.resource-nav-btn[data-node-id="${nodeId}"][data-resource-type="${resourceType}"][data-resource-index="${resourceIndex}"][data-nav-direction="prev"]`,
+    );
+    const nextButton = nodeParamsPanelElement?.querySelector<HTMLButtonElement>(
+      `.resource-nav-btn[data-node-id="${nodeId}"][data-resource-type="${resourceType}"][data-resource-index="${resourceIndex}"][data-nav-direction="next"]`,
+    );
+
+    if (prevButton) {
+      const prev = resourceBrowserModal.getAdjacentResourceSelection(resourceType, currentResourceId, currentFilePath, -1);
+      prevButton.disabled = !prev;
+      prevButton.setAttribute("aria-disabled", prev ? "false" : "true");
+    }
+    if (nextButton) {
+      const next = resourceBrowserModal.getAdjacentResourceSelection(resourceType, currentResourceId, currentFilePath, 1);
+      nextButton.disabled = !next;
+      nextButton.setAttribute("aria-disabled", next ? "false" : "true");
+    }
+
+    const clearButtons = nodeParamsPanelElement?.querySelectorAll<HTMLButtonElement>(
+      `.resource-clear-btn[data-node-id="${nodeId}"][data-resource-type="${resourceType}"]`,
+    ) ?? [];
+    clearButtons.forEach((clearBtn) => {
+      const clearResourceIndex = clearBtn.dataset.resourceIndex ? parseInt(clearBtn.dataset.resourceIndex, 10) : 0;
+      const clearExposedResourceId = clearBtn.dataset.exposedResourceId;
+      if (clearResourceIndex === resourceIndex && (clearExposedResourceId ?? "") === (exposedResourceId ?? "")) {
+        clearBtn.disabled = !(currentResourceId || currentFilePath);
+      }
+    });
+  };
+
   // Bind resource dropdowns
   const dropdowns = nodeParamsPanelElement?.querySelectorAll(".resource-dropdown") as NodeListOf<HTMLSelectElement> | null;
   dropdowns?.forEach((dropdown) => {
@@ -4321,8 +4406,70 @@ function bindResourceControls(node: GraphNode, preset: Preset): void {
             const missing = Boolean(resourceId) && !getLibraryResource(resourceType, resourceId);
             labelEl.classList.toggle("is-missing", missing);
           }
+
+          syncResourceNavigationButtons(nodeId, resourceType, resourceIndex, exposedResourceId, resourceId, "");
         },
       });
+    });
+  });
+
+  const resourceNavButtons = nodeParamsPanelElement?.querySelectorAll(".resource-nav-btn") as NodeListOf<HTMLButtonElement> | null;
+  resourceNavButtons?.forEach((navBtn) => {
+    navBtn.addEventListener("click", () => {
+      const nodeId = navBtn.dataset.nodeId;
+      const resourceType = navBtn.dataset.resourceType as "nam" | "ir" | undefined;
+      const resourceIndex = navBtn.dataset.resourceIndex ? parseInt(navBtn.dataset.resourceIndex, 10) : 0;
+      const exposedResourceId = navBtn.dataset.exposedResourceId;
+      const direction = navBtn.dataset.navDirection === "prev" ? -1 : 1;
+      if (!nodeId || !resourceType || (resourceType !== "nam" && resourceType !== "ir")) {
+        return;
+      }
+
+      const current = getNodeResourceAtIndex(node, resourceIndex);
+      const next = resourceBrowserModal.getAdjacentResourceSelection(
+        resourceType,
+        current.id ?? "",
+        current.filePath ?? "",
+        direction,
+      );
+      if (!next) {
+        return;
+      }
+
+      sendNodeResourceUpdate(
+        nodeId,
+        resourceType,
+        next.resourceId ?? "",
+        next.filePath ?? "",
+        resourceIndex,
+        undefined,
+        exposedResourceId,
+      );
+
+      const nextResource = next.resourceId
+        ? getLibraryResource(resourceType, next.resourceId)
+        : undefined;
+      const labelText = nextResource?.name
+        || (next.resourceId ?? "")
+        || (next.filePath?.split(/[\\/]/).pop() ?? "");
+
+      const labelCandidates = nodeParamsPanelElement?.querySelectorAll(
+        `.resource-picker-label[data-node-id="${nodeId}"]`,
+      ) as NodeListOf<HTMLElement> | null;
+      const labelEl = findMatchingResourcePickerLabel(
+        labelCandidates,
+        nodeId,
+        resourceType,
+        resourceIndex,
+        exposedResourceId,
+      );
+
+      if (labelEl) {
+        labelEl.textContent = labelText || (resourceType === "ir" ? "No IR selected" : "No model selected");
+        labelEl.title = labelText || "";
+        labelEl.classList.toggle("is-missing", Boolean(next.resourceId) && !nextResource);
+      }
+      syncResourceNavigationButtons(nodeId, resourceType, resourceIndex, exposedResourceId, next.resourceId ?? "", next.filePath ?? "");
     });
   });
   
@@ -4445,6 +4592,10 @@ function bindResourceControls(node: GraphNode, preset: Preset): void {
           labelEl.textContent = emptyLabel;
           labelEl.title = emptyLabel;
           labelEl.classList.remove("is-missing");
+        }
+
+        if (pickerResourceType) {
+          syncResourceNavigationButtons(nodeId, pickerResourceType, resourceIndex ?? 0, exposedResourceId, "", "");
         }
 
         clearBtn.disabled = true;

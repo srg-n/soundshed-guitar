@@ -9,6 +9,7 @@ import { EffectTypeRegistry, type ParameterDef } from "./presetV2.js";
 import { renderIcon } from "./iconAssets.js";
 import { escapeHtml } from "./utils.js";
 import { ensureLayoutImagesLoaded } from "./layoutImages.js";
+import { resourceBrowserModal } from "./resourceBrowser.js";
 import type {
   EffectLayout,
   LayoutControl,
@@ -26,6 +27,7 @@ export interface LayoutResourceControlDef {
   resourceIndex: number;
   exposedResourceId?: string;
   allowBrowseFile?: boolean;
+  currentResourceId?: string;
   currentDisplayName: string;
   currentFilePath?: string;
   isMissing?: boolean;
@@ -424,6 +426,26 @@ function renderControls(
           : "";
         const resourceIndex = resourceDef?.resourceIndex ?? 0;
         const isPluginResource = resourceDef?.resourceType === "plugin";
+        const currentResourceId = resourceDef?.currentResourceId ?? "";
+        const currentFilePath = resourceDef?.currentFilePath ?? "";
+        const prevSelection = resourceDef?.resourceType === "nam" || resourceDef?.resourceType === "ir"
+          ? resourceBrowserModal.getAdjacentResourceSelection(
+            resourceDef.resourceType as "nam" | "ir",
+            currentResourceId,
+            currentFilePath,
+            -1,
+          )
+          : null;
+        const nextSelection = resourceDef?.resourceType === "nam" || resourceDef?.resourceType === "ir"
+          ? resourceBrowserModal.getAdjacentResourceSelection(
+            resourceDef.resourceType as "nam" | "ir",
+            currentResourceId,
+            currentFilePath,
+            1,
+          )
+          : null;
+        const prevDisabled = prevSelection ? "" : " disabled";
+        const nextDisabled = nextSelection ? "" : " disabled";
         const pluginLoadingIndicator = isPluginResource
           ? `
               <div
@@ -450,6 +472,19 @@ function renderControls(
                 data-resource-index="${resourceIndex}"
                 ${exposedResourceAttr}
               >Browse</button>
+              ${resourceDef?.resourceType === "nam" || resourceDef?.resourceType === "ir" ? `
+                <button
+                  type="button"
+                  class="preset-action-btn resource-nav-btn resource-nav-prev-btn"
+                  data-node-id="${node.id}"
+                  data-resource-type="${resourceDef?.resourceType ?? ""}"
+                  data-resource-index="${resourceIndex}"
+                  ${exposedResourceAttr}
+                  data-nav-direction="prev"
+                  title="Previous resource"
+                  aria-label="Previous resource"${prevDisabled}
+                >${renderIcon("arrow-left", "resource-nav-icon")}</button>
+              ` : ""}
               <div
                 class="${missingClass}"
                 data-node-id="${node.id}"
@@ -458,6 +493,19 @@ function renderControls(
                 ${exposedResourceAttr}
                 title="${escapeHtml(resourceDef?.currentDisplayName ?? "") }"
               >${escapeHtml(resourceDef?.currentDisplayName ?? "")}</div>
+              ${resourceDef?.resourceType === "nam" || resourceDef?.resourceType === "ir" ? `
+                <button
+                  type="button"
+                  class="preset-action-btn resource-nav-btn resource-nav-next-btn"
+                  data-node-id="${node.id}"
+                  data-resource-type="${resourceDef?.resourceType ?? ""}"
+                  data-resource-index="${resourceIndex}"
+                  ${exposedResourceAttr}
+                  data-nav-direction="next"
+                  title="Next resource"
+                  aria-label="Next resource"${nextDisabled}
+                >${renderIcon("arrow-right", "resource-nav-icon")}</button>
+              ` : ""}
               ${(resourceDef?.allowBrowseFile ?? true) ? `
                 <button
                   class="resource-browse-btn"
@@ -580,4 +628,3 @@ export function formatParamValue(value: number, unit?: string, labels?: string[]
   }
   return value.toFixed(2);
 }
-

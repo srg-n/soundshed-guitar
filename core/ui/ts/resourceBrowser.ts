@@ -181,6 +181,16 @@ interface ResourceImportedDetail {
   filePath?: string;
 }
 
+interface ResourceNavigationResult {
+  resourceId?: string;
+  filePath?: string;
+}
+
+interface ResourceNavigationState {
+  resourceType: ResourceType;
+  items: ResourceNavigationResult[];
+}
+
 export class ResourceBrowserModal {
   private initialized = false;
   private options: ResourceBrowserOptions | null = null;
@@ -248,6 +258,9 @@ export class ResourceBrowserModal {
   private folderListing: FolderListing | null = null;
   private folderLoading = false;
   private expandedFolderItemPath: string | null = null;
+  private libraryNavigationState: ResourceNavigationState | null = null;
+  private folderNavigationState: ResourceNavigationState | null = null;
+  private lastNavigationView: "library" | "folder" | null = null;
   
   // Tone3000 tab elements
   private tone3000ModeSearchTab: HTMLButtonElement | null = null;
@@ -1386,6 +1399,18 @@ export class ResourceBrowserModal {
       return (a.filePath ?? "").localeCompare(b.filePath ?? "");
     });
     
+    this.libraryNavigationState = {
+      resourceType,
+      items: filtered.map((res) => ({ resourceId: res.id })),
+    };
+    this.lastNavigationView = "library";
+    document.dispatchEvent(new CustomEvent("resource-browser:navigation-cache-updated", {
+      detail: {
+        resourceType,
+        view: "library",
+      },
+    }));
+
     if (!filtered.length) {
       this.libraryList.innerHTML = `<div class="results-empty resource-browser-empty">No ${resourceType === "ir" ? "IRs" : "models"} match the current filters.</div>`;
       return;
@@ -2845,6 +2870,26 @@ export class ResourceBrowserModal {
       })
       : filesByQuery;
 
+    this.folderNavigationState = {
+      resourceType: this.options?.resourceType ?? "nam",
+      items: files
+        .filter((file) => file.resourceType === this.options?.resourceType)
+        .map((file) => {
+          const match = this.folderFileLibraryMatch(file);
+          return {
+            resourceId: match.id || file.libraryId || "",
+            filePath: file.path,
+          };
+        }),
+    };
+    this.lastNavigationView = "folder";
+    document.dispatchEvent(new CustomEvent("resource-browser:navigation-cache-updated", {
+      detail: {
+        resourceType: this.options?.resourceType ?? "nam",
+        view: "folder",
+      },
+    }));
+
     if (this.folderStatus) {
       const parts: string[] = [
         `<span class="resource-browser-status-count">${listing.dirs.length} folder${listing.dirs.length === 1 ? "" : "s"}</span>`,
@@ -3104,6 +3149,43 @@ export class ResourceBrowserModal {
     }
     this.updateSelectButtonState();
     this.renderFolderList();
+  }
+
+  public getAdjacentResourceSelection(
+    resourceType: ResourceType,
+    currentResourceId: string,
+    currentFilePath: string,
+    offset: number,
+  ): ResourceNavigationResult | null {
+    const state = this.lastNavigationView === "folder"
+      ? this.folderNavigationState
+      : this.lastNavigationView === "library"
+        ? this.libraryNavigationState
+        : null;
+    if (!state || state.resourceType !== resourceType || !state.items.length) {
+      return null;
+    }
+
+    const currentKeys = this.lastNavigationView === "folder"
+      ? [currentFilePath, currentResourceId]
+      : [currentResourceId, currentFilePath];
+    const currentIndex = state.items.findIndex((item) => currentKeys.some((key) => (
+      key
+      && (item.filePath === key || item.resourceId === key)
+    )));
+    if (currentIndex < 0) {
+      return null;
+    }
+
+    const nextIndex = Math.max(0, Math.min(state.items.length - 1, currentIndex + offset));
+    if (nextIndex === currentIndex) {
+      return null;
+    }
+
+    const nextItem = state.items[nextIndex];
+    return this.lastNavigationView === "folder"
+      ? { filePath: nextItem.filePath, resourceId: nextItem.resourceId }
+      : { resourceId: nextItem.resourceId, filePath: nextItem.filePath };
   }
 
   private confirmFolderSelection(path: string): void {

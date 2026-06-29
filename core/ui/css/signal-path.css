@@ -2037,6 +2037,19 @@
   gap: 10px;
 }
 
+.default-effect-shell .resource-nav-btn,
+.custom-layout-resource-selector .resource-nav-btn {
+  border-radius: 10px;
+  border-color: rgba(192, 203, 229, 0.16);
+  background: linear-gradient(180deg, rgba(72, 79, 100, 0.9) 0%, rgba(38, 43, 57, 0.96) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.default-effect-shell .resource-nav-btn:hover,
+.custom-layout-resource-selector .resource-nav-btn:hover {
+  border-color: rgba(255, 190, 120, 0.36);
+}
+
 .default-effect-shell-inline-note {
   margin: 8px 0 2px;
   padding: 8px 10px;
