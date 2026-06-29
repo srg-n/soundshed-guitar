@@ -1205,6 +1205,56 @@ function getNodeArchitectureBadge(node: GraphNode): string {
   return "";
 }
 
+function hasNamCalibrationMetadataValue(value: string | undefined): boolean {
+  if (typeof value !== "string") {
+    return false;
+  }
+  const trimmed = value.trim();
+  if (!trimmed.length) {
+    return false;
+  }
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed);
+}
+
+function isNodeFullyCalibratedFromNamMetadata(node: GraphNode): boolean {
+  if (!isNeuralModelNode(node)) {
+    return false;
+  }
+
+  const resources = Array.isArray((node as unknown as { resources?: unknown[] }).resources)
+    ? (node as unknown as { resources?: unknown[] }).resources ?? []
+    : [];
+  const resourceCount = Math.max(1, resources.length);
+
+  let modelsWithCalibration = 0;
+  let consideredModels = 0;
+  for (let index = 0; index < resourceCount; index += 1) {
+    const current = getNodeResourceAtIndex(node, index);
+    if (!current.id) {
+      continue;
+    }
+    consideredModels += 1;
+    const resource = getLibraryResource("nam", current.id);
+    const metadata = resource?.metadata ?? {};
+    const hasInputCalibration = hasNamCalibrationMetadataValue(metadata.inputLevelDbu);
+    const hasOutputCalibration = hasNamCalibrationMetadataValue(metadata.outputLevelDbu);
+    if (hasInputCalibration && hasOutputCalibration) {
+      modelsWithCalibration += 1;
+    }
+  }
+
+  return consideredModels > 0 && modelsWithCalibration === consideredModels;
+}
+
+function getNodeNamCalibrationMetadataChip(node: GraphNode): string {
+  if (!isNodeFullyCalibratedFromNamMetadata(node)) {
+    return "";
+  }
+
+  return `<span class="default-effect-shell-chip default-effect-shell-chip-calibration default-effect-shell-chip-calibration-complete" title="Loaded model includes both input and output calibration metadata (inputLevelDbu/outputLevelDbu).">Calibrated</span>`;
+}
+
 function getMissingResourceEntries(node: GraphNode): Array<{ resourceType?: string; resourceId?: string; filePath?: string }> {
   const typeInfo = getNodeEffectInfo(node);
   const backendMissing = (uiState.missingNodeResources ?? []).filter((entry) => entry.nodeId === node.id);
@@ -3463,6 +3513,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
   const shellStatusLabel = isNodeBypassed(node) ? "BYPASSED" : "ENABLED";
   const shellBypassTitle = isNodeBypassed(node) ? "Enable effect" : "Bypass effect";
   const architectureBadge = getNodeArchitectureBadge(node);
+  const calibrationMetadataChip = getNodeNamCalibrationMetadataChip(node);
   const shellBlendId = getBlendState(node)?.blend?.id || "";
   const fullRigCabModelNote = shouldShowFullRigCabModelNote(node, preset)
     ? `<div class="default-effect-shell-inline-note" role="status" aria-live="polite">Signal chain already includes a Cabinet Model (a "Full Rig").</div>`
@@ -3583,6 +3634,7 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
           </div>
           <div class="default-effect-shell-meta" aria-label="Module status">
             ${architectureBadge ? `<span class="default-effect-shell-chip default-effect-shell-chip-architecture" title="Loaded model architecture">${architectureBadge}</span>` : ""}
+            ${calibrationMetadataChip}
             <button
               class="default-effect-shell-chip default-effect-shell-chip-status node-bypass-btn ${isNodeBypassed(node) ? "bypassed" : ""}"
               data-node-id="${node.id}"
