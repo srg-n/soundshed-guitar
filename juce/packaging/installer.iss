@@ -38,9 +38,11 @@ ArchitecturesAllowed=x64compatible
 #endif
 AppName={#ProductName}
 OutputBaseFilename={#ProductName}-{#Version}-Windows
+SetupIconFile="..\Builds\{#ProjectName}_artefacts\JuceLibraryCode\icon.ico"
 AppCopyright=Copyright (C) {#Year} {#Publisher}
 AppPublisher={#Publisher}
 AppVersion={#Version}
+VersionInfoVersion={#Version}
 DefaultDirName="{#CommonFiles}\VST3\{#ProductName}.vst3"
 DisableDirPage=yes
 
