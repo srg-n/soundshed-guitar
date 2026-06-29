@@ -934,6 +934,7 @@
   flex-direction: column;
   overflow: hidden;
   padding: 0;
+  position: relative;
 }
 
 .resource-browser-tabs {
@@ -957,6 +958,59 @@
 
 .resource-browser-tab-panel.active {
   display: flex;
+}
+
+.resource-browser-edit-popover {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.38);
+  z-index: 2;
+}
+
+.resource-browser-edit-popover-card {
+  width: min(420px, 92%);
+  border-radius: 10px;
+  border: 1px solid var(--border-browser);
+  background: var(--modal-bg-raised);
+  box-shadow: var(--shadow-lg);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.resource-browser-edit-popover-header h4 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--modal-text);
+}
+
+.resource-browser-edit-popover-body {
+  display: grid;
+  gap: 6px;
+}
+
+.resource-browser-edit-popover-body label {
+  font-size: 11px;
+  color: var(--modal-text-secondary);
+}
+
+.resource-browser-edit-popover-body input {
+  border: 1px solid var(--border-browser);
+  border-radius: 6px;
+  background: var(--bg-browser-input);
+  color: var(--modal-text);
+  padding: 7px 9px;
+  font-size: 12px;
+}
+
+.resource-browser-edit-popover-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .resource-browser-filters {
@@ -983,6 +1037,41 @@
 
 .resource-browser-filters select {
   min-width: 140px;
+}
+
+.resource-browser-library-favorites-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--border-browser);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-browser-input);
+}
+
+.resource-browser-library-favorites-tab {
+  height: 30px;
+  padding: 0 12px;
+  border: none;
+  background: transparent;
+  color: var(--modal-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.resource-browser-library-favorites-tab + .resource-browser-library-favorites-tab {
+  border-left: 1px solid var(--border-browser);
+}
+
+.resource-browser-library-favorites-tab:hover {
+  background: var(--bg-browser-hover);
+  color: var(--modal-text);
+}
+
+.resource-browser-library-favorites-tab.active {
+  background: var(--bg-browser-selected);
+  color: var(--modal-text);
 }
 
 .resource-browser-status {
@@ -1031,7 +1120,7 @@
   gap: 12px;
   padding: 10px 12px;
   border-radius: 8px;
-  border: 1px solid var(--border-browser);
+  border: none;
   background: var(--bg-browser-card);
   cursor: pointer;
   transition: all 0.2s ease;
@@ -1117,26 +1206,10 @@
   white-space: nowrap;
 }
 
-.resource-browser-item-select {
-  padding: 6px 12px;
-  border-radius: 6px;
-  border: none;
-  background: var(--bg-browser-input);
-  color: var(--modal-text);
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.resource-browser-item-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.resource-browser-item-copy-path {
+.resource-browser-action-icon-btn {
   width: 28px;
   height: 28px;
+  padding: 0;
   border-radius: 6px;
   border: 1px solid var(--border-browser);
   background: var(--bg-browser-input);
@@ -1148,14 +1221,26 @@
   transition: all 0.2s;
 }
 
-.resource-browser-item-copy-path:hover {
+.resource-browser-action-icon-btn:hover {
   background: var(--bg-browser-hover);
   color: var(--modal-text);
 }
 
-.resource-browser-item-copy-path svg {
-  width: 14px;
-  height: 14px;
+.resource-browser-item-actions {
+  display: grid;
+  grid-template-columns: repeat(5, 30px);
+  align-items: center;
+  gap: 6px;
+  justify-content: end;
+}
+
+.resource-browser-folder-dir-row .resource-browser-item-actions {
+  grid-template-columns: minmax(72px, auto);
+}
+
+.resource-browser-item-action-spacer {
+  width: 30px;
+  height: 30px;
 }
 
 .resource-browser-item-select:hover {
@@ -1163,9 +1248,20 @@
   color: white;
 }
 
-.resource-browser-item.is-selected .resource-browser-item-select {
+.resource-browser-item-select {
+  justify-self: end;
+}
+
+.resource-browser-item-select svg {
+  width: 14px;
+  height: 14px;
+}
+
+.resource-browser-item.is-selected .resource-browser-item-select,
+.resource-browser-item-select.is-active {
   background: var(--color-primary);
   color: white;
+  border-color: var(--color-primary);
 }
 
 /* Library entry wrapper — groups item row + collapsible details panel */
@@ -1182,18 +1278,7 @@
 
 /* Details info button */
 .resource-browser-item-details-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  border: 1px solid var(--border-browser);
-  background: var(--bg-browser-input);
-  color: var(--modal-text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
   font-size: 13px;
-  transition: all 0.2s;
 }
 
 .resource-browser-item-details-btn:hover,
@@ -1204,18 +1289,7 @@
 
 /* Favorites toggle button in row */
 .resource-browser-item-fav-toggle {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  border: 1px solid var(--border-browser);
-  background: var(--bg-browser-input);
-  color: var(--modal-text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
   font-size: 14px;
-  transition: all 0.2s;
 }
 
 .resource-browser-item-fav-toggle:hover {
@@ -1263,67 +1337,42 @@
   border-color: var(--border-browser-focus);
 }
 
-/* Folder browser tab action buttons */
-.resource-browser-folder-preview,
-.resource-browser-folder-select,
-.resource-browser-folder-fav,
-.resource-browser-folder-open {
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border-browser);
-  background: var(--bg-browser-input);
+.resource-browser-folder-select-preview {
+  border-color: var(--color-primary);
   color: var(--modal-text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 12px;
-  white-space: nowrap;
-  transition: all 0.2s;
 }
 
-.resource-browser-folder-preview:hover,
-.resource-browser-folder-select:hover,
-.resource-browser-folder-fav:hover,
-.resource-browser-folder-open:hover {
-  background: var(--bg-browser-hover);
-  color: var(--modal-text);
-}
-
-.resource-browser-folder-select {
-  border-color: var(--color-primary);
-  color: var(--modal-text);
-}
-
-.resource-browser-folder-select:hover {
+.resource-browser-folder-select-preview:hover {
   background: var(--color-primary);
   color: white;
 }
 
-.resource-browser-folder-preview.is-active {
+.resource-browser-folder-select-preview.is-active {
   background: var(--color-primary);
   color: white;
   border-color: var(--color-primary);
+}
+
+.resource-browser-folder-select-preview svg {
+  width: 14px;
+  height: 14px;
 }
 
 .resource-browser-folder-fav:hover {
   color: var(--color-preset-favorite, #d8852f);
 }
 
+.resource-browser-folder-fav.is-active {
+  color: var(--color-preset-favorite, #d8852f);
+  border-color: var(--color-preset-favorite, #d8852f);
+}
+
+.resource-browser-folder-remove-btn {
+  font-size: 16px;
+}
+
 .resource-browser-folder-details-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  border: 1px solid var(--border-browser);
-  background: var(--bg-browser-input);
-  color: var(--modal-text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
   font-size: 13px;
-  transition: all 0.2s;
 }
 
 .resource-browser-folder-details-btn:hover,
@@ -1738,15 +1787,67 @@
   font-style: italic;
 }
 
+.resource-browser-local-path-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.resource-browser-local-path-copy-btn {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--modal-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.resource-browser-local-path-copy-btn:hover {
+  color: var(--modal-text);
+  opacity: 1;
+}
+
+.resource-browser-local-path-copy-btn svg {
+  width: 10px;
+  height: 10px;
+}
+
 .resource-browser-local-path {
   display: inline-block;
+  min-width: 0;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace);
+  color: var(--modal-text-muted);
+  opacity: 0.95;
+}
+
+.resource-browser-creator {
   color: var(--modal-text-secondary);
-  opacity: 0.9;
+}
+
+.resource-browser-tag-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.resource-browser-tag-pill {
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-browser), transparent 14%);
+  background: color-mix(in srgb, var(--bg-browser-input), transparent 20%);
+  color: var(--modal-text-secondary);
+  font-size: 9px;
+  line-height: 1.4;
 }
 
 .blend-model-row button {

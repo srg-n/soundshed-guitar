@@ -5646,6 +5646,7 @@ void PluginController::HandleImportRemoteResourceRequest(const nlohmann::json& p
     const std::string fileName = payload.value("fileName", "");
     const std::string hash = payload.value("hash", "");
     const nlohmann::json metadataPayload = payload.value("metadata", nlohmann::json::object());
+    const nlohmann::json tagsPayload = payload.value("tags", nlohmann::json::array());
 
     if (resourceType.empty() || resourceId.empty() || data.empty())
     {
@@ -5699,6 +5700,17 @@ void PluginController::HandleImportRemoteResourceRequest(const nlohmann::json& p
             else if (value.is_boolean()) resource.metadata[entry.key()] = value.get<bool>() ? "true" : "false";
         }
     }
+    if (tagsPayload.is_array())
+    {
+        for (const auto& tagValue : tagsPayload)
+        {
+            if (!tagValue.is_string())
+                continue;
+            const auto tag = tagValue.get<std::string>();
+            if (!tag.empty())
+                resource.tags.push_back(tag);
+        }
+    }
 
     if (resourceType == "nam")
         EnrichNamResourceMetadata(resource, targetPath);
@@ -5734,6 +5746,7 @@ std::optional<LibraryResource> PluginController::SaveLocalLibraryResource(const 
     const std::string subfolder = payload.value("subfolder", "");
     const std::string providedHash = payload.value("hash", "");
     const nlohmann::json metadataPayload = payload.value("metadata", nlohmann::json::object());
+    const nlohmann::json tagsPayload = payload.value("tags", nlohmann::json::array());
     const std::string payloadPluginName = payload.value("pluginName", "");
     const std::string payloadPluginManufacturer = payload.value("pluginManufacturer", "");
     const std::string payloadPluginStableId = payload.value("pluginStableId", "");
@@ -5977,6 +5990,21 @@ std::optional<LibraryResource> PluginController::SaveLocalLibraryResource(const 
     resource.hash = resolvedHash;
     upsertMetadata(resource);
     resource.metadata["sourceFileName"] = resolvedPath.filename().string();
+    if (payload.contains("tags"))
+    {
+        resource.tags.clear();
+        if (tagsPayload.is_array())
+        {
+            for (const auto& tagValue : tagsPayload)
+            {
+                if (!tagValue.is_string())
+                    continue;
+                const auto tag = tagValue.get<std::string>();
+                if (!tag.empty())
+                    resource.tags.push_back(tag);
+            }
+        }
+    }
 
     // Extract all NAM metadata fields from the model file header.
     if (resourceType == "nam")
@@ -6359,6 +6387,21 @@ void PluginController::HandleUpdateLibraryResourceRequest(const nlohmann::json& 
         updated.category = payload.value("category", updated.category);
     if (payload.contains("description"))
         updated.description = payload.value("description", updated.description);
+    if (payload.contains("tags"))
+    {
+        updated.tags.clear();
+        if (payload["tags"].is_array())
+        {
+            for (const auto& tagValue : payload["tags"])
+            {
+                if (!tagValue.is_string())
+                    continue;
+                const auto tag = tagValue.get<std::string>();
+                if (!tag.empty())
+                    updated.tags.push_back(tag);
+            }
+        }
+    }
     if (payload.contains("metadata") && payload["metadata"].is_object())
     {
         updated.metadata.clear();
@@ -10391,6 +10434,7 @@ void PluginController::BroadcastState()
         entry["name"] = resource.name;
         entry["category"] = resource.category;
         entry["description"] = resource.description;
+        entry["tags"] = resource.tags;
         entry["filePath"] = resource.filePath.empty() ? "" : resource.filePath.string();
         entry["hash"] = resource.hash;
         if (!resource.metadata.empty())

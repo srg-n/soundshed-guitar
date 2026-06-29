@@ -380,7 +380,7 @@
 }
 
 .equipment-library-filters-primary {
-  grid-template-columns: minmax(220px, 1fr) 180px;
+  grid-template-columns: minmax(220px, 1fr) 180px 180px;
 }
 
 .equipment-library-filters-advanced {
@@ -403,6 +403,26 @@
   font-size: 11px;
   color: var(--text-secondary);
   margin-bottom: 10px;
+}
+
+.equipment-library-tag-filter-bar {
+  margin-bottom: 12px;
+}
+
+.equipment-library-item-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.equipment-library-item-tag {
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-browser), transparent 18%);
+  background: color-mix(in srgb, var(--bg-browser-input), transparent 18%);
+  color: var(--text-secondary);
+  font-size: 9px;
+  line-height: 1.4;
 }
 
 .results {
@@ -456,8 +476,8 @@
 .results-item-path {
   margin-top: 6px;
   font-size: 10px;
-  color: var(--text-secondary);
-  opacity: 0.85;
+  color: var(--text-muted);
+  opacity: 0.95;
   word-break: break-all;
 }
 

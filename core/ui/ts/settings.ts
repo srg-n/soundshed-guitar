@@ -106,6 +106,8 @@ const libraryTypeSelect = document.getElementById("equipment-library-type") as H
 const librarySourceSelect = document.getElementById("equipment-library-source") as HTMLSelectElement | null;
 const libraryViewSelect = document.getElementById("equipment-library-view") as HTMLSelectElement | null;
 const libraryCategorySelect = document.getElementById("equipment-library-category") as HTMLSelectElement | null;
+const libraryCreatorSelect = document.getElementById("equipment-library-creator") as HTMLSelectElement | null;
+const libraryTagFilterBar = document.getElementById("equipment-library-tag-filters");
 const libraryCleanupSelect = document.getElementById("equipment-library-cleanup-scope") as HTMLSelectElement | null;
 const libraryCleanupButton = document.getElementById("equipment-library-cleanup-btn") as HTMLButtonElement | null;
 const libraryCleanupRow = document.getElementById("equipment-library-cleanup-row") as HTMLElement | null;
@@ -159,6 +161,8 @@ let equipmentTabsInitialized = false;
 let themeSelectInitialized = false;
 let zoomControlsInitialized = false;
 let libraryTabsInitialized = false;
+let libraryCreatorFilter = "all";
+let libraryActiveTagFilters = new Set<string>();
 let userInputCalibrationControlsInitialized = false;
 let dspLevelTargetsInitialized = false;
 let libraryStateRequestedAt = 0;
@@ -677,6 +681,34 @@ export function initLibraryFilters(): void {
   librarySourceSelect?.addEventListener("change", () => renderLibraryView());
   libraryViewSelect?.addEventListener("change", () => renderLibraryView());
   libraryCategorySelect?.addEventListener("change", () => renderLibraryView());
+  libraryCreatorSelect?.addEventListener("change", () => {
+    libraryCreatorFilter = libraryCreatorSelect?.value ?? "all";
+    renderLibraryView();
+  });
+  libraryTagFilterBar?.addEventListener("click", (event) => {
+    const target = event.target as HTMLElement | null;
+    const chip = target?.closest(".preset-tag-filter-chip") as HTMLButtonElement | null;
+    if (!chip) {
+      return;
+    }
+    const tag = chip.dataset.tag ?? "";
+    if (!tag) {
+      libraryActiveTagFilters.clear();
+      renderLibraryView();
+      return;
+    }
+    if (tag === "__clear__") {
+      libraryActiveTagFilters.clear();
+      renderLibraryView();
+      return;
+    }
+    if (libraryActiveTagFilters.has(tag)) {
+      libraryActiveTagFilters.delete(tag);
+    } else {
+      libraryActiveTagFilters.add(tag);
+    }
+    renderLibraryView();
+  });
   bindLibraryActions();
 }
 
@@ -1826,6 +1858,7 @@ type LibraryArchiveResource = {
   type: string;
   fileName: string;
   hash?: string;
+  tags?: string[];
 };
 
 type LibraryArchive = {
@@ -2017,6 +2050,7 @@ async function exportLibraryArchive(): Promise<void> {
       type: entry.type,
       fileName,
       hash,
+      tags: entry.resource.tags ?? [],
     });
   }
 
@@ -2052,9 +2086,69 @@ type LibraryItem = {
   category: string;
   description: string;
   filePath: string;
+  tags?: string[];
   metadata?: Record<string, string>;
   fileMissing?: boolean;
 };
+
+function normalizeLibraryFilterValue(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function splitLibraryTags(raw: string): string[] {
+  return raw
+    .split(/[,;/|]/g)
+    .map((tag) => tag.trim())
+    .filter((tag) => Boolean(tag));
+}
+
+function getLibraryItemTags(item: LibraryItem): string[] {
+  const tags = new Set<string>();
+
+  (item.tags ?? []).forEach((tag) => {
+    const value = tag.trim();
+    if (value) {
+      tags.add(value);
+    }
+  });
+
+  const metadataTags = item.metadata?.tags;
+  if (typeof metadataTags === "string") {
+    splitLibraryTags(metadataTags).forEach((tag) => tags.add(tag));
+  }
+
+  return Array.from(tags);
+}
+
+function getLibraryItemCreator(item: LibraryItem): string {
+  const metadata = item.metadata ?? {};
+  return (
+    metadata.creatorName
+    ?? metadata.authorUsername
+    ?? metadata.modeledBy
+    ?? metadata.creator
+    ?? metadata.provider
+    ?? ""
+  ).trim();
+}
+
+function getLibraryItemFacets(items: LibraryItem[]): { tags: string[]; creators: string[] } {
+  const tags = new Set<string>();
+  const creators = new Set<string>();
+
+  items.forEach((item) => {
+    getLibraryItemTags(item).forEach((tag) => tags.add(tag));
+    const creator = getLibraryItemCreator(item);
+    if (creator) {
+      creators.add(creator);
+    }
+  });
+
+  return {
+    tags: Array.from(tags).sort((a, b) => a.localeCompare(b)),
+    creators: Array.from(creators).sort((a, b) => a.localeCompare(b)),
+  };
+}
 
 function getLibraryItems(): LibraryItem[] {
   const items: LibraryItem[] = [];
@@ -2103,12 +2197,41 @@ function getLibraryItems(): LibraryItem[] {
         category: entry.category ?? "Imported",
         description: entry.description ?? "",
         filePath: entryFilePath,
+        tags: entry.tags ?? undefined,
         metadata: entry.metadata ?? { source: "imported" },
         fileMissing: entry.fileMissing ?? entryFilePath.length === 0,
       });
     });
   });
   return dedupeLibraryItems(items);
+}
+
+function renderLibraryFilterFacets(items: LibraryItem[]): void {
+  const { tags, creators } = getLibraryItemFacets(items);
+
+  if (libraryCreatorSelect) {
+    const current = libraryCreatorFilter || "all";
+    libraryCreatorSelect.innerHTML = [
+      `<option value="all">All Creators</option>`,
+      ...creators.map((creator) => `<option value="${escapeHtml(creator)}">${escapeHtml(creator)}</option>`),
+    ].join("");
+    libraryCreatorSelect.value = creators.includes(current) ? current : "all";
+    libraryCreatorFilter = libraryCreatorSelect.value;
+  }
+
+  if (libraryTagFilterBar) {
+    if (!tags.length) {
+      libraryTagFilterBar.innerHTML = `<span class="results-empty">No tags available for these resources.</span>`;
+      return;
+    }
+
+    const activeTags = libraryActiveTagFilters;
+    libraryTagFilterBar.innerHTML = [
+      `<button class="preset-tag-filter-chip${activeTags.size === 0 ? " active" : ""}" type="button" data-tag="">All Tags</button>`,
+      ...tags.map((tag) => `<button class="preset-tag-filter-chip${activeTags.has(tag) ? " active" : ""}" type="button" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`),
+      activeTags.size > 0 ? `<button class="preset-tag-filter-chip" type="button" data-tag="__clear__">Clear</button>` : "",
+    ].join("");
+  }
 }
 
 function renderLibraryView(): void {
@@ -2139,6 +2262,8 @@ function renderLibraryView(): void {
 
   updateCategoryOptions(typeFilteredItems);
   const categoryFilter = libraryCategorySelect?.value ?? "all";
+  renderLibraryFilterFacets(typeFilteredItems);
+  const creatorFilter = libraryCreatorSelect?.value ?? libraryCreatorFilter ?? "all";
 
   let filtered = typeFilteredItems;
   if (categoryFilter !== "all") {
@@ -2152,9 +2277,29 @@ function renderLibraryView(): void {
     });
   }
 
+  if (creatorFilter !== "all") {
+    const normalizedCreator = normalizeLibraryFilterValue(creatorFilter);
+    filtered = filtered.filter((item) => normalizeLibraryFilterValue(getLibraryItemCreator(item)) === normalizedCreator);
+  }
+
+  if (libraryActiveTagFilters.size > 0) {
+    filtered = filtered.filter((item) => {
+      const resourceTags = getLibraryItemTags(item).map(normalizeLibraryFilterValue);
+      return Array.from(libraryActiveTagFilters).every((tag) => resourceTags.includes(normalizeLibraryFilterValue(tag)));
+    });
+  }
+
   if (query) {
     filtered = filtered.filter((item) => {
-      const haystack = `${item.name} ${item.id} ${item.category} ${item.description} ${item.filePath}`.toLowerCase();
+      const haystack = [
+        item.name,
+        item.id,
+        item.category,
+        item.description,
+        item.filePath,
+        getLibraryItemCreator(item),
+        ...getLibraryItemTags(item),
+      ].join(" ").toLowerCase();
       return haystack.includes(query);
     });
   }
@@ -2313,6 +2458,7 @@ async function importDroppedLibraryFile(file: File): Promise<void> {
     fileName: sanitizeFilename(file.name),
     name: label,
     category: "Local",
+    tags: [],
     hash,
     metadata: {
       provider: "local",
@@ -2338,11 +2484,18 @@ async function promptEditLibraryResource(item: LibraryItem): Promise<void> {
   if (description === null) {
     return;
   }
+  const tagsText = window.prompt("Tags (comma-separated)", (item.tags ?? []).join(", "));
+  if (tagsText === null) {
+    return;
+  }
   const metadataText = window.prompt("Metadata JSON", JSON.stringify(item.metadata ?? {}, null, 2));
   if (metadataText === null) {
     return;
   }
 
+  const tags = tagsText.trim()
+    ? Array.from(new Set(splitLibraryTags(tagsText)))
+    : [];
   let metadata: Record<string, string> = {};
   const trimmedMetadata = metadataText.trim();
   if (trimmedMetadata) {
@@ -2369,6 +2522,7 @@ async function promptEditLibraryResource(item: LibraryItem): Promise<void> {
     name: name.trim() || item.id,
     category: category.trim(),
     description,
+    tags,
     metadata,
   });
 }
@@ -2403,6 +2557,7 @@ async function replaceLibraryResourceFromInput(item: LibraryItem, input: HTMLInp
     name: item.name,
     description: item.description,
     category: item.category,
+    tags: item.tags ?? [],
     fileName: sanitizeFilename(file.name),
     data,
     hash,
@@ -2538,6 +2693,12 @@ function renderLibraryItemRow(item: LibraryItem, usedResources: Set<string>): st
   const categoryLabel = item.category ? item.category : "Uncategorized";
   const originLabel = inferResourceOrigin(item.filePath, item.metadata);
   const metadataBadges = buildMetadataBadges(item.metadata);
+  const creator = getLibraryItemCreator(item);
+  const creatorBadge = creator ? `<span>by: ${escapeHtml(creator)}</span>` : "";
+  const tags = getLibraryItemTags(item);
+  const tagsBadge = tags.length
+    ? `<span class="equipment-library-item-tags">${tags.map((tag) => `<span class="equipment-library-item-tag">${escapeHtml(tag)}</span>`).join("")}</span>`
+    : "";
   const missingBadge = item.fileMissing ? "<span class=\"equipment-library-missing\">Missing File</span>" : "";
   const browseLabel = originLabel === "Local"
     ? (item.fileMissing ? "Set Path" : "Change Path")
@@ -2561,9 +2722,11 @@ function renderLibraryItemRow(item: LibraryItem, usedResources: Set<string>): st
           <span>${escapeHtml(typeLabel)}</span>
           <span>${escapeHtml(categoryLabel)}</span>
           <span>${escapeHtml(originLabel)}</span>
+          ${creatorBadge}
           ${missingBadge}
           <span>${escapeHtml(item.id)}</span>
           ${metadataBadges}
+          ${tagsBadge}
         </div>
         <div class="results-item-path equipment-library-item-path" title="${escapeHtml(item.filePath)}">${escapeHtml(item.filePath || "(no file path)")}</div>
       </div>

@@ -96,6 +96,7 @@ function upsertImportedResourceInUiState(info: { id?: string; name?: string; res
     name,
     category: existing?.category ?? "Uncategorized",
     description: existing?.description ?? "",
+    tags: existing?.tags ?? [],
     filePath,
     hash: existing?.hash,
     metadata: existing?.metadata,

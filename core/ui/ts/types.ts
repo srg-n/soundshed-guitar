@@ -255,6 +255,7 @@ export interface LibraryResource {
   description: string;
   filePath: string;
   hash?: string;
+  tags?: string[];
   metadata?: Record<string, string>;
   fileMissing?: boolean;
 }

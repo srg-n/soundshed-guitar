@@ -19,9 +19,16 @@
               <select id="resource-browser-library-category">
                 <option value="all">All Categories</option>
               </select>
-              <button class="btn btn-secondary" id="resource-browser-library-favorites-toggle" type="button" title="Filter by favourites">☆ Favourites</button>
-              <button class="btn btn-secondary" id="resource-browser-library-browse" type="button">Local File..</button>
+              <select id="resource-browser-library-creator">
+                <option value="all">All Creators</option>
+              </select>
+              <div class="resource-browser-library-favorites-tabs" role="tablist" aria-label="Favourite filter">
+                <button class="resource-browser-library-favorites-tab active" id="resource-browser-library-favorites-all" type="button" aria-pressed="true">All</button>
+                <button class="resource-browser-library-favorites-tab" id="resource-browser-library-favorites-only" type="button" aria-pressed="false">Favourites</button>
+              </div>
+              <button class="btn btn-secondary" id="resource-browser-library-browse" type="button">File...</button>
             </div>
+            <div class="resource-browser-tag-filter-bar preset-tag-filter-bar" id="resource-browser-library-tag-filters"></div>
             <div id="resource-browser-library-list" class="results results--compact resource-browser-list"></div>
           </div>
 
@@ -32,13 +39,14 @@
                 <option value="">No folder selected</option>
               </select>
               <button class="btn btn-secondary" id="resource-browser-folder-add" type="button" title="Add a folder">+ Add Folder</button>
-              <button class="btn btn-secondary" id="resource-browser-folder-remove" type="button" title="Remove the selected folder">Remove</button>
+              <button class="resource-browser-action-icon-btn resource-browser-folder-remove-btn" id="resource-browser-folder-remove" type="button" title="Remove the selected folder" aria-label="Remove folder">🗑️</button>
               <input type="text" id="resource-browser-folder-search" placeholder="Filter files..." />
             </div>
             <div class="resource-browser-folder-breadcrumb">
               <button class="btn btn-secondary" id="resource-browser-folder-up" type="button" title="Up one level">↑ Up</button>
               <span id="resource-browser-folder-path" class="resource-browser-folder-path"></span>
             </div>
+            <div class="resource-browser-tag-filter-bar preset-tag-filter-bar" id="resource-browser-folder-tag-filters"></div>
             <div id="resource-browser-folder-status" class="resource-browser-status"></div>
             <div id="resource-browser-folder-list" class="results results--compact resource-browser-list resource-browser-folder-list"></div>
           </div>
@@ -84,10 +92,30 @@
              </button>
             </div>
           </div>
+
+          <div id="resource-browser-edit-popover" class="resource-browser-edit-popover" hidden>
+            <div class="resource-browser-edit-popover-card" role="dialog" aria-modal="true" aria-labelledby="resource-browser-edit-title">
+              <div class="resource-browser-edit-popover-header">
+                <h4 id="resource-browser-edit-title">Edit resource</h4>
+              </div>
+              <div class="resource-browser-edit-popover-body">
+                <label for="resource-browser-edit-name">Name</label>
+                <input id="resource-browser-edit-name" type="text" placeholder="Resource name" />
+                <label for="resource-browser-edit-category">Category</label>
+                <input id="resource-browser-edit-category" type="text" placeholder="Category" />
+                <label for="resource-browser-edit-tags">Tags</label>
+                <input id="resource-browser-edit-tags" type="text" placeholder="Comma-separated tags" />
+              </div>
+              <div class="resource-browser-edit-popover-actions">
+                <button class="btn btn-secondary" id="resource-browser-edit-cancel" type="button">Cancel</button>
+                <button class="btn btn-primary" id="resource-browser-edit-save" type="button">Save</button>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" id="resource-browser-cancel">Cancel</button>
-          <button class="btn btn-primary" id="resource-browser-select" disabled>Select</button>
+          <button class="btn btn-primary" id="resource-browser-select" disabled>OK</button>
         </div>
       </div>
     </div>

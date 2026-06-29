@@ -28,7 +28,7 @@ import {
   parseTone3000Pagination,
 } from "./tone3000Api.js";
 import { fetchTone3000Models, getTone3000ImageUrl } from "./tone3000Shared.js";
-import { getCheckmarkSvg, getPlaySvg, getStopSvg } from "./iconAssets.js";
+import { getPlaySvg, getStopSvg } from "./iconAssets.js";
 
 type ResourceBrowserOptions = {
   resourceType: "nam" | "ir";
@@ -55,6 +55,67 @@ interface PreviewState {
 interface PreviewLoadingState {
   toneId: string;
   modelId: string;
+}
+
+function normalizeFilterValue(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function splitTagValues(raw: string): string[] {
+  return raw
+    .split(/[,;/|]/g)
+    .map((tag) => tag.trim())
+    .filter((tag) => Boolean(tag));
+}
+
+function getResourceTags(resource: Pick<LibraryResource, "tags" | "metadata">): string[] {
+  const collected = new Set<string>();
+
+  if (Array.isArray(resource.tags)) {
+    resource.tags.forEach((tag) => {
+      const value = tag.trim();
+      if (value) {
+        collected.add(value);
+      }
+    });
+  }
+
+  const metadataTags = resource.metadata?.tags;
+  if (typeof metadataTags === "string") {
+    splitTagValues(metadataTags).forEach((tag) => collected.add(tag));
+  }
+
+  return Array.from(collected);
+}
+
+function getResourceCreator(resource: Pick<LibraryResource, "metadata">): string {
+  const metadata = resource.metadata ?? {};
+  return (
+    metadata.creatorName
+    ?? metadata.authorUsername
+    ?? metadata.modeledBy
+    ?? metadata.creator
+    ?? metadata.provider
+    ?? ""
+  ).trim();
+}
+
+function getResourceLibraryFacets(resources: LibraryResource[]): { tags: string[]; creators: string[] } {
+  const tags = new Set<string>();
+  const creators = new Set<string>();
+
+  resources.forEach((resource) => {
+    getResourceTags(resource).forEach((tag) => tags.add(tag));
+    const creator = getResourceCreator(resource);
+    if (creator) {
+      creators.add(creator);
+    }
+  });
+
+  return {
+    tags: Array.from(tags).sort((a, b) => a.localeCompare(b)),
+    creators: Array.from(creators).sort((a, b) => a.localeCompare(b)),
+  };
 }
 
 const RESOURCE_FAVORITES_SETTING = "resources.favorites";
@@ -99,6 +160,8 @@ interface PersistedResourceBrowserState {
   activeTab: ResourceBrowserTab;
   librarySearch: string;
   libraryCategory: string;
+  libraryCreator: string;
+  libraryTagFilters: string[];
   libraryFavoritesOnly?: boolean;
   tone3000Search: string;
   tone3000Category: string;
@@ -136,6 +199,16 @@ export class ResourceBrowserModal {
   private closeBtn: HTMLButtonElement | null = null;
   private cancelBtn: HTMLButtonElement | null = null;
   private selectBtn: HTMLButtonElement | null = null;
+  private editPopover: HTMLElement | null = null;
+  private editNameInput: HTMLInputElement | null = null;
+  private editCategoryInput: HTMLInputElement | null = null;
+  private editTagsInput: HTMLInputElement | null = null;
+  private editSaveBtn: HTMLButtonElement | null = null;
+  private editCancelBtn: HTMLButtonElement | null = null;
+  private editingResourceId = "";
+  private editingResourceType: ResourceType | null = null;
+  private editingFolderPath = "";
+  private editingFolderResourceType: ResourceType | null = null;
   
   // Tab elements
   private tabsContainer: HTMLElement | null = null;
@@ -146,11 +219,17 @@ export class ResourceBrowserModal {
   // Library tab elements
   private librarySearch: HTMLInputElement | null = null;
   private libraryCategory: HTMLSelectElement | null = null;
-  private libraryFavoritesToggle: HTMLButtonElement | null = null;
+  private libraryCreator: HTMLSelectElement | null = null;
+  private libraryTagFilterBar: HTMLElement | null = null;
+  private libraryFavoritesAllBtn: HTMLButtonElement | null = null;
+  private libraryFavoritesOnlyBtn: HTMLButtonElement | null = null;
   private libraryFavoritesOnly = false;
   private libraryBrowseBtn: HTMLButtonElement | null = null;
   private libraryList: HTMLElement | null = null;
   private selectedResourceId: string = "";
+  private selectedFolderPath: string = "";
+  private libraryCreatorFilter = "all";
+  private libraryTagFilters: Set<string> = new Set();
 
   // Folder tab elements
   private folderRootSelect: HTMLSelectElement | null = null;
@@ -159,11 +238,13 @@ export class ResourceBrowserModal {
   private folderSearch: HTMLInputElement | null = null;
   private folderUpBtn: HTMLButtonElement | null = null;
   private folderPathLabel: HTMLElement | null = null;
+  private folderTagFilterBar: HTMLElement | null = null;
   private folderStatus: HTMLElement | null = null;
   private folderList: HTMLElement | null = null;
 
   // Folder tab state
   private folderCurrentPath = "";
+  private folderTagFilters: Set<string> = new Set();
   private folderListing: FolderListing | null = null;
   private folderLoading = false;
   private expandedFolderItemPath: string | null = null;
@@ -205,17 +286,25 @@ export class ResourceBrowserModal {
       return;
     }
 
-    // The folder tab can import resources of any type, so refresh it regardless
-    // of the node's current resource type.
-    if (this.folderList) {
-      this.renderFolderList();
-    }
-
     const importedNorm = (detail?.filePath ?? "").replace(/\\/g, "/").toLowerCase();
     const importedId = (detail?.id ?? "").trim();
+    if (importedId && importedNorm && this.folderListing) {
+      const file = this.folderListing.files.find((entry) => entry.path.replace(/\\/g, "/").toLowerCase() === importedNorm);
+      if (file) {
+        file.alreadyInLibrary = true;
+        file.libraryId = importedId;
+      }
+    }
     if (importedId && importedNorm && this.pendingFolderFavoritePaths.has(importedNorm)) {
       this.setResourceFavorite(importedId, true);
       this.pendingFolderFavoritePaths.delete(importedNorm);
+      if (this.folderListing) {
+        const file = this.folderListing.files.find((entry) => entry.path.replace(/\\/g, "/").toLowerCase() === importedNorm);
+        if (file) {
+          file.alreadyInLibrary = true;
+          file.libraryId = importedId;
+        }
+      }
     }
 
     // Complete a pending folder-tab "Select" once its import lands.
@@ -239,6 +328,12 @@ export class ResourceBrowserModal {
           return;
         }
       }
+    }
+
+    // The folder tab can import resources of any type, so refresh it regardless
+    // of the node's current resource type.
+    if (this.folderList) {
+      this.renderFolderList();
     }
 
     const importedType = detail?.resourceType;
@@ -334,32 +429,11 @@ export class ResourceBrowserModal {
 
     const usage = this.resourceUsageInfo.get(`${resourceType}:${resourceId}`);
     const isInUse = usage?.inUse ?? false;
-    const presetName = usage?.presetName ?? "";
 
     const deleteBtn = row.querySelector<HTMLButtonElement>(".resource-browser-item-delete-btn");
     if (deleteBtn) {
       deleteBtn.disabled = isInUse;
-      deleteBtn.title = isInUse
-        ? `In use by preset: ${presetName}. Remove from preset before deleting.`
-        : "Delete from resource library";
-    }
-
-    const meta = row.querySelector(".resource-browser-item-meta");
-    if (meta) {
-      const existing = meta.querySelector(".resource-browser-in-use-badge");
-      if (isInUse) {
-        if (existing) {
-          (existing as HTMLElement).title = `In use by: ${presetName}`;
-        } else {
-          const badge = document.createElement("span");
-          badge.className = "resource-browser-in-use-badge";
-          badge.title = `In use by: ${presetName}`;
-          badge.textContent = "In use";
-          meta.appendChild(badge);
-        }
-      } else if (existing) {
-        existing.remove();
-      }
+      deleteBtn.title = "Delete from resource library";
     }
   };
 
@@ -451,6 +525,12 @@ export class ResourceBrowserModal {
     this.closeBtn = document.getElementById("resource-browser-close") as HTMLButtonElement | null;
     this.cancelBtn = document.getElementById("resource-browser-cancel") as HTMLButtonElement | null;
     this.selectBtn = document.getElementById("resource-browser-select") as HTMLButtonElement | null;
+    this.editPopover = document.getElementById("resource-browser-edit-popover");
+    this.editNameInput = document.getElementById("resource-browser-edit-name") as HTMLInputElement | null;
+    this.editCategoryInput = document.getElementById("resource-browser-edit-category") as HTMLInputElement | null;
+    this.editTagsInput = document.getElementById("resource-browser-edit-tags") as HTMLInputElement | null;
+    this.editSaveBtn = document.getElementById("resource-browser-edit-save") as HTMLButtonElement | null;
+    this.editCancelBtn = document.getElementById("resource-browser-edit-cancel") as HTMLButtonElement | null;
     
     // Tab buttons and panels
     this.tabsContainer = this.modal.querySelector(".resource-browser-tabs") as HTMLElement | null;
@@ -460,7 +540,10 @@ export class ResourceBrowserModal {
     // Library tab elements
     this.librarySearch = document.getElementById("resource-browser-library-search") as HTMLInputElement | null;
     this.libraryCategory = document.getElementById("resource-browser-library-category") as HTMLSelectElement | null;
-    this.libraryFavoritesToggle = document.getElementById("resource-browser-library-favorites-toggle") as HTMLButtonElement | null;
+    this.libraryCreator = document.getElementById("resource-browser-library-creator") as HTMLSelectElement | null;
+    this.libraryTagFilterBar = document.getElementById("resource-browser-library-tag-filters");
+    this.libraryFavoritesAllBtn = document.getElementById("resource-browser-library-favorites-all") as HTMLButtonElement | null;
+    this.libraryFavoritesOnlyBtn = document.getElementById("resource-browser-library-favorites-only") as HTMLButtonElement | null;
     this.libraryBrowseBtn = document.getElementById("resource-browser-library-browse") as HTMLButtonElement | null;
     this.libraryList = document.getElementById("resource-browser-library-list");
 
@@ -471,6 +554,7 @@ export class ResourceBrowserModal {
     this.folderSearch = document.getElementById("resource-browser-folder-search") as HTMLInputElement | null;
     this.folderUpBtn = document.getElementById("resource-browser-folder-up") as HTMLButtonElement | null;
     this.folderPathLabel = document.getElementById("resource-browser-folder-path");
+    this.folderTagFilterBar = document.getElementById("resource-browser-folder-tag-filters");
     this.folderStatus = document.getElementById("resource-browser-folder-status");
     this.folderList = document.getElementById("resource-browser-folder-list");
     
@@ -494,6 +578,18 @@ export class ResourceBrowserModal {
     this.closeBtn?.addEventListener("click", () => this.close());
     this.cancelBtn?.addEventListener("click", () => this.close());
     this.selectBtn?.addEventListener("click", () => this.confirmSelection());
+    this.editSaveBtn?.addEventListener("click", () => this.saveEditPopover());
+    this.editCancelBtn?.addEventListener("click", () => this.closeEditPopover());
+    this.editPopover?.addEventListener("mousedown", (event) => {
+      if (event.target === this.editPopover) {
+        this.closeEditPopover();
+      }
+    });
+    this.editPopover?.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        this.closeEditPopover();
+      }
+    });
     
     this.modal.addEventListener("mousedown", (event) => {
       if (event.target === this.modal) {
@@ -520,14 +616,53 @@ export class ResourceBrowserModal {
       this.renderLibraryList();
       this.saveCurrentStateForResourceType();
     });
-    this.libraryFavoritesToggle?.addEventListener("click", () => {
-      this.libraryFavoritesOnly = !this.libraryFavoritesOnly;
-      this.libraryFavoritesToggle?.classList.toggle("active", this.libraryFavoritesOnly);
-      if (this.libraryFavoritesToggle) {
-        this.libraryFavoritesToggle.textContent = this.libraryFavoritesOnly ? "★ Favourites" : "☆ Favourites";
+    this.libraryCreator?.addEventListener("change", () => {
+      this.libraryCreatorFilter = this.libraryCreator?.value ?? "all";
+      this.renderLibraryList();
+      this.saveCurrentStateForResourceType();
+    });
+    this.libraryTagFilterBar?.addEventListener("click", (event) => {
+      const target = event.target as HTMLElement | null;
+      const chip = target?.closest(".preset-tag-filter-chip") as HTMLButtonElement | null;
+      if (!chip) {
+        return;
+      }
+      const tag = chip.dataset.tag ?? "";
+      if (!tag) {
+        this.libraryTagFilters.clear();
+        this.renderLibraryList();
+        this.saveCurrentStateForResourceType();
+        return;
+      }
+      if (tag === "__clear__") {
+        this.libraryTagFilters.clear();
+        this.renderLibraryList();
+        this.saveCurrentStateForResourceType();
+        return;
+      }
+      if (this.libraryTagFilters.has(tag)) {
+        this.libraryTagFilters.delete(tag);
+      } else {
+        this.libraryTagFilters.add(tag);
       }
       this.renderLibraryList();
       this.saveCurrentStateForResourceType();
+    });
+    this.libraryFavoritesAllBtn?.addEventListener("click", () => {
+      if (this.libraryFavoritesOnly) {
+        this.libraryFavoritesOnly = false;
+        this.syncLibraryFavoritesUi();
+        this.renderLibraryList();
+        this.saveCurrentStateForResourceType();
+      }
+    });
+    this.libraryFavoritesOnlyBtn?.addEventListener("click", () => {
+      if (!this.libraryFavoritesOnly) {
+        this.libraryFavoritesOnly = true;
+        this.syncLibraryFavoritesUi();
+        this.renderLibraryList();
+        this.saveCurrentStateForResourceType();
+      }
     });
     this.libraryBrowseBtn?.addEventListener("click", () => this.browseForLibraryFile());
     
@@ -540,6 +675,22 @@ export class ResourceBrowserModal {
     this.folderRootSelect?.addEventListener("change", () => this.onFolderRootChanged());
     this.folderUpBtn?.addEventListener("click", () => this.navigateFolderUp());
     this.folderSearch?.addEventListener("input", () => this.renderFolderList());
+    this.folderTagFilterBar?.addEventListener("click", (event) => {
+      const target = event.target as HTMLElement | null;
+      const chip = target?.closest(".preset-tag-filter-chip") as HTMLButtonElement | null;
+      if (!chip) {
+        return;
+      }
+      const tag = chip.dataset.tag ?? "";
+      if (!tag || tag === "__clear__") {
+        this.folderTagFilters.clear();
+      } else if (this.folderTagFilters.has(tag)) {
+        this.folderTagFilters.delete(tag);
+      } else {
+        this.folderTagFilters.add(tag);
+      }
+      this.renderFolderList();
+    });
     this.folderList?.addEventListener("click", (event) => this.handleFolderClick(event));
     
     // Tone3000 search
@@ -606,6 +757,8 @@ export class ResourceBrowserModal {
       activeTab: "library",
       librarySearch: "",
       libraryCategory: "all",
+      libraryCreator: "all",
+      libraryTagFilters: [],
       libraryFavoritesOnly: false,
       tone3000Search: "",
       tone3000Category: isIr ? "ir" : "amp",
@@ -640,6 +793,8 @@ export class ResourceBrowserModal {
     persisted.activeTab = this.activeTab;
     persisted.librarySearch = this.librarySearch?.value ?? "";
     persisted.libraryCategory = this.libraryCategory?.value ?? "all";
+    persisted.libraryCreator = this.libraryCreator?.value ?? this.libraryCreatorFilter;
+    persisted.libraryTagFilters = Array.from(this.libraryTagFilters);
     persisted.libraryFavoritesOnly = this.libraryFavoritesOnly;
     persisted.tone3000Search = this.tone3000Search?.value ?? "";
     persisted.tone3000Category = this.tone3000Category?.value ?? (resourceType === "ir" ? "ir" : "amp");
@@ -690,11 +845,16 @@ export class ResourceBrowserModal {
       this.libraryCategory.value = hasOption ? persisted.libraryCategory : "all";
     }
 
-    this.libraryFavoritesOnly = persisted.libraryFavoritesOnly ?? false;
-    if (this.libraryFavoritesToggle) {
-      this.libraryFavoritesToggle.classList.toggle("active", this.libraryFavoritesOnly);
-      this.libraryFavoritesToggle.textContent = this.libraryFavoritesOnly ? "★ Favourites" : "☆ Favourites";
+    this.libraryCreatorFilter = persisted.libraryCreator ?? "all";
+    if (this.libraryCreator) {
+      const hasOption = Array.from(this.libraryCreator.options).some((option) => option.value === this.libraryCreatorFilter);
+      this.libraryCreator.value = hasOption ? this.libraryCreatorFilter : "all";
     }
+
+    this.libraryTagFilters = new Set(Array.isArray(persisted.libraryTagFilters) ? persisted.libraryTagFilters : []);
+
+    this.libraryFavoritesOnly = persisted.libraryFavoritesOnly ?? false;
+    this.syncLibraryFavoritesUi();
 
     this.activeTab = persisted.activeTab;
     this.tone3000Query = persisted.tone3000Search;
@@ -726,6 +886,17 @@ export class ResourceBrowserModal {
 
     if (this.tone3000SearchControls) {
       this.tone3000SearchControls.style.display = this.tone3000FavoritesOnly ? "none" : "";
+    }
+  }
+
+  private syncLibraryFavoritesUi(): void {
+    if (this.libraryFavoritesAllBtn) {
+      this.libraryFavoritesAllBtn.classList.toggle("active", !this.libraryFavoritesOnly);
+      this.libraryFavoritesAllBtn.setAttribute("aria-pressed", !this.libraryFavoritesOnly ? "true" : "false");
+    }
+    if (this.libraryFavoritesOnlyBtn) {
+      this.libraryFavoritesOnlyBtn.classList.toggle("active", this.libraryFavoritesOnly);
+      this.libraryFavoritesOnlyBtn.setAttribute("aria-pressed", this.libraryFavoritesOnly ? "true" : "false");
     }
   }
 
@@ -772,6 +943,9 @@ export class ResourceBrowserModal {
     this.libraryPreviewActive = false;
     this.folderPreviewActive = false;
     this.folderPreviewPath = null;
+    this.selectedFolderPath = "";
+    this.folderTagFilters.clear();
+    this.closeEditPopover();
     this.pendingFolderSelectPath = null;
     this.pendingFolderFavoritePaths.clear();
     if (this.title) {
@@ -848,6 +1022,8 @@ export class ResourceBrowserModal {
     this.libraryPreviewActive = false;
     this.folderPreviewActive = false;
     this.folderPreviewPath = null;
+    this.selectedFolderPath = "";
+    this.closeEditPopover();
     this.modal.style.display = "none";
     this.saveCurrentStateForResourceType();
     this.options = null;
@@ -927,6 +1103,7 @@ export class ResourceBrowserModal {
     const resourceType = this.options?.resourceType ?? "nam";
     const resources = uiState.resourceLibrary[resourceType] ?? [];
     const tone3000CategoryFilter = this.options?.tone3000CategoryFilter;
+    const currentCategory = this.libraryCategory?.value ?? "all";
     
     // Collect unique categories
     const categories = new Set<string>();
@@ -941,7 +1118,9 @@ export class ResourceBrowserModal {
       this.libraryCategory.innerHTML = `<option value="all">All Categories</option>` +
         sorted.map((cat) => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join("");
       this.libraryCategory.disabled = false;
-      if (resourceType === "nam" && tone3000CategoryFilter && sorted.includes(tone3000CategoryFilter)) {
+      if (currentCategory !== "all" && sorted.includes(currentCategory)) {
+        this.libraryCategory.value = currentCategory;
+      } else if (resourceType === "nam" && tone3000CategoryFilter && sorted.includes(tone3000CategoryFilter)) {
         this.libraryCategory.value = tone3000CategoryFilter;
       } else {
         this.libraryCategory.value = "all";
@@ -1105,6 +1284,40 @@ export class ResourceBrowserModal {
     this.renderLibraryList();
   }
 
+  private renderLibraryFilterFacets(resources: LibraryResource[]): void {
+    const { tags, creators } = getResourceLibraryFacets(resources);
+
+    if (this.libraryCreator) {
+      const currentValue = this.libraryCreatorFilter || "all";
+      this.libraryCreator.innerHTML = [
+        `<option value="all">All Creators</option>`,
+        ...creators.map((creator) => `<option value="${escapeHtml(creator)}">${escapeHtml(creator)}</option>`),
+      ].join("");
+      this.libraryCreator.value = creators.includes(currentValue) ? currentValue : "all";
+      this.libraryCreatorFilter = this.libraryCreator.value;
+    }
+
+    if (this.libraryTagFilterBar) {
+      if (!tags.length) {
+        this.libraryTagFilterBar.innerHTML = `<span class="resource-browser-empty">No tags available for these resources.</span>`;
+        return;
+      }
+
+      const activeTags = this.libraryTagFilters;
+      const chips = tags.map((tag) => {
+        const active = activeTags.has(tag);
+        return `<button class="preset-tag-filter-chip${active ? " active" : ""}" type="button" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`;
+      });
+      this.libraryTagFilterBar.innerHTML = [
+        `<button class="preset-tag-filter-chip${activeTags.size === 0 ? " active" : ""}" type="button" data-tag="">All Tags</button>`,
+        ...chips,
+        activeTags.size > 0
+          ? `<button class="preset-tag-filter-chip" type="button" data-tag="__clear__">Clear</button>`
+          : "",
+      ].join("");
+    }
+  }
+
   private renderLibraryList(): void {
     if (!this.libraryList || !this.options) {
       return;
@@ -1112,9 +1325,12 @@ export class ResourceBrowserModal {
     
     const resourceType = this.options.resourceType;
     const resources = uiState.resourceLibrary[resourceType] ?? [];
+    this.renderLibraryFilterFacets(resources);
     const query = (this.librarySearch?.value ?? "").trim().toLowerCase();
     const category = this.libraryCategory?.value ?? "all";
+    const creator = this.libraryCreator?.value ?? this.libraryCreatorFilter ?? "all";
     const currentId = this.selectedResourceId;
+    const activeTags = Array.from(this.libraryTagFilters);
     
     let filtered = resources.filter((res) => !res.fileMissing);
     
@@ -1125,13 +1341,32 @@ export class ResourceBrowserModal {
       });
     }
 
+    if (creator !== "all") {
+      const creatorFilter = normalizeFilterValue(creator);
+      filtered = filtered.filter((res) => normalizeFilterValue(getResourceCreator(res)) === creatorFilter);
+    }
+
+    if (activeTags.length > 0) {
+      filtered = filtered.filter((res) => {
+        const resourceTags = getResourceTags(res).map(normalizeFilterValue);
+        return activeTags.every((tag) => resourceTags.includes(normalizeFilterValue(tag)));
+      });
+    }
+
     if (this.libraryFavoritesOnly) {
       filtered = filtered.filter((res) => this.isResourceFavorite(res.id));
     }
     
     if (query) {
       filtered = filtered.filter((res) => {
-        const haystack = `${res.name} ${res.id} ${res.category} ${res.description}`.toLowerCase();
+        const haystack = [
+          res.name,
+          res.id,
+          res.category,
+          res.description,
+          getResourceCreator(res),
+          ...getResourceTags(res),
+        ].join(" ").toLowerCase();
         return haystack.includes(query);
       });
     }
@@ -1171,8 +1406,19 @@ export class ResourceBrowserModal {
         const authorBadge = authorUsername ? `<span class="resource-browser-author">by: ${escapeHtml(authorUsername)}</span>` : "";
         const sourceLinkBadge = sourceUrl.startsWith("https://www.tone3000.com/") ? `<a class="resource-browser-attribution-link" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">↗ tone3000</a>` : "";
         const localPath = (res.filePath ?? "").trim();
+        const localPathCopyButton = localPath
+          ? `<button class="resource-browser-action-icon-btn resource-browser-local-path-copy-btn" type="button" data-resource-id="${escapeHtml(res.id)}" title="Copy local file path" aria-label="Copy local file path"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>`
+          : "";
         const localPathBadge = localPath
-          ? `<span class="resource-browser-local-path" title="${escapeHtml(localPath)}">${escapeHtml(localPath)}</span>`
+          ? `<span class="resource-browser-local-path-group">${localPathCopyButton}<span class="resource-browser-local-path" title="${escapeHtml(localPath)}">${escapeHtml(localPath)}</span></span>`
+          : "";
+        const tags = getResourceTags(res);
+        const tagsBadge = tags.length
+          ? `<span class="resource-browser-tag-list">${tags.map((tag) => `<span class="resource-browser-tag-pill">${escapeHtml(tag)}</span>`).join("")}</span>`
+          : "";
+        const creator = getResourceCreator(res);
+        const creatorBadge = creator
+          ? `<span class="resource-browser-creator">by ${escapeHtml(creator)}</span>`
           : "";
         const architecture = resourceType === "nam"
           ? this.normalizeArchitectureBadge(
@@ -1195,24 +1441,19 @@ export class ResourceBrowserModal {
         const toneTypeBadge = toneType
           ? `<span class="resource-browser-tone-type">${escapeHtml(toneType.replace(/_/g, " "))}</span>`
           : "";
-        const localFilePath = (res.filePath ?? "").trim();
-        const canCopyLocalPath = Boolean(localFilePath);
-        const copyPathAction = canCopyLocalPath
-          ? `<button class="resource-browser-item-copy-path" type="button" data-resource-id="${escapeHtml(res.id)}" title="Copy local file path" aria-label="Copy local file path"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>`
-          : "";
-        
         const isFav = this.isResourceFavorite(res.id);
-        const favoriteAction = `<button class="resource-browser-item-fav-toggle${isFav ? " is-active" : ""}" type="button" data-resource-id="${escapeHtml(res.id)}" title="${isFav ? "Remove from favourites" : "Add to favourites"}" aria-label="Toggle favorite">${isFav ? "★" : "☆"}</button>`;
+        const favoriteAction = `<button class="resource-browser-action-icon-btn resource-browser-item-fav-toggle${isFav ? " is-active" : ""}" type="button" data-resource-id="${escapeHtml(res.id)}" title="${isFav ? "Remove from favourites" : "Add to favourites"}" aria-label="Toggle favorite">${isFav ? "★" : "☆"}</button>`;
+        const providerNormalized = (metadata.provider ?? "").trim().toLowerCase();
+        const isBuiltIn = providerNormalized === "built-in" || providerNormalized === "builtin" || providerNormalized === "factory";
+        const editAction = isBuiltIn
+          ? `<span class="resource-browser-item-action-spacer" aria-hidden="true"></span>`
+          : `<button class="resource-browser-action-icon-btn resource-browser-item-edit-btn" type="button" data-resource-id="${escapeHtml(res.id)}" title="Edit name, category and tags" aria-label="Edit name, category and tags"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg></button>`;
         
-        // Check if resource is in use
         const usageKey = `${resourceType}:${res.id}`;
         const usage = this.resourceUsageInfo.get(usageKey);
         const isInUse = usage?.inUse ?? false;
-        const usagePresetName = usage?.presetName ?? "";
         const deleteDisabled = isInUse ? " disabled" : "";
-        const deleteTitle = isInUse ? `In use by preset: ${escapeHtml(usagePresetName)}. Remove from preset before deleting.` : "Delete from resource library";
-        const deleteAction = `<button class="resource-browser-item-delete-btn"${deleteDisabled} type="button" data-resource-id="${escapeHtml(res.id)}" title="${deleteTitle}" aria-label="Delete from resource library"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>`;
-        const inUseIndicator = isInUse ? `<span class="resource-browser-in-use-badge" title="In use by: ${escapeHtml(usagePresetName)}">In use</span>` : "";
+        const deleteAction = `<button class="resource-browser-action-icon-btn resource-browser-item-delete-btn"${deleteDisabled} type="button" data-resource-id="${escapeHtml(res.id)}" title="Delete from resource library" aria-label="Delete from resource library"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>`;
 
         const isDetailsExpanded = this.expandedLibraryItemId === res.id;
         const entryClass = `resource-browser-library-entry${isDetailsExpanded ? " is-details-expanded" : ""}`;
@@ -1223,15 +1464,16 @@ export class ResourceBrowserModal {
                 <div class="results-item-title resource-browser-item-title">${escapeHtml(title)}</div>
                 <div class="results-item-meta resource-browser-item-meta">
                   <span>${escapeHtml(categoryLabel)}</span>
-                  ${architectureBadge}${gearDescBadge}${toneTypeBadge}${providerBadge}${authorBadge}${sourceLinkBadge}${localPathBadge}${inUseIndicator}
+                  ${creatorBadge}
+                  ${architectureBadge}${gearDescBadge}${toneTypeBadge}${providerBadge}${authorBadge}${sourceLinkBadge}${localPathBadge}${tagsBadge}
                 </div>
               </div>
               <div class="resource-browser-item-actions">
                 ${favoriteAction}
-                ${copyPathAction}
-                <button class="resource-browser-item-details-btn" type="button" data-resource-id="${escapeHtml(res.id)}" title="${isDetailsExpanded ? "Hide details" : "Show details"}" aria-expanded="${isDetailsExpanded ? "true" : "false"}" aria-label="Resource details">ℹ</button>
+                ${editAction}
+                <button class="resource-browser-action-icon-btn resource-browser-item-details-btn" type="button" data-resource-id="${escapeHtml(res.id)}" title="${isDetailsExpanded ? "Hide details" : "Show details"}" aria-expanded="${isDetailsExpanded ? "true" : "false"}" aria-label="Resource details">ℹ</button>
                 ${deleteAction}
-                <button class="resource-browser-item-select" type="button">${isSelected ? `${getCheckmarkSvg()} Selected` : "Select"}</button>
+                <button class="resource-browser-action-icon-btn resource-browser-item-select${isSelected ? " is-active" : ""}" type="button" title="Select in effect" aria-label="Select in effect" aria-pressed="${isSelected ? "true" : "false"}">${getPlaySvg()}</button>
               </div>
             </div>
             ${isDetailsExpanded ? this.renderLibraryItemDetailsPanel(res) : ""}
@@ -1339,6 +1581,16 @@ export class ResourceBrowserModal {
       `);
     }
 
+    const tags = getResourceTags(res);
+    if (tags.length > 0) {
+      rows.push(`
+        <tr>
+          <td class="resource-browser-details-label">Tags</td>
+          <td class="resource-browser-details-value">${tags.map((tag) => `<span class="resource-browser-tag-pill">${escapeHtml(tag)}</span>`).join(" ")}</td>
+        </tr>
+      `);
+    }
+
     for (const [key, value] of Object.entries(metadata)) {
       if (!value) continue;
       const label = METADATA_LABELS[key] ?? key.replace(/_/g, " ").replace(/([A-Z])/g, " $1").trim();
@@ -1393,11 +1645,20 @@ export class ResourceBrowserModal {
       return;
     }
 
-    const copyPathButton = target.closest(".resource-browser-item-copy-path") as HTMLButtonElement | null;
+    const copyPathButton = target.closest(".resource-browser-local-path-copy-btn, .resource-browser-item-copy-path") as HTMLButtonElement | null;
     if (copyPathButton) {
       const resourceId = copyPathButton.dataset.resourceId ?? "";
       if (resourceId) {
         void this.copyLocalLibraryPath(resourceId);
+      }
+      return;
+    }
+
+    const editButton = target.closest(".resource-browser-item-edit-btn") as HTMLButtonElement | null;
+    if (editButton) {
+      const resourceId = editButton.dataset.resourceId ?? "";
+      if (resourceId) {
+        this.openEditPopover(resourceId, this.options?.resourceType ?? "nam");
       }
       return;
     }
@@ -1479,7 +1740,134 @@ export class ResourceBrowserModal {
     const resources = uiState.resourceLibrary[this.options.resourceType] ?? [];
     const resource = findResourceById(resources, resourceId);
     const displayName = resource?.name || resourceId;
-    showNotification("Previewing", `${displayName} - click Select to confirm`);
+    showNotification("Previewing", `${displayName} - click OK to confirm`);
+  }
+
+  private openEditPopover(resourceId: string, resourceType: ResourceType): void {
+    const resources = uiState.resourceLibrary[resourceType] ?? [];
+    const resource = findResourceById(resources, resourceId);
+    if (!resource) {
+      showNotification("Edit failed", "Resource not found.");
+      return;
+    }
+
+    this.openEditPopoverForValues({
+      resourceId,
+      resourceType,
+      name: (resource.name ?? "").trim() || resource.id,
+      category: (resource.category ?? "").trim() || "Local",
+      tags: getResourceTags(resource),
+      provider: (resource.metadata?.provider ?? "").trim().toLowerCase(),
+    });
+  }
+
+  private openFolderEditPopover(path: string, resourceType: ResourceType): void {
+    const file = this.folderListing?.files.find((entry) => entry.path === path);
+    if (!file) {
+      showNotification("Edit failed", "File no longer exists in this folder.");
+      return;
+    }
+
+    const match = this.folderFileLibraryMatch(file);
+    if (match.inLibrary && match.id) {
+      this.openEditPopover(match.id, resourceType);
+      return;
+    }
+
+    const fileName = file.name ?? path.split(/[\\/]/).pop() ?? path;
+    const defaultCategory = (this.folderListing?.name || "Folder").trim() || "Folder";
+    this.openEditPopoverForValues({
+      resourceId: "",
+      resourceType,
+      name: this.folderFileDisplayName(path) || fileName.replace(/\.[^.]+$/, ""),
+      category: defaultCategory,
+      tags: this.getFolderFileTags(file),
+      folderPath: path,
+    });
+  }
+
+  private openEditPopoverForValues(options: {
+    resourceId: string;
+    resourceType: ResourceType;
+    name: string;
+    category: string;
+    tags: string[];
+    provider?: string;
+    folderPath?: string;
+  }): void {
+    if (!this.options) {
+      return;
+    }
+
+    const provider = (options.provider ?? "").trim().toLowerCase();
+    if (provider === "built-in" || provider === "builtin" || provider === "factory") {
+      showNotification("Edit unavailable", "Built-in resources cannot be edited.");
+      return;
+    }
+
+    if (!this.editPopover || !this.editNameInput || !this.editCategoryInput || !this.editTagsInput) {
+      return;
+    }
+
+    this.editingResourceId = options.resourceId;
+    this.editingResourceType = options.resourceType;
+    this.editingFolderPath = options.folderPath ?? "";
+    this.editingFolderResourceType = options.folderPath ? options.resourceType : null;
+    this.editNameInput.value = options.name.trim() || "Unnamed";
+    this.editCategoryInput.value = options.category.trim() || "Local";
+    this.editTagsInput.value = options.tags.join(", ");
+    this.editPopover.hidden = false;
+    this.editNameInput.focus();
+    this.editNameInput.select();
+  }
+
+  private closeEditPopover(): void {
+    if (this.editPopover) {
+      this.editPopover.hidden = true;
+    }
+    this.editingResourceId = "";
+    this.editingResourceType = null;
+    this.editingFolderPath = "";
+    this.editingFolderResourceType = null;
+  }
+
+  private saveEditPopover(): void {
+    if (!this.options || !this.editNameInput || !this.editCategoryInput || !this.editTagsInput) {
+      return;
+    }
+
+    const name = this.editNameInput.value.trim();
+    const category = this.editCategoryInput.value.trim();
+    const tagsInput = this.editTagsInput.value.trim();
+    const tags = tagsInput ? Array.from(new Set(splitTagValues(tagsInput))) : [];
+
+    if (this.editingResourceId) {
+      const resourceId = this.editingResourceId;
+      const resourceType = this.editingResourceType ?? this.options.resourceType;
+      postMessage({
+        type: "updateLibraryResource",
+        resourceType,
+        resourceId,
+        name: name || resourceId,
+        category: category || "Uncategorized",
+        tags,
+      });
+      this.closeEditPopover();
+      showNotification("Resource updated", name || resourceId);
+      return;
+    }
+
+    if (this.editingFolderPath && this.editingFolderResourceType) {
+      const path = this.editingFolderPath;
+      const resourceType = this.editingFolderResourceType;
+      postMessage(this.buildFolderImportPayload(path, resourceType, {
+        name: name || this.folderFileDisplayName(path),
+        category: category || (this.folderListing?.name || "Folder"),
+        tags,
+      }));
+      this.closeEditPopover();
+      showNotification("Resource saved", name || this.folderFileDisplayName(path));
+    }
   }
   
   private async runTone3000Search(page = 1): Promise<void> {
@@ -2180,11 +2568,11 @@ export class ResourceBrowserModal {
     if (!this.selectBtn) {
       return;
     }
-    
-    // Only enable select button if we have a library resource selected
-    const hasSelection = Boolean(this.selectedResourceId) && this.activeTab === "library";
-    this.selectBtn.disabled = !hasSelection;
-    this.selectBtn.textContent = hasSelection ? "Select" : "Select from Library";
+
+    const hasLibrarySelection = this.activeTab === "library" && Boolean(this.selectedResourceId);
+    const hasFolderSelection = this.activeTab === "folder" && Boolean(this.selectedFolderPath);
+    this.selectBtn.disabled = !(hasLibrarySelection || hasFolderSelection);
+    this.selectBtn.textContent = "OK";
   }
 
   // ── Folder browser tab ──────────────────────────────────────────
@@ -2288,19 +2676,27 @@ export class ResourceBrowserModal {
   private removeActiveFolderRoot(): void {
     const activeRoot = this.getActiveRoot();
     if (!activeRoot) return;
-    const roots = this.getFolderRoots().filter((r) => r.id !== activeRoot.id);
-    this.setFolderRoots(roots);
-    const next = roots[0] ?? null;
-    this.setActiveRootId(next?.id ?? "");
-    this.folderCurrentPath = next?.path ?? "";
-    this.folderListing = null;
-    this.renderFolderRootOptions();
-    if (next) {
-      this.requestFolderListing(next.path);
-    } else {
-      this.renderFolderPath();
-      this.renderFolderList();
-    }
+
+    void showConfirm(
+      `Remove folder "${activeRoot.label || activeRoot.path}" from saved folders?`,
+      "Remove Folder"
+    ).then((confirmed) => {
+      if (!confirmed) return;
+       
+      const roots = this.getFolderRoots().filter((r) => r.id !== activeRoot.id);
+      this.setFolderRoots(roots);
+      const next = roots[0] ?? null;
+      this.setActiveRootId(next?.id ?? "");
+      this.folderCurrentPath = next?.path ?? "";
+      this.folderListing = null;
+      this.renderFolderRootOptions();
+      if (next) {
+        this.requestFolderListing(next.path);
+      } else {
+        this.renderFolderPath();
+        this.renderFolderList();
+      }
+    });
   }
 
   private onFolderRootChanged(): void {
@@ -2362,6 +2758,51 @@ export class ResourceBrowserModal {
     return { inLibrary: false, id: "" };
   }
 
+  private getFolderFileTags(file: FolderListingFile): string[] {
+    const match = this.folderFileLibraryMatch(file);
+    if (match.inLibrary && match.id) {
+      const resources = uiState.resourceLibrary[file.resourceType] ?? [];
+      const resource = findResourceById(resources, match.id);
+      if (resource) {
+        return getResourceTags(resource);
+      }
+    }
+
+    const metadata = file.metadata ?? {};
+    const tagSources = [metadata.tags, metadata.tag, metadata.toneTags, metadata.categories]
+      .filter((value): value is string => typeof value === "string");
+    const tags = new Set<string>();
+    tagSources.forEach((raw) => {
+      splitTagValues(raw).forEach((tag) => tags.add(tag));
+    });
+    return Array.from(tags);
+  }
+
+  private renderFolderTagFilters(availableTags: string[]): void {
+    if (!this.folderTagFilterBar) {
+      return;
+    }
+
+    if (!availableTags.length) {
+      this.folderTagFilterBar.innerHTML = "";
+      this.folderTagFilterBar.classList.remove("is-active");
+      return;
+    }
+
+    const selectedTags = Array.from(this.folderTagFilters);
+    const clearChip = selectedTags.length
+      ? `<button class="preset-tag-filter-chip" type="button" data-tag="__clear__">Clear tags</button>`
+      : "";
+
+    const chips = availableTags.map((tag) => {
+      const active = this.folderTagFilters.has(tag);
+      return `<button class="preset-tag-filter-chip${active ? " is-active" : ""}" type="button" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`;
+    }).join("");
+
+    this.folderTagFilterBar.innerHTML = clearChip + chips;
+    this.folderTagFilterBar.classList.add("is-active");
+  }
+
   private renderFolderList(): void {
     if (!this.folderList) return;
     if (this.folderLoading) return;
@@ -2370,12 +2811,14 @@ export class ResourceBrowserModal {
     if (!activeRoot) {
       this.folderList.innerHTML = `<div class="resource-browser-empty">No folder selected. Click \u201CAdd Folder\u201D to browse a folder of NAM/IR/WAV files.</div>`;
       if (this.folderStatus) this.folderStatus.textContent = "";
+      this.renderFolderTagFilters([]);
       return;
     }
 
     const listing = this.folderListing;
     if (!listing) {
       this.folderList.innerHTML = `<div class="resource-browser-empty">Select a folder to browse.</div>`;
+      this.renderFolderTagFilters([]);
       return;
     }
 
@@ -2383,14 +2826,29 @@ export class ResourceBrowserModal {
     const dirs = query
       ? listing.dirs.filter((d) => d.name.toLowerCase().includes(query))
       : listing.dirs;
-    const files = query
+    const filesByQuery = query
       ? listing.files.filter((f) => f.name.toLowerCase().includes(query))
       : listing.files;
+    const availableTags = Array.from(new Set(filesByQuery.flatMap((file) => this.getFolderFileTags(file))))
+      .sort((a, b) => a.localeCompare(b));
+    const availableTagSet = new Set(availableTags);
+    this.folderTagFilters.forEach((tag) => {
+      if (!availableTagSet.has(tag)) {
+        this.folderTagFilters.delete(tag);
+      }
+    });
+    this.renderFolderTagFilters(availableTags);
+    const files = this.folderTagFilters.size
+      ? filesByQuery.filter((file) => {
+        const tags = this.getFolderFileTags(file);
+        return Array.from(this.folderTagFilters).every((tag) => tags.includes(tag));
+      })
+      : filesByQuery;
 
     if (this.folderStatus) {
       const parts: string[] = [
         `<span class="resource-browser-status-count">${listing.dirs.length} folder${listing.dirs.length === 1 ? "" : "s"}</span>`,
-        `<span class="resource-browser-status-count">${listing.files.length} file${listing.files.length === 1 ? "" : "s"}</span>`,
+        `<span class="resource-browser-status-count">${files.length} file${files.length === 1 ? "" : "s"}</span>`,
       ];
       if (listing.truncated) parts.push(`<span class="resource-browser-status-note">(truncated)</span>`);
       this.folderStatus.innerHTML = parts.join("");
@@ -2401,9 +2859,6 @@ export class ResourceBrowserModal {
         <div class="results-item resource-browser-item resource-browser-folder-dir-row">
           <div class="results-item-main resource-browser-item-info">
             <div class="results-item-title resource-browser-item-title">\uD83D\uDCC1 ${escapeHtml(dir.name)}</div>
-          </div>
-          <div class="resource-browser-item-actions">
-            <button class="resource-browser-folder-open" type="button" data-path="${escapeHtml(dir.path)}">Open</button>
           </div>
         </div>
       </div>
@@ -2423,6 +2878,7 @@ export class ResourceBrowserModal {
     const typeLabel = file.resourceType === "ir" ? "IR / Cab" : "NAM";
     const match = this.folderFileLibraryMatch(file);
     const badges: string[] = [`<span>${escapeHtml(typeLabel)}</span>`];
+    const tags = this.getFolderFileTags(file);
 
     if (file.resourceType === "nam") {
       const architecture = this.normalizeNamArchitectureBadge(
@@ -2446,22 +2902,26 @@ export class ResourceBrowserModal {
     if (file.metadataPending && badges.length <= 1) {
       badges.push(`<span class="resource-browser-meta-pending" title="Reading metadata…">…</span>`);
     }
+    if (tags.length) {
+      const tagPills = tags
+        .map((tag) => `<span class="resource-browser-tag-pill">${escapeHtml(tag)}</span>`)
+        .join("");
+      badges.push(`<span class="resource-browser-tag-list">${tagPills}</span>`);
+    }
 
     const isFav = Boolean(match.id) && this.isResourceFavorite(match.id);
-    const favBtn = `<button class="resource-browser-item-fav-toggle resource-browser-folder-fav${isFav ? " is-active" : ""}" type="button" data-path="${escapeHtml(file.path)}" data-resource-type="${escapeHtml(file.resourceType)}" title="${isFav ? "Remove from favourites" : "Add to favourites"}" aria-pressed="${isFav ? "true" : "false"}" aria-label="Toggle favourite">${isFav ? "\u2605" : "\u2606"}</button>`;
+    const favBtn = `<button class="resource-browser-action-icon-btn resource-browser-item-fav-toggle resource-browser-folder-fav${isFav ? " is-active" : ""}" type="button" data-path="${escapeHtml(file.path)}" data-resource-type="${escapeHtml(file.resourceType)}" title="${isFav ? "Remove from favourites" : "Add to favourites"}" aria-pressed="${isFav ? "true" : "false"}" aria-label="Toggle favourite">${isFav ? "\u2605" : "\u2606"}</button>`;
 
     const typeMatches = this.options?.resourceType === file.resourceType;
     const isPreviewing = this.folderPreviewPath === file.path;
-    const previewBtn = typeMatches
-      ? `<button class="resource-browser-folder-preview${isPreviewing ? " is-active" : ""}" type="button" data-path="${escapeHtml(file.path)}" title="${isPreviewing ? "Stop preview" : "Preview in effect"}" aria-pressed="${isPreviewing ? "true" : "false"}">${isPreviewing ? "\u25A0 Stop" : "\u25B6 Preview"}</button>`
+    const isSelected = this.selectedFolderPath === file.path;
+    const selectPreviewBtn = typeMatches
+      ? `<button class="resource-browser-action-icon-btn resource-browser-folder-select-preview${isSelected ? " is-active" : ""}" type="button" data-path="${escapeHtml(file.path)}" title="Select in effect (does not close modal)" aria-label="Select in effect" aria-pressed="${isSelected ? "true" : "false"}">${getPlaySvg()}</button>`
       : "";
 
     const isExpanded = this.expandedFolderItemPath === file.path;
-    const detailsBtn = `<button class="resource-browser-folder-details-btn" type="button" data-path="${escapeHtml(file.path)}" title="${isExpanded ? "Hide details" : "Show details"}" aria-expanded="${isExpanded ? "true" : "false"}" aria-label="File details">\u2139</button>`;
-
-    const selectBtn = typeMatches
-      ? `<button class="resource-browser-folder-select" type="button" data-path="${escapeHtml(file.path)}" data-resource-type="${escapeHtml(file.resourceType)}" title="Select and close">Select</button>`
-      : "";
+    const detailsBtn = `<button class="resource-browser-action-icon-btn resource-browser-folder-details-btn" type="button" data-path="${escapeHtml(file.path)}" title="${isExpanded ? "Hide details" : "Show details"}" aria-expanded="${isExpanded ? "true" : "false"}" aria-label="File details">\u2139</button>`;
+    const editBtn = `<button class="resource-browser-action-icon-btn resource-browser-folder-edit-btn" type="button" data-path="${escapeHtml(file.path)}" data-resource-type="${escapeHtml(file.resourceType)}" title="Edit name, category and tags" aria-label="Edit resource">✎</button>`;
 
     return `
       <div class="resource-browser-folder-entry${isExpanded ? " is-details-expanded" : ""}${isPreviewing ? " is-previewing" : ""}" data-kind="file" data-path="${escapeHtml(file.path)}">
@@ -2472,9 +2932,9 @@ export class ResourceBrowserModal {
           </div>
           <div class="resource-browser-item-actions">
             ${favBtn}
-            ${previewBtn}
             ${detailsBtn}
-            ${selectBtn}
+            ${editBtn}
+            ${selectPreviewBtn}
           </div>
         </div>
         ${isExpanded ? this.renderFolderFileDetails(file) : ""}
@@ -2515,17 +2975,10 @@ export class ResourceBrowserModal {
       return;
     }
 
-    const previewBtn = target.closest(".resource-browser-folder-preview") as HTMLButtonElement | null;
+    const previewBtn = target.closest(".resource-browser-folder-select-preview") as HTMLButtonElement | null;
     if (previewBtn) {
       const path = previewBtn.dataset.path ?? "";
       if (path) this.previewFolderFile(path);
-      return;
-    }
-
-    const selectBtn = target.closest(".resource-browser-folder-select") as HTMLButtonElement | null;
-    if (selectBtn) {
-      const path = selectBtn.dataset.path ?? "";
-      if (path) this.confirmFolderSelection(path);
       return;
     }
 
@@ -2539,6 +2992,29 @@ export class ResourceBrowserModal {
       return;
     }
 
+    const editBtn = target.closest(".resource-browser-folder-edit-btn") as HTMLButtonElement | null;
+    if (editBtn) {
+      const path = editBtn.dataset.path ?? "";
+      const resourceType = editBtn.dataset.resourceType as ResourceType;
+      if (path && (resourceType === "nam" || resourceType === "ir")) {
+        this.openFolderEditPopover(path, resourceType);
+      }
+      return;
+    }
+
+    const fileRow = target.closest(".resource-browser-folder-file-row") as HTMLElement | null;
+    if (fileRow) {
+      const fileEntry = fileRow.closest('[data-kind="file"]') as HTMLElement | null;
+      const path = fileEntry?.dataset.path ?? "";
+      if (path && this.options) {
+        const file = this.folderListing?.files.find((entry) => entry.path === path);
+        if (file && file.resourceType === this.options.resourceType) {
+          this.previewFolderFile(path);
+        }
+      }
+      return;
+    }
+
     const dirRow = target.closest('[data-kind="dir"]') as HTMLElement | null;
     if (dirRow) {
       const path = dirRow.dataset.path ?? "";
@@ -2546,16 +3022,26 @@ export class ResourceBrowserModal {
     }
   }
 
-  private buildFolderImportPayload(path: string, resourceType: ResourceType): Record<string, unknown> {
+  private buildFolderImportPayload(
+    path: string,
+    resourceType: ResourceType,
+    overrides?: { name?: string; category?: string; tags?: string[] },
+  ): Record<string, unknown> {
     const listing = this.folderListing;
     const file = listing?.files.find((f) => f.path === path);
     const fileName = file?.name ?? path.split(/[\\/]/).pop() ?? path;
     const category = listing?.name || "Folder";
+    const tags = overrides?.tags ?? this.getFolderFileTags(file ?? {
+      name: fileName,
+      path,
+      resourceType,
+    });
     return {
       type: "saveLocalLibraryResource",
       resourceType,
-      name: this.folderFileDisplayName(path),
-      category,
+      name: (overrides?.name ?? this.folderFileDisplayName(path)).trim(),
+      category: (overrides?.category ?? category).trim(),
+      tags,
       description: "",
       filePath: path,
       metadata: {
@@ -2597,49 +3083,26 @@ export class ResourceBrowserModal {
   private previewFolderFile(path: string): void {
     if (!this.options) return;
 
-    // Toggle off if already previewing this file.
-    if (this.folderPreviewPath === path) {
-      this.stopFolderPreview();
-      return;
+    this.selectedFolderPath = path;
+
+    if (this.folderPreviewPath !== path || !this.folderPreviewActive) {
+      // We now own the node output; clear any library preview tracking.
+      this.libraryPreviewActive = false;
+      this.folderPreviewActive = true;
+      this.folderPreviewPath = path;
+
+      postMessage({
+        type: "updateNodeResource",
+        nodeId: this.options.nodeId,
+        resourceType: this.options.resourceType,
+        resourceId: "",
+        filePath: path,
+        resourceIndex: this.options.resourceIndex ?? 0,
+      });
+
+      showNotification("Previewing", `${this.folderFileDisplayName(path)} - click OK to confirm`);
     }
-
-    // We now own the node output; clear any library preview tracking.
-    this.libraryPreviewActive = false;
-    this.folderPreviewActive = true;
-    this.folderPreviewPath = path;
-
-    postMessage({
-      type: "updateNodeResource",
-      nodeId: this.options.nodeId,
-      resourceType: this.options.resourceType,
-      resourceId: "",
-      filePath: path,
-      resourceIndex: this.options.resourceIndex ?? 0,
-    });
-
-    showNotification("Previewing", `${this.folderFileDisplayName(path)} - click Select to confirm`);
-    this.renderFolderList();
-  }
-
-  private stopFolderPreview(): void {
-    if (!this.folderPreviewActive || !this.options) {
-      this.folderPreviewActive = false;
-      this.folderPreviewPath = null;
-      return;
-    }
-
-    // Restore the resource that was applied before previewing.
-    postMessage({
-      type: "updateNodeResource",
-      nodeId: this.options.nodeId,
-      resourceType: this.options.resourceType,
-      resourceId: this.originalResourceId,
-      filePath: "",
-      resourceIndex: this.options.resourceIndex ?? 0,
-    });
-
-    this.folderPreviewActive = false;
-    this.folderPreviewPath = null;
+    this.updateSelectButtonState();
     this.renderFolderList();
   }
 
@@ -2679,7 +3142,19 @@ export class ResourceBrowserModal {
   }
 
   private confirmSelection(): void {
-    if (!this.options || !this.selectedResourceId) {
+    if (!this.options) {
+      return;
+    }
+
+    if (this.activeTab === "folder") {
+      if (!this.selectedFolderPath) {
+        return;
+      }
+      this.confirmFolderSelection(this.selectedFolderPath);
+      return;
+    }
+
+    if (!this.selectedResourceId) {
       return;
     }
     
