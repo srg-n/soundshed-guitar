@@ -3200,6 +3200,21 @@ function showNodeParamsPanel(node: GraphNode, preset: Preset): void {
     }
   }
 
+  // Preload library navigation cache so prev/next buttons work without opening
+  // the resource browser modal first. Do this synchronously before the resource
+  // selector HTML is rendered so the buttons' initial disabled state is correct.
+  {
+    const navCacheTypes = new Set<"nam" | "ir">();
+    if (typeInfo?.requiresResource) {
+      const rt = typeInfo.resourceType;
+      if (rt === "nam" || rt === "ir") navCacheTypes.add(rt);
+    }
+    (typeInfo?.exposedResources ?? []).forEach((er) => {
+      if (er.resourceType === "nam" || er.resourceType === "ir") navCacheTypes.add(er.resourceType as "nam" | "ir");
+    });
+    navCacheTypes.forEach((rt) => resourceBrowserModal.preloadLibraryNavigationCache(rt));
+  }
+
   // Build resource selector if this node type requires a resource,
   // or if a composite node surfaces inner resources.
   let resourceSelector = "";

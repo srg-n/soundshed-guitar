@@ -160,6 +160,7 @@ interface PersistedResourceBrowserState {
   activeTab: ResourceBrowserTab;
   librarySearch: string;
   libraryCategory: string;
+  libraryArchitecture: string;
   libraryCreator: string;
   libraryTagFilters: string[];
   libraryFavoritesOnly?: boolean;
@@ -189,6 +190,15 @@ interface ResourceNavigationResult {
 interface ResourceNavigationState {
   resourceType: ResourceType;
   items: ResourceNavigationResult[];
+}
+
+interface LibraryFilterSnapshot {
+  query: string;
+  category: string;
+  architecture: string;
+  creator: string;
+  tags: string[];
+  favoritesOnly: boolean;
 }
 
 export class ResourceBrowserModal {
@@ -229,16 +239,20 @@ export class ResourceBrowserModal {
   // Library tab elements
   private librarySearch: HTMLInputElement | null = null;
   private libraryCategory: HTMLSelectElement | null = null;
+  private libraryArchitecture: HTMLSelectElement | null = null;
   private libraryCreator: HTMLSelectElement | null = null;
   private libraryTagFilterBar: HTMLElement | null = null;
   private libraryFavoritesAllBtn: HTMLButtonElement | null = null;
   private libraryFavoritesOnlyBtn: HTMLButtonElement | null = null;
   private libraryFavoritesOnly = false;
+  private libraryNavPrevBtn: HTMLButtonElement | null = null;
+  private libraryNavNextBtn: HTMLButtonElement | null = null;
   private libraryBrowseBtn: HTMLButtonElement | null = null;
   private libraryList: HTMLElement | null = null;
   private selectedResourceId: string = "";
   private selectedFolderPath: string = "";
   private libraryCreatorFilter = "all";
+  private libraryArchitectureFilter = "all";
   private libraryTagFilters: Set<string> = new Set();
 
   // Folder tab elements
@@ -259,6 +273,8 @@ export class ResourceBrowserModal {
   private folderLoading = false;
   private expandedFolderItemPath: string | null = null;
   private libraryNavigationState: ResourceNavigationState | null = null;
+  // Per-type cache so preloads for different resource types don't clobber each other.
+  private libraryNavigationStates: Map<string, ResourceNavigationState> = new Map();
   private folderNavigationState: ResourceNavigationState | null = null;
   private lastNavigationView: "library" | "folder" | null = null;
   
@@ -368,6 +384,15 @@ export class ResourceBrowserModal {
       const hasAllOption = Array.from(this.libraryCategory.options).some((option) => option.value === "all");
       if (hasAllOption) {
         this.libraryCategory.value = "all";
+      }
+    }
+
+    if (this.libraryArchitecture) {
+      this.libraryArchitecture.disabled = importedType !== "nam";
+      if (importedType !== "nam") {
+        this.libraryArchitecture.value = "all";
+      } else if (!this.libraryArchitecture.value) {
+        this.libraryArchitecture.value = this.libraryArchitectureFilter || "all";
       }
     }
 
@@ -553,10 +578,13 @@ export class ResourceBrowserModal {
     // Library tab elements
     this.librarySearch = document.getElementById("resource-browser-library-search") as HTMLInputElement | null;
     this.libraryCategory = document.getElementById("resource-browser-library-category") as HTMLSelectElement | null;
+    this.libraryArchitecture = document.getElementById("resource-browser-library-architecture") as HTMLSelectElement | null;
     this.libraryCreator = document.getElementById("resource-browser-library-creator") as HTMLSelectElement | null;
     this.libraryTagFilterBar = document.getElementById("resource-browser-library-tag-filters");
     this.libraryFavoritesAllBtn = document.getElementById("resource-browser-library-favorites-all") as HTMLButtonElement | null;
     this.libraryFavoritesOnlyBtn = document.getElementById("resource-browser-library-favorites-only") as HTMLButtonElement | null;
+    this.libraryNavPrevBtn = document.getElementById("resource-browser-library-prev") as HTMLButtonElement | null;
+    this.libraryNavNextBtn = document.getElementById("resource-browser-library-next") as HTMLButtonElement | null;
     this.libraryBrowseBtn = document.getElementById("resource-browser-library-browse") as HTMLButtonElement | null;
     this.libraryList = document.getElementById("resource-browser-library-list");
 
@@ -629,6 +657,11 @@ export class ResourceBrowserModal {
       this.renderLibraryList();
       this.saveCurrentStateForResourceType();
     });
+    this.libraryArchitecture?.addEventListener("change", () => {
+      this.libraryArchitectureFilter = this.libraryArchitecture?.value ?? "all";
+      this.renderLibraryList();
+      this.saveCurrentStateForResourceType();
+    });
     this.libraryCreator?.addEventListener("change", () => {
       this.libraryCreatorFilter = this.libraryCreator?.value ?? "all";
       this.renderLibraryList();
@@ -677,6 +710,8 @@ export class ResourceBrowserModal {
         this.saveCurrentStateForResourceType();
       }
     });
+    this.libraryNavPrevBtn?.addEventListener("click", () => this.navigateLibrarySelection(-1));
+    this.libraryNavNextBtn?.addEventListener("click", () => this.navigateLibrarySelection(1));
     this.libraryBrowseBtn?.addEventListener("click", () => this.browseForLibraryFile());
     
     // Library item click
@@ -770,6 +805,7 @@ export class ResourceBrowserModal {
       activeTab: "library",
       librarySearch: "",
       libraryCategory: "all",
+      libraryArchitecture: "all",
       libraryCreator: "all",
       libraryTagFilters: [],
       libraryFavoritesOnly: false,
@@ -806,6 +842,7 @@ export class ResourceBrowserModal {
     persisted.activeTab = this.activeTab;
     persisted.librarySearch = this.librarySearch?.value ?? "";
     persisted.libraryCategory = this.libraryCategory?.value ?? "all";
+    persisted.libraryArchitecture = this.libraryArchitecture?.value ?? this.libraryArchitectureFilter;
     persisted.libraryCreator = this.libraryCreator?.value ?? this.libraryCreatorFilter;
     persisted.libraryTagFilters = Array.from(this.libraryTagFilters);
     persisted.libraryFavoritesOnly = this.libraryFavoritesOnly;
@@ -856,6 +893,16 @@ export class ResourceBrowserModal {
     if (this.libraryCategory) {
       const hasOption = Array.from(this.libraryCategory.options).some((option) => option.value === persisted.libraryCategory);
       this.libraryCategory.value = hasOption ? persisted.libraryCategory : "all";
+    }
+
+    this.libraryArchitectureFilter = persisted.libraryArchitecture ?? "all";
+    if (this.libraryArchitecture) {
+      const hasOption = Array.from(this.libraryArchitecture.options).some((option) => option.value === this.libraryArchitectureFilter);
+      this.libraryArchitecture.value = hasOption ? this.libraryArchitectureFilter : "all";
+      this.libraryArchitecture.disabled = resourceType !== "nam";
+      if (resourceType !== "nam") {
+        this.libraryArchitecture.value = "all";
+      }
     }
 
     this.libraryCreatorFilter = persisted.libraryCreator ?? "all";
@@ -939,7 +986,7 @@ export class ResourceBrowserModal {
     const selectedItem = this.libraryList.querySelector(
       `.resource-browser-item[data-resource-id="${CSS.escape(this.selectedResourceId)}"]`,
     ) as HTMLElement | null;
-    selectedItem?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    selectedItem?.scrollIntoView({ behavior: "instant", block: "center" });
   }
   
   open(options: ResourceBrowserOptions): void {
@@ -1108,6 +1155,10 @@ export class ResourceBrowserModal {
       this.initFolderTab();
     }
 
+    if (resolvedTab === "library") {
+      requestAnimationFrame(() => this.scrollSelectedLibraryItemIntoView());
+    }
+
     this.updateSelectButtonState();
     this.saveCurrentStateForResourceType();
   }
@@ -1191,6 +1242,102 @@ export class ResourceBrowserModal {
       return "Custom";
     }
     return "";
+  }
+
+  private getLibraryResourceArchitecture(resource: LibraryResource): string {
+    const metadata = resource.metadata ?? {};
+    return this.normalizeNamArchitectureBadge(
+      metadata.architectureVersion
+      || metadata.architecture_version
+      || metadata.architecture
+      || "",
+    );
+  }
+
+  private getLibraryFilterSnapshot(resourceType: ResourceType): LibraryFilterSnapshot {
+    const persisted = this.getOrCreatePersistedState(resourceType);
+    return {
+      query: (this.librarySearch?.value ?? persisted.librarySearch ?? "").trim().toLowerCase(),
+      category: this.libraryCategory?.value ?? persisted.libraryCategory ?? "all",
+      architecture: this.libraryArchitecture?.value ?? persisted.libraryArchitecture ?? "all",
+      creator: this.libraryCreator?.value ?? persisted.libraryCreator ?? "all",
+      tags: this.libraryTagFilters.size > 0 ? Array.from(this.libraryTagFilters) : [...(persisted.libraryTagFilters ?? [])],
+      favoritesOnly: this.libraryFavoritesOnly,
+    };
+  }
+
+  private buildLibraryNavigationState(resourceType: ResourceType): ResourceNavigationState {
+    const resources = uiState.resourceLibrary[resourceType] ?? [];
+    const filters = this.getLibraryFilterSnapshot(resourceType);
+    let filtered = resources.filter((res) => !res.fileMissing);
+
+    if (filters.category !== "all") {
+      filtered = filtered.filter((res) => ((res.category ?? "").trim() || "Uncategorized") === filters.category);
+    }
+
+    if (resourceType === "nam" && filters.architecture !== "all") {
+      filtered = filtered.filter((res) => this.getLibraryResourceArchitecture(res) === filters.architecture);
+    }
+
+    if (filters.creator !== "all") {
+      const creatorFilter = normalizeFilterValue(filters.creator);
+      filtered = filtered.filter((res) => normalizeFilterValue(getResourceCreator(res)) === creatorFilter);
+    }
+
+    if (filters.tags.length > 0) {
+      filtered = filtered.filter((res) => {
+        const resourceTags = getResourceTags(res).map(normalizeFilterValue);
+        return filters.tags.every((tag) => resourceTags.includes(normalizeFilterValue(tag)));
+      });
+    }
+
+    if (filters.favoritesOnly) {
+      filtered = filtered.filter((res) => this.isResourceFavorite(res.id));
+    }
+
+    if (filters.query) {
+      filtered = filtered.filter((res) => {
+        const haystack = [
+          res.name,
+          res.id,
+          res.category,
+          res.description,
+          getResourceCreator(res),
+          ...getResourceTags(res),
+        ].join(" ").toLowerCase();
+        return haystack.includes(filters.query);
+      });
+    }
+
+    filtered.sort((a, b) => {
+      const aFav = this.isResourceFavorite(a.id);
+      const bFav = this.isResourceFavorite(b.id);
+      if (aFav !== bFav) {
+        return aFav ? -1 : 1;
+      }
+      const leftName = (a.name || a.id);
+      const rightName = (b.name || b.id);
+      const byName = leftName.localeCompare(rightName);
+      if (byName !== 0) {
+        return byName;
+      }
+      return (a.filePath ?? "").localeCompare(b.filePath ?? "");
+    });
+
+    return {
+      resourceType,
+      items: filtered.map((res) => ({ resourceId: res.id })),
+    };
+  }
+
+  public preloadLibraryNavigationCache(resourceType: ResourceType): void {
+    const state = this.buildLibraryNavigationState(resourceType);
+    this.libraryNavigationStates.set(resourceType, state);
+    // Also populate the single-slot state if it isn't already set for this type,
+    // so the modal's own internal navigation works even without the modal being opened first.
+    if (!this.libraryNavigationState || this.libraryNavigationState.resourceType === resourceType) {
+      this.libraryNavigationState = state;
+    }
   }
 
   /// Resolves a NAM architecture badge (A1/A2), falling back to the NAM
@@ -1341,6 +1488,7 @@ export class ResourceBrowserModal {
     this.renderLibraryFilterFacets(resources);
     const query = (this.librarySearch?.value ?? "").trim().toLowerCase();
     const category = this.libraryCategory?.value ?? "all";
+    const architecture = this.libraryArchitecture?.value ?? this.libraryArchitectureFilter ?? "all";
     const creator = this.libraryCreator?.value ?? this.libraryCreatorFilter ?? "all";
     const currentId = this.selectedResourceId;
     const activeTags = Array.from(this.libraryTagFilters);
@@ -1352,6 +1500,10 @@ export class ResourceBrowserModal {
         const cat = (res.category ?? "").trim() || "Uncategorized";
         return cat === category;
       });
+    }
+
+    if (resourceType === "nam" && architecture !== "all") {
+      filtered = filtered.filter((res) => this.getLibraryResourceArchitecture(res) === architecture);
     }
 
     if (creator !== "all") {
@@ -1403,6 +1555,7 @@ export class ResourceBrowserModal {
       resourceType,
       items: filtered.map((res) => ({ resourceId: res.id })),
     };
+    this.libraryNavigationStates.set(resourceType, this.libraryNavigationState);
     this.lastNavigationView = "library";
     document.dispatchEvent(new CustomEvent("resource-browser:navigation-cache-updated", {
       detail: {
@@ -1508,6 +1661,7 @@ export class ResourceBrowserModal {
       .join("");
 
     this.observeVisibleUsage(resourceType);
+    this.updateLibraryNavigationButtons();
   }
 
   // Lazily query "in use" status only for library rows that scroll into view.
@@ -3157,16 +3311,18 @@ export class ResourceBrowserModal {
     currentFilePath: string,
     offset: number,
   ): ResourceNavigationResult | null {
-    const state = this.lastNavigationView === "folder"
+    // Prefer folder navigation only when the folder state actually matches the
+    // requested resource type; otherwise fall through to the per-type library cache.
+    const usingFolderState = this.lastNavigationView === "folder"
+      && this.folderNavigationState?.resourceType === resourceType;
+    const state = usingFolderState
       ? this.folderNavigationState
-      : this.lastNavigationView === "library"
-        ? this.libraryNavigationState
-        : null;
+      : (this.libraryNavigationStates.get(resourceType) ?? this.libraryNavigationState);
     if (!state || state.resourceType !== resourceType || !state.items.length) {
       return null;
     }
 
-    const currentKeys = this.lastNavigationView === "folder"
+    const currentKeys = usingFolderState
       ? [currentFilePath, currentResourceId]
       : [currentResourceId, currentFilePath];
     const currentIndex = state.items.findIndex((item) => currentKeys.some((key) => (
@@ -3183,9 +3339,43 @@ export class ResourceBrowserModal {
     }
 
     const nextItem = state.items[nextIndex];
-    return this.lastNavigationView === "folder"
+    return usingFolderState
       ? { filePath: nextItem.filePath, resourceId: nextItem.resourceId }
       : { resourceId: nextItem.resourceId, filePath: nextItem.filePath };
+  }
+
+  private updateLibraryNavigationButtons(): void {
+    if (!this.options) {
+      return;
+    }
+
+    const prev = this.getAdjacentResourceSelection(this.options.resourceType, this.selectedResourceId, "", -1);
+    const next = this.getAdjacentResourceSelection(this.options.resourceType, this.selectedResourceId, "", 1);
+
+    if (this.libraryNavPrevBtn) {
+      this.libraryNavPrevBtn.disabled = !prev;
+      this.libraryNavPrevBtn.setAttribute("aria-disabled", prev ? "false" : "true");
+    }
+    if (this.libraryNavNextBtn) {
+      this.libraryNavNextBtn.disabled = !next;
+      this.libraryNavNextBtn.setAttribute("aria-disabled", next ? "false" : "true");
+    }
+  }
+
+  private navigateLibrarySelection(offset: number): void {
+    if (!this.options) {
+      return;
+    }
+
+    const next = this.getAdjacentResourceSelection(this.options.resourceType, this.selectedResourceId, "", offset);
+    if (!next?.resourceId) {
+      return;
+    }
+
+    this.selectedResourceId = next.resourceId;
+    this.renderLibraryList();
+    this.updateSelectButtonState();
+    this.previewLibraryResource(next.resourceId);
   }
 
   private confirmFolderSelection(path: string): void {
