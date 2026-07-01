@@ -260,6 +260,32 @@ if(NOT TARGET guitarfx_miniz)
         "${guitarfx_miniz_src_SOURCE_DIR}")
 endif()
 
+# minimp3 — single-header MP3 decoder used by AudioDecoder for riff/demo audio import
+if(NOT TARGET guitarfx_minimp3)
+    include(FetchContent)
+    FetchContent_Declare(guitarfx_minimp3_src
+        GIT_REPOSITORY https://github.com/lieff/minimp3.git
+        GIT_TAG master)
+
+    if(POLICY CMP0169)
+        cmake_policy(PUSH)
+        cmake_policy(SET CMP0169 OLD)
+    endif()
+
+    FetchContent_GetProperties(guitarfx_minimp3_src)
+    if(NOT guitarfx_minimp3_src_POPULATED)
+        FetchContent_Populate(guitarfx_minimp3_src)
+    endif()
+
+    if(POLICY CMP0169)
+        cmake_policy(POP)
+    endif()
+
+    add_library(guitarfx_minimp3 INTERFACE)
+    target_include_directories(guitarfx_minimp3 INTERFACE
+        "${guitarfx_minimp3_src_SOURCE_DIR}")
+endif()
+
 # Wasmtime C API — embedded WebAssembly runtime used by the generic WASM effect host
 if(GUITARFX_CORE_ENABLE_WASM_EFFECTS AND NOT TARGET guitarfx_wasmtime)
     include(FetchContent)
@@ -523,6 +549,8 @@ set(GUITARFX_CORE_SOURCES
     src/util/PathSanitizer.cpp
     src/util/Wav.h
     src/util/Wav.cpp
+    src/util/AudioDecoder.h
+    src/util/AudioDecoder.cpp
 
     # Automation
     src/automation/AutomationTypes.h
@@ -637,6 +665,7 @@ target_link_libraries(SoundshedGuitarCore
         nlohmann_json::nlohmann_json
     PRIVATE
         guitarfx_miniz
+        guitarfx_minimp3
 )
 
 if(TARGET guitarfx_wasmtime)
