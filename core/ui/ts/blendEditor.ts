@@ -631,6 +631,18 @@ export class BlendEditorModal {
     this.updateModelBrowserCategoryOptions();
     this.renderModelBrowserList();
     this.modelBrowserModal.style.display = "flex";
+    requestAnimationFrame(() => this.scrollSelectedModelBrowserItemIntoView());
+  }
+
+  private scrollSelectedModelBrowserItemIntoView(): void {
+    if (!this.modelBrowserList || !this.browserCurrentId) {
+      return;
+    }
+
+    const selectedItem = this.modelBrowserList.querySelector(
+      `.blend-model-browser-item[data-model-id="${CSS.escape(this.browserCurrentId)}"]`,
+    ) as HTMLElement | null;
+    selectedItem?.scrollIntoView({ behavior: "instant", block: "center" });
   }
 
   private openModelBrowser(row: HTMLElement): void {
