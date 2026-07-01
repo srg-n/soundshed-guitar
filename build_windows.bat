@@ -45,14 +45,25 @@ echo CMake configure succeeded.
 echo.
 
 :: --- Build UI ---------------------------------------------------------------
-echo [1/5] Building UI (npm run build)...
+echo [1/5] Building UI (npm install ^& build)...
 pushd "%UI_DIR%"
+
+echo Running npm install...
+call npm install
+if !ERRORLEVEL! neq 0 (
+    echo ERROR: npm install failed.
+    popd
+    goto :fail
+)
+
+echo Running npm run build...
 call npm run build
 if !ERRORLEVEL! neq 0 (
     echo ERROR: UI build failed.
     popd
     goto :fail
 )
+
 popd
 echo UI build succeeded.
 echo.
