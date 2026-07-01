@@ -31,7 +31,12 @@ echo [0/5] Configuring CMake...
 echo       Generator: %CMAKE_GENERATOR%
 echo       Architecture: %ARCH_LABEL% ^(CMake platform: %ARCH%^)
 echo       AVX2 support: %CORE_ENABLE_AVX2%
-cmake -G "%CMAKE_GENERATOR%" -A "%ARCH%" -S juce -B "%JUCE_BUILDS%" -DGUITARFX_CORE_ENABLE_AVX2=%CORE_ENABLE_AVX2%
+:: YENİ HALİ (Bunu kullan)
+if defined CMAKE_GENERATOR (
+    cmake -G "%CMAKE_GENERATOR%" -A "%ARCH%" -S juce -B "%JUCE_BUILDS%" -DGUITARFX_CORE_ENABLE_AVX2=%CORE_ENABLE_AVX2%
+) else (
+    cmake -A "%ARCH%" -S juce -B "%JUCE_BUILDS%" -DGUITARFX_CORE_ENABLE_AVX2=%CORE_ENABLE_AVX2%
+)
 if !ERRORLEVEL! neq 0 (
     echo ERROR: CMake configure failed.
     goto :fail
