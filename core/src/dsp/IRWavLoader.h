@@ -56,6 +56,19 @@ namespace guitarfx
       return value;
     }
 
+    template <typename T>
+    inline T ReadBigEndian(std::ifstream &stream)
+    {
+      T value;
+      if (!ReadValue(stream, value))
+        return {};
+
+      if constexpr (std::endian::native == std::endian::little)
+        value = SwapEndian(value);
+
+      return value;
+    }
+
     inline std::uint32_t ReadFourCC(std::ifstream &stream)
     {
       std::uint32_t value;
@@ -368,6 +381,243 @@ namespace guitarfx
       }
 
       samples = std::move(resampled);
+    }
+
+    // -------------------------------------------------------------------------
+    // Read an 80-bit IEEE 754 extended big-endian value from a stream.
+    // Used to decode the AIFF COMM chunk sample-rate field.
+    // -------------------------------------------------------------------------
+    inline double Read80BitExtendedFromStream(std::ifstream &stream)
+    {
+      std::array<std::uint8_t, 10> buf{};
+      if (!stream.read(reinterpret_cast<char *>(buf.data()), 10))
+        return 0.0;
+
+      const bool sign = (buf[0] & 0x80u) != 0u;
+      const std::uint16_t biasedExp =
+          static_cast<std::uint16_t>(((buf[0] & 0x7Fu) << 8u) | buf[1]);
+
+      std::uint64_t mantissa = 0;
+      for (int i = 0; i < 8; ++i)
+        mantissa = (mantissa << 8u) | buf[2 + i];
+
+      if (biasedExp == 0 && mantissa == 0)
+        return 0.0;
+
+      // value = mantissa * 2^(biasedExp - 16383 - 63)
+      const int exponent = static_cast<int>(biasedExp) - 16383 - 63;
+      double result = static_cast<double>(mantissa) * std::pow(2.0, exponent);
+      return sign ? -result : result;
+    }
+
+    // -------------------------------------------------------------------------
+    // LoadAiffFile — loads an AIFF or AIFC file into IRWavData.
+    // Supports big-endian PCM (AIFF, AIFC/NONE) and byte-swapped PCM
+    // (AIFC/sowt).  Float variants (fl32/FL32, fl64/FL64) are accepted for
+    // AIFC but uncommon in IR packs.
+    // -------------------------------------------------------------------------
+    inline bool LoadAiffFile(const std::filesystem::path &path, IRWavData &out)
+    {
+      out = {};
+
+      std::ifstream file(path, std::ios::binary);
+      if (!file)
+        return false;
+
+      // FORM header (12 bytes)
+      std::array<char, 4> formId{}, formType{};
+      if (!file.read(formId.data(), 4)) return false;
+      if (std::strncmp(formId.data(), "FORM", 4) != 0) return false;
+
+      ReadBigEndian<std::uint32_t>(file); // total file size (unused here)
+
+      if (!file.read(formType.data(), 4)) return false;
+      const bool isAifc = std::strncmp(formType.data(), "AIFC", 4) == 0;
+      if (!isAifc && std::strncmp(formType.data(), "AIFF", 4) != 0)
+        return false;
+
+      // FourCC helpers
+      constexpr auto MakeFourCCBE = [](char a, char b, char c, char d) -> std::uint32_t
+      {
+        return (static_cast<std::uint32_t>(static_cast<unsigned char>(a)) << 24u)
+             | (static_cast<std::uint32_t>(static_cast<unsigned char>(b)) << 16u)
+             | (static_cast<std::uint32_t>(static_cast<unsigned char>(c)) <<  8u)
+             |  static_cast<std::uint32_t>(static_cast<unsigned char>(d));
+      };
+      const std::uint32_t kNONE = MakeFourCCBE('N', 'O', 'N', 'E');
+      const std::uint32_t kSowt = MakeFourCCBE('s', 'o', 'w', 't');
+      const std::uint32_t kFl32 = MakeFourCCBE('f', 'l', '3', '2');
+      const std::uint32_t kFL32 = MakeFourCCBE('F', 'L', '3', '2');
+      const std::uint32_t kFl64 = MakeFourCCBE('f', 'l', '6', '4');
+      const std::uint32_t kFL64 = MakeFourCCBE('F', 'L', '6', '4');
+
+      std::uint16_t channels      = 0;
+      std::uint32_t numFrames     = 0;
+      std::uint16_t bitsPerSample = 0;
+      double        sampleRate    = 0.0;
+      std::uint32_t comprType     = kNONE;
+      bool          fmtLoaded     = false;
+      bool          dataLoaded    = false;
+
+      while (file && !dataLoaded)
+      {
+        std::array<char, 4> chunkIdBuf{};
+        if (!file.read(chunkIdBuf.data(), 4)) break;
+        const std::uint32_t chunkSize = ReadBigEndian<std::uint32_t>(file);
+        if (!file) break;
+
+        const std::string chunkId(chunkIdBuf.data(), 4);
+        const auto chunkStart = file.tellg();
+
+        if (chunkId == "COMM")
+        {
+          channels      = ReadBigEndian<std::uint16_t>(file);
+          numFrames     = ReadBigEndian<std::uint32_t>(file);
+          bitsPerSample = ReadBigEndian<std::uint16_t>(file);
+          sampleRate    = Read80BitExtendedFromStream(file);
+
+          if (isAifc)
+          {
+            comprType = ReadBigEndian<std::uint32_t>(file);
+          }
+          else
+          {
+            comprType = kNONE;
+          }
+
+          fmtLoaded = true;
+        }
+        else if (chunkId == "SSND")
+        {
+          if (!fmtLoaded || channels == 0 || bitsPerSample == 0)
+            return false;
+
+          const bool isBigEndianPcm = (comprType == kNONE);
+          const bool isLittleEndian = (comprType == kSowt);
+          const bool isFloat32      = (comprType == kFl32 || comprType == kFL32);
+          const bool isFloat64      = (comprType == kFl64 || comprType == kFL64);
+
+          if (!isBigEndianPcm && !isLittleEndian && !isFloat32 && !isFloat64)
+            return false;
+          if (isLittleEndian && bitsPerSample != 16) return false;
+          if (isFloat32      && bitsPerSample != 32) return false;
+          if (isFloat64      && bitsPerSample != 64) return false;
+
+          ReadBigEndian<std::uint32_t>(file); // dataOffset (unused for uncompressed)
+          ReadBigEndian<std::uint32_t>(file); // blockSize  (unused for uncompressed)
+
+          const std::size_t bytesPerSample = static_cast<std::size_t>(bitsPerSample) / 8u;
+          if (bytesPerSample == 0) return false;
+
+          const std::size_t totalSamples =
+              static_cast<std::size_t>(numFrames) * static_cast<std::size_t>(channels);
+          if (totalSamples == 0) return false;
+
+          std::vector<float> samples(totalSamples);
+
+          if (isFloat32)
+          {
+            for (std::size_t i = 0; i < totalSamples; ++i)
+            {
+              const std::uint32_t raw = ReadBigEndian<std::uint32_t>(file);
+              float v; std::memcpy(&v, &raw, sizeof(float));
+              samples[i] = v;
+            }
+          }
+          else if (isFloat64)
+          {
+            for (std::size_t i = 0; i < totalSamples; ++i)
+            {
+              std::array<std::uint8_t, 8> buf{};
+              file.read(reinterpret_cast<char *>(buf.data()), 8);
+              // Big-endian 64-bit float — swap bytes on little-endian host
+              if constexpr (std::endian::native == std::endian::little)
+                std::reverse(buf.begin(), buf.end());
+              double d; std::memcpy(&d, buf.data(), 8);
+              samples[i] = static_cast<float>(d);
+            }
+          }
+          else if (isLittleEndian)
+          {
+            // sowt: 16-bit little-endian signed
+            for (std::size_t i = 0; i < totalSamples; ++i)
+            {
+              const std::int16_t value = ReadLittleEndian<std::int16_t>(file);
+              samples[i] = static_cast<float>(value) /
+                           static_cast<float>(std::numeric_limits<std::int16_t>::max());
+            }
+          }
+          else if (bitsPerSample == 16)
+          {
+            for (std::size_t i = 0; i < totalSamples; ++i)
+            {
+              const std::int16_t value = ReadBigEndian<std::int16_t>(file);
+              samples[i] = static_cast<float>(value) /
+                           static_cast<float>(std::numeric_limits<std::int16_t>::max());
+            }
+          }
+          else if (bitsPerSample == 24)
+          {
+            for (std::size_t i = 0; i < totalSamples; ++i)
+            {
+              std::array<std::uint8_t, 3> buf{};
+              file.read(reinterpret_cast<char *>(buf.data()), 3);
+              // Big-endian 24-bit signed integer
+              std::int32_t value = (static_cast<std::int32_t>(buf[0]) << 24)
+                                 | (static_cast<std::int32_t>(buf[1]) << 16)
+                                 | (static_cast<std::int32_t>(buf[2]) <<  8);
+              value >>= 8; // arithmetic right-shift to sign-extend
+              samples[i] = static_cast<float>(value) / 8388608.0f;
+            }
+          }
+          else if (bitsPerSample == 32)
+          {
+            for (std::size_t i = 0; i < totalSamples; ++i)
+            {
+              const std::int32_t value = ReadBigEndian<std::int32_t>(file);
+              samples[i] = static_cast<float>(value) /
+                           static_cast<float>(std::numeric_limits<std::int32_t>::max());
+            }
+          }
+          else
+          {
+            return false;
+          }
+
+          if (!file) return false;
+
+          out.samples    = std::move(samples);
+          out.channels   = channels;
+          out.sampleRate = sampleRate;
+          dataLoaded     = true;
+        }
+        else
+        {
+          // Skip unknown chunk; AIFF chunks are word-aligned
+          const std::streamoff skip = static_cast<std::streamoff>(chunkSize) +
+                                      (chunkSize & 1u ? 1 : 0);
+          file.seekg(static_cast<std::streamoff>(chunkStart) + skip);
+        }
+      }
+
+      return dataLoaded && out.channels > 0 && !out.samples.empty();
+    }
+
+    // -------------------------------------------------------------------------
+    // LoadAudioFile — dispatches to LoadWavFile or LoadAiffFile based on the
+    // file extension.  Use this in place of LoadWavFile where AIFF support
+    // is desired (IR cab/reverb loading).
+    // -------------------------------------------------------------------------
+    inline bool LoadAudioFile(const std::filesystem::path &path, IRWavData &out)
+    {
+      std::string ext = path.extension().string();
+      std::transform(ext.begin(), ext.end(), ext.begin(),
+                     [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+      if (ext == ".aif" || ext == ".aiff")
+        return LoadAiffFile(path, out);
+
+      return LoadWavFile(path, out);
     }
 
   } // namespace irwav
