@@ -710,9 +710,15 @@ function renderRiffTakePreviewButtons(): void {
   });
 }
 
-async function importDroppedRiffWav(file: File): Promise<void> {
-  if (!file.name.toLowerCase().endsWith(".wav") && file.type !== "audio/wav" && file.type !== "audio/x-wav") {
-    showNotification("Only WAV files are supported for riff import");
+async function importDroppedRiffAudio(file: File): Promise<void> {
+  const lowerName = file.name.toLowerCase();
+  const isAudio = lowerName.endsWith(".wav") || lowerName.endsWith(".aif") || lowerName.endsWith(".aiff")
+    || lowerName.endsWith(".mp3")
+    || file.type === "audio/wav" || file.type === "audio/x-wav"
+    || file.type === "audio/aiff" || file.type === "audio/x-aiff"
+    || file.type === "audio/mpeg" || file.type === "audio/mp3";
+  if (!isAudio) {
+    showNotification("Only WAV, AIFF, and MP3 files are supported for riff import");
     return;
   }
 
@@ -762,11 +768,11 @@ async function importDroppedRiffWav(file: File): Promise<void> {
   importRiffWav(importPayload);
 
   if (wavInfo) {
-    appendLog(`riff wav import requested → ${file.name} (${wavInfo.sampleRate} Hz, ${wavInfo.channels} ch, ${bars} bars)`);
+    appendLog(`riff audio import requested → ${file.name} (${wavInfo.sampleRate} Hz, ${wavInfo.channels} ch, ${bars} bars)`);
   } else {
-    appendLog(`riff wav import requested → ${file.name} (UI metadata unavailable, backend decode pending)`);
+    appendLog(`riff audio import requested → ${file.name} (UI metadata unavailable, backend decode pending)`);
   }
-  showNotification("Importing WAV into current take", file.name);
+  showNotification("Importing audio into current take", file.name);
 }
 
 function renderRiffCaptureStatus(): void {
@@ -1182,15 +1188,20 @@ function bindRiffLibraryActions(): void {
         return;
       }
 
-      const wavFile = files.find((file) => file.name.toLowerCase().endsWith(".wav")
-        || file.type === "audio/wav"
-        || file.type === "audio/x-wav");
-      if (!wavFile) {
-        showNotification("Only WAV files are supported for riff import");
+      const audioFile = files.find((file) => {
+        const lower = file.name.toLowerCase();
+        return lower.endsWith(".wav") || lower.endsWith(".aif") || lower.endsWith(".aiff")
+          || lower.endsWith(".mp3")
+          || file.type === "audio/wav" || file.type === "audio/x-wav"
+          || file.type === "audio/aiff" || file.type === "audio/x-aiff"
+          || file.type === "audio/mpeg" || file.type === "audio/mp3";
+      });
+      if (!audioFile) {
+        showNotification("Only WAV, AIFF, and MP3 files are supported for riff import");
         return;
       }
 
-      await importDroppedRiffWav(wavFile);
+      await importDroppedRiffAudio(audioFile);
     });
   }
 

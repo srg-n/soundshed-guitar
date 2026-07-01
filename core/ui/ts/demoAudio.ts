@@ -274,12 +274,17 @@ async function buildBuiltinDemoAudioPayload(sample: Extract<DemoAudioSource, { k
   const base64 = arrayBufferToBase64(buffer);
   const metadata = parseWavMetadata(buffer);
 
+  const lowerPath = (sample.path ?? "").toLowerCase();
+  const contentType = lowerPath.endsWith(".mp3") ? "audio/mpeg"
+    : lowerPath.endsWith(".aif") || lowerPath.endsWith(".aiff") ? "audio/aiff"
+    : "audio/wav";
+
   const audioPayload: Record<string, unknown> = {
     id: demoSample.id,
     title: demoSample.title,
     path: demoSample.path,
     size: buffer.byteLength,
-    contentType: "audio/wav",
+    contentType,
     data: base64,
   };
 
