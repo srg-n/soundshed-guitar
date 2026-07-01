@@ -1,3 +1,28 @@
+name: Build Windows App
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_windows:
+        description: 'Windows için build alınsın mı?'
+        type: boolean
+        default: true
+      windows_targets:
+        description: 'Mimari Seçimi'
+        type: choice
+        options:
+          - x64
+          - all
+        default: x64
+      asio_sdk_url:
+        description: 'ASIO SDK Zip URL'
+        type: string
+        default: 'https://www.steinberg.net/sdk_downloads/asiosdk_2.3.3_2019-06-14.zip'
+      upload_r2:
+        description: 'Cloudflare R2 Bucket''a yüklensin mi?'
+        type: boolean
+        default: false
+
 jobs:
   build-windows-x64:
     name: Build Windows Installer (x64)
