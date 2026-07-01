@@ -4752,6 +4752,7 @@ void PluginController::HandleDeletePresetRequest(const nlohmann::json& payload)
 void PluginController::HandleGetPresetByIdRequest(const nlohmann::json& payload)
 {
     const std::string presetId = payload.value("presetId", "");
+    const std::string requestId = payload.value("requestId", "");
     if (presetId.empty())
         return;
 
@@ -4760,7 +4761,14 @@ void PluginController::HandleGetPresetByIdRequest(const nlohmann::json& payload)
 
     if (!IsFactoryPresetArchiveLoadingEnabled() && mTrackedFactoryArchivePresetIds.contains(resolvedPresetId))
     {
-        ReportErrorToUI("Preset unavailable", "Factory preset archive loading is disabled in Advanced settings");
+        nlohmann::json msg;
+        msg["type"] = "error";
+        msg["message"] = "Preset unavailable";
+        msg["detail"] = "Factory preset archive loading is disabled in Advanced settings";
+        if (!requestId.empty())
+            msg["requestId"] = requestId;
+        msg["presetId"] = presetId;
+        SendMessageToUI(msg.dump());
         return;
     }
 
@@ -4784,13 +4792,23 @@ void PluginController::HandleGetPresetByIdRequest(const nlohmann::json& payload)
 
     if (!presetOpt)
     {
-        ReportErrorToUI("Preset not found", presetId);
+        nlohmann::json msg;
+        msg["type"] = "error";
+        msg["message"] = "Preset not found";
+        msg["detail"] = presetId;
+        if (!requestId.empty())
+            msg["requestId"] = requestId;
+        msg["presetId"] = presetId;
+        SendMessageToUI(msg.dump());
         return;
     }
 
     nlohmann::json msg;
     msg["type"] = "presetData";
     msg["preset"] = SerializePresetForUi(*presetOpt);
+    if (!requestId.empty())
+        msg["requestId"] = requestId;
+    msg["requestedPresetId"] = presetId;
     SendMessageToUI(msg.dump());
 }
 

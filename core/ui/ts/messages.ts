@@ -1,5 +1,5 @@
 import { uiState, clonePreset, getActivePresetForRender, setActivePresetDraft, setActivePresetIsNew, setActivePresetSnapshot, setPresetDirty } from "./state.js";
-import { renderActivePreset, applyPresetFromLibrary, populatePresetDropdown, updatePresetDropdownSelection, cachePresetInMemory, updatePresetActionButtons, applyPresetFoldersFromBackend, applyPresetFavoritesFromBackend, applyPresetRecentsFromAppSettings, applyPresetRatingsFromBackend, applySetlistsFromBackend, applySetlistCursorFromBackend, handlePresetDataMessage, recordRecentPreset, refreshSavePresetModalPeakInfoIfOpen } from "./presets.js";
+import { renderActivePreset, applyPresetFromLibrary, populatePresetDropdown, updatePresetDropdownSelection, cachePresetInMemory, updatePresetActionButtons, applyPresetFoldersFromBackend, applyPresetFavoritesFromBackend, applyPresetRecentsFromAppSettings, applyPresetRatingsFromBackend, applySetlistsFromBackend, applySetlistCursorFromBackend, handlePresetDataMessage, recordRecentPreset, refreshSavePresetModalPeakInfoIfOpen, rejectPendingPresetRequest } from "./presets.js";
 import { syncControlsFromState, handleInputModeChanged, handleAmpCabStateChanged, syncAutoLevelControlsFromState, applyStoredInputChannel } from "./controls.js";
 import { showNotification } from "./notifications.js";
 import { appendLog } from "./logging.js";
@@ -965,6 +965,10 @@ export function handleIncomingMessage(message: string): void {
     }
     case "error": {
       console.error("Plugin error", payload);
+      const requestId = (payload as { requestId?: string }).requestId;
+      if (requestId) {
+        rejectPendingPresetRequest(requestId, (payload as { message?: string }).message ?? "An error occurred", (payload as { detail?: string }).detail);
+      }
       showNotification((payload as { message?: string }).message ?? "An error occurred", (payload as { detail?: string }).detail ?? "");
       break;
     }
@@ -1183,7 +1187,7 @@ export function handleIncomingMessage(message: string): void {
         migratePresetNodeTypes(presetPayload.preset);
         normalizePresetResources(presetPayload.preset);
         normalizePresetScenes(presetPayload.preset);
-        handlePresetDataMessage(presetPayload.preset);
+        handlePresetDataMessage(presetPayload.preset, (payload as { requestId?: string }).requestId);
       }
       break;
     }

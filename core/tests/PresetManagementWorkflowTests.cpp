@@ -1279,6 +1279,7 @@ bool TestSaveGetDeletePresetWorkflow()
     nlohmann::json get;
     get["type"] = "getPresetById";
     get["presetId"] = saveId;
+    get["requestId"] = "preset-request-1";
     controller.HandleUIMessage(get.dump());
 
     const auto presetDataMsg = FindLatestMessageOfType(host.sentMessages, "presetData");
@@ -1289,6 +1290,11 @@ bool TestSaveGetDeletePresetWorkflow()
     }
 
     const auto returnedPreset = (*presetDataMsg)["preset"];
+    if (presetDataMsg->value("requestId", "") != "preset-request-1")
+    {
+        std::cerr << "getPresetById did not echo requestId\n";
+        return false;
+    }
     if (returnedPreset.value("id", "") != saveId)
     {
         std::cerr << "getPresetById returned wrong preset id\n";

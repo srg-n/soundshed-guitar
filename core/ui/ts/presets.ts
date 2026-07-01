@@ -77,6 +77,7 @@ const activeTagFilters = new Set<string>();
 const presetNameCollator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
 
 const pendingPresetRequests = new Map<string, {
+  presetId: string;
   resolve: (preset: Preset) => void;
   reject: (error: Error) => void;
   timeoutId: number;
@@ -1745,44 +1746,38 @@ export function initializePresetTagFilterBar(): void {
   });
 }
 
-function requestPresetFromBackend(presetId: string): Promise<Preset> {
-  const existing = pendingPresetRequests.get(presetId);
-  if (existing) {
-    return new Promise((resolve, reject) => {
-      const chainedResolve = (preset: Preset) => {
-        existing.resolve(preset);
-        resolve(preset);
-      };
-      const chainedReject = (error: Error) => {
-        existing.reject(error);
-        reject(error);
-      };
-      pendingPresetRequests.set(presetId, {
-        resolve: chainedResolve,
-        reject: chainedReject,
-        timeoutId: existing.timeoutId,
-      });
-    });
-  }
+function createPresetRequestId(): string {
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `preset-request-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
-  postMessage({ type: "getPresetById", presetId });
+function requestPresetFromBackend(presetId: string): Promise<Preset> {
+  const requestId = createPresetRequestId();
+  postMessage({ type: "getPresetById", presetId, requestId });
 
   return new Promise((resolve, reject) => {
     const timeoutId = window.setTimeout(() => {
-      pendingPresetRequests.delete(presetId);
+      pendingPresetRequests.delete(requestId);
       reject(new Error(`Preset ${presetId} request timed out`));
     }, PRESET_REQUEST_TIMEOUT_MS);
 
-    pendingPresetRequests.set(presetId, { resolve, reject, timeoutId });
+    pendingPresetRequests.set(requestId, { presetId, resolve, reject, timeoutId });
   });
 }
 
-export function handlePresetDataMessage(preset: Preset): void {
+export function handlePresetDataMessage(preset: Preset, requestId?: string): void {
   if (!preset?.id) return;
-  const pending = pendingPresetRequests.get(preset.id);
+  const requestPending = requestId ? pendingPresetRequests.get(requestId) : null;
+  const presetPending = pendingPresetRequests.get(preset.id);
+  const pending = requestPending ?? presetPending;
   if (pending) {
     window.clearTimeout(pending.timeoutId);
-    pendingPresetRequests.delete(preset.id);
+    if (requestPending && requestId) {
+      pendingPresetRequests.delete(requestId);
+    } else {
+      pendingPresetRequests.delete(preset.id);
+    }
     pending.resolve(preset);
   }
   uiState.presetCache.set(preset.id, clonePreset(preset));
@@ -1791,6 +1786,15 @@ export function handlePresetDataMessage(preset: Preset): void {
     uiState.presets[index] = clonePreset(preset);
   } else {
     uiState.presets.push(clonePreset(preset));
+  }
+}
+
+export function rejectPendingPresetRequest(requestId: string | undefined, message: string, detail?: string): void {
+  const pending = requestId ? pendingPresetRequests.get(requestId) : null;
+  if (pending) {
+    window.clearTimeout(pending.timeoutId);
+    pendingPresetRequests.delete(requestId!);
+    pending.reject(new Error(detail ? `${message}: ${detail}` : message));
   }
 }
 
