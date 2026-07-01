@@ -1,0 +1,106 @@
+name: Build macOS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    env:
+      R2_BUCKET: ${{ vars.CLOUDFLARE_R2_BUCKET }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Import signing certificates
+        uses: sudara/basic-macos-keychain-action@v1
+        id: keychain
+        with:
+          dev-id-app-cert: ${{ secrets.DEV_ID_APP_CERT }}
+          dev-id-app-password: ${{ secrets.DEV_ID_APP_PASSWORD }}
+          dev-id-installer-cert: ${{ secrets.DEV_ID_INSTALLER_CERT }}
+          dev-id-installer-password: ${{ secrets.DEV_ID_INSTALLER_PASSWORD }}
+
+      - name: Build universal artifacts (no pkg)
+        run: |
+          chmod +x ./build_macos.sh
+          ./build_macos.sh --universal --no-pkg
+
+      - name: Sign built bundles
+        run: |
+          set -euo pipefail
+          ARTEFACTS="juce/builds/SoundshedGuitar_artefacts/Release"
+          PRODUCT="Soundshed Guitar"
+
+          sign_if_exists() {
+            local path="$1"
+            if [[ -e "$path" ]]; then
+              codesign --force --keychain "${{ steps.keychain.outputs.keychain-path }}" -s "${{ secrets.DEVELOPER_ID_APPLICATION }}" --deep --strict --options runtime --timestamp "$path"
+            fi
+          }
+
+          sign_if_exists "$ARTEFACTS/Standalone/$PRODUCT.app"
+          sign_if_exists "$ARTEFACTS/VST3/$PRODUCT.vst3"
+          sign_if_exists "$ARTEFACTS/AU/$PRODUCT.component"
+          sign_if_exists "$ARTEFACTS/CLAP/$PRODUCT.clap"
+          sign_if_exists "$ARTEFACTS/AAX/$PRODUCT.aaxplugin"
+
+      - name: Build macOS installer package
+        run: ./build_macos.sh --skip-ts --skip-build --pkg
+
+      - name: Sign installer package
+        id: pkg
+        run: |
+          set -euo pipefail
+          VERSION="$(cat juce/VERSION)"
+          UNSIGNED_PKG="macos-dist/SoundshedGuitar-${VERSION}.pkg"
+          SIGNED_PKG="macos-dist/SoundshedGuitar-${VERSION}-macOS-universal.pkg"
+
+          productsign --sign "${{ secrets.DEVELOPER_ID_INSTALLER }}" "$UNSIGNED_PKG" "$SIGNED_PKG"
+
+          echo "pkg_path=$SIGNED_PKG" >> "$GITHUB_OUTPUT"
+          echo "pkg_name=$(basename "$SIGNED_PKG")" >> "$GITHUB_OUTPUT"
+
+      - name: Notarize and staple package
+        run: |
+          set -euo pipefail
+          xcrun notarytool submit "${{ steps.pkg.outputs.pkg_path }}" \
+            --apple-id "${{ secrets.NOTARIZATION_USERNAME }}" \
+            --password "${{ secrets.NOTARIZATION_PASSWORD }}" \
+            --team-id "${{ secrets.TEAM_ID }}" \
+            --wait
+
+          xcrun stapler staple "${{ steps.pkg.outputs.pkg_path }}"
+
+      - name: Upload GitHub artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: macos-universal-pkg
+          path: ${{ steps.pkg.outputs.pkg_path }}
+          if-no-files-found: error
+
+      - name: Install Wrangler
+        if: ${{ env.R2_BUCKET != '' }}
+        run: npm install -g wrangler@4
+
+      - name: Upload artifact to Cloudflare R2
+        if: ${{ env.R2_BUCKET != '' }}
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          key="builds/${{ github.ref_name }}/${{ github.run_id }}/macos/universal/${{ steps.pkg.outputs.pkg_name }}"
+          wrangler r2 object put "$R2_BUCKET/$key" --file "${{ steps.pkg.outputs.pkg_path }}"
