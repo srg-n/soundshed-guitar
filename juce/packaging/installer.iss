@@ -39,6 +39,7 @@ ArchitecturesAllowed=x64compatible
 AppName={#ProductName}
 OutputBaseFilename={#ProductName}-{#Version}-Windows
 SetupIconFile="..\Builds\{#ProjectName}_artefacts\JuceLibraryCode\icon.ico"
+UninstallDisplayIcon="{code:GetStandaloneExePath}"
 AppCopyright=Copyright (C) {#Year} {#Publisher}
 AppPublisher={#Publisher}
 AppVersion={#Version}
