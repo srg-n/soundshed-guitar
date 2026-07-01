@@ -3,7 +3,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 
 :: ---------------------------------------------------------------------------
 :: Full release build: JUCE Standalone + VST3 + CLAP, then installer
-:: Modified: Argument passing removed, AVX2 permanently disabled.
+:: Modified: No Generator forcing, Auto-detect Visual Studio, No AVX2.
 :: ---------------------------------------------------------------------------
 
 set "WORKSPACE_ROOT=%~dp0"
@@ -14,29 +14,29 @@ set "UI_DIR=%WORKSPACE_ROOT%core\ui"
 :: AVX2'yi kalıcı olarak kapatıyoruz
 set "CORE_ENABLE_AVX2=OFF"
 
-:: Argüman işini atlıyoruz, varsayılan olarak x64 mimarisi ayarlıyoruz
-set "ARCH=x64"
-set "ARCH_LABEL=x64"
-set "GUITARFX_WINDOWS_ARCH=%ARCH%"
+:: Mimariyi argüman olarak yakala, yoksa x64 kullan
+set "ARCH_INPUT=%~1"
+if not defined ARCH_INPUT (
+    set "ARCH_INPUT=x64"
+)
 
-if defined GUITARFX_WINDOWS_CMAKE_GENERATOR (
-    set "CMAKE_GENERATOR=%GUITARFX_WINDOWS_CMAKE_GENERATOR%"
-) else (
-    set "CMAKE_GENERATOR=Visual Studio 18 2026"
+:: Mimarileri ayarla
+set "ARCH="
+if /I "%ARCH_INPUT%"=="x86" set "ARCH=Win32"
+if /I "%ARCH_INPUT%"=="x64" set "ARCH=x64"
+if /I "%ARCH_INPUT%"=="arm64" set "ARCH=ARM64"
+if not defined ARCH (
+    set "ARCH=x64"
 )
 
 for /f %%I in ('powershell -NoProfile -Command "[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()"') do set "BUILD_START_MS=%%I"
 
 echo [0/5] Configuring CMake...
-echo       Generator: %CMAKE_GENERATOR%
-echo       Architecture: %ARCH_LABEL% ^(CMake platform: %ARCH%^)
+echo       Architecture: %ARCH%
 echo       AVX2 support: %CORE_ENABLE_AVX2%
-:: YENİ HALİ (Bunu kullan)
-if defined CMAKE_GENERATOR (
-    cmake -G "%CMAKE_GENERATOR%" -A "%ARCH%" -S juce -B "%JUCE_BUILDS%" -DGUITARFX_CORE_ENABLE_AVX2=%CORE_ENABLE_AVX2%
-) else (
-    cmake -A "%ARCH%" -S juce -B "%JUCE_BUILDS%" -DGUITARFX_CORE_ENABLE_AVX2=%CORE_ENABLE_AVX2%
-)
+
+:: DİKKAT: -G parametresini tamamen kaldırdık, CMake kendi bulacak!
+cmake -A "%ARCH%" -S juce -B "%JUCE_BUILDS%" -DGUITARFX_CORE_ENABLE_AVX2=%CORE_ENABLE_AVX2%
 if !ERRORLEVEL! neq 0 (
     echo ERROR: CMake configure failed.
     goto :fail
