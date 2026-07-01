@@ -2,79 +2,23 @@
 setlocal EnableExtensions EnableDelayedExpansion
 
 :: ---------------------------------------------------------------------------
-:: Full release build: JUCE Standalone + VST3, then installer
-:: Run from the workspace root.
-:: Usage: build_windows.bat [x86|x64|arm64] [--no-avx2|--no-avx]
+:: Full release build: JUCE Standalone + VST3 + CLAP, then installer
+:: Modified: Argument passing removed, AVX2 permanently disabled.
 :: ---------------------------------------------------------------------------
 
 set "WORKSPACE_ROOT=%~dp0"
 set "JUCE_BUILDS=%WORKSPACE_ROOT%juce\Builds"
 set "INSTALLER_SCRIPT=%WORKSPACE_ROOT%juce\packaging\build-installer.bat"
 set "UI_DIR=%WORKSPACE_ROOT%core\ui"
-set "CORE_ENABLE_AVX2=ON"
 
-:parse_args
-if "%~1"=="" goto :args_done
-if /I "%~1"=="--no-avx" (
-    set "CORE_ENABLE_AVX2=OFF"
-    shift
-    goto :parse_args
-)
-if /I "%~1"=="--no-avx2" (
-    set "CORE_ENABLE_AVX2=OFF"
-    shift
-    goto :parse_args
-)
-if not defined ARCH_INPUT (
-    set "ARCH_INPUT=%~1"
-    shift
-    goto :parse_args
-)
-echo ERROR: Too many arguments.
-echo Usage: %~nx0 [x86^|x64^|arm64] [--no-avx2^|--no-avx]
-exit /b 1
+:: AVX2'yi kalıcı olarak kapatıyoruz
+set "CORE_ENABLE_AVX2=OFF"
 
-:args_done
-
-if not defined ARCH_INPUT (
-    if defined GUITARFX_WINDOWS_ARCH (
-        set "ARCH_INPUT=%GUITARFX_WINDOWS_ARCH%"
-    )
-)
-if not defined ARCH_INPUT (
-    set "ARCH_INPUT=x64"
-)
-
-:: Canonical CMake Visual Studio platform names: Win32 (32-bit x86), x64, ARM64.
-set "ARCH="
-set "ARCH_LABEL="
-if /I "%ARCH_INPUT%"=="x86" (
-    set "ARCH=Win32"
-    set "ARCH_LABEL=x86"
-)
-if /I "%ARCH_INPUT%"=="Win32" (
-    set "ARCH=Win32"
-    set "ARCH_LABEL=x86"
-)
-if /I "%ARCH_INPUT%"=="x64" (
-    set "ARCH=x64"
-    set "ARCH_LABEL=x64"
-)
-if /I "%ARCH_INPUT%"=="arm64" (
-    set "ARCH=ARM64"
-    set "ARCH_LABEL=arm64"
-)
-if /I "%ARCH_INPUT%"=="ARM64" (
-    set "ARCH=ARM64"
-    set "ARCH_LABEL=arm64"
-)
-if not defined ARCH (
-    echo ERROR: Unsupported Windows architecture "%ARCH_INPUT%". Expected one of: x86, x64, arm64.
-    exit /b 1
-)
-echo       AVX2 support: %CORE_ENABLE_AVX2%
-:: Export the resolved platform for Inno Setup architecture/install path selection.
+:: Argüman işini atlıyoruz, varsayılan olarak x64 mimarisi ayarlıyoruz
+set "ARCH=x64"
+set "ARCH_LABEL=x64"
 set "GUITARFX_WINDOWS_ARCH=%ARCH%"
+
 if defined GUITARFX_WINDOWS_CMAKE_GENERATOR (
     set "CMAKE_GENERATOR=%GUITARFX_WINDOWS_CMAKE_GENERATOR%"
 ) else (
@@ -86,6 +30,7 @@ for /f %%I in ('powershell -NoProfile -Command "[DateTimeOffset]::UtcNow.ToUnixT
 echo [0/5] Configuring CMake...
 echo       Generator: %CMAKE_GENERATOR%
 echo       Architecture: %ARCH_LABEL% ^(CMake platform: %ARCH%^)
+echo       AVX2 support: %CORE_ENABLE_AVX2%
 cmake -G "%CMAKE_GENERATOR%" -A "%ARCH%" -S juce -B "%JUCE_BUILDS%" -DGUITARFX_CORE_ENABLE_AVX2=%CORE_ENABLE_AVX2%
 if !ERRORLEVEL! neq 0 (
     echo ERROR: CMake configure failed.
