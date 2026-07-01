@@ -1,5 +1,6 @@
 #include "controller/DemoPreviewService.h"
 
+#include "util/AudioDecoder.h"
 #include "util/Base64.h"
 #include "util/Wav.h"
 
@@ -77,10 +78,10 @@ void DemoPreviewService::StartPreview(const nlohmann::json& payload)
         return;
     }
 
-    const auto wavData = util::DecodePcmWav(decodedBytes);
+    const auto wavData = util::DecodeAudioBytes(decodedBytes);
     if (!wavData)
     {
-        mReportError("Demo preview unavailable", "Unsupported WAV format");
+        mReportError("Demo preview unavailable", "Unsupported audio format (expected WAV, AIFF, or MP3)");
         return;
     }
 

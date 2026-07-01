@@ -22,6 +22,7 @@
 #endif
 #include "presets/CompositePresetStorage.h"
 #include "presets/CompositePresetTypes.h"
+#include "util/AudioDecoder.h"
 #include "util/Base64.h"
 #include "util/FileIO.h"
 #include "util/PathSanitizer.h"
@@ -1591,10 +1592,10 @@ namespace
                                                                   const std::string& title,
                                                                   std::string& error)
     {
-        const auto wavData = guitarfx::util::DecodePcmWav(bytes);
+        const auto wavData = guitarfx::util::DecodeAudioBytes(bytes);
         if (!wavData)
         {
-            error = "Unsupported WAV format";
+            error = "Unsupported audio format (expected WAV, AIFF, or MP3)";
             return std::nullopt;
         }
 
@@ -8987,35 +8988,35 @@ void PluginController::HandleImportRiffWavRequest(const nlohmann::json& payload)
     const std::string base64 = payload.value("data", std::string{});
     if (base64.empty())
     {
-        ReportErrorToUI("Riff Library", "Dropped WAV data is missing");
+        ReportErrorToUI("Riff Library", "Dropped audio data is missing");
         return;
     }
 
     const auto bytes = util::DecodeBase64(base64);
     if (bytes.empty())
     {
-        ReportErrorToUI("Riff Library", "Failed to decode dropped WAV data");
+            ReportErrorToUI("Riff Library", "Failed to decode dropped audio data");
         return;
     }
 
-    const auto decodedOpt = util::DecodePcmWav(bytes);
+        const auto decodedOpt = util::DecodeAudioBytes(bytes);
     if (!decodedOpt)
     {
-        ReportErrorToUI("Riff Library", "Unsupported WAV file (expected PCM/float WAV)");
+            ReportErrorToUI("Riff Library", "Unsupported audio format (expected WAV, AIFF, or MP3)");
         return;
     }
 
     const auto& decoded = *decodedOpt;
     if (decoded.channelSamples.empty() || decoded.channelSamples.front().empty())
     {
-        ReportErrorToUI("Riff Library", "Dropped WAV has no audio samples");
+            ReportErrorToUI("Riff Library", "Dropped audio file has no audio samples");
         return;
     }
 
     const std::size_t frameCount = decoded.channelSamples.front().size();
     if (frameCount == 0)
     {
-        ReportErrorToUI("Riff Library", "Dropped WAV has no audio frames");
+            ReportErrorToUI("Riff Library", "Dropped audio file has no audio frames");
         return;
     }
 
