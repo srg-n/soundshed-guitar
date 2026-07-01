@@ -951,7 +951,7 @@ namespace guitarfx
                          bool &outIsStereo)
     {
       IRWavData data;
-      if (!irwav::LoadWavFile(path, data))
+      if (!irwav::LoadAudioFile(path, data))
         return false;
 
       std::vector<float> left;

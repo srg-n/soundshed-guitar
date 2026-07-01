@@ -441,9 +441,9 @@ namespace guitarfx
     bool LoadWavFile(const std::filesystem::path &path)
     {
       IRWavData data;
-      if (!irwav::LoadWavFile(path, data))
+      if (!irwav::LoadAudioFile(path, data))
       {
-        std::cerr << "[IRReverbEffect] Failed to parse WAV data from: " << path << "\n";
+        std::cerr << "[IRReverbEffect] Failed to parse audio data from: " << path << "\n";
         return false;
       }
 
