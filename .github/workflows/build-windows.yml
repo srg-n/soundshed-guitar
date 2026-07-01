@@ -70,7 +70,8 @@ jobs:
           } elseif (Test-Path "juce/JUCE/CMakeLists.txt") {
             Write-Host "JUCE source already present at juce/JUCE"
           } else {
-            git clone --depth 1 https://github.com/juce-framework/JUCE.git juce/JUCE
+            # Burada --branch 8.0.13 ekledik ki sadece istenen sürüm insin
+            git clone --depth 1 --branch 8.0.13 https://github.com/juce-framework/JUCE.git juce/JUCE
           }
 
       - name: Install WebView2 NuGet package
