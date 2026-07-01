@@ -19,12 +19,25 @@
               <select id="resource-browser-library-category">
                 <option value="all">All Categories</option>
               </select>
+              <select id="resource-browser-library-architecture">
+                <option value="all">All Architectures</option>
+                <option value="A1">A1</option>
+                <option value="A2">A2</option>
+              </select>
               <select id="resource-browser-library-creator">
                 <option value="all">All Creators</option>
               </select>
               <div class="resource-browser-library-favorites-tabs" role="tablist" aria-label="Favourite filter">
                 <button class="resource-browser-library-favorites-tab active" id="resource-browser-library-favorites-all" type="button" aria-pressed="true">All</button>
                 <button class="resource-browser-library-favorites-tab" id="resource-browser-library-favorites-only" type="button" aria-pressed="false">Favourites</button>
+              </div>
+              <div class="resource-browser-library-nav" aria-label="Browse selected resource">
+                <button class="preset-action-btn resource-browser-nav-btn" id="resource-browser-library-prev" type="button" title="Previous resource" aria-label="Previous resource" disabled>
+                  <span class="resource-nav-icon" style="--icon-url: url('/images/icons/chevron-left.svg')" aria-hidden="true"></span>
+                </button>
+                <button class="preset-action-btn resource-browser-nav-btn" id="resource-browser-library-next" type="button" title="Next resource" aria-label="Next resource" disabled>
+                  <span class="resource-nav-icon" style="--icon-url: url('/images/icons/chevron-right.svg')" aria-hidden="true"></span>
+                </button>
               </div>
               <button class="btn btn-secondary" id="resource-browser-library-browse" type="button">File...</button>
             </div>

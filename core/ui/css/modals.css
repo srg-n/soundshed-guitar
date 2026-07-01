@@ -1020,6 +1020,21 @@
   margin-bottom: 12px;
 }
 
+.resource-browser-library-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.resource-browser-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
 .resource-browser-filters input,
 .resource-browser-filters select {
   padding: 8px 10px;
